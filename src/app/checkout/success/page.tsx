@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
@@ -127,5 +127,13 @@ export default function CheckoutSuccessPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 } 

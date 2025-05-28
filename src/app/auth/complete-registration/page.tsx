@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 
-export default function CompleteRegistration() {
+function CompleteRegistrationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -261,5 +261,13 @@ export default function CompleteRegistration() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CompleteRegistration() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CompleteRegistrationContent />
+    </Suspense>
   );
 } 

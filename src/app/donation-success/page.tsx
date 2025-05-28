@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -21,7 +21,7 @@ interface DonationTransaction {
   completed_at: string;
 }
 
-export default function DonationSuccess() {
+function DonationSuccessContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -354,5 +354,13 @@ Generated on: ${new Date().toLocaleString()}
         </div>
       </main>
     </div>
+  );
+}
+
+export default function DonationSuccess() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DonationSuccessContent />
+    </Suspense>
   );
 } 

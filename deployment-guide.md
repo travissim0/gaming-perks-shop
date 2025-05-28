@@ -35,7 +35,7 @@ sudo apt install certbot python3-certbot-nginx -y
 cd /var/www
 
 # Clone your repository
-sudo git clone https://github.com/yourusername/gaming-perks-shop.git
+sudo git clone https://github.com/travissim0/gaming-perks-shop.git
 sudo chown -R $USER:$USER gaming-perks-shop
 cd gaming-perks-shop
 
