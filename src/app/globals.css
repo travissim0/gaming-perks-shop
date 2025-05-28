@@ -24,3 +24,34 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom Infantry Online Theme Styles */
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 10px theme('colors.cyan.400'), 0 0 20px theme('colors.cyan.400/50');
+  }
+  
+  .border-glow {
+    box-shadow: 0 0 10px theme('colors.cyan.500/30'), inset 0 0 10px theme('colors.cyan.500/10');
+  }
+  
+  .nav-link:hover {
+    animation: pulse-glow 1.5s infinite;
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 5px theme('colors.cyan.500/50');
+    }
+    50% {
+      box-shadow: 0 0 15px theme('colors.cyan.400'), 0 0 25px theme('colors.cyan.400/30');
+    }
+  }
+  
+  .cyber-grid {
+    background-image: 
+      linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+}
