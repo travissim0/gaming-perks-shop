@@ -1,0 +1,8 @@
+# Deployment Configuration
+# Copy this file to deploy-config.local and update with your server details
+# (deploy-config.local is in .gitignore to keep your secrets safe)
+
+SERVER_IP=your.server.ip.address
+USERNAME=root
+APP_NAME=gaming-perks-shop
+SSH_KEY_PATH=~/.ssh/id_rsa 

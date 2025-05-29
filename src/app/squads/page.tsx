@@ -7,6 +7,8 @@ import { User } from '@supabase/supabase-js';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
+import { queries, robustFetch } from '@/utils/dataFetching';
 
 interface Squad {
   id: string;
@@ -33,6 +35,8 @@ interface SquadMember {
 interface FreeAgent {
   id: string;
   in_game_alias: string;
+  email: string;
+  created_at: string;
 }
 
 interface SquadInvite {
@@ -47,6 +51,7 @@ interface SquadInvite {
   expires_at: string;
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   message?: string;
+  inviter_alias?: string;
 }
 
 export default function SquadsPage() {
@@ -71,53 +76,310 @@ export default function SquadsPage() {
   const [discordLink, setDiscordLink] = useState('');
   const [websiteLink, setWebsiteLink] = useState('');
 
+  // Loading timeout to prevent indefinite loading
+  useLoadingTimeout({
+    isLoading: dataLoading,
+    timeout: 20000, // Longer timeout for this complex page
+    onTimeout: () => {
+      console.error('⏰ Squads page loading timeout - forcing completion');
+      setDataLoading(false);
+      toast.error('Loading took too long. Some data may not be available.');
+    }
+  });
+
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
       loadInitialData();
     }
-  }, [user]);
+  }, [user, loading]);
 
   const loadInitialData = async () => {
-    setDataLoading(true);
-    
     try {
-      // First fetch user squad to know if we need to fetch pending invites
-      await fetchUserSquad();
+      setDataLoading(true);
       
-      // Fetch received invitations for users not in a squad
-      await fetchReceivedInvitations();
-      
-      // Fetch sent join requests for users not in a squad
-      await fetchSentJoinRequests();
-      
-      // Then fetch other data in parallel with error handling
-      const promises = [
-        fetchAllSquads().catch(error => {
-          console.error('Error fetching all squads:', error);
-          setAllSquads([]);
-        }),
-        fetchFreeAgents().catch(error => {
-          console.error('Error fetching free agents:', error);
-          setFreeAgents([]);
-        })
-      ];
-      
-      await Promise.allSettled(promises);
+      // Load critical data first
+      await Promise.allSettled([
+        loadUserSquad(),
+        loadAllSquads(),
+        loadFreeAgents()
+      ]);
+
+      // Load user-specific data after basic data loads
+      if (user) {
+        await Promise.allSettled([
+          loadReceivedInvitations(),
+          loadSentJoinRequests(),
+          loadJoinRequestsForSquad()
+        ]);
+      }
+
     } catch (error) {
       console.error('Error loading initial data:', error);
-      // Ensure we still set loading to false even if there's an error
+      toast.error('Failed to load squads data');
     } finally {
       setDataLoading(false);
     }
   };
 
-  const fetchFreeAgents = async () => {
+  const loadUserSquad = async () => {
+    if (!user) return;
+
+    const { data, success } = await robustFetch(
+      async () => {
+        const result = await supabase
+          .from('squad_members')
+          .select(`
+            squads!inner(
+              id,
+              name,
+              tag,
+              description,
+              discord_link,
+              website_link,
+              captain_id,
+              created_at
+            )
+          `)
+          .eq('player_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (result.error) throw new Error(result.error.message);
+        return result.data;
+      },
+      { showErrorToast: false } // Don't show error if user has no squad
+    );
+
+    if (success && data) {
+      const squadData = (data.squads as any);
+      
+      // Get squad members
+      const { data: membersData } = await queries.getSquadMembers(squadData.id);
+      
+      const formattedSquad: Squad = {
+        ...squadData,
+        members: membersData?.map((member: any) => ({
+          id: member.id,
+          player_id: member.player_id,
+          in_game_alias: member.profiles?.in_game_alias || 'Unknown',
+          role: member.role,
+          joined_at: member.joined_at
+        })) || []
+      };
+
+      setUserSquad(formattedSquad);
+    }
+  };
+
+  const loadAllSquads = async () => {
+    const { data, success } = await robustFetch(
+      async () => {
+        const result = await supabase
+          .from('squads')
+          .select(`
+            id,
+            name,
+            tag,
+            description,
+            discord_link,
+            website_link,
+            captain_id,
+            created_at
+          `)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+
+        if (result.error) throw new Error(result.error.message);
+        return result.data;
+      },
+      { errorMessage: 'Failed to load squads' }
+    );
+
+    if (success && data) {
+      // Load members for each squad
+      const squadsWithMembers = await Promise.all(
+        data.map(async (squad: any) => {
+          const { data: membersData } = await queries.getSquadMembers(squad.id);
+          
+          return {
+            ...squad,
+            members: membersData?.map((member: any) => ({
+              id: member.id,
+              player_id: member.player_id,
+              in_game_alias: member.profiles?.in_game_alias || 'Unknown',
+              role: member.role,
+              joined_at: member.joined_at
+            })) || []
+          };
+        })
+      );
+
+      setAllSquads(squadsWithMembers);
+    }
+  };
+
+  const loadFreeAgents = async () => {
+    const { data, success } = await robustFetch(
+      async () => {
+        const result = await supabase
+          .from('profiles')
+          .select('id, in_game_alias, email, created_at')
+          .not('id', 'in', 
+            supabase
+              .from('squad_members')
+              .select('player_id')
+              .eq('status', 'active')
+          )
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (result.error) throw new Error(result.error.message);
+        return result.data;
+      },
+      { showErrorToast: false } // Don't show error for optional data
+    );
+
+    if (success && data) {
+      setFreeAgents(data);
+    }
+  };
+
+  const loadReceivedInvitations = async () => {
+    if (!user) return;
+
+    const { data, success } = await robustFetch(
+      async () => {
+        const result = await supabase
+          .from('squad_invites')
+          .select(`
+            *,
+            squads!squad_invites_squad_id_fkey(name, tag),
+            inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
+          `)
+          .eq('invited_player_id', user.id)
+          .eq('status', 'pending')
+          .neq('invited_by', user.id) // Exclude self-requests
+          .gt('expires_at', new Date().toISOString());
+
+        if (result.error) throw new Error(result.error.message);
+        return result.data;
+      },
+      { showErrorToast: false }
+    );
+
+    if (success && data) {
+      const formattedInvitations = data.map((invite: any) => ({
+        ...invite,
+        squad_name: invite.squads?.name,
+        squad_tag: invite.squads?.tag,
+        inviter_alias: invite.inviter?.in_game_alias
+      }));
+
+      setReceivedInvitations(formattedInvitations);
+    }
+  };
+
+  const loadSentJoinRequests = async () => {
+    if (!user) return;
+
+    console.log('fetchSentJoinRequests: Starting fetch for user:', user.id);
+
     try {
-      const { data, error } = await supabase.rpc('get_free_agents');
-      if (error) throw error;
-      setFreeAgents(data || []);
+      // Get join requests sent by the current user (where invited_by = invited_player_id = user.id)
+      const { data: requestData, error } = await supabase
+        .from('squad_invites')
+        .select(`
+          id,
+          squad_id,
+          invited_player_id,
+          invited_by,
+          message,
+          created_at,
+          expires_at,
+          status,
+          squads!inner(
+            id,
+            name,
+            tag
+          )
+        `)
+        .eq('invited_by', user.id)
+        .eq('invited_player_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      console.log('fetchSentJoinRequests: Query result:', { requestData, error });
+
+      if (error) {
+        console.error('Error fetching sent join requests:', error);
+        setSentJoinRequests([]);
+        return;
+      }
+
+      if (!requestData || requestData.length === 0) {
+        console.log('fetchSentJoinRequests: No pending join requests found');
+        setSentJoinRequests([]);
+        return;
+      }
+
+      console.log('fetchSentJoinRequests: Found', requestData.length, 'requests');
+
+      const formattedRequests = requestData.map((request: any) => ({
+        id: request.id,
+        squad_id: request.squad_id,
+        squad_name: request.squads.name,
+        squad_tag: request.squads.tag,
+        invited_player_id: request.invited_player_id,
+        invited_alias: '', // This is the current user
+        invited_by_alias: '', // This is also the current user
+        created_at: request.created_at,
+        expires_at: request.expires_at,
+        status: request.status,
+        message: request.message
+      }));
+
+      console.log('fetchSentJoinRequests: Formatted requests:', formattedRequests);
+      setSentJoinRequests(formattedRequests);
     } catch (error) {
-      console.error('Error fetching free agents:', error);
+      console.error('Error fetching sent join requests:', error);
+      setSentJoinRequests([]);
+    }
+  };
+
+  const loadJoinRequestsForSquad = async () => {
+    if (!user || !userSquad) return;
+
+    const userMember = userSquad.members.find(m => m.player_id === user.id);
+    if (!userMember || (userMember.role !== 'captain' && userMember.role !== 'co_captain')) {
+      return;
+    }
+
+    const { data, success } = await robustFetch(
+      async () => {
+        const result = await supabase
+          .from('squad_invites')
+          .select(`
+            *,
+            profiles!squad_invites_invited_player_id_fkey(in_game_alias)
+          `)
+          .eq('squad_id', userSquad.id)
+          .eq('status', 'pending')
+          .eq('invited_by', 'invited_player_id') // Self-requests only
+          .gt('expires_at', new Date().toISOString());
+
+        if (result.error) throw new Error(result.error.message);
+        return result.data;
+      },
+      { showErrorToast: false }
+    );
+
+    if (success && data) {
+      const formattedRequests = data.map((request: any) => ({
+        ...request,
+        requester_alias: request.profiles?.in_game_alias
+      }));
+
+      setJoinRequests(formattedRequests);
     }
   };
 
@@ -226,372 +488,6 @@ export default function SquadsPage() {
     }
   };
 
-  const fetchUserSquad = async () => {
-    try {
-      // Get user's squad membership
-      const { data: squadData, error } = await supabase
-        .from('squad_members')
-        .select(`
-          id,
-          role,
-          joined_at,
-          squads!inner(
-            id,
-            name,
-            tag,
-            description,
-            captain_id,
-            created_at,
-            max_members,
-            logo_url,
-            discord_link,
-            website_link
-          )
-        `)
-        .eq('player_id', user?.id)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching user squad:', error);
-        setUserSquad(null);
-        setPendingInvites([]);
-        return;
-      }
-
-      if (!squadData) {
-        setUserSquad(null);
-        setPendingInvites([]);
-        return;
-      }
-
-      // Get all squad members
-      const { data: members, error: membersError } = await supabase
-        .from('squad_members')
-        .select(`
-          id,
-          player_id,
-          role,
-          joined_at,
-          profiles!squad_members_player_id_fkey(in_game_alias)
-        `)
-        .eq('squad_id', (squadData.squads as any).id)
-        .eq('status', 'active')
-        .order('joined_at', { ascending: true });
-
-      if (membersError) {
-        console.error('Error fetching squad members:', membersError);
-        setUserSquad(null);
-        setPendingInvites([]);
-        return;
-      }
-
-      // Get captain alias
-      const { data: captainData } = await supabase
-        .from('profiles')
-        .select('in_game_alias')
-        .eq('id', (squadData.squads as any).captain_id)
-        .single();
-
-      const formattedSquad: Squad = {
-        ...(squadData.squads as any),
-        captain_alias: captainData?.in_game_alias || 'Unknown',
-        members: members?.map((member: any) => ({
-          id: member.id,
-          player_id: member.player_id,
-          in_game_alias: member.profiles?.in_game_alias || 'Unknown',
-          role: member.role,
-          joined_at: member.joined_at
-        })) || [],
-        member_count: members?.length || 0
-      };
-
-      setUserSquad(formattedSquad);
-      
-      // Now fetch pending invites for this squad (only if we have a valid squad ID)
-      if (formattedSquad.id) {
-        await fetchPendingInvitesForSquad(formattedSquad.id);
-        // Also fetch join requests if user is captain or co-captain
-        if (formattedSquad.members.some(member => 
-          member.player_id === user?.id && 
-          ['captain', 'co_captain'].includes(member.role)
-        )) {
-          await fetchJoinRequests(formattedSquad.id);
-        }
-      } else {
-        console.warn('Squad created without valid ID, skipping pending invites fetch');
-        setPendingInvites([]);
-        setJoinRequests([]);
-      }
-    } catch (error) {
-      console.error('Error fetching user squad:', error);
-      // Ensure state is clean on any error
-      setUserSquad(null);
-      setPendingInvites([]);
-    }
-  };
-
-  const fetchAllSquads = async () => {
-    try {
-      const response = await fetch('/api/squads');
-      if (response.ok) {
-        const data = await response.json();
-        setAllSquads(data.squads);
-      }
-    } catch (error) {
-      console.error('Error fetching all squads:', error);
-    }
-  };
-
-  const fetchPendingInvites = async () => {
-    // Don't fetch if user doesn't have a squad
-    if (!userSquad?.id) {
-      setPendingInvites([]);
-      return;
-    }
-
-    await fetchPendingInvitesForSquad(userSquad.id);
-  };
-
-  const fetchReceivedInvitations = async () => {
-    if (!user) {
-      setReceivedInvitations([]);
-      return;
-    }
-
-    try {
-      // Get invitations sent to the current user (exclude self-requests/join requests)
-      const { data: inviteData, error } = await supabase
-        .from('squad_invites')
-        .select(`
-          id,
-          squad_id,
-          invited_player_id,
-          invited_by,
-          message,
-          created_at,
-          expires_at,
-          status,
-          squads!inner(
-            id,
-            name,
-            tag
-          )
-        `)
-        .eq('invited_player_id', user.id)
-        .neq('invited_by', user.id)  // Exclude self-requests (join requests)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching received invitations:', error);
-        setReceivedInvitations([]);
-        return;
-      }
-
-      if (!inviteData || inviteData.length === 0) {
-        setReceivedInvitations([]);
-        return;
-      }
-
-      // Get profile information for the inviters
-      const inviterIds = inviteData.map(invite => invite.invited_by);
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, in_game_alias')
-        .in('id', inviterIds);
-
-      if (profilesError) {
-        console.warn('Error fetching profiles for inviters:', profilesError);
-      }
-
-      const profilesMap = new Map(
-        profilesData?.map(profile => [profile.id, profile.in_game_alias]) || []
-      );
-
-      const formattedInvitations = inviteData.map((invite: any) => ({
-        id: invite.id,
-        squad_id: invite.squad_id,
-        squad_name: invite.squads.name,
-        squad_tag: invite.squads.tag,
-        invited_player_id: invite.invited_player_id,
-        invited_alias: '', // This is the current user
-        invited_by_alias: profilesMap.get(invite.invited_by) || 'Unknown',
-        created_at: invite.created_at,
-        expires_at: invite.expires_at,
-        status: invite.status,
-        message: invite.message
-      }));
-
-      setReceivedInvitations(formattedInvitations);
-    } catch (error) {
-      console.error('Error fetching received invitations:', error);
-      setReceivedInvitations([]);
-    }
-  };
-
-  const fetchSentJoinRequests = async () => {
-    if (!user) {
-      console.log('fetchSentJoinRequests: No user');
-      setSentJoinRequests([]);
-      return;
-    }
-
-    console.log('fetchSentJoinRequests: Starting fetch for user:', user.id);
-
-    try {
-      // Get join requests sent by the current user (where invited_by = invited_player_id = user.id)
-      const { data: requestData, error } = await supabase
-        .from('squad_invites')
-        .select(`
-          id,
-          squad_id,
-          invited_player_id,
-          invited_by,
-          message,
-          created_at,
-          expires_at,
-          status,
-          squads!inner(
-            id,
-            name,
-            tag
-          )
-        `)
-        .eq('invited_by', user.id)
-        .eq('invited_player_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      console.log('fetchSentJoinRequests: Query result:', { requestData, error });
-
-      if (error) {
-        console.error('Error fetching sent join requests:', error);
-        setSentJoinRequests([]);
-        return;
-      }
-
-      if (!requestData || requestData.length === 0) {
-        console.log('fetchSentJoinRequests: No pending join requests found');
-        setSentJoinRequests([]);
-        return;
-      }
-
-      console.log('fetchSentJoinRequests: Found', requestData.length, 'requests');
-
-      const formattedRequests = requestData.map((request: any) => ({
-        id: request.id,
-        squad_id: request.squad_id,
-        squad_name: request.squads.name,
-        squad_tag: request.squads.tag,
-        invited_player_id: request.invited_player_id,
-        invited_alias: '', // This is the current user
-        invited_by_alias: '', // This is also the current user
-        created_at: request.created_at,
-        expires_at: request.expires_at,
-        status: request.status,
-        message: request.message
-      }));
-
-      console.log('fetchSentJoinRequests: Formatted requests:', formattedRequests);
-      setSentJoinRequests(formattedRequests);
-    } catch (error) {
-      console.error('Error fetching sent join requests:', error);
-      setSentJoinRequests([]);
-    }
-  };
-
-  const fetchJoinRequests = async (squadId: string) => {
-    if (!squadId) {
-      console.log('fetchJoinRequests: No squadId provided');
-      setJoinRequests([]);
-      return;
-    }
-
-    console.log('fetchJoinRequests: Starting fetch for squad:', squadId);
-
-    try {
-      // Get join requests made to this squad (where invited_by = invited_player_id, meaning self-requests)
-      const { data: requestData, error } = await supabase
-        .from('squad_invites')
-        .select(`
-          id,
-          squad_id,
-          invited_player_id,
-          invited_by,
-          message,
-          created_at,
-          expires_at,
-          status
-        `)
-        .eq('squad_id', squadId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      console.log('fetchJoinRequests: Query result:', { requestData, error });
-
-      if (error) {
-        console.error('Error fetching join requests:', error);
-        setJoinRequests([]);
-        return;
-      }
-
-      if (!requestData || requestData.length === 0) {
-        console.log('fetchJoinRequests: No pending requests found for squad');
-        setJoinRequests([]);
-        return;
-      }
-
-      console.log('fetchJoinRequests: Found', requestData.length, 'total requests, filtering self-requests...');
-
-      // Filter to only show self-requests (join requests)
-      const joinRequestsOnly = requestData.filter(request => request.invited_by === request.invited_player_id);
-
-      console.log('fetchJoinRequests: Found', joinRequestsOnly.length, 'self-requests (join requests)');
-
-      if (joinRequestsOnly.length === 0) {
-        console.log('fetchJoinRequests: No self-requests found');
-        setJoinRequests([]);
-        return;
-      }
-
-      // Get profile information for the requesters
-      const requesterIds = joinRequestsOnly.map(request => request.invited_player_id);
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, in_game_alias')
-        .in('id', requesterIds);
-
-      if (profilesError) {
-        console.warn('Error fetching profiles for requesters:', profilesError);
-      }
-
-      const profilesMap = new Map(
-        profilesData?.map(profile => [profile.id, profile.in_game_alias]) || []
-      );
-
-      const formattedRequests = joinRequestsOnly.map((request: any) => ({
-        id: request.id,
-        squad_id: request.squad_id,
-        squad_name: '', // Not needed for join requests
-        squad_tag: '', // Not needed for join requests
-        invited_player_id: request.invited_player_id,
-        invited_alias: profilesMap.get(request.invited_player_id) || 'Unknown',
-        invited_by_alias: profilesMap.get(request.invited_by) || 'Unknown',
-        created_at: request.created_at,
-        expires_at: request.expires_at,
-        status: request.status,
-        message: request.message
-      }));
-
-      console.log('fetchJoinRequests: Final formatted requests:', formattedRequests);
-      setJoinRequests(formattedRequests);
-    } catch (error) {
-      console.error('Error fetching join requests:', error);
-      setJoinRequests([]);
-    }
-  };
-
   const acceptInvitation = async (invitationId: string, squadId: string) => {
     if (!user) return;
 
@@ -621,9 +517,9 @@ export default function SquadsPage() {
 
       // Refresh data
       await Promise.all([
-        fetchUserSquad(),
-        fetchReceivedInvitations(),
-        fetchFreeAgents()
+        loadUserSquad(),
+        loadReceivedInvitations(),
+        loadFreeAgents()
       ]);
 
       toast.success('Successfully joined the squad!');
@@ -646,7 +542,7 @@ export default function SquadsPage() {
       if (error) throw error;
 
       // Refresh received invitations
-      await fetchReceivedInvitations();
+      await loadReceivedInvitations();
       
       toast.success('Invitation declined');
     } catch (error) {
@@ -668,7 +564,7 @@ export default function SquadsPage() {
       if (error) throw error;
 
       // Refresh sent join requests
-      await fetchSentJoinRequests();
+      await loadSentJoinRequests();
       
       toast.success('Join request withdrawn');
     } catch (error) {
@@ -706,8 +602,8 @@ export default function SquadsPage() {
 
       // Refresh data
       await Promise.all([
-        fetchUserSquad(),
-        fetchFreeAgents()
+        loadUserSquad(),
+        loadFreeAgents()
       ]);
 
       toast.success('Join request approved!');
@@ -730,53 +626,12 @@ export default function SquadsPage() {
       if (error) throw error;
 
       // Refresh join requests
-      if (userSquad?.id) {
-        await fetchJoinRequests(userSquad.id);
-      }
+      await loadJoinRequestsForSquad();
       
       toast.success('Join request denied');
     } catch (error) {
       console.error('Error denying join request:', error);
       toast.error('Error denying join request');
-    }
-  };
-
-  const createSquad = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const response = await fetch('/api/squads', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: squadName,
-          tag: squadTag,
-          description: squadDescription,
-          captainId: user?.id,
-          discordLink: discordLink || null,
-          websiteLink: websiteLink || null,
-        }),
-      });
-
-      if (response.ok) {
-        setShowCreateForm(false);
-        setSquadName('');
-        setSquadTag('');
-        setSquadDescription('');
-        setDiscordLink('');
-        setWebsiteLink('');
-        fetchUserSquad();
-        fetchAllSquads();
-        fetchFreeAgents();
-      } else {
-        const error = await response.json();
-        toast.error(`Error creating squad: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Error creating squad:', error);
-      toast.error('Error creating squad');
     }
   };
 
@@ -799,8 +654,7 @@ export default function SquadsPage() {
 
       setShowInviteForm(false);
       setSelectedInvitee('');
-      fetchPendingInvites();
-      fetchFreeAgents();
+      await loadFreeAgents();
     } catch (error) {
       console.error('Error sending invitation:', error);
       toast.error('Error sending invitation');
@@ -952,10 +806,18 @@ export default function SquadsPage() {
     member => member.player_id === user?.id && member.role === 'captain'
   );
 
-  if (loading) {
+  // Enhanced loading screen
+  if (loading || dataLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+        <Navbar user={user} />
+        <div className="container mx-auto py-8 px-4 flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-cyan-500 mx-auto mb-6"></div>
+            <p className="text-cyan-400 font-mono text-lg">Loading squads...</p>
+            <p className="text-gray-400 text-sm mt-2">This might take a moment</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -974,10 +836,14 @@ export default function SquadsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
-      <div className="max-w-7xl mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-8">Squad Management</h1>
+      
+      <main className="container mx-auto py-8 px-4">
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">🛡️ Squad Management</h1>
+          <p className="text-gray-400 text-lg">Form teams, compete together, dominate the battlefield</p>
+        </div>
 
         {/* User's Squad Section */}
         {dataLoading ? (
@@ -1218,7 +1084,7 @@ export default function SquadsPage() {
                             </span>
                           </div>
                           <div className="text-sm text-gray-400 mb-2">
-                            Invited by {invitation.invited_by_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                            Invited by {invitation.inviter_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
                           </div>
                           {invitation.message && (
                             <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
@@ -1422,7 +1288,7 @@ export default function SquadsPage() {
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 } 
