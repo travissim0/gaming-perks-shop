@@ -73,11 +73,23 @@ export default function MatchesPage() {
 
   const loadInitialData = async () => {
     setDataLoading(true);
-    await Promise.all([
-      fetchMatches(),
-      fetchUserSquad(),
-      fetchAllSquads()
-    ]);
+    
+    const promises = [
+      fetchMatches().catch(error => {
+        console.error('Error fetching matches:', error);
+        setMatches([]);
+      }),
+      fetchUserSquad().catch(error => {
+        console.error('Error fetching user squad:', error);
+        setUserSquad(null);
+      }),
+      fetchAllSquads().catch(error => {
+        console.error('Error fetching all squads:', error);
+        setAllSquads([]);
+      })
+    ];
+    
+    await Promise.allSettled(promises);
     setDataLoading(false);
   };
 
@@ -414,14 +426,14 @@ export default function MatchesPage() {
               const userRoles = getUserRoles(match);
               
               return (
-                <div key={match.id} className="bg-gray-800 rounded-lg p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
+                <div key={match.id} className="bg-gray-800 rounded-lg p-4 md:p-6">
+                  <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start mb-4 space-y-4 lg:space-y-0">
+                    <div className="flex-1">
                       <Link href={`/matches/${match.id}`}>
                         <h3 className="text-xl font-bold mb-2 text-cyan-400 hover:text-cyan-300 cursor-pointer">{match.title}</h3>
                       </Link>
                       <p className="text-gray-300 mb-3">{match.description}</p>
-                      <div className="flex gap-4 text-sm text-gray-400 mb-2">
+                      <div className="flex flex-wrap gap-2 md:gap-4 text-sm text-gray-400 mb-2">
                         <span>📅 {date} at {time}</span>
                         <span className={getStatusColor(match.status)}>
                           {getStatusIcon(match.status)} {match.status.replace('_', ' ').toUpperCase()}
@@ -429,7 +441,7 @@ export default function MatchesPage() {
                         <span>🎯 {match.match_type.replace('_', ' ').toUpperCase()}</span>
                       </div>
                       {match.match_type === 'squad_vs_squad' && (
-                        <div className="text-sm text-blue-400">
+                        <div className="text-sm text-blue-400 mb-2">
                           {match.squad_a_name} vs {match.squad_b_name || 'TBD'}
                         </div>
                       )}
@@ -437,7 +449,9 @@ export default function MatchesPage() {
                         Created by {match.created_by_alias}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    
+                    {/* Action Buttons - Mobile Responsive */}
+                    <div className="flex flex-col sm:flex-row gap-2 lg:ml-4">
                       {match.status === 'scheduled' && (
                         <button
                           onClick={() => {
@@ -458,7 +472,7 @@ export default function MatchesPage() {
                             
                             setShowParticipantModal(true);
                           }}
-                          className={`px-4 py-2 rounded text-sm ${
+                          className={`px-3 py-2 rounded text-sm whitespace-nowrap ${
                             isParticipant 
                               ? 'bg-blue-600 hover:bg-blue-700' 
                               : 'bg-green-600 hover:bg-green-700'
@@ -471,11 +485,11 @@ export default function MatchesPage() {
                         <div className="flex flex-col gap-1">
                           <button
                             onClick={() => leaveMatch(match.id)}
-                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                            className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-sm whitespace-nowrap"
                           >
                             Leave All Roles
                           </button>
-                          <div className="text-xs text-gray-400">
+                          <div className="text-xs text-gray-400 text-center">
                             Joined as: {userRoles.join(', ')}
                           </div>
                         </div>
@@ -483,7 +497,7 @@ export default function MatchesPage() {
                       {match.created_by === user?.id && match.status === 'scheduled' && (
                         <button
                           onClick={() => deleteMatch(match.id)}
-                          className="bg-red-800 hover:bg-red-900 px-4 py-2 rounded text-sm"
+                          className="bg-red-800 hover:bg-red-900 px-3 py-2 rounded text-sm whitespace-nowrap"
                         >
                           Delete Match
                         </button>
@@ -491,11 +505,11 @@ export default function MatchesPage() {
                     </div>
                   </div>
 
-                  {/* Participants */}
+                  {/* Participants - Mobile Responsive */}
                   {match.participants.length > 0 && (
                     <div>
                       <h4 className="text-lg font-semibold mb-3">Participants ({match.participants.length})</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {['player', 'commentator', 'recording', 'referee'].map(role => {
                           const roleParticipants = match.participants.filter(p => p.role === role);
                           return (
@@ -505,16 +519,16 @@ export default function MatchesPage() {
                               </div>
                               {roleParticipants.map(participant => (
                                 <div key={participant.id} className="text-sm mb-1 flex items-center justify-between">
-                                  <div>
-                                    <span className="font-medium">{participant.in_game_alias}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <span className="font-medium truncate block">{participant.in_game_alias}</span>
                                     {participant.squad_name && (
-                                      <span className="text-gray-400 ml-2">({participant.squad_name})</span>
+                                      <span className="text-gray-400 text-xs truncate block">({participant.squad_name})</span>
                                     )}
                                   </div>
                                   {participant.player_id === user?.id && match.status === 'scheduled' && (
                                     <button
                                       onClick={() => leaveMatchRole(participant.id, role)}
-                                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs ml-2"
+                                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs ml-2 flex-shrink-0"
                                       title={`Leave as ${role}`}
                                     >
                                       ✕

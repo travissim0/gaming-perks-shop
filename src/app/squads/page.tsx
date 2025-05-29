@@ -76,11 +76,19 @@ export default function SquadsPage() {
       // First fetch user squad to know if we need to fetch pending invites
       await fetchUserSquad();
       
-      // Then fetch other data in parallel
-      await Promise.all([
-        fetchAllSquads(),
-        fetchFreeAgents()
-      ]);
+      // Then fetch other data in parallel with error handling
+      const promises = [
+        fetchAllSquads().catch(error => {
+          console.error('Error fetching all squads:', error);
+          setAllSquads([]);
+        }),
+        fetchFreeAgents().catch(error => {
+          console.error('Error fetching free agents:', error);
+          setFreeAgents([]);
+        })
+      ];
+      
+      await Promise.allSettled(promises);
     } catch (error) {
       console.error('Error loading initial data:', error);
       // Ensure we still set loading to false even if there's an error

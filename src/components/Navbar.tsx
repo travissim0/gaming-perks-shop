@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Navbar({ user }: { user: any }) {
   const router = useRouter();
+  const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -29,8 +31,13 @@ export default function Navbar({ user }: { user: any }) {
   }, [user]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.refresh();
+    try {
+      await signOut();
+      router.push('/');
+      router.refresh();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   const toggleMobileMenu = () => {

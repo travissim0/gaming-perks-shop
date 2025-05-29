@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 
 interface MatchParticipant {
   id: string;
@@ -39,6 +40,9 @@ export default function MatchDetailPage() {
   const matchId = params.id as string;
   const [match, setMatch] = useState<Match | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [showParticipantModal, setShowParticipantModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'player' | 'commentator' | 'recording' | 'referee'>('player');
+  const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
     if (matchId) {
@@ -124,6 +128,72 @@ export default function MatchDetailPage() {
     };
   };
 
+  const isUserParticipant = () => {
+    if (!user || !match) return false;
+    return match.participants.some(p => p.player_id === user.id);
+  };
+
+  const getUserParticipation = () => {
+    if (!user || !match) return null;
+    return match.participants.find(p => p.player_id === user.id);
+  };
+
+  const canUserJoin = () => {
+    if (!user || !match) return false;
+    if (match.status !== 'scheduled') return false;
+    return !isUserParticipant();
+  };
+
+  const joinMatch = async () => {
+    if (!user || !match) return;
+
+    setIsJoining(true);
+    try {
+      const { error } = await supabase
+        .from('match_participants')
+        .insert({
+          match_id: match.id,
+          player_id: user.id,
+          role: selectedRole
+        });
+
+      if (error) throw error;
+
+      toast.success(`Joined match as ${selectedRole}!`);
+      setShowParticipantModal(false);
+      fetchMatchDetails(); // Refresh match data
+    } catch (error: any) {
+      console.error('Error joining match:', error);
+      toast.error(error.message || 'Failed to join match');
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const leaveMatch = async () => {
+    if (!user || !match) return;
+
+    const participation = getUserParticipation();
+    if (!participation) return;
+
+    if (!confirm('Are you sure you want to leave this match?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('match_participants')
+        .delete()
+        .eq('id', participation.id);
+
+      if (error) throw error;
+
+      toast.success('Left match successfully');
+      fetchMatchDetails(); // Refresh match data
+    } catch (error: any) {
+      console.error('Error leaving match:', error);
+      toast.error(error.message || 'Failed to leave match');
+    }
+  };
+
   if (loading || pageLoading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
@@ -153,6 +223,7 @@ export default function MatchDetailPage() {
   }
 
   const { date, time } = formatDateTime(match.scheduled_at);
+  const userParticipation = getUserParticipation();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -168,10 +239,10 @@ export default function MatchDetailPage() {
         {/* Match Header */}
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <div className="flex justify-between items-start mb-6">
-            <div>
+            <div className="flex-1">
               <h1 className="text-3xl font-bold mb-2">{match.title}</h1>
               <p className="text-gray-300 mb-4">{match.description}</p>
-              <div className="flex gap-4 text-sm text-gray-400 mb-2">
+              <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-2">
                 <span>📅 {date} at {time}</span>
                 <span className={getStatusColor(match.status)}>
                   {getStatusIcon(match.status)} {match.status.replace('_', ' ').toUpperCase()}
@@ -187,6 +258,36 @@ export default function MatchDetailPage() {
                 Created by {match.created_by_alias} • {new Date(match.created_at).toLocaleDateString()}
               </div>
             </div>
+            
+            {/* Action Buttons */}
+            {user && (
+              <div className="flex flex-col gap-2 ml-4">
+                {userParticipation ? (
+                  <div className="text-center">
+                    <div className="bg-green-600 text-white px-4 py-2 rounded mb-2">
+                      ✅ Joined as {userParticipation.role}
+                    </div>
+                    <button
+                      onClick={leaveMatch}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
+                    >
+                      Leave Match
+                    </button>
+                  </div>
+                ) : canUserJoin() ? (
+                  <button
+                    onClick={() => setShowParticipantModal(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded transition-colors"
+                  >
+                    Join Match
+                  </button>
+                ) : (
+                  <div className="text-gray-400 text-sm text-center">
+                    {match.status !== 'scheduled' ? 'Match not available' : 'Already joined'}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -228,6 +329,43 @@ export default function MatchDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Join Match Modal */}
+      {showParticipantModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-xl font-bold mb-4">Join Match</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Select your role:</label>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as any)}
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+              >
+                <option value="player">🎮 Player</option>
+                <option value="commentator">🎤 Commentator</option>
+                <option value="recording">📹 Recorder</option>
+                <option value="referee">👨‍⚖️ Referee</option>
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowParticipantModal(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={joinMatch}
+                disabled={isJoining}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded transition-colors"
+              >
+                {isJoining ? 'Joining...' : 'Join'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
