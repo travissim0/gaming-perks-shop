@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Game Perks Shop",
-  description: "Purchase in-game perks for your character",
+  title: "CTFPL",
+  description: "Capture The Flag Premier League - Infantry Online competitive gaming platform",
 };
 
 export default function RootLayout({

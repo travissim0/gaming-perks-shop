@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
@@ -88,6 +88,43 @@ export default function Home() {
   const [topSquads, setTopSquads] = useState<Squad[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
+  
+  // Carousel and animation states
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  
+  // Banner slides data
+  const bannerSlides = [
+    {
+      title: "FREE INFANTRY",
+      subtitle: "Capture the Flag: Player's League",
+      description: "🎮 Competitive Gaming Platform",
+      highlight: "Join the Battle",
+      color: "cyan"
+    },
+    {
+      title: "ACTIVE SQUADS",
+      subtitle: "Form Elite Teams",
+      description: "🛡️ Create or Join Competitive Squads",
+      highlight: "Build Your Team",
+      color: "purple"
+    },
+    {
+      title: "LIVE MATCHES",
+      subtitle: "Compete in Real-Time",
+      description: "⚔️ Schedule and Play Competitive Matches",
+      highlight: "Enter the Arena",
+      color: "green"
+    },
+    {
+      title: "SUPPORT THE GAME",
+      subtitle: "Keep Infantry Online Running",
+      description: "💰 Donate to Support Development",
+      highlight: "Make a Difference",
+      color: "yellow"
+    }
+  ];
 
   useEffect(() => {
     if (user) {
@@ -134,6 +171,18 @@ export default function Home() {
       
       fetchRecentPatchNotes();
     }
+    
+    // Scroll effect handler
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    
+    // Carousel auto-advance
+    const carouselInterval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % bannerSlides.length);
+    }, 5000); // Change slide every 5 seconds
+    
+    window.addEventListener('scroll', handleScroll);
     
     // Fetch server data for all users
     const fetchServerData = async () => {
@@ -183,25 +232,28 @@ export default function Home() {
             id,
             in_game_alias,
             updated_at,
-            squad_members!inner(
+            squad_members(
               role,
-              squads!inner(name, tag)
+              squads(name, tag)
             )
           `)
           .eq('registration_status', 'completed')
-          .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // Last 30 minutes
+          .not('in_game_alias', 'is', null)
+          .neq('in_game_alias', '')
+          .gte('updated_at', new Date(Date.now() - 15 * 60 * 1000).toISOString()) // Last 15 minutes
           .order('updated_at', { ascending: false })
-          .limit(20);
+          .limit(15);
 
         if (!error && data) {
           const users: OnlineUser[] = data.map((user: any) => ({
             id: user.id,
             in_game_alias: user.in_game_alias,
             last_seen: user.updated_at,
-            squad_name: user.squad_members?.[0]?.squads?.name,
-            squad_tag: user.squad_members?.[0]?.squads?.tag,
-            role: user.squad_members?.[0]?.role
+            squad_name: user.squad_members?.[0]?.squads?.name || null,
+            squad_tag: user.squad_members?.[0]?.squads?.tag || null,
+            role: user.squad_members?.[0]?.role || null,
           }));
+          
           setOnlineUsers(users);
         }
       } catch (error) {
@@ -329,6 +381,8 @@ export default function Home() {
       clearInterval(usersInterval);
       clearInterval(squadsInterval);
       clearInterval(matchesInterval);
+      clearInterval(carouselInterval);
+      window.removeEventListener('scroll', handleScroll);
     };
   }, [user]);
 
@@ -416,46 +470,133 @@ export default function Home() {
       <Navbar user={user} />
       
       <main className="container mx-auto px-4 py-8">
-        {/* Welcome Section */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">
-            INFANTRY ONLINE
-          </h1>
-          <p className="text-xl text-gray-300 mb-6">
-            Capture The Flag Pro League • Community Hub
-          </p>
+        {/* Interactive Carousel Banner */}
+        <div 
+          ref={bannerRef}
+          className="relative mb-8 overflow-hidden rounded-xl h-64 lg:h-80"
+          style={{
+            transform: `translateY(${scrollY * 0.5}px)`,
+            opacity: Math.max(0.3, 1 - scrollY / 400)
+          }}
+        >
+          {/* Video Background */}
+          <video 
+            autoPlay 
+            loop 
+            muted 
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          >
+            <source src="/CTFPL-Website-Header-1.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
           
-          {/* Quick Actions for Logged In Users */}
-          {user && (
-            <div className="flex flex-wrap justify-center gap-4 mb-6">
-              <Link 
-                href="/squads" 
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg hover:shadow-purple-500/25"
+          {/* Dynamic Overlay Gradient */}
+          <div 
+            className={`absolute inset-0 transition-all duration-1000 ${
+              bannerSlides[currentSlide].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80' :
+              bannerSlides[currentSlide].color === 'purple' ? 'bg-gradient-to-r from-gray-900/80 via-purple-900/40 to-gray-900/80' :
+              bannerSlides[currentSlide].color === 'green' ? 'bg-gradient-to-r from-gray-900/80 via-green-900/40 to-gray-900/80' :
+              'bg-gradient-to-r from-gray-900/80 via-yellow-900/40 to-gray-900/80'
+            }`}
+          ></div>
+          
+          {/* Slide Content */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div 
+              className="text-center px-4 transition-all duration-1000 transform"
+              style={{
+                transform: `translateY(${scrollY * 0.2}px) scale(${Math.max(0.8, 1 - scrollY / 1000)})`,
+                filter: `brightness(${Math.max(0.7, 1 + scrollY / 500)})`
+              }}
+            >
+              <h1 
+                className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${
+                  bannerSlides[currentSlide].color === 'cyan' ? 'text-cyan-400' :
+                  bannerSlides[currentSlide].color === 'purple' ? 'text-purple-400' :
+                  bannerSlides[currentSlide].color === 'green' ? 'text-green-400' :
+                  'text-yellow-400'
+                }`}
               >
-                🛡️ SQUADS
-              </Link>
-              <Link 
-                href="/matches" 
-                className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg hover:shadow-green-500/25"
+                {bannerSlides[currentSlide].title}
+              </h1>
+              <p className="text-lg lg:text-2xl text-gray-200 mb-2 drop-shadow-lg transition-all duration-1000">
+                {bannerSlides[currentSlide].subtitle}
+              </p>
+              <div className="text-gray-300 font-mono text-sm lg:text-base drop-shadow-lg mb-4 transition-all duration-1000">
+                {bannerSlides[currentSlide].description}
+              </div>
+              
+              {/* Call to Action Button */}
+              <button 
+                className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 ${
+                  bannerSlides[currentSlide].color === 'cyan' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white hover:shadow-cyan-500/25' :
+                  bannerSlides[currentSlide].color === 'purple' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white hover:shadow-purple-500/25' :
+                  bannerSlides[currentSlide].color === 'green' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white hover:shadow-green-500/25' :
+                  'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:shadow-yellow-500/25'
+                }`}
+                onClick={() => {
+                  if (currentSlide === 1) window.location.href = '/squads';
+                  else if (currentSlide === 2) window.location.href = '/matches';
+                  else if (currentSlide === 3) window.location.href = '/donate';
+                  else window.location.href = '/dashboard';
+                }}
               >
-                ⚔️ MATCHES
-              </Link>
-              <Link 
-                href="/donate" 
-                className="bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg hover:shadow-yellow-500/25"
-              >
-                💰 DONATE
-              </Link>
+                {bannerSlides[currentSlide].highlight}
+              </button>
             </div>
-          )}
+          </div>
+          
+          {/* Navigation Arrows */}
+          <button 
+            onClick={() => setCurrentSlide((prev) => (prev - 1 + bannerSlides.length) % bannerSlides.length)}
+            className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          
+          <button 
+            onClick={() => setCurrentSlide((prev) => (prev + 1) % bannerSlides.length)}
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          
+          {/* Slide Indicators */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+            {bannerSlides.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentSlide(index)}
+                className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                  index === currentSlide 
+                    ? `${bannerSlides[currentSlide].color === 'cyan' ? 'bg-cyan-400' :
+                        bannerSlides[currentSlide].color === 'purple' ? 'bg-purple-400' :
+                        bannerSlides[currentSlide].color === 'green' ? 'bg-green-400' :
+                        'bg-yellow-400'} scale-125` 
+                    : 'bg-white/50 hover:bg-white/70'
+                }`}
+              />
+            ))}
+          </div>
         </div>
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Main Grid Layout with Enhanced Animations */}
+        <div 
+          className="grid grid-cols-1 lg:grid-cols-4 gap-6"
+          style={{
+            transform: `translateY(${Math.max(0, scrollY - 200) * -0.1}px)`,
+            opacity: Math.min(1, Math.max(0.5, 1 - (scrollY - 200) / 800))
+          }}
+        >
           {/* Left Sidebar - Server Status & Game Data */}
           <div className="lg:col-span-1 space-y-6">
             {/* Server Status */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-green-500/20 hover:border-green-500/50">
               <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
                 <h3 className="text-green-400 font-bold text-sm tracking-wider">🌐 SERVER STATUS</h3>
                 <p className="text-gray-400 text-xs mt-1 font-mono">Live Game Data</p>
@@ -506,7 +647,7 @@ export default function Home() {
             </section>
 
             {/* Live Game Data */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden">
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/20 hover:border-blue-500/50">
               <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
                 <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
                 <p className="text-gray-400 text-xs mt-1 font-mono">
@@ -608,7 +749,7 @@ export default function Home() {
 
           {/* Main Content - Matches */}
           <div className="lg:col-span-2">
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-8 shadow-2xl">
+            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-8 shadow-2xl transform transition-all duration-300 hover:scale-[1.02] hover:shadow-cyan-500/20 hover:border-cyan-500/50">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-3xl font-bold text-cyan-400 tracking-wider">UPCOMING MATCHES</h3>
                 {user && (
@@ -661,7 +802,7 @@ export default function Home() {
             </div>
 
             {/* Top Squads Section */}
-            <div className="mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-6 shadow-2xl">
+            <div className="mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-6 shadow-2xl transform transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/20 hover:border-purple-500/50">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-bold text-purple-400 tracking-wider">🛡️ ACTIVE SQUADS</h3>
                 {user && !userSquad && (
