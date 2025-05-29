@@ -146,7 +146,13 @@ export default function MatchDetailPage() {
   const canUserJoin = () => {
     if (!user || !match) return false;
     if (match.status !== 'scheduled') return false;
-    return !isUserParticipant();
+    
+    // For additional roles, check if user can join more roles
+    const userParticipations = getAllUserParticipations();
+    const userRoleSet = new Set(userParticipations.map(p => p.role));
+    const availableRoles = (['player', 'commentator', 'recording', 'referee'] as const).filter(role => !userRoleSet.has(role));
+    
+    return availableRoles.length > 0;
   };
 
   const joinMatch = async () => {
@@ -205,6 +211,25 @@ export default function MatchDetailPage() {
     } catch (error: any) {
       console.error('Error leaving match:', error);
       toast.error(error.message || 'Failed to leave match');
+    }
+  };
+
+  const leaveMatchRole = async (participantId: string, role: string) => {
+    if (!confirm(`Are you sure you want to leave as ${role}?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('match_participants')
+        .delete()
+        .eq('id', participantId);
+
+      if (error) throw error;
+
+      toast.success(`Left ${role} role successfully`);
+      fetchMatchDetails(); // Refresh match data
+    } catch (error: any) {
+      console.error('Error leaving match role:', error);
+      toast.error(error.message || 'Failed to leave role');
     }
   };
 
@@ -283,23 +308,45 @@ export default function MatchDetailPage() {
                     <div className="bg-green-600 text-white px-4 py-2 rounded mb-2">
                       ✅ Joined as: {userRoles.join(', ')}
                     </div>
-                    <button
-                      onClick={leaveMatch}
-                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors"
-                    >
-                      Leave Match
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      {canUserJoin() && (
+                        <button
+                          onClick={() => {
+                            // Set the first available role as default
+                            const userParticipations = getAllUserParticipations();
+                            const userRoleSet = new Set(userParticipations.map(p => p.role));
+                            const availableRoles = (['player', 'commentator', 'recording', 'referee'] as const).filter(role => !userRoleSet.has(role));
+                            if (availableRoles.length > 0) {
+                              setSelectedRole(availableRoles[0]);
+                            }
+                            setShowParticipantModal(true);
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors text-sm"
+                        >
+                          Join Additional Role
+                        </button>
+                      )}
+                      <button
+                        onClick={leaveMatch}
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition-colors text-sm"
+                      >
+                        Leave All Roles
+                      </button>
+                    </div>
                   </div>
                 ) : canUserJoin() ? (
                   <button
-                    onClick={() => setShowParticipantModal(true)}
+                    onClick={() => {
+                      setSelectedRole('player');
+                      setShowParticipantModal(true);
+                    }}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded transition-colors"
                   >
                     Join Match
                   </button>
                 ) : (
                   <div className="text-gray-400 text-sm text-center">
-                    {match.status !== 'scheduled' ? 'Match not available' : 'Already joined'}
+                    {match.status !== 'scheduled' ? 'Match not available' : 'Match not available'}
                   </div>
                 )}
               </div>
@@ -322,14 +369,25 @@ export default function MatchDetailPage() {
                     </div>
                     <div className="space-y-2">
                       {roleParticipants.map(participant => (
-                        <div key={participant.id} className="text-sm">
-                          <span className="font-medium">{participant.in_game_alias}</span>
-                          {participant.squad_name && (
-                            <span className="text-gray-400 ml-2">({participant.squad_name})</span>
-                          )}
-                          <div className="text-xs text-gray-500">
-                            Joined {new Date(participant.joined_at).toLocaleDateString()}
+                        <div key={participant.id} className="text-sm flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{participant.in_game_alias}</span>
+                            {participant.squad_name && (
+                              <span className="text-gray-400 ml-2">({participant.squad_name})</span>
+                            )}
+                            <div className="text-xs text-gray-500">
+                              Joined {new Date(participant.joined_at).toLocaleDateString()}
+                            </div>
                           </div>
+                          {participant.player_id === user?.id && match.status === 'scheduled' && (
+                            <button
+                              onClick={() => leaveMatchRole(participant.id, role)}
+                              className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs ml-2 flex-shrink-0"
+                              title={`Leave as ${role}`}
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -350,7 +408,9 @@ export default function MatchDetailPage() {
       {showParticipantModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-bold mb-4">Join Match</h3>
+            <h3 className="text-xl font-bold mb-4">
+              {allUserParticipations.length > 0 ? 'Join Additional Role' : 'Join Match'}
+            </h3>
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">Select your role:</label>
               <select
@@ -358,10 +418,16 @@ export default function MatchDetailPage() {
                 onChange={(e) => setSelectedRole(e.target.value as any)}
                 className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
               >
-                <option value="player">🎮 Player</option>
-                <option value="commentator">🎤 Commentator</option>
-                <option value="recording">📹 Recorder</option>
-                <option value="referee">👨‍⚖️ Referee</option>
+                {(['player', 'commentator', 'recording', 'referee'] as const)
+                  .filter(role => !getAllUserParticipations().some(p => p.role === role))
+                  .map(role => (
+                    <option key={role} value={role}>
+                      {role === 'player' && '🎮 Player'}
+                      {role === 'commentator' && '🎤 Commentator'}
+                      {role === 'recording' && '📹 Recorder'}
+                      {role === 'referee' && '👨‍⚖️ Referee'}
+                    </option>
+                  ))}
               </select>
             </div>
             <div className="flex gap-3">
