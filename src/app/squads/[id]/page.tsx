@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 
 interface SquadMember {
   id: string;
@@ -27,18 +28,35 @@ interface Squad {
   members: SquadMember[];
 }
 
+interface UserSquad {
+  id: string;
+  name: string;
+  tag: string;
+}
+
 export default function SquadDetailPage() {
   const { user, loading } = useAuth();
   const params = useParams();
   const squadId = params.id as string;
   const [squad, setSquad] = useState<Squad | null>(null);
+  const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [hasExistingRequest, setHasExistingRequest] = useState(false);
 
   useEffect(() => {
-    if (squadId) {
-      fetchSquadDetails();
+    if (squadId && user) {
+      loadData();
     }
-  }, [squadId]);
+  }, [squadId, user]);
+
+  const loadData = async () => {
+    await Promise.all([
+      fetchSquadDetails(),
+      fetchUserSquad(),
+      checkExistingRequest()
+    ]);
+  };
 
   const fetchSquadDetails = async () => {
     try {
@@ -97,6 +115,100 @@ export default function SquadDetailPage() {
     } finally {
       setPageLoading(false);
     }
+  };
+
+  const fetchUserSquad = async () => {
+    if (!user) return;
+    
+    try {
+      // Get user's current squad membership
+      const { data: squadData, error } = await supabase
+        .from('squad_members')
+        .select(`
+          squads!inner(id, name, tag)
+        `)
+        .eq('player_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching user squad:', error);
+        return;
+      }
+
+      if (squadData) {
+        setUserSquad({
+          id: (squadData.squads as any).id,
+          name: (squadData.squads as any).name,
+          tag: (squadData.squads as any).tag
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user squad:', error);
+    }
+  };
+
+  const checkExistingRequest = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: existingRequest, error } = await supabase
+        .from('squad_invites')
+        .select('*')
+        .eq('invited_player_id', user.id)
+        .eq('squad_id', squadId)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking existing request:', error);
+        return;
+      }
+
+      setHasExistingRequest(!!existingRequest);
+    } catch (error) {
+      console.error('Error checking existing request:', error);
+    }
+  };
+
+  const requestToJoin = async () => {
+    if (!user || !squad) return;
+
+    setIsRequesting(true);
+    try {
+      // Create a join request by inserting into squad_invites
+      const { error } = await supabase
+        .from('squad_invites')
+        .insert({
+          squad_id: squad.id,
+          invited_player_id: user.id,
+          invited_by_id: user.id, // Self-request
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+        });
+
+      if (error) throw error;
+
+      toast.success('Join request sent successfully!');
+      setHasExistingRequest(true);
+    } catch (error: any) {
+      console.error('Error sending join request:', error);
+      toast.error(error.message || 'Failed to send join request');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const isUserInThisSquad = () => {
+    if (!user || !squad) return false;
+    return squad.members.some(member => member.player_id === user.id);
+  };
+
+  const canRequestToJoin = () => {
+    if (!user || !squad) return false;
+    if (isUserInThisSquad()) return false; // Already in this squad
+    if (userSquad) return false; // Already in another squad
+    if (hasExistingRequest) return false; // Already has pending request
+    return true;
   };
 
   const getRoleIcon = (role: string) => {
@@ -197,6 +309,37 @@ export default function SquadDetailPage() {
                 )}
               </div>
             </div>
+            
+            {/* Action Buttons */}
+            {user && (
+              <div className="flex flex-col gap-2 ml-4">
+                {isUserInThisSquad() ? (
+                  <div className="bg-green-600 text-white px-4 py-2 rounded text-center">
+                    ✅ Squad Member
+                  </div>
+                ) : canRequestToJoin() ? (
+                  <button
+                    onClick={requestToJoin}
+                    disabled={isRequesting}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded transition-colors"
+                  >
+                    {isRequesting ? 'Sending...' : '📝 Request to Join'}
+                  </button>
+                ) : userSquad ? (
+                  <div className="bg-gray-600 text-gray-300 px-4 py-2 rounded text-center text-sm">
+                    Already in [{userSquad.tag}] {userSquad.name}
+                  </div>
+                ) : hasExistingRequest ? (
+                  <div className="bg-yellow-600 text-white px-4 py-2 rounded text-center text-sm">
+                    ⏳ Request Pending
+                  </div>
+                ) : (
+                  <div className="bg-gray-600 text-gray-300 px-4 py-2 rounded text-center text-sm">
+                    Cannot Join
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

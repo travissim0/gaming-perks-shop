@@ -138,6 +138,11 @@ export default function MatchDetailPage() {
     return match.participants.find(p => p.player_id === user.id);
   };
 
+  const getAllUserParticipations = () => {
+    if (!user || !match) return [];
+    return match.participants.filter(p => p.player_id === user.id);
+  };
+
   const canUserJoin = () => {
     if (!user || !match) return false;
     if (match.status !== 'scheduled') return false;
@@ -173,16 +178,25 @@ export default function MatchDetailPage() {
   const leaveMatch = async () => {
     if (!user || !match) return;
 
-    const participation = getUserParticipation();
-    if (!participation) return;
+    const allParticipations = getAllUserParticipations();
+    if (allParticipations.length === 0) {
+      toast.error('You are not participating in this match');
+      return;
+    }
 
-    if (!confirm('Are you sure you want to leave this match?')) return;
+    const confirmMessage = allParticipations.length > 1 
+      ? `Are you sure you want to leave this match? You will be removed from all roles: ${allParticipations.map(p => p.role).join(', ')}`
+      : `Are you sure you want to leave this match as ${allParticipations[0].role}?`;
+
+    if (!confirm(confirmMessage)) return;
 
     try {
+      // Delete all participations for this user in this match
       const { error } = await supabase
         .from('match_participants')
         .delete()
-        .eq('id', participation.id);
+        .eq('match_id', match.id)
+        .eq('player_id', user.id);
 
       if (error) throw error;
 
@@ -224,6 +238,8 @@ export default function MatchDetailPage() {
 
   const { date, time } = formatDateTime(match.scheduled_at);
   const userParticipation = getUserParticipation();
+  const allUserParticipations = getAllUserParticipations();
+  const userRoles = allUserParticipations.map(p => p.role);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -262,10 +278,10 @@ export default function MatchDetailPage() {
             {/* Action Buttons */}
             {user && (
               <div className="flex flex-col gap-2 ml-4">
-                {userParticipation ? (
+                {allUserParticipations.length > 0 ? (
                   <div className="text-center">
                     <div className="bg-green-600 text-white px-4 py-2 rounded mb-2">
-                      ✅ Joined as {userParticipation.role}
+                      ✅ Joined as: {userRoles.join(', ')}
                     </div>
                     <button
                       onClick={leaveMatch}
