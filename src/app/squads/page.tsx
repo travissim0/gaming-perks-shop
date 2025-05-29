@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 
 interface Squad {
   id: string;
@@ -36,12 +37,16 @@ interface FreeAgent {
 
 interface SquadInvite {
   id: string;
+  squad_id?: string;
+  squad_name?: string;
+  squad_tag?: string;
   invited_player_id: string;
   invited_alias: string;
   invited_by_alias: string;
   created_at: string;
   expires_at: string;
   status: 'pending' | 'accepted' | 'declined' | 'expired';
+  message?: string;
 }
 
 export default function SquadsPage() {
@@ -50,6 +55,9 @@ export default function SquadsPage() {
   const [allSquads, setAllSquads] = useState<Squad[]>([]);
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   const [pendingInvites, setPendingInvites] = useState<SquadInvite[]>([]);
+  const [receivedInvitations, setReceivedInvitations] = useState<SquadInvite[]>([]);
+  const [sentJoinRequests, setSentJoinRequests] = useState<SquadInvite[]>([]);
+  const [joinRequests, setJoinRequests] = useState<SquadInvite[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showInviteForm, setShowInviteForm] = useState(false);
@@ -75,6 +83,12 @@ export default function SquadsPage() {
     try {
       // First fetch user squad to know if we need to fetch pending invites
       await fetchUserSquad();
+      
+      // Fetch received invitations for users not in a squad
+      await fetchReceivedInvitations();
+      
+      // Fetch sent join requests for users not in a squad
+      await fetchSentJoinRequests();
       
       // Then fetch other data in parallel with error handling
       const promises = [
@@ -297,9 +311,17 @@ export default function SquadsPage() {
       // Now fetch pending invites for this squad (only if we have a valid squad ID)
       if (formattedSquad.id) {
         await fetchPendingInvitesForSquad(formattedSquad.id);
+        // Also fetch join requests if user is captain or co-captain
+        if (formattedSquad.members.some(member => 
+          member.player_id === user?.id && 
+          ['captain', 'co_captain'].includes(member.role)
+        )) {
+          await fetchJoinRequests(formattedSquad.id);
+        }
       } else {
         console.warn('Squad created without valid ID, skipping pending invites fetch');
         setPendingInvites([]);
+        setJoinRequests([]);
       }
     } catch (error) {
       console.error('Error fetching user squad:', error);
@@ -329,6 +351,394 @@ export default function SquadsPage() {
     }
 
     await fetchPendingInvitesForSquad(userSquad.id);
+  };
+
+  const fetchReceivedInvitations = async () => {
+    if (!user) {
+      setReceivedInvitations([]);
+      return;
+    }
+
+    try {
+      // Get invitations sent to the current user (exclude self-requests/join requests)
+      const { data: inviteData, error } = await supabase
+        .from('squad_invites')
+        .select(`
+          id,
+          squad_id,
+          invited_player_id,
+          invited_by,
+          message,
+          created_at,
+          expires_at,
+          status,
+          squads!inner(
+            id,
+            name,
+            tag
+          )
+        `)
+        .eq('invited_player_id', user.id)
+        .neq('invited_by', user.id)  // Exclude self-requests (join requests)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching received invitations:', error);
+        setReceivedInvitations([]);
+        return;
+      }
+
+      if (!inviteData || inviteData.length === 0) {
+        setReceivedInvitations([]);
+        return;
+      }
+
+      // Get profile information for the inviters
+      const inviterIds = inviteData.map(invite => invite.invited_by);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, in_game_alias')
+        .in('id', inviterIds);
+
+      if (profilesError) {
+        console.warn('Error fetching profiles for inviters:', profilesError);
+      }
+
+      const profilesMap = new Map(
+        profilesData?.map(profile => [profile.id, profile.in_game_alias]) || []
+      );
+
+      const formattedInvitations = inviteData.map((invite: any) => ({
+        id: invite.id,
+        squad_id: invite.squad_id,
+        squad_name: invite.squads.name,
+        squad_tag: invite.squads.tag,
+        invited_player_id: invite.invited_player_id,
+        invited_alias: '', // This is the current user
+        invited_by_alias: profilesMap.get(invite.invited_by) || 'Unknown',
+        created_at: invite.created_at,
+        expires_at: invite.expires_at,
+        status: invite.status,
+        message: invite.message
+      }));
+
+      setReceivedInvitations(formattedInvitations);
+    } catch (error) {
+      console.error('Error fetching received invitations:', error);
+      setReceivedInvitations([]);
+    }
+  };
+
+  const fetchSentJoinRequests = async () => {
+    if (!user) {
+      console.log('fetchSentJoinRequests: No user');
+      setSentJoinRequests([]);
+      return;
+    }
+
+    console.log('fetchSentJoinRequests: Starting fetch for user:', user.id);
+
+    try {
+      // Get join requests sent by the current user (where invited_by = invited_player_id = user.id)
+      const { data: requestData, error } = await supabase
+        .from('squad_invites')
+        .select(`
+          id,
+          squad_id,
+          invited_player_id,
+          invited_by,
+          message,
+          created_at,
+          expires_at,
+          status,
+          squads!inner(
+            id,
+            name,
+            tag
+          )
+        `)
+        .eq('invited_by', user.id)
+        .eq('invited_player_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      console.log('fetchSentJoinRequests: Query result:', { requestData, error });
+
+      if (error) {
+        console.error('Error fetching sent join requests:', error);
+        setSentJoinRequests([]);
+        return;
+      }
+
+      if (!requestData || requestData.length === 0) {
+        console.log('fetchSentJoinRequests: No pending join requests found');
+        setSentJoinRequests([]);
+        return;
+      }
+
+      console.log('fetchSentJoinRequests: Found', requestData.length, 'requests');
+
+      const formattedRequests = requestData.map((request: any) => ({
+        id: request.id,
+        squad_id: request.squad_id,
+        squad_name: request.squads.name,
+        squad_tag: request.squads.tag,
+        invited_player_id: request.invited_player_id,
+        invited_alias: '', // This is the current user
+        invited_by_alias: '', // This is also the current user
+        created_at: request.created_at,
+        expires_at: request.expires_at,
+        status: request.status,
+        message: request.message
+      }));
+
+      console.log('fetchSentJoinRequests: Formatted requests:', formattedRequests);
+      setSentJoinRequests(formattedRequests);
+    } catch (error) {
+      console.error('Error fetching sent join requests:', error);
+      setSentJoinRequests([]);
+    }
+  };
+
+  const fetchJoinRequests = async (squadId: string) => {
+    if (!squadId) {
+      console.log('fetchJoinRequests: No squadId provided');
+      setJoinRequests([]);
+      return;
+    }
+
+    console.log('fetchJoinRequests: Starting fetch for squad:', squadId);
+
+    try {
+      // Get join requests made to this squad (where invited_by = invited_player_id, meaning self-requests)
+      const { data: requestData, error } = await supabase
+        .from('squad_invites')
+        .select(`
+          id,
+          squad_id,
+          invited_player_id,
+          invited_by,
+          message,
+          created_at,
+          expires_at,
+          status
+        `)
+        .eq('squad_id', squadId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      console.log('fetchJoinRequests: Query result:', { requestData, error });
+
+      if (error) {
+        console.error('Error fetching join requests:', error);
+        setJoinRequests([]);
+        return;
+      }
+
+      if (!requestData || requestData.length === 0) {
+        console.log('fetchJoinRequests: No pending requests found for squad');
+        setJoinRequests([]);
+        return;
+      }
+
+      console.log('fetchJoinRequests: Found', requestData.length, 'total requests, filtering self-requests...');
+
+      // Filter to only show self-requests (join requests)
+      const joinRequestsOnly = requestData.filter(request => request.invited_by === request.invited_player_id);
+
+      console.log('fetchJoinRequests: Found', joinRequestsOnly.length, 'self-requests (join requests)');
+
+      if (joinRequestsOnly.length === 0) {
+        console.log('fetchJoinRequests: No self-requests found');
+        setJoinRequests([]);
+        return;
+      }
+
+      // Get profile information for the requesters
+      const requesterIds = joinRequestsOnly.map(request => request.invited_player_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, in_game_alias')
+        .in('id', requesterIds);
+
+      if (profilesError) {
+        console.warn('Error fetching profiles for requesters:', profilesError);
+      }
+
+      const profilesMap = new Map(
+        profilesData?.map(profile => [profile.id, profile.in_game_alias]) || []
+      );
+
+      const formattedRequests = joinRequestsOnly.map((request: any) => ({
+        id: request.id,
+        squad_id: request.squad_id,
+        squad_name: '', // Not needed for join requests
+        squad_tag: '', // Not needed for join requests
+        invited_player_id: request.invited_player_id,
+        invited_alias: profilesMap.get(request.invited_player_id) || 'Unknown',
+        invited_by_alias: profilesMap.get(request.invited_by) || 'Unknown',
+        created_at: request.created_at,
+        expires_at: request.expires_at,
+        status: request.status,
+        message: request.message
+      }));
+
+      console.log('fetchJoinRequests: Final formatted requests:', formattedRequests);
+      setJoinRequests(formattedRequests);
+    } catch (error) {
+      console.error('Error fetching join requests:', error);
+      setJoinRequests([]);
+    }
+  };
+
+  const acceptInvitation = async (invitationId: string, squadId: string) => {
+    if (!user) return;
+
+    try {
+      // Update invitation status to accepted
+      const { error: updateError } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'accepted',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', invitationId);
+
+      if (updateError) throw updateError;
+
+      // Add user to squad_members
+      const { error: memberError } = await supabase
+        .from('squad_members')
+        .insert({
+          squad_id: squadId,
+          player_id: user.id,
+          role: 'player',
+          status: 'active'
+        });
+
+      if (memberError) throw memberError;
+
+      // Refresh data
+      await Promise.all([
+        fetchUserSquad(),
+        fetchReceivedInvitations(),
+        fetchFreeAgents()
+      ]);
+
+      toast.success('Successfully joined the squad!');
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      toast.error('Error accepting invitation');
+    }
+  };
+
+  const declineInvitation = async (invitationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'declined',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', invitationId);
+
+      if (error) throw error;
+
+      // Refresh received invitations
+      await fetchReceivedInvitations();
+      
+      toast.success('Invitation declined');
+    } catch (error) {
+      console.error('Error declining invitation:', error);
+      toast.error('Error declining invitation');
+    }
+  };
+
+  const withdrawJoinRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'declined',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      // Refresh sent join requests
+      await fetchSentJoinRequests();
+      
+      toast.success('Join request withdrawn');
+    } catch (error) {
+      console.error('Error withdrawing join request:', error);
+      toast.error('Error withdrawing join request');
+    }
+  };
+
+  const approveJoinRequest = async (requestId: string, playerId: string) => {
+    if (!userSquad) return;
+
+    try {
+      // Update request status to accepted
+      const { error: updateError } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'accepted',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (updateError) throw updateError;
+
+      // Add player to squad_members
+      const { error: memberError } = await supabase
+        .from('squad_members')
+        .insert({
+          squad_id: userSquad.id,
+          player_id: playerId,
+          role: 'player',
+          status: 'active'
+        });
+
+      if (memberError) throw memberError;
+
+      // Refresh data
+      await Promise.all([
+        fetchUserSquad(),
+        fetchFreeAgents()
+      ]);
+
+      toast.success('Join request approved!');
+    } catch (error) {
+      console.error('Error approving join request:', error);
+      toast.error('Error approving join request');
+    }
+  };
+
+  const denyJoinRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'declined',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      // Refresh join requests
+      if (userSquad?.id) {
+        await fetchJoinRequests(userSquad.id);
+      }
+      
+      toast.success('Join request denied');
+    } catch (error) {
+      console.error('Error denying join request:', error);
+      toast.error('Error denying join request');
+    }
   };
 
   const createSquad = async (e: React.FormEvent) => {
@@ -362,11 +772,11 @@ export default function SquadsPage() {
         fetchFreeAgents();
       } else {
         const error = await response.json();
-        alert(`Error creating squad: ${error.error}`);
+        toast.error(`Error creating squad: ${error.error}`);
       }
     } catch (error) {
       console.error('Error creating squad:', error);
-      alert('Error creating squad');
+      toast.error('Error creating squad');
     }
   };
 
@@ -393,7 +803,7 @@ export default function SquadsPage() {
       fetchFreeAgents();
     } catch (error) {
       console.error('Error sending invitation:', error);
-      alert('Error sending invitation');
+      toast.error('Error sending invitation');
     }
   };
 
@@ -412,7 +822,7 @@ export default function SquadsPage() {
       fetchFreeAgents();
     } catch (error) {
       console.error('Error kicking member:', error);
-      alert('Error kicking member');
+      toast.error('Error kicking member');
     }
   };
 
@@ -428,7 +838,7 @@ export default function SquadsPage() {
       fetchUserSquad();
     } catch (error) {
       console.error('Error updating member role:', error);
-      alert('Error updating member role');
+      toast.error('Error updating member role');
     }
   };
 
@@ -448,7 +858,7 @@ export default function SquadsPage() {
       fetchFreeAgents();
     } catch (error) {
       console.error('Error leaving squad:', error);
-      alert('Error leaving squad');
+      toast.error('Error leaving squad');
     }
   };
 
@@ -477,7 +887,7 @@ export default function SquadsPage() {
       fetchFreeAgents();
     } catch (error) {
       console.error('Error disbanding squad:', error);
-      alert('Error disbanding squad');
+      toast.error('Error disbanding squad');
     }
   };
 
@@ -514,7 +924,7 @@ export default function SquadsPage() {
       fetchUserSquad();
     } catch (error) {
       console.error('Error transferring ownership:', error);
-      alert('Error transferring ownership');
+      toast.error('Error transferring ownership');
     }
   };
 
@@ -706,17 +1116,148 @@ export default function SquadsPage() {
                 </div>
               </div>
             )}
+
+            {/* Join Requests to Squad */}
+            {canManageSquad && joinRequests.length > 0 && (
+              <div>
+                <h3 className="text-xl font-semibold mb-4">Join Requests</h3>
+                <div className="grid gap-3">
+                  {joinRequests.map((request) => (
+                    <div key={request.id} className="bg-gray-700 rounded p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <span className="font-semibold text-green-400">{request.invited_alias}</span>
+                          <div className="text-sm text-gray-400 mb-2">
+                            Requested to join {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
+                          </div>
+                          {request.message && (
+                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
+                              "{request.message}"
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
+                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => denyJoinRequest(request.id)}
+                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sent Join Requests - Show for ALL users */}
+            {sentJoinRequests.length > 0 && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4">Your Pending Join Requests</h2>
+                <div className="grid gap-3">
+                  {sentJoinRequests.map((request) => (
+                    <div key={request.id} className="bg-gray-700 rounded p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-semibold text-orange-400">
+                              [{request.squad_tag}] {request.squad_name}
+                            </span>
+                            <span className="bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
+                              REQUEST PENDING
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-400 mb-2">
+                            Requested {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Waiting for squad captain to approve your request
+                          </div>
+                          {request.message && (
+                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3 mt-2">
+                              Your message: "{request.message}"
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => withdrawJoinRequest(request.id)}
+                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                          >
+                            Withdraw Request
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="bg-gray-800 rounded-lg p-6 mb-8 text-center">
-            <h2 className="text-xl font-semibold mb-4">You're not in a squad</h2>
-            <p className="text-gray-300 mb-4">Create your own squad or wait for an invitation</p>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
-            >
-              Create Squad
-            </button>
+          <div className="space-y-6 mb-8">
+            {/* Received Invitations */}
+            {receivedInvitations.length > 0 && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4">Squad Invitations</h2>
+                <div className="grid gap-3">
+                  {receivedInvitations.map((invitation) => (
+                    <div key={invitation.id} className="bg-gray-700 rounded p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-semibold text-cyan-400">
+                              [{invitation.squad_tag}] {invitation.squad_name}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-400 mb-2">
+                            Invited by {invitation.invited_by_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                          </div>
+                          {invitation.message && (
+                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
+                              "{invitation.message}"
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => acceptInvitation(invitation.id, invitation.squad_id!)}
+                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => declineInvitation(invitation.id)}
+                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Create Squad Section */}
+            <div className="bg-gray-800 rounded-lg p-6 text-center">
+              <h2 className="text-xl font-semibold mb-4">You're not in a squad</h2>
+              <p className="text-gray-300 mb-4">Create your own squad or wait for an invitation</p>
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
+              >
+                Create Squad
+              </button>
+            </div>
           </div>
         )}
 
