@@ -3,21 +3,28 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from './supabase';
 import { User, AuthError } from '@supabase/supabase-js';
+import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
+import { withTimeout } from '@/utils/dataFetching';
+import { toast } from 'react-hot-toast';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  error: string | null;
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string, inGameAlias: string) => Promise<any>;
   signOut: () => Promise<void>;
+  retryAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  error: null,
   signIn: async () => null,
   signUp: async () => null,
   signOut: async () => {},
+  retryAuth: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -25,15 +32,39 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [authAttempts, setAuthAttempts] = useState(0);
+  const [lastAuthCheck, setLastAuthCheck] = useState<number>(0);
+
+  // Use our loading timeout hook with auth-specific handling
+  useLoadingTimeout({
+    isLoading: loading,
+    timeout: 12000, // 12 seconds for auth
+    onTimeout: () => {
+      console.error('⏰ Authentication timeout - forcing completion');
+      setError('Authentication check took too long. Please try refreshing the page.');
+      setLoading(false);
+      toast.error('Authentication timeout. Please refresh the page or try signing in again.');
+    }
+  });
 
   // Clear session and redirect to login
-  const clearSessionAndRedirect = async () => {
-    console.log('🚨 Clearing invalid session and redirecting to login');
+  const clearSessionAndRedirect = async (reason?: string) => {
+    console.log('🚨 Clearing invalid session and redirecting to login:', reason);
     
     try {
-      // Clear Supabase session
-      await supabase.auth.signOut();
-      
+      // Clear Supabase session with timeout
+      await withTimeout(
+        supabase.auth.signOut(),
+        5000,
+        'Session signout timeout'
+      );
+    } catch (signOutError) {
+      console.warn('Warning: signOut failed:', signOutError);
+      // Continue with cleanup even if signOut fails
+    }
+    
+    try {
       // Clear any local storage items
       if (typeof window !== 'undefined') {
         // Clear all Supabase auth tokens
@@ -46,17 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(null);
       setLoading(false);
+      setError(reason || 'Session expired');
       
       // Only redirect if we're not already on auth pages
       if (typeof window !== 'undefined' && 
           !window.location.pathname.includes('/auth/') && 
           window.location.pathname !== '/') {
-        window.location.href = '/auth/login';
+        
+        // Add a small delay to show the error message
+        setTimeout(() => {
+          window.location.href = '/auth/login';
+        }, 1500);
       }
     } catch (error) {
       console.error('Error clearing session:', error);
       setUser(null);
       setLoading(false);
+      setError('Failed to clear session properly');
     }
   };
 
@@ -73,142 +110,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage.includes('refresh_token_not_found') ||
       errorMessage.includes('invalid_grant') ||
       errorMessage.includes('token_expired') ||
+      errorMessage.includes('jwt expired') ||
+      errorMessage.includes('invalid jwt') ||
+      errorMessage.includes('unauthorized') ||
       errorCode === 'invalid_grant' ||
-      errorCode === 'refresh_token_not_found'
+      errorCode === 'refresh_token_not_found' ||
+      errorCode === 'token_expired'
     );
   };
 
-  useEffect(() => {
-    let mounted = true;
-    let timeoutId: NodeJS.Timeout;
-
-    // Set a maximum loading time of 10 seconds
-    const loadingTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.log('⏰ Auth loading timeout reached, clearing session');
-        clearSessionAndRedirect();
-      }
-    }, 10000);
-
-    // Check active sessions and sets the user
-    const getSession = async () => {
-      console.log('🔐 Getting session...'); // Debug log
-      
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
-
-        if (error) {
-          console.error('❌ Session error:', error);
-          
-          // Handle refresh token errors specifically
-          if (isAuthTokenError(error)) {
-            console.log('🚨 Detected invalid/expired refresh token, clearing session');
-            await clearSessionAndRedirect();
-            return;
-          }
-          
-          // For other errors, still clear the session but don't redirect
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-        
-        console.log('✅ Session result:', { 
-          user: session?.user?.email || 'No user', 
-          hasAccessToken: !!session?.access_token,
-          hasRefreshToken: !!session?.refresh_token,
-          expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'No expiry'
-        }); // Enhanced debug log
-        
-        setUser(session?.user ?? null);
-        
-        // If user is logged in, ensure they have a profile
-        if (session?.user) {
-          await ensureUserProfile(session.user);
-        }
-      } catch (error: any) {
-        console.error('❌ Error getting session:', error);
-        
-        if (!mounted) return;
-
-        // Handle refresh token errors
-        if (isAuthTokenError(error)) {
-          await clearSessionAndRedirect();
-          return;
-        }
-        
-        setUser(null);
-      }
-      
-      if (mounted) {
-        clearTimeout(loadingTimeout);
-        setLoading(false);
-      }
-    };
+  // Check if we should skip auth check (recently checked and failed)
+  const shouldSkipAuthCheck = (): boolean => {
+    const now = Date.now();
+    const timeSinceLastCheck = now - lastAuthCheck;
+    const cooldownPeriod = authAttempts > 2 ? 30000 : 10000; // 30s after multiple failures, 10s otherwise
     
-    getSession();
+    return timeSinceLastCheck < cooldownPeriod && authAttempts > 0;
+  };
 
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+  // Robust session getter with retry logic
+  const getSessionRobust = async (attempt: number = 1): Promise<void> => {
+    const maxAttempts = 3;
+    console.log(`🔐 Getting session (attempt ${attempt}/${maxAttempts})...`);
+    
+    try {
+      // Use timeout wrapper for session check
+      const sessionResult = await withTimeout(
+        supabase.auth.getSession(),
+        8000, // 8 second timeout for individual session check
+        'Session check timeout'
+      );
 
-      console.log('🔄 Auth state changed:', { 
-        event, 
-        user: session?.user?.email || 'No user',
-        hasAccessToken: !!session?.access_token,
-        hasRefreshToken: !!session?.refresh_token
-      }); // Enhanced debug log
+      const { data: { session }, error } = sessionResult;
+
+      if (error) {
+        console.error('❌ Session error:', error);
+        
+        // Handle refresh token errors specifically
+        if (isAuthTokenError(error)) {
+          console.log('🚨 Detected invalid/expired token, clearing session');
+          await clearSessionAndRedirect('Session expired or invalid');
+          return;
+        }
+        
+        throw error;
+      }
       
-      // Handle specific auth events
-      if (event === 'TOKEN_REFRESHED') {
-        console.log('✅ Token refreshed successfully');
-      } else if (event === 'SIGNED_OUT') {
-        console.log('👋 User signed out');
-        setUser(null);
-        setLoading(false);
+      console.log('✅ Session result:', { 
+        user: session?.user?.email || 'No user', 
+        hasAccessToken: !!session?.access_token,
+        hasRefreshToken: !!session?.refresh_token,
+        expiresAt: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'No expiry'
+      });
+      
+      setUser(session?.user ?? null);
+      setError(null);
+      setAuthAttempts(0); // Reset attempts on success
+      
+      // If user is logged in, ensure they have a profile
+      if (session?.user) {
+        await ensureUserProfileRobust(session.user);
+      }
+      
+    } catch (error: any) {
+      console.error(`❌ Error getting session (attempt ${attempt}):`, error);
+      
+      // Handle auth errors
+      if (isAuthTokenError(error)) {
+        await clearSessionAndRedirect('Authentication failed');
         return;
       }
       
-      setUser(session?.user ?? null);
-      
-      // If user just logged in, ensure they have a profile
-      if (session?.user) {
-        try {
-          await ensureUserProfile(session.user);
-        } catch (error: any) {
-          console.error('❌ Error ensuring user profile:', error);
-          
-          // If profile creation fails due to auth issues, handle it
-          if (isAuthTokenError(error)) {
-            await clearSessionAndRedirect();
-            return;
-          }
-        }
+      // Retry logic for non-auth errors
+      if (attempt < maxAttempts && !error.message?.includes('timeout')) {
+        console.log(`🔄 Retrying session check in 2s... (attempt ${attempt + 1}/${maxAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return getSessionRobust(attempt + 1);
       }
       
-      if (mounted) {
-        clearTimeout(loadingTimeout);
-        setLoading(false);
-      }
-    });
+      // Final failure
+      console.error('❌ All session check attempts failed');
+      setUser(null);
+      setError(`Authentication failed: ${error.message}`);
+      setAuthAttempts(prev => prev + 1);
+    }
+  };
 
-    return () => {
-      mounted = false;
-      clearTimeout(loadingTimeout);
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // Ensure user has a profile, create one if they don't
-  const ensureUserProfile = async (user: User) => {
+  // Robust profile creation/checking
+  const ensureUserProfileRobust = async (user: User, attempt: number = 1): Promise<void> => {
+    const maxAttempts = 2;
+    
     try {
-      const { data: profile, error } = await supabase
+      console.log(`📋 Checking user profile (attempt ${attempt}/${maxAttempts})...`);
+      
+      // Create a timeout race for the profile check
+      const profileCheckPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile check timeout')), 5000)
+      );
+      
+      const profileResult = await Promise.race([profileCheckPromise, timeoutPromise]) as any;
+      const { data: profile, error } = profileResult;
 
       if (error) {
         console.error('❌ Error checking profile:', error);
@@ -218,13 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw error;
         }
         
+        // Retry for non-auth errors
+        if (attempt < maxAttempts) {
+          console.log(`🔄 Retrying profile check... (attempt ${attempt + 1}/${maxAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return ensureUserProfileRobust(user, attempt + 1);
+        }
+        
+        console.warn('⚠️ Profile check failed, continuing without profile creation');
         return;
       }
 
       // If no profile exists, create one
       if (!profile) {
         console.log('📝 Creating user profile...');
-        const { error: insertError } = await supabase
+        
+        // Create a timeout race for the profile creation
+        const insertPromise = supabase
           .from('profiles')
           .insert([
             {
@@ -233,6 +250,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               in_game_alias: user.user_metadata?.inGameAlias || '',
             },
           ]);
+        
+        const insertTimeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Profile creation timeout')), 5000)
+        );
+        
+        const insertResult = await Promise.race([insertPromise, insertTimeoutPromise]) as any;
+        const { error: insertError } = insertResult;
 
         if (insertError) {
           console.error('❌ Error creating profile:', insertError);
@@ -241,24 +265,149 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (isAuthTokenError(insertError)) {
             throw insertError;
           }
+          
+          console.warn('⚠️ Profile creation failed, continuing anyway');
         } else {
           console.log('✅ Profile created successfully');
         }
+      } else {
+        console.log('✅ Profile exists');
       }
     } catch (error: any) {
-      console.error('❌ Error checking/creating profile:', error);
-      throw error; // Re-throw to be handled by caller
+      console.error('❌ Error in profile management:', error);
+      
+      // Only throw auth errors, log others as warnings
+      if (isAuthTokenError(error)) {
+        throw error;
+      }
+      
+      console.warn('⚠️ Profile management failed, continuing with authentication');
     }
   };
 
-  // Sign in with email and password
+  // Manual retry function for users
+  const retryAuth = async () => {
+    console.log('🔄 Manual auth retry requested');
+    setLoading(true);
+    setError(null);
+    setAuthAttempts(0);
+    setLastAuthCheck(0);
+    
+    try {
+      await getSessionRobust();
+    } finally {
+      setLoading(false);
+      setLastAuthCheck(Date.now());
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    let subscription: any = null;
+
+    const initializeAuth = async () => {
+      if (!mounted) return;
+      
+      // Check if we should skip auth check
+      if (shouldSkipAuthCheck()) {
+        console.log('⏸️ Skipping auth check (cooldown period)');
+        setLoading(false);
+        return;
+      }
+      
+      setLastAuthCheck(Date.now());
+      
+      try {
+        await getSessionRobust();
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for changes on auth state (logged in, signed out, etc.)
+    const { data: authSubscription } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      console.log('🔄 Auth state changed:', { 
+        event, 
+        user: session?.user?.email || 'No user',
+        hasAccessToken: !!session?.access_token,
+        hasRefreshToken: !!session?.refresh_token
+      });
+      
+      // Handle specific auth events
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('✅ Token refreshed successfully');
+        setError(null);
+        setAuthAttempts(0);
+      } else if (event === 'SIGNED_OUT') {
+        console.log('👋 User signed out');
+        setUser(null);
+        setError(null);
+        setLoading(false);
+        return;
+      } else if (event === 'SIGNED_IN') {
+        console.log('👋 User signed in');
+        setError(null);
+        setAuthAttempts(0);
+      }
+      
+      setUser(session?.user ?? null);
+      
+      // If user just logged in, ensure they have a profile
+      if (session?.user) {
+        try {
+          await ensureUserProfileRobust(session.user);
+        } catch (error: any) {
+          console.error('❌ Error ensuring user profile:', error);
+          
+          // If profile creation fails due to auth issues, handle it
+          if (isAuthTokenError(error)) {
+            await clearSessionAndRedirect('Profile setup failed');
+            return;
+          }
+        }
+      }
+      
+      if (mounted) {
+        setLoading(false);
+      }
+    });
+
+    subscription = authSubscription;
+
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, [authAttempts]); // Re-run when authAttempts changes
+
+  // Enhanced sign in with timeout and retry
   const signIn = async (email: string, password: string) => {
     try {
-      const result = await supabase.auth.signInWithPassword({ email, password });
+      console.log('🔑 Attempting sign in...');
+      
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        10000,
+        'Sign in timeout'
+      );
       
       if (result.error && isAuthTokenError(result.error)) {
         console.log('🚨 Auth error during sign in, clearing any existing session');
-        await clearSessionAndRedirect();
+        await clearSessionAndRedirect('Sign in failed');
+      }
+      
+      if (result.error) {
+        console.error('❌ Sign in error:', result.error);
+      } else {
+        console.log('✅ Sign in successful');
+        setError(null);
+        setAuthAttempts(0);
       }
       
       return result;
@@ -266,33 +415,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('❌ Sign in error:', error);
       
       if (isAuthTokenError(error)) {
-        await clearSessionAndRedirect();
+        await clearSessionAndRedirect('Sign in authentication error');
       }
       
       throw error;
     }
   };
 
-  // Sign up with email and password
+  // Enhanced sign up with timeout
   const signUp = async (email: string, password: string, inGameAlias: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          inGameAlias,
-        },
-      },
-    });
+    try {
+      console.log('📝 Attempting sign up...');
+      
+      const result = await withTimeout(
+        supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              inGameAlias,
+            },
+          },
+        }),
+        15000, // Longer timeout for sign up
+        'Sign up timeout'
+      );
 
-    // Profile will be created on first login, not here
-    return { data, error };
+      if (result.error) {
+        console.error('❌ Sign up error:', result.error);
+      } else {
+        console.log('✅ Sign up successful');
+      }
+
+      return result;
+    } catch (error: any) {
+      console.error('❌ Sign up error:', error);
+      throw error;
+    }
   };
 
-  // Sign out
+  // Enhanced sign out with timeout
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
+      console.log('👋 Signing out...');
+      
+      await withTimeout(
+        supabase.auth.signOut(),
+        5000,
+        'Sign out timeout'
+      );
       
       // Clear any remaining local storage
       if (typeof window !== 'undefined') {
@@ -304,19 +475,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setUser(null);
+      setError(null);
+      setAuthAttempts(0);
+      console.log('✅ Sign out successful');
     } catch (error) {
       console.error('❌ Error during sign out:', error);
       // Even if sign out fails, clear local state
       setUser(null);
+      setError(null);
+      toast.error('Sign out may not have completed properly. Please clear your browser cache if you experience issues.');
     }
   };
 
   const value = {
     user,
     loading,
+    error,
     signIn,
     signUp,
     signOut,
+    retryAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
