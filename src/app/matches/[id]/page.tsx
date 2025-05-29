@@ -197,16 +197,32 @@ export default function MatchDetailPage() {
     if (!confirm(confirmMessage)) return;
 
     try {
+      console.log('Attempting to delete participations:', {
+        match_id: match.id,
+        player_id: user.id,
+        participationIds: allParticipations.map(p => p.id)
+      });
+
       // Delete all participations for this user in this match
-      const { error } = await supabase
+      const { data, error, count } = await supabase
         .from('match_participants')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('match_id', match.id)
         .eq('player_id', user.id);
 
-      if (error) throw error;
+      console.log('Delete result:', { data, error, count });
 
-      toast.success('Left match successfully');
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+
+      if (count === 0 || count === null) {
+        toast.error('No participations were removed. You may not have permission to leave this match.');
+        return;
+      }
+
+      toast.success(`Left match successfully (removed ${count} participation${count > 1 ? 's' : ''})`);
       fetchMatchDetails(); // Refresh match data
     } catch (error: any) {
       console.error('Error leaving match:', error);
@@ -218,12 +234,28 @@ export default function MatchDetailPage() {
     if (!confirm(`Are you sure you want to leave as ${role}?`)) return;
 
     try {
-      const { error } = await supabase
+      console.log('Attempting to delete individual participation:', {
+        participantId,
+        role,
+        userId: user?.id
+      });
+
+      const { data, error, count } = await supabase
         .from('match_participants')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('id', participantId);
 
-      if (error) throw error;
+      console.log('Delete individual role result:', { data, error, count });
+
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+
+      if (count === 0 || count === null) {
+        toast.error('Role was not removed. You may not have permission to leave this role.');
+        return;
+      }
 
       toast.success(`Left ${role} role successfully`);
       fetchMatchDetails(); // Refresh match data
