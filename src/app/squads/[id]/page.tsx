@@ -182,7 +182,7 @@ export default function SquadDetailPage() {
         .insert({
           squad_id: squad.id,
           invited_player_id: user.id,
-          invited_by_id: user.id, // Self-request
+          invited_by: user.id, // Self-request - using correct column name
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
         });
 

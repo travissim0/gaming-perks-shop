@@ -166,7 +166,7 @@ export default function SquadsPage() {
       // If basic query works, fetch profile data separately
       if (data && data.length > 0) {
         const invitedPlayerIds = data.map(invite => invite.invited_player_id);
-        const invitedByIds = data.map(invite => invite.invited_by_id);
+        const invitedByIds = data.map(invite => invite.invited_by);
         const allPlayerIds = [...new Set([...invitedPlayerIds, ...invitedByIds])];
 
         const { data: profilesData, error: profilesError } = await supabase
@@ -186,7 +186,7 @@ export default function SquadsPage() {
           id: invite.id,
           invited_player_id: invite.invited_player_id,
           invited_alias: profilesMap.get(invite.invited_player_id) || 'Unknown',
-          invited_by_alias: profilesMap.get(invite.invited_by_id) || 'Unknown',
+          invited_by_alias: profilesMap.get(invite.invited_by) || 'Unknown',
           created_at: invite.created_at,
           expires_at: invite.expires_at,
           status: invite.status
@@ -381,7 +381,7 @@ export default function SquadsPage() {
         .insert({
           squad_id: userSquad.id,
           invited_player_id: selectedInvitee,
-          invited_by_id: user?.id,
+          invited_by: user?.id,
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
         });
 
