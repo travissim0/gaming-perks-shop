@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -22,6 +22,7 @@ interface Squad {
   created_at: string;
   member_count: number;
   members: SquadMember[];
+  banner_url?: string;
 }
 
 interface SquadMember {
@@ -66,6 +67,7 @@ export default function SquadsPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showInviteForm, setShowInviteForm] = useState(false);
+  const [showBannerForm, setShowBannerForm] = useState(false);
   const [selectedInvitee, setSelectedInvitee] = useState('');
   const [pendingInvitesError, setPendingInvitesError] = useState(false);
 
@@ -75,6 +77,11 @@ export default function SquadsPage() {
   const [squadDescription, setSquadDescription] = useState('');
   const [discordLink, setDiscordLink] = useState('');
   const [websiteLink, setWebsiteLink] = useState('');
+  const [bannerUrl, setBannerUrl] = useState('');
+
+  // Add cleanup tracking
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
@@ -82,18 +89,55 @@ export default function SquadsPage() {
     timeout: 20000, // Longer timeout for this complex page
     onTimeout: () => {
       console.error('⏰ Squads page loading timeout - forcing completion');
-      setDataLoading(false);
-      toast.error('Loading took too long. Some data may not be available.');
+      if (isMountedRef.current) {
+        setDataLoading(false);
+        toast.error('Loading took too long. Some data may not be available.');
+      }
     }
   });
 
   useEffect(() => {
+    isMountedRef.current = true;
+    abortControllerRef.current = new AbortController();
+
     if (user && !loading) {
       loadInitialData();
     }
+
+    // Cleanup function
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // Clear any pending timeouts/intervals
+      const timeouts = (window as any).__squadPageTimeouts || [];
+      timeouts.forEach((id: number) => clearTimeout(id));
+      (window as any).__squadPageTimeouts = [];
+    };
   }, [user, loading]);
 
+  // Add error boundary for auth-related errors
+  useEffect(() => {
+    const handleAuthError = (error: any) => {
+      if (error?.message?.includes('unsubscribe') && !error?.message?.includes('timeout')) {
+        console.warn('Auth subscription error detected:', error);
+        // Only log the error, don't auto-refresh to avoid loops
+      }
+    };
+
+    window.addEventListener('error', handleAuthError);
+    window.addEventListener('unhandledrejection', (e) => handleAuthError(e.reason));
+
+    return () => {
+      window.removeEventListener('error', handleAuthError);
+      window.removeEventListener('unhandledrejection', (e) => handleAuthError(e.reason));
+    };
+  }, []);
+
   const loadInitialData = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
       setDataLoading(true);
       
@@ -103,6 +147,9 @@ export default function SquadsPage() {
         loadAllSquads(),
         loadFreeAgents()
       ]);
+
+      // Check if still mounted before continuing
+      if (!isMountedRef.current) return;
 
       // Load user-specific data after basic data loads
       if (user) {
@@ -115,164 +162,163 @@ export default function SquadsPage() {
 
     } catch (error) {
       console.error('Error loading initial data:', error);
-      toast.error('Failed to load squads data');
+      if (isMountedRef.current) {
+        toast.error('Failed to load squads data');
+      }
     } finally {
-      setDataLoading(false);
+      if (isMountedRef.current) {
+        setDataLoading(false);
+      }
     }
   };
 
   const loadUserSquad = async () => {
-    if (!user) return;
+    if (!user || !isMountedRef.current) return;
 
     const { data, success } = await robustFetch(
       async () => {
-        const result = await supabase
-          .from('squad_members')
-          .select(`
-            squads!inner(
-              id,
-              name,
-              tag,
-              description,
-              discord_link,
-              website_link,
-              captain_id,
-              created_at
-            )
-          `)
-          .eq('player_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle();
+        // Use optimized function instead of complex joins
+        const result = await supabase.rpc('get_user_squad_optimized', {
+          user_id_param: user.id
+        });
 
         if (result.error) throw new Error(result.error.message);
-        return result.data;
+        return result.data?.[0] || null;
       },
       { showErrorToast: false } // Don't show error if user has no squad
     );
 
+    if (!isMountedRef.current) return;
+
     if (success && data) {
-      const squadData = (data.squads as any);
+      // Get squad members using optimized function
+      const { data: membersData } = await supabase.rpc('get_squad_members_optimized', {
+        squad_id_param: data.squad_id
+      });
       
-      // Get squad members
-      const { data: membersData } = await queries.getSquadMembers(squadData.id);
-      
+      if (!isMountedRef.current) return;
+
       const formattedSquad: Squad = {
-        ...squadData,
+        id: data.squad_id,
+        name: data.squad_name,
+        tag: data.squad_tag,
+        description: data.squad_description,
+        discord_link: data.discord_link,
+        website_link: data.website_link,
+        captain_id: data.captain_id,
+        created_at: data.created_at,
+        banner_url: data.banner_url,
+        captain_alias: 'Loading...', // Will be loaded with members
+        member_count: data.member_count,
         members: membersData?.map((member: any) => ({
-          id: member.id,
+          id: member.member_id,
           player_id: member.player_id,
-          in_game_alias: member.profiles?.in_game_alias || 'Unknown',
+          in_game_alias: member.in_game_alias,
           role: member.role,
           joined_at: member.joined_at
         })) || []
       };
+
+      // Set captain alias from members
+      const captain = formattedSquad.members.find(m => m.role === 'captain');
+      formattedSquad.captain_alias = captain?.in_game_alias || 'Unknown';
 
       setUserSquad(formattedSquad);
     }
   };
 
   const loadAllSquads = async () => {
+    if (!isMountedRef.current) return;
+    
     const { data, success } = await robustFetch(
       async () => {
-        const result = await supabase
-          .from('squads')
-          .select(`
-            id,
-            name,
-            tag,
-            description,
-            discord_link,
-            website_link,
-            captain_id,
-            created_at
-          `)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
-
+        // Use single optimized query instead of multiple individual calls
+        const result = await supabase.rpc('get_all_squads_optimized');
         if (result.error) throw new Error(result.error.message);
         return result.data;
       },
       { errorMessage: 'Failed to load squads' }
     );
 
-    if (success && data) {
-      // Load members for each squad
-      const squadsWithMembers = await Promise.all(
-        data.map(async (squad: any) => {
-          const { data: membersData } = await queries.getSquadMembers(squad.id);
-          
-          return {
-            ...squad,
-            members: membersData?.map((member: any) => ({
-              id: member.id,
-              player_id: member.player_id,
-              in_game_alias: member.profiles?.in_game_alias || 'Unknown',
-              role: member.role,
-              joined_at: member.joined_at
-            })) || []
-          };
-        })
-      );
+    if (!isMountedRef.current) return;
 
-      setAllSquads(squadsWithMembers);
+    if (success && data) {
+      const formattedSquads: Squad[] = data.map((squad: any) => ({
+        id: squad.squad_id,
+        name: squad.squad_name,
+        tag: squad.squad_tag,
+        description: squad.squad_description,
+        discord_link: squad.discord_link,
+        website_link: squad.website_link,
+        captain_id: squad.captain_id,
+        captain_alias: squad.captain_alias,
+        created_at: squad.created_at,
+        banner_url: squad.banner_url,
+        member_count: Number(squad.member_count),
+        members: [] // Not needed for list view
+      }));
+
+      setAllSquads(formattedSquads);
     }
   };
 
   const loadFreeAgents = async () => {
+    if (!isMountedRef.current) return;
+    
     const { data, success } = await robustFetch(
       async () => {
-        const result = await supabase
-          .from('profiles')
-          .select('id, in_game_alias, email, created_at')
-          .not('id', 'in', 
-            supabase
-              .from('squad_members')
-              .select('player_id')
-              .eq('status', 'active')
-          )
-          .order('created_at', { ascending: false })
-          .limit(20);
-
+        // Use optimized function
+        const result = await supabase.rpc('get_free_agents_optimized');
         if (result.error) throw new Error(result.error.message);
         return result.data;
       },
       { showErrorToast: false } // Don't show error for optional data
     );
 
+    if (!isMountedRef.current) return;
+
     if (success && data) {
-      setFreeAgents(data);
+      const formattedAgents: FreeAgent[] = data.map((agent: any) => ({
+        id: agent.player_id,
+        in_game_alias: agent.in_game_alias,
+        email: agent.email,
+        created_at: agent.created_at
+      }));
+      
+      setFreeAgents(formattedAgents);
     }
   };
 
   const loadReceivedInvitations = async () => {
-    if (!user) return;
+    if (!user || !isMountedRef.current) return;
 
     const { data, success } = await robustFetch(
       async () => {
-        const result = await supabase
-          .from('squad_invites')
-          .select(`
-            *,
-            squads!squad_invites_squad_id_fkey(name, tag),
-            inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
-          `)
-          .eq('invited_player_id', user.id)
-          .eq('status', 'pending')
-          .neq('invited_by', user.id) // Exclude self-requests
-          .gt('expires_at', new Date().toISOString());
-
+        // Use optimized function
+        const result = await supabase.rpc('get_squad_invitations_optimized', {
+          user_id_param: user.id
+        });
         if (result.error) throw new Error(result.error.message);
         return result.data;
       },
       { showErrorToast: false }
     );
 
+    if (!isMountedRef.current) return;
+
     if (success && data) {
       const formattedInvitations = data.map((invite: any) => ({
-        ...invite,
-        squad_name: invite.squads?.name,
-        squad_tag: invite.squads?.tag,
-        inviter_alias: invite.inviter?.in_game_alias
+        id: invite.invite_id,
+        squad_id: invite.squad_id,
+        squad_name: invite.squad_name,
+        squad_tag: invite.squad_tag,
+        invited_player_id: user.id,
+        invited_alias: '',
+        invited_by_alias: invite.inviter_alias,
+        created_at: invite.created_at,
+        expires_at: invite.expires_at,
+        status: invite.status,
+        message: invite.message
       }));
 
       setReceivedInvitations(formattedInvitations);
@@ -280,7 +326,7 @@ export default function SquadsPage() {
   };
 
   const loadSentJoinRequests = async () => {
-    if (!user) return;
+    if (!user || !isMountedRef.current) return;
 
     console.log('fetchSentJoinRequests: Starting fetch for user:', user.id);
 
@@ -307,6 +353,8 @@ export default function SquadsPage() {
         .eq('invited_player_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
+
+      if (!isMountedRef.current) return;
 
       console.log('fetchSentJoinRequests: Query result:', { requestData, error });
 
@@ -339,15 +387,19 @@ export default function SquadsPage() {
       }));
 
       console.log('fetchSentJoinRequests: Formatted requests:', formattedRequests);
-      setSentJoinRequests(formattedRequests);
+      if (isMountedRef.current) {
+        setSentJoinRequests(formattedRequests);
+      }
     } catch (error) {
       console.error('Error fetching sent join requests:', error);
-      setSentJoinRequests([]);
+      if (isMountedRef.current) {
+        setSentJoinRequests([]);
+      }
     }
   };
 
   const loadJoinRequestsForSquad = async () => {
-    if (!user || !userSquad) return;
+    if (!user || !userSquad || !isMountedRef.current) return;
 
     const userMember = userSquad.members.find(m => m.player_id === user.id);
     if (!userMember || (userMember.role !== 'captain' && userMember.role !== 'co_captain')) {
@@ -372,6 +424,8 @@ export default function SquadsPage() {
       },
       { showErrorToast: false }
     );
+
+    if (!isMountedRef.current) return;
 
     if (success && data) {
       const formattedRequests = data.map((request: any) => ({
@@ -635,29 +689,31 @@ export default function SquadsPage() {
     }
   };
 
-  const invitePlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const invitePlayer = async () => {
     if (!selectedInvitee || !userSquad) return;
 
     try {
       const { error } = await supabase
         .from('squad_invites')
-        .insert({
-          squad_id: userSquad.id,
-          invited_player_id: selectedInvitee,
-          invited_by: user?.id,
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-        });
+        .insert([
+          {
+            squad_id: userSquad.id,
+            invited_player_id: selectedInvitee,
+            invited_by: user?.id,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+          }
+        ]);
 
       if (error) throw error;
 
+      toast.success('Invitation sent successfully');
       setShowInviteForm(false);
       setSelectedInvitee('');
-      await loadFreeAgents();
+      loadAllSquads();
+      loadFreeAgents();
     } catch (error) {
       console.error('Error sending invitation:', error);
-      toast.error('Error sending invitation');
+      toast.error('Failed to send invitation');
     }
   };
 
@@ -667,20 +723,21 @@ export default function SquadsPage() {
     try {
       const { error } = await supabase
         .from('squad_members')
-        .delete()
+        .update({ status: 'inactive' })
         .eq('id', memberId);
 
       if (error) throw error;
 
-      fetchUserSquad();
-      fetchFreeAgents();
+      toast.success('Member kicked successfully');
+      loadAllSquads();
+      loadFreeAgents();
     } catch (error) {
       console.error('Error kicking member:', error);
-      toast.error('Error kicking member');
+      toast.error('Failed to kick member');
     }
   };
 
-  const promoteMember = async (memberId: string, newRole: 'co_captain' | 'player') => {
+  const promoteMember = async (memberId: string, newRole: string) => {
     try {
       const { error } = await supabase
         .from('squad_members')
@@ -689,10 +746,11 @@ export default function SquadsPage() {
 
       if (error) throw error;
 
-      fetchUserSquad();
+      toast.success(`Member ${newRole === 'co_captain' ? 'promoted' : 'demoted'} successfully`);
+      loadUserSquad();
     } catch (error) {
       console.error('Error updating member role:', error);
-      toast.error('Error updating member role');
+      toast.error('Failed to update member role');
     }
   };
 
@@ -708,8 +766,8 @@ export default function SquadsPage() {
       if (error) throw error;
 
       setUserSquad(null);
-      fetchAllSquads();
-      fetchFreeAgents();
+      loadAllSquads();
+      loadFreeAgents();
     } catch (error) {
       console.error('Error leaving squad:', error);
       toast.error('Error leaving squad');
@@ -737,8 +795,8 @@ export default function SquadsPage() {
       if (squadError) throw squadError;
 
       setUserSquad(null);
-      fetchAllSquads();
-      fetchFreeAgents();
+      loadAllSquads();
+      loadFreeAgents();
     } catch (error) {
       console.error('Error disbanding squad:', error);
       toast.error('Error disbanding squad');
@@ -749,36 +807,23 @@ export default function SquadsPage() {
     if (!confirm('Are you sure you want to transfer squad ownership? You will become a regular player.')) return;
 
     try {
-      // Update the squad's captain
-      const { error: squadError } = await supabase
-        .from('squads')
-        .update({ captain_id: newCaptainId })
-        .eq('id', userSquad?.id);
+      // Use the database function for safe captain transfers
+      const { data, error } = await supabase.rpc('transfer_squad_ownership', {
+        squad_id_param: userSquad?.id,
+        new_captain_id_param: newCaptainId
+      });
 
-      if (squadError) throw squadError;
+      if (error) throw error;
 
-      // Update the current captain's role to player
-      const { error: oldCaptainError } = await supabase
-        .from('squad_members')
-        .update({ role: 'player' })
-        .eq('squad_id', userSquad?.id)
-        .eq('player_id', user?.id);
-
-      if (oldCaptainError) throw oldCaptainError;
-
-      // Update the new captain's role
-      const { error: newCaptainError } = await supabase
-        .from('squad_members')
-        .update({ role: 'captain' })
-        .eq('squad_id', userSquad?.id)
-        .eq('player_id', newCaptainId);
-
-      if (newCaptainError) throw newCaptainError;
-
-      fetchUserSquad();
+      if (data) {
+        toast.success('Squad ownership transferred successfully!');
+        loadUserSquad();
+      } else {
+        throw new Error('Transfer function returned false');
+      }
     } catch (error) {
       console.error('Error transferring ownership:', error);
-      toast.error('Error transferring ownership');
+      toast.error('Error transferring ownership: ' + (error as Error).message);
     }
   };
 
@@ -805,6 +850,94 @@ export default function SquadsPage() {
   const isCaptain = userSquad && userSquad.members.some(
     member => member.player_id === user?.id && member.role === 'captain'
   );
+
+  const handleCreateSquad = async () => {
+    if (!squadName.trim() || !squadTag.trim() || !user) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/squads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: squadName.trim(),
+          tag: squadTag.trim(),
+          description: squadDescription.trim(),
+          captainId: user.id,
+          discordLink: discordLink.trim() || null,
+          websiteLink: websiteLink.trim() || null
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create squad');
+      }
+
+      toast.success('Squad created successfully!');
+      setShowCreateForm(false);
+      setSquadName('');
+      setSquadTag('');
+      setSquadDescription('');
+      setDiscordLink('');
+      setWebsiteLink('');
+      
+      loadUserSquad();
+    } catch (error: any) {
+      console.error('Error creating squad:', error);
+      toast.error(error.message || 'Failed to create squad');
+    }
+  };
+
+  const updateSquadBanner = async () => {
+    if (!userSquad || !isCaptain) return;
+
+    try {
+      // Validate URL if provided
+      if (bannerUrl.trim() && !isValidImageUrl(bannerUrl.trim())) {
+        toast.error('Please enter a valid image URL (jpg, png, gif, webp)');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('squads')
+        .update({ 
+          banner_url: bannerUrl.trim() || null 
+        })
+        .eq('id', userSquad.id);
+
+      if (error) throw error;
+
+      toast.success(bannerUrl.trim() ? 'Squad picture updated!' : 'Squad picture removed!');
+      setShowBannerForm(false);
+      setBannerUrl('');
+      
+      // Refresh squad data
+      loadUserSquad();
+      loadAllSquads();
+    } catch (error) {
+      console.error('Error updating squad banner:', error);
+      toast.error('Failed to update squad picture');
+    }
+  };
+
+  const isValidImageUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const pathname = urlObj.pathname.toLowerCase();
+      return validExtensions.some(ext => pathname.endsWith(ext)) || 
+             url.includes('imgur.com') || 
+             url.includes('discord.com') ||
+             url.includes('cdn.') ||
+             url.includes('i.redd.it');
+    } catch {
+      return false;
+    }
+  };
 
   // Enhanced loading screen
   if (loading || dataLoading) {
@@ -882,12 +1015,22 @@ export default function SquadsPage() {
               </div>
               <div className="flex gap-2">
                 {canManageSquad && (
-                  <button
-                    onClick={() => setShowInviteForm(true)}
-                    className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                  >
-                    Invite Player
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowInviteForm(true)}
+                      className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                    >
+                      Invite Player
+                    </button>
+                    {isCaptain && (
+                      <button
+                        onClick={() => setShowBannerForm(true)}
+                        className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm"
+                      >
+                        {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
+                      </button>
+                    )}
+                  </>
                 )}
                 {isCaptain ? (
                   <div className="flex gap-2">
@@ -1144,20 +1287,47 @@ export default function SquadsPage() {
             <div className="grid gap-4">
               {allSquads.map((squad) => (
                 <Link key={squad.id} href={`/squads/${squad.id}`}>
-                  <div className="bg-gray-700 rounded p-4 hover:bg-gray-600 transition-colors cursor-pointer">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300">
-                          [{squad.tag}] {squad.name}
-                        </h3>
-                        <p className="text-gray-300 mb-2">{squad.description}</p>
-                        <div className="flex gap-4 text-sm text-gray-400">
-                          <span>Members: {squad.member_count}</span>
-                          <span>Captain: {squad.captain_alias}</span>
+                  <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
+                    <div className="p-4">
+                      <div className="flex gap-4">
+                        {/* Squad Picture */}
+                        {squad.banner_url && (
+                          <div className="w-24 h-24 flex-shrink-0">
+                            <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
+                              <img 
+                                src={squad.banner_url} 
+                                alt={`${squad.name} picture`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.parentElement!.style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Squad Info */}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate">
+                            [{squad.tag}] {squad.name}
+                          </h3>
+                          
+                          <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
+                          
+                          <div className="flex justify-between items-center">
+                            <div className="flex gap-4 text-sm text-gray-400">
+                              <span className="flex items-center gap-1">
+                                👥 {squad.member_count} members
+                              </span>
+                              <span className="flex items-center gap-1">
+                                👑 {squad.captain_alias}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(squad.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        Created {new Date(squad.created_at).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
@@ -1177,7 +1347,7 @@ export default function SquadsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
               <h3 className="text-xl font-bold mb-4">Create New Squad</h3>
-              <form onSubmit={createSquad}>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateSquad(); }}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">Squad Name</label>
                   <input
@@ -1279,6 +1449,110 @@ export default function SquadsPage() {
                   <button
                     type="button"
                     onClick={() => setShowInviteForm(false)}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Squad Banner Management Modal */}
+        {showBannerForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4">
+                {userSquad?.banner_url ? 'Update Squad Picture' : 'Add Squad Picture'}
+              </h3>
+              
+              {/* Current Banner Preview */}
+              {userSquad?.banner_url && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Current Picture</label>
+                  <div className="w-full max-w-xs mx-auto bg-gray-700 rounded-lg overflow-hidden">
+                    <img 
+                      src={userSquad.banner_url} 
+                      alt="Current picture"
+                      className="w-full h-auto object-contain max-h-40"
+                      onError={(e) => {
+                        e.currentTarget.src = '';
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={(e) => { e.preventDefault(); updateSquadBanner(); }}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Squad Picture URL</label>
+                  <input
+                    type="url"
+                    value={bannerUrl}
+                    onChange={(e) => setBannerUrl(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Supports: JPG, PNG, GIF, WebP. Square or portrait images work best (1:1 to 3:4 ratio).
+                  </p>
+                </div>
+
+                {/* Live Preview */}
+                {bannerUrl && isValidImageUrl(bannerUrl) && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Preview</label>
+                    <div className="w-full max-w-xs mx-auto bg-gray-700 rounded-lg overflow-hidden">
+                      <img 
+                        src={bannerUrl} 
+                        alt="Picture preview"
+                        className="w-full h-auto object-contain max-h-40"
+                        onError={(e) => {
+                          e.currentTarget.src = '';
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-4">
+                  <h4 className="text-blue-400 font-medium text-sm mb-2">📋 Image Guidelines:</h4>
+                  <ul className="text-xs text-gray-300 space-y-1">
+                    <li>• <strong>Size:</strong> Square (1:1) or portrait (3:4) ratios work best</li>
+                    <li>• <strong>Content:</strong> Squad logos, team photos, or artwork</li>
+                    <li>• <strong>Hosting:</strong> Imgur, Discord, or direct image links</li>
+                    <li>• <strong>Quality:</strong> Clear images at least 200x200px</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded"
+                  >
+                    {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
+                  </button>
+                  {userSquad?.banner_url && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBannerUrl('');
+                        updateSquadBanner();
+                      }}
+                      className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                    >
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBannerForm(false);
+                      setBannerUrl('');
+                    }}
                     className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
                   >
                     Cancel

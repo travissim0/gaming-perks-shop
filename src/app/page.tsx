@@ -56,6 +56,7 @@ interface Squad {
   tag: string;
   member_count: number;
   captain_alias: string;
+  banner_url?: string;
 }
 
 interface Match {
@@ -97,37 +98,48 @@ export default function Home() {
   const [scrollY, setScrollY] = useState(0);
   const bannerRef = useRef<HTMLDivElement>(null);
   
-  // Banner slides data
-  const bannerSlides = [
+  // Banner slides data - filtered based on user status
+  const getAllBannerSlides = () => [
     {
       title: "FREE INFANTRY",
       subtitle: "Capture the Flag: Player's League",
       description: "🎮 Competitive Gaming Platform",
       highlight: "Join the Battle",
-      color: "cyan"
+      color: "cyan",
+      showWhen: "guest" // Only show to non-authenticated users
     },
     {
       title: "ACTIVE SQUADS",
       subtitle: "Form Elite Teams",
       description: "🛡️ Create or Join Competitive Squads",
       highlight: "Build Your Team",
-      color: "purple"
+      color: "purple",
+      showWhen: "always"
     },
     {
       title: "LIVE MATCHES",
       subtitle: "Compete in Real-Time",
       description: "⚔️ Schedule and Play Competitive Matches",
       highlight: "Enter the Arena",
-      color: "green"
+      color: "green",
+      showWhen: "always"
     },
     {
       title: "SUPPORT THE GAME",
       subtitle: "Keep Infantry Online Running",
       description: "💰 Donate to Support Development",
       highlight: "Make a Difference",
-      color: "yellow"
+      color: "yellow",
+      showWhen: "always"
     }
   ];
+
+  // Filter slides based on user authentication
+  const bannerSlides = getAllBannerSlides().filter(slide => 
+    slide.showWhen === "always" || 
+    (slide.showWhen === "guest" && !user) ||
+    (slide.showWhen === "user" && user)
+  );
 
   useEffect(() => {
     if (user) {
@@ -199,7 +211,7 @@ export default function Home() {
       setScrollY(window.scrollY);
     };
     
-    // Carousel auto-advance
+    // Carousel auto-advance with dynamic slide count
     const carouselInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % bannerSlides.length);
     }, 5000); // Change slide every 5 seconds
@@ -286,31 +298,24 @@ export default function Home() {
     // Fetch top squads
     const fetchTopSquads = async () => {
       try {
-        const { data, error } = await supabase
-          .from('squads')
-          .select(`
-            id,
-            name,
-            tag,
-            profiles!squads_captain_id_fkey(in_game_alias),
-            squad_members!inner(id)
-          `)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(5);
+        // Use the optimized function instead of individual queries
+        const { data, error } = await supabase.rpc('get_all_squads_optimized');
 
         if (!error && data) {
-          const squads: Squad[] = data.map((squad: any) => ({
-            id: squad.id,
-            name: squad.name,
-            tag: squad.tag,
-            member_count: squad.squad_members?.length || 0,
-            captain_alias: squad.profiles?.in_game_alias || 'Unknown'
+          const squads: Squad[] = data.slice(0, 6).map((squad: any) => ({
+            id: squad.squad_id,
+            name: squad.squad_name,
+            tag: squad.squad_tag,
+            member_count: Number(squad.member_count),
+            captain_alias: squad.captain_alias,
+            banner_url: squad.banner_url
           }));
+          
           setTopSquads(squads);
         }
       } catch (error) {
-        console.error('Error fetching squads:', error);
+        console.error('Error fetching top squads:', error);
+        setTopSquads([]);
       }
     };
 
@@ -408,6 +413,13 @@ export default function Home() {
     };
   }, [user]);
 
+  useEffect(() => {
+    // Reset current slide if it's out of bounds after filtering
+    if (currentSlide >= bannerSlides.length) {
+      setCurrentSlide(0);
+    }
+  }, [user, bannerSlides.length, currentSlide]);
+
   // Helper function to get class color
   const getClassColor = (className: string) => {
     switch (className.toLowerCase()) {
@@ -498,7 +510,9 @@ export default function Home() {
           className="relative mb-8 overflow-hidden rounded-xl h-64 lg:h-80"
           style={{
             transform: `translateY(${scrollY * 0.5}px)`,
-            opacity: Math.max(0.3, 1 - scrollY / 400)
+            opacity: scrollY > 500 ? 0 : Math.max(0, 1 - scrollY / 400),
+            visibility: scrollY > 500 ? 'hidden' : 'visible',
+            pointerEvents: scrollY > 500 ? 'none' : 'auto'
           }}
         >
           {/* Video Background */}
@@ -516,57 +530,64 @@ export default function Home() {
           {/* Dynamic Overlay Gradient */}
           <div 
             className={`absolute inset-0 transition-all duration-1000 ${
-              bannerSlides[currentSlide].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80' :
-              bannerSlides[currentSlide].color === 'purple' ? 'bg-gradient-to-r from-gray-900/80 via-purple-900/40 to-gray-900/80' :
-              bannerSlides[currentSlide].color === 'green' ? 'bg-gradient-to-r from-gray-900/80 via-green-900/40 to-gray-900/80' :
-              'bg-gradient-to-r from-gray-900/80 via-yellow-900/40 to-gray-900/80'
+              bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] ? (
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'purple' ? 'bg-gradient-to-r from-gray-900/80 via-purple-900/40 to-gray-900/80' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'green' ? 'bg-gradient-to-r from-gray-900/80 via-green-900/40 to-gray-900/80' :
+                'bg-gradient-to-r from-gray-900/80 via-yellow-900/40 to-gray-900/80'
+              ) : 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80'
             }`}
           ></div>
           
           {/* Slide Content */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div 
-              className="text-center px-4 transition-all duration-1000 transform"
-              style={{
-                transform: `translateY(${scrollY * 0.2}px) scale(${Math.max(0.8, 1 - scrollY / 1000)})`,
-                filter: `brightness(${Math.max(0.7, 1 + scrollY / 500)})`
-              }}
-            >
-              <h1 
-                className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${
-                  bannerSlides[currentSlide].color === 'cyan' ? 'text-cyan-400' :
-                  bannerSlides[currentSlide].color === 'purple' ? 'text-purple-400' :
-                  bannerSlides[currentSlide].color === 'green' ? 'text-green-400' :
-                  'text-yellow-400'
-                }`}
-              >
-                {bannerSlides[currentSlide].title}
-              </h1>
-              <p className="text-lg lg:text-2xl text-gray-200 mb-2 drop-shadow-lg transition-all duration-1000">
-                {bannerSlides[currentSlide].subtitle}
-              </p>
-              <div className="text-gray-300 font-mono text-sm lg:text-base drop-shadow-lg mb-4 transition-all duration-1000">
-                {bannerSlides[currentSlide].description}
-              </div>
-              
-              {/* Call to Action Button */}
-              <button 
-                className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 ${
-                  bannerSlides[currentSlide].color === 'cyan' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white hover:shadow-cyan-500/25' :
-                  bannerSlides[currentSlide].color === 'purple' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white hover:shadow-purple-500/25' :
-                  bannerSlides[currentSlide].color === 'green' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white hover:shadow-green-500/25' :
-                  'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:shadow-yellow-500/25'
-                }`}
-                onClick={() => {
-                  if (currentSlide === 1) window.location.href = '/squads';
-                  else if (currentSlide === 2) window.location.href = '/matches';
-                  else if (currentSlide === 3) window.location.href = '/donate';
-                  else window.location.href = '/dashboard';
+            {bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] && (
+              <div 
+                className="text-center px-4 transition-all duration-1000 transform"
+                style={{
+                  transform: `translateY(${scrollY * 0.2}px) scale(${Math.max(0.8, 1 - scrollY / 1000)})`,
+                  filter: `brightness(${Math.max(0.7, 1 + scrollY / 500)})`
                 }}
               >
-                {bannerSlides[currentSlide].highlight}
-              </button>
-            </div>
+                <h1 
+                  className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'text-cyan-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'text-purple-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'text-green-400' :
+                    'text-yellow-400'
+                  }`}
+                >
+                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.title}
+                </h1>
+                <p className="text-lg lg:text-2xl text-gray-200 mb-2 drop-shadow-lg transition-all duration-1000">
+                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.subtitle}
+                </p>
+                <div className="text-gray-300 font-mono text-sm lg:text-base drop-shadow-lg mb-4 transition-all duration-1000">
+                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.description}
+                </div>
+                
+                {/* Call to Action Button */}
+                <button 
+                  className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 ${
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white hover:shadow-cyan-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white hover:shadow-purple-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white hover:shadow-green-500/25' :
+                    'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:shadow-yellow-500/25'
+                  }`}
+                  onClick={() => {
+                    const currentBannerSlide = bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)];
+                    if (currentBannerSlide) {
+                      if (currentSlide === 1 || currentBannerSlide.highlight === "Build Your Team") window.location.href = '/squads';
+                      else if (currentSlide === 2 || currentBannerSlide.highlight === "Enter the Arena") window.location.href = '/matches';
+                      else if (currentSlide === 3 || currentBannerSlide.highlight === "Make a Difference") window.location.href = '/donate';
+                      else window.location.href = '/dashboard';
+                    }
+                  }}
+                >
+                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.highlight}
+                </button>
+              </div>
+            )}
           </div>
           
           {/* Navigation Arrows */}
@@ -596,9 +617,9 @@ export default function Home() {
                 onClick={() => setCurrentSlide(index)}
                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
                   index === currentSlide 
-                    ? `${bannerSlides[currentSlide].color === 'cyan' ? 'bg-cyan-400' :
-                        bannerSlides[currentSlide].color === 'purple' ? 'bg-purple-400' :
-                        bannerSlides[currentSlide].color === 'green' ? 'bg-green-400' :
+                    ? `${bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-cyan-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-purple-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-green-400' :
                         'bg-yellow-400'} scale-125` 
                     : 'bg-white/50 hover:bg-white/70'
                 }`}
@@ -722,12 +743,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Main Grid Layout with Enhanced Animations */}
+        {/* Main Grid Layout with Limited Scroll Effects */}
         <div 
           className="grid grid-cols-1 lg:grid-cols-4 gap-6"
           style={{
-            transform: `translateY(${Math.max(0, scrollY - 200) * -0.1}px)`,
-            opacity: Math.min(1, Math.max(0.5, 1 - (scrollY - 200) / 800))
+            // Limit transform effect to top 300px of scroll
+            transform: scrollY < 300 ? `translateY(${Math.max(0, scrollY - 200) * -0.05}px)` : 'none',
+            // Limit opacity effect to first 400px and make it fade out quickly
+            opacity: scrollY < 400 ? Math.max(0.85, 1 - (scrollY - 200) / 300) : 1
           }}
         >
           {/* Left Sidebar - Server Status & Game Data */}
@@ -987,18 +1010,42 @@ export default function Home() {
                 {topSquads.length > 0 ? (
                   topSquads.map((squad) => (
                     <Link key={squad.id} href={`/squads/${squad.id}`}>
-                      <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-4 hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-purple-400 font-bold">[{squad.tag}]</span>
-                            <span className="text-gray-300 font-medium hover:text-purple-300">{squad.name}</span>
+                      <div className="bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
+                        <div className="p-3">
+                          <div className="flex gap-3">
+                            {/* Squad Picture */}
+                            {squad.banner_url && (
+                              <div className="w-16 h-16 flex-shrink-0">
+                                <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
+                                  <img 
+                                    src={squad.banner_url} 
+                                    alt={`${squad.name} picture`}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.parentElement!.style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Squad Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="text-purple-400 font-bold text-sm">[{squad.tag}]</span>
+                                <span className="text-gray-300 font-medium text-sm hover:text-purple-300 truncate">{squad.name}</span>
+                              </div>
+                              
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs text-gray-400">
+                                  Captain: <span className="text-yellow-400">{squad.captain_alias}</span>
+                                </div>
+                                <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
+                                  {squad.member_count} members
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-                            {squad.member_count} members
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          Captain: <span className="text-yellow-400">{squad.captain_alias}</span>
                         </div>
                       </div>
                     </Link>

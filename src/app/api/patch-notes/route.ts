@@ -4,60 +4,89 @@ import path from 'path';
 
 export async function GET(request: NextRequest) {
   try {
-    // The file path specified by the user
-    const filePath = 'G:\\Users\\Travis\\Desktop\\New folder (2)\\Infantry Online Map Folder\\CTFPL Updates\\ctfpl.nws';
+    // Define file paths in order of preference
+    const filePaths = [
+      // Production: Synced file from game server
+      '/var/www/gaming-perks-shop/public/ctfpl.nws',
+      // Development: Local sample file
+      path.join(process.cwd(), 'sample-ctfpl.nws'),
+      // Alternative: Public directory sample
+      path.join(process.cwd(), 'public', 'ctfpl.nws')
+    ];
     
-    // Check if file exists and read it
     let content = '';
     let lastModified = '';
+    let usedFilePath = '';
+    let isFromGameServer = false;
     
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      content = fileContent;
-      
-      // Get file stats for last modified date
-      const stats = await fs.stat(filePath);
-      lastModified = stats.mtime.toISOString();
-    } catch (fileError: any) {
-      console.error('Error reading patch notes file:', fileError);
-      
-      // Try to read from sample file for testing
+    // Try each file path until we find one that works
+    for (const filePath of filePaths) {
       try {
-        const samplePath = path.join(process.cwd(), 'sample-ctfpl.nws');
-        const sampleContent = await fs.readFile(samplePath, 'utf-8');
-        content = sampleContent;
+        console.log(`Attempting to read patch notes from: ${filePath}`);
         
-        const sampleStats = await fs.stat(samplePath);
-        lastModified = sampleStats.mtime.toISOString();
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const stats = await fs.stat(filePath);
         
-        console.log('Using sample file for testing');
-      } catch (sampleError) {
-        console.error('Error reading sample file:', sampleError);
+        content = fileContent;
+        lastModified = stats.mtime.toISOString();
+        usedFilePath = filePath;
+        isFromGameServer = filePath.includes('/var/www/gaming-perks-shop/public/ctfpl.nws');
         
-        // If both files fail, return a default message
-        content = `OTF News
+        console.log(`Successfully loaded patch notes from: ${filePath}`);
+        console.log(`File size: ${Buffer.byteLength(content, 'utf8')} bytes`);
+        console.log(`Last modified: ${lastModified}`);
+        console.log(`From game server: ${isFromGameServer}`);
+        
+        break; // Success - exit the loop
+        
+      } catch (fileError: any) {
+        console.log(`Failed to read ${filePath}: ${fileError.message}`);
+        continue; // Try next file path
+      }
+    }
+    
+    // If no files could be read, return error content
+    if (!content) {
+      console.error('All patch notes file paths failed');
+      
+      content = `OTF News
 
 ~2Patch Notes Unavailable
 
-~6Unable to load patch notes from the specified file path.
-~4This may be because:
-~4- The file doesn't exist at the expected location
-~4- The application doesn't have permission to read the file
-~4- The file path is incorrect
+~6Unable to load patch notes from any configured location.
 
-~6Expected file location:
-~4${filePath}
+~6Attempted locations:
+${filePaths.map(path => `~4- ${path}`).join('\n')}
 
-~5Please check the file path and permissions.`;
-        
-        lastModified = new Date().toISOString();
-      }
+~5Status:
+~4The sync system may not be set up yet, or there may be a file permission issue.
+
+~6For Production Setup:
+~41. Upload sync-patch-notes.sh and setup-patch-sync.sh to your server
+~42. Run: sudo ./setup-patch-sync.sh
+~43. This will automatically sync patch notes from your game server
+
+~6For Development:
+~4Ensure sample-ctfpl.nws exists in your project root`;
+      
+      lastModified = new Date().toISOString();
+      usedFilePath = 'none';
     }
     
     return NextResponse.json({
       content,
       lastModified,
-      filePath
+      filePath: usedFilePath,
+      isFromGameServer,
+      sync: {
+        enabled: isFromGameServer,
+        lastCheck: lastModified,
+        source: isFromGameServer ? 'Live Game Server' : 'Sample/Development File'
+      },
+      stats: {
+        size: Buffer.byteLength(content, 'utf8'),
+        lines: content.split('\n').length
+      }
     });
     
   } catch (error: any) {
@@ -66,8 +95,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to fetch patch notes',
-        content: '~B Error loading patch notes\n~1 An unexpected error occurred while trying to load the patch notes.',
-        lastModified: new Date().toISOString()
+        content: `~B Error Loading Patch Notes
+
+~1An unexpected error occurred while trying to load the patch notes.
+
+~6Error Details:
+~4${error.message || 'Unknown error'}
+
+~5Please try again later or contact support if the issue persists.`,
+        lastModified: new Date().toISOString(),
+        filePath: 'error',
+        isFromGameServer: false
       },
       { status: 500 }
     );

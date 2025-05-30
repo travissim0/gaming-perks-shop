@@ -27,6 +27,7 @@ interface Squad {
   website_link?: string;
   captain_id: string;
   created_at: string;
+  banner_url?: string;
   members: SquadMember[];
 }
 
@@ -363,81 +364,105 @@ export default function SquadDetailPage() {
       
       <main className="container mx-auto py-8 px-4">
         {/* Squad Header */}
-        <div className="bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl p-8 mb-8 border border-cyan-500/20">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            <div>
-              <div className="flex items-center gap-4 mb-4">
-                <h1 className="text-4xl font-bold text-cyan-400">
-                  [{squad.tag}] {squad.name}
-                </h1>
+        <div className="bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl overflow-hidden mb-8 border border-cyan-500/20">
+          <div className="p-8">
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Squad Picture */}
+              {squad.banner_url && (
+                <div className="lg:w-80 lg:flex-shrink-0">
+                  <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30">
+                    <img 
+                      src={squad.banner_url} 
+                      alt={`${squad.name} picture`}
+                      className="w-full h-auto object-contain max-h-60"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement!.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Squad Info */}
+              <div className="flex-1">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4 mb-4">
+                      <h1 className="text-4xl font-bold text-cyan-400">
+                        [{squad.tag}] {squad.name}
+                      </h1>
+                    </div>
+                    
+                    {squad.description && (
+                      <p className="text-gray-300 text-lg mb-4">{squad.description}</p>
+                    )}
+                    
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-4">
+                      <span>👥 {squad.members.length} members</span>
+                      <span>📅 Created {new Date(squad.created_at).toLocaleDateString()}</span>
+                    </div>
+                    
+                    {/* Links */}
+                    {(squad.discord_link || squad.website_link) && (
+                      <div className="flex gap-4">
+                        {squad.discord_link && (
+                          <a
+                            href={squad.discord_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
+                          >
+                            💬 Discord
+                          </a>
+                        )}
+                        {squad.website_link && (
+                          <a
+                            href={squad.website_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors"
+                          >
+                            🌐 Website
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-3 lg:flex-shrink-0">
+                    {canRequestToJoin() && (
+                      <button
+                        onClick={requestToJoin}
+                        disabled={isRequesting}
+                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed"
+                      >
+                        {isRequesting ? (
+                          <span className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                            Sending...
+                          </span>
+                        ) : (
+                          '📤 Request to Join'
+                        )}
+                      </button>
+                    )}
+                    
+                    {hasExistingRequest && (
+                      <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
+                        ⏳ Request Pending
+                      </div>
+                    )}
+                    
+                    {userSquad && userSquad.id !== squad.id && (
+                      <div className="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-lg text-center border border-blue-600/30">
+                        👥 Member of [{userSquad.tag}]
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              
-              {squad.description && (
-                <p className="text-gray-300 text-lg mb-4">{squad.description}</p>
-              )}
-              
-              <div className="flex flex-wrap gap-4 text-sm text-gray-400">
-                <span>👥 {squad.members.length} members</span>
-                <span>📅 Created {new Date(squad.created_at).toLocaleDateString()}</span>
-              </div>
-              
-              {/* Links */}
-              {(squad.discord_link || squad.website_link) && (
-                <div className="flex gap-4 mt-4">
-                  {squad.discord_link && (
-                    <a
-                      href={squad.discord_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
-                    >
-                      💬 Discord
-                    </a>
-                  )}
-                  {squad.website_link && (
-                    <a
-                      href={squad.website_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition-colors"
-                    >
-                      🌐 Website
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex flex-col gap-3">
-              {canRequestToJoin() && (
-                <button
-                  onClick={requestToJoin}
-                  disabled={isRequesting}
-                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed"
-                >
-                  {isRequesting ? (
-                    <span className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                      Sending...
-                    </span>
-                  ) : (
-                    '📤 Request to Join'
-                  )}
-                </button>
-              )}
-              
-              {hasExistingRequest && (
-                <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
-                  ⏳ Request Pending
-                </div>
-              )}
-              
-              {userSquad && userSquad.id !== squad.id && (
-                <div className="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-lg text-center border border-blue-600/30">
-                  👥 Member of [{userSquad.tag}]
-                </div>
-              )}
             </div>
           </div>
         </div>
