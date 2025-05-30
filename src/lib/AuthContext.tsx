@@ -203,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`📋 Checking user profile (attempt ${attempt}/${maxAttempts})...`);
       
-      // Create a timeout race for the profile check
+      // Create a timeout race for the profile check with longer timeout
       const profileCheckPromise = supabase
         .from('profiles')
         .select('*')
@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
       
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile check timeout')), 5000)
+        setTimeout(() => reject(new Error('Profile check timeout')), 10000) // Increased from 5s to 10s
       );
       
       const profileResult = await Promise.race([profileCheckPromise, timeoutPromise]) as any;
@@ -228,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Retry for non-auth errors
         if (attempt < maxAttempts) {
           console.log(`🔄 Retrying profile check... (attempt ${attempt + 1}/${maxAttempts})`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Increased delay
           return ensureUserProfileRobust(user, attempt + 1);
         }
         
@@ -240,7 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!profile) {
         console.log('📝 Creating user profile...');
         
-        // Create a timeout race for the profile creation
+        // Create a timeout race for the profile creation with longer timeout
         const insertPromise = supabase
           .from('profiles')
           .insert([
@@ -252,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ]);
         
         const insertTimeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Profile creation timeout')), 5000)
+          setTimeout(() => reject(new Error('Profile creation timeout')), 10000) // Increased from 5s to 10s
         );
         
         const insertResult = await Promise.race([insertPromise, insertTimeoutPromise]) as any;
@@ -276,9 +276,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error('❌ Error in profile management:', error);
       
-      // Only throw auth errors, log others as warnings
+      // Only throw auth errors for critical failures, log timeouts as warnings
       if (isAuthTokenError(error)) {
         throw error;
+      }
+      
+      // Don't throw timeout errors, just log them
+      if (error.message?.includes('timeout')) {
+        console.warn('⚠️ Profile operation timed out, continuing with authentication');
+        return;
       }
       
       console.warn('⚠️ Profile management failed, continuing with authentication');

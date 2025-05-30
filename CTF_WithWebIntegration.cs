@@ -13,6 +13,7 @@ public class PlayerData
 {
     public string alias;
     public string team;
+    public string teamType; // "Titan" or "Collective" for logic
     public string className;
     public bool isOffense;
     public string weapon;
@@ -21,7 +22,7 @@ public class PlayerData
 public class WebIntegration
 {
     private static readonly HttpClient httpClient = new HttpClient();
-    private const string API_ENDPOINT = "http://localhost:3000/api/game-data"; // Change to your actual domain in production
+    private const string API_ENDPOINT = "https://freeinf.org/api/game-data";
     
     public static async Task SendGameDataToWebsite(Arena arena)
     {
@@ -34,25 +35,23 @@ public class WebIntegration
             var players = arena.Players.ToList();
             var gameDataPlayers = new List<PlayerData>();
             
-            // Determine which team is offense/defense for OvD games
-            bool titanIsOffense = false;
-            if (gameType == "OvD")
-            {
-                titanIsOffense = DetermineOffenseTeam(players, arena);
-            }
+            // Determine which team is offense/defense for all games
+            bool titanIsOffense = DetermineOffenseTeam(players, arena);
             
             // Process each player
             foreach (Player player in players)
             {
-                string team = DeterminePlayerTeam(player);
-                string className = GetPrimarySkillName(player);
-                bool isOffense = DetermineIsOffense(team, titanIsOffense, gameType);
+                string actualTeamName = player._team._name; // Keep the actual team name like "WC C" or "PT T"
+                string teamType = DeterminePlayerTeamType(player); // "Titan" or "Collective" for logic
+                string className = player._baseVehicle._type.Name; // Get class name directly from vehicle type
+                bool isOffense = DetermineIsOffense(teamType, titanIsOffense, gameType);
                 string weapon = GetSpecialWeapon(player);
                 
                 gameDataPlayers.Add(new PlayerData
                 {
                     alias = player._alias,
-                    team = team,
+                    team = actualTeamName, // Use actual team name
+                    teamType = teamType, // Add team type for logic
                     className = className,
                     isOffense = isOffense,
                     weapon = weapon
@@ -66,21 +65,22 @@ public class WebIntegration
             string jsonData = BuildJsonString(arena._name, gameType, baseUsed, gameDataPlayers);
             
             // Send to API
-            var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+            var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");
+            
             var response = await httpClient.PostAsync(API_ENDPOINT, content);
             
             if (response.IsSuccessStatusCode)
             {
-                Log.write("Game data sent successfully to website");
+                //Console.WriteLine("Game data sent successfully to website");
             }
             else
             {
-                Log.write(String.Format("Failed to send game data: {0}", response.StatusCode));
+                //Console.WriteLine(String.Format("Failed to send game data: {0}", response.StatusCode));
             }
         }
         catch (Exception ex)
         {
-            Log.write(String.Format("Error sending game data: {0}", ex.Message));
+            Console.WriteLine(String.Format("Error sending game data: {0}", ex.Message));
         }
     }
     
@@ -100,7 +100,7 @@ public class WebIntegration
             return "Unknown";
     }
     
-    private static string DeterminePlayerTeam(Player player)
+    private static string DeterminePlayerTeamType(Player player)
     {
         if (player._team._name.Contains(" T"))
             return "Titan";
@@ -112,24 +112,60 @@ public class WebIntegration
     
     private static bool DetermineOffenseTeam(List<Player> players, Arena arena)
     {
-        // Find the team with a Squad Leader - that team is offense
+        // First, try to find the team with a Squad Leader - that team is offense
         foreach (Player player in players)
         {
-            string className = GetPrimarySkillName(player);
+            string className = player._baseVehicle._type.Name;
             if (className == "Squad Leader")
             {
                 return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
             }
         }
-        return false; // Default to Titan = defense if no Squad Leader found
+        
+        // If no Squad Leader found, use a consistent fallback based on team balance
+        // Count players on each team type
+        int titanCount = 0;
+        int collectiveCount = 0;
+        
+        foreach (Player player in players)
+        {
+            if (player._team._name.Contains(" T"))
+                titanCount++;
+            else if (player._team._name.Contains(" C"))
+                collectiveCount++;
+        }
+        
+        // Make the larger team defense (more common in OvD), smaller team offense
+        // If equal, default to Titan = offense
+        if (titanCount > collectiveCount)
+            return false; // Titan = defense (larger team)
+        else
+            return true;  // Titan = offense (smaller or equal team)
     }
     
-    private static bool DetermineIsOffense(string team, bool titanIsOffense, string gameType)
+    private static bool DetermineIsOffense(string teamType, bool titanIsOffense, string gameType)
     {
-        if (gameType != "OvD")
-            return true; // For non-OvD games, everyone can be considered "offense"
-            
-        if (team == "Titan")
+        // For OvD games, use the Squad Leader logic
+        if (gameType == "OvD")
+        {
+            if (teamType == "Titan")
+                return titanIsOffense;
+            else
+                return !titanIsOffense;
+        }
+        
+        // For CTF games, assume teams alternate offense/defense
+        if (gameType == "CTF")
+        {
+            if (teamType == "Titan")
+                return titanIsOffense;
+            else
+                return !titanIsOffense;
+        }
+        
+        // For other game types (Pub, Mix, Duel, Unknown), still try to separate teams
+        // Don't default everyone to offense - use the same logic
+        if (teamType == "Titan")
             return titanIsOffense;
         else
             return !titanIsOffense;
@@ -157,49 +193,32 @@ public class WebIntegration
     
     private static string GetCurrentBase(Arena arena)
     {
-        // Try to get the current map/base name
-        // Adapt this based on how your arena stores map information
-        
-        if (arena._server != null && arena._server._config != null)
+        // Try to get the current map/base name from arena configuration
+        try
         {
-            return arena._server._config.name ?? "Unknown Base";
-        }
-        
-        return "Unknown Base";
-    }
-    
-    public static string GetPrimarySkillName(Player player)
-    {
-        // Implement based on your actual skill system
-        // This is adapted for typical Infantry Online skill detection
-        
-        if (player._skills == null || player._skills.Count == 0)
-            return "Infantry";
-            
-        // Find the skill with the highest level or primary skill
-        var primarySkill = player._skills.Values.OrderByDescending(s => s.Level).FirstOrDefault();
-        
-        if (primarySkill != null)
-        {
-            switch (primarySkill.SkillId)
+            // Check if arena has a map or zone configuration
+            if (arena._info != null && !string.IsNullOrEmpty(arena._info.name))
             {
-                case 1: return "Infantry";
-                case 2: return "Heavy Weapons"; 
-                case 3: return "Jump Trooper";
-                case 4: return "Infiltrator";
-                case 5: return "Squad Leader";
-                case 6: return "Field Medic";
-                case 7: return "Combat Engineer";
-                default: return "Infantry";
+                return arena._info.name;
             }
+            
+            // Fallback to arena name if no specific base info
+            if (!string.IsNullOrEmpty(arena._name))
+            {
+                return arena._name;
+            }
+            
+            return "Unknown Base";
         }
-        
-        return "Infantry";
+        catch (Exception)
+        {
+            return "Unknown Base";
+        }
     }
     
     private static string BuildJsonString(string arenaName, string gameType, string baseUsed, List<PlayerData> players)
     {
-        var json = new StringBuilder();
+        var json = new System.Text.StringBuilder();
         json.Append("{");
         
         // Add basic properties
@@ -216,6 +235,7 @@ public class WebIntegration
             json.Append("{");
             json.AppendFormat("\"alias\":\"{0}\",", EscapeJsonString(player.alias));
             json.AppendFormat("\"team\":\"{0}\",", EscapeJsonString(player.team));
+            json.AppendFormat("\"teamType\":\"{0}\",", EscapeJsonString(player.teamType));
             json.AppendFormat("\"class\":\"{0}\",", EscapeJsonString(player.className));
             json.AppendFormat("\"isOffense\":{0},", player.isOffense.ToString().ToLower());
             

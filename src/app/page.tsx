@@ -26,7 +26,8 @@ interface ServerData {
 
 interface GamePlayer {
   alias: string;
-  team: 'Titan' | 'Collective';
+  team: string; // Actual team name like "WC C" or "PT T"
+  teamType?: 'Titan' | 'Collective'; // For logic purposes
   class: string;
   isOffense: boolean;
   weapon?: string;
@@ -71,6 +72,8 @@ export default function Home() {
   const { user, loading } = useAuth();
   const [recentPatchNotes, setRecentPatchNotes] = useState<string>('');
   const [latestUpdateDate, setLatestUpdateDate] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminSectionExpanded, setAdminSectionExpanded] = useState(false);
   const [serverData, setServerData] = useState<ServerData>({
     zones: [],
     stats: { totalPlayers: 0, activeGames: 0, serverStatus: 'offline' },
@@ -128,6 +131,25 @@ export default function Home() {
 
   useEffect(() => {
     if (user) {
+      // Check if user is admin
+      const checkAdminStatus = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .single();
+
+          if (!error && data?.is_admin) {
+            setIsAdmin(true);
+          }
+        } catch (error) {
+          console.error('Error checking admin status:', error);
+        }
+      };
+
+      checkAdminStatus();
+
       // Fetch recent patch notes for logged-in users
       const fetchRecentPatchNotes = async () => {
         try {
@@ -585,6 +607,121 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Admin Controls Section - Only visible to admins */}
+        {user && isAdmin && (
+          <div className="mb-8">
+            {adminSectionExpanded ? (
+              // Expanded Admin Section
+              <div className="bg-gradient-to-r from-red-900/20 via-orange-900/20 to-yellow-900/20 border-2 border-yellow-500/50 rounded-xl shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-[1.02] hover:shadow-yellow-500/25">
+                <div className="bg-gradient-to-r from-red-800/30 via-orange-800/30 to-yellow-800/30 px-6 py-3 border-b border-yellow-500/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-yellow-400 tracking-wider flex items-center">
+                        ⚡ ADMIN CONTROLS
+                        <span className="ml-3 text-sm bg-red-600 text-white px-3 py-1 rounded-full animate-pulse">
+                          ADMIN ONLY
+                        </span>
+                      </h2>
+                      <p className="text-gray-300 text-sm mt-1">Administrative Dashboard & Management Tools</p>
+                    </div>
+                    <button
+                      onClick={() => setAdminSectionExpanded(false)}
+                      className="text-yellow-400 hover:text-yellow-300 p-2 rounded-lg hover:bg-yellow-500/10 transition-all duration-300"
+                      title="Collapse Admin Section"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Main Admin Dashboard */}
+                    <Link href="/admin">
+                      <div className="group bg-gradient-to-br from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-red-500/25 cursor-pointer">
+                        <div className="text-3xl mb-2">🎛️</div>
+                        <div className="text-white font-bold text-lg">ADMIN DASHBOARD</div>
+                        <div className="text-red-200 text-sm mt-1">Main Control Panel</div>
+                      </div>
+                    </Link>
+
+                    {/* User Management */}
+                    <Link href="/admin/users">
+                      <div className="group bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-purple-500/25 cursor-pointer">
+                        <div className="text-3xl mb-2">👥</div>
+                        <div className="text-white font-bold text-lg">USER MANAGEMENT</div>
+                        <div className="text-purple-200 text-sm mt-1">Manage Roles & Access</div>
+                      </div>
+                    </Link>
+
+                    {/* Order Management */}
+                    <Link href="/admin/orders">
+                      <div className="group bg-gradient-to-br from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-green-500/25 cursor-pointer">
+                        <div className="text-3xl mb-2">📦</div>
+                        <div className="text-white font-bold text-lg">ORDERS</div>
+                        <div className="text-green-200 text-sm mt-1">Purchase Management</div>
+                      </div>
+                    </Link>
+
+                    {/* Donations Management */}
+                    <Link href="/admin/donations">
+                      <div className="group bg-gradient-to-br from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-yellow-500/25 cursor-pointer">
+                        <div className="text-3xl mb-2">💰</div>
+                        <div className="text-white font-bold text-lg">DONATIONS</div>
+                        <div className="text-yellow-200 text-sm mt-1">Support Tracking</div>
+                      </div>
+                    </Link>
+                  </div>
+
+                  {/* Quick Admin Actions */}
+                  <div className="mt-6 pt-4 border-t border-yellow-500/30">
+                    <div className="flex flex-wrap gap-3 justify-center">
+                      <button
+                        onClick={() => window.open('https://dashboard.stripe.com', '_blank')}
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm flex items-center space-x-2"
+                      >
+                        <span>💳</span>
+                        <span>Stripe Dashboard</span>
+                      </button>
+                      
+                      <Link href="/admin/perks">
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm flex items-center space-x-2">
+                          <span>🎁</span>
+                          <span>Manage Perks</span>
+                        </button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Collapsed Admin Section
+              <div className="bg-gradient-to-r from-red-900/10 via-orange-900/10 to-yellow-900/10 border border-yellow-500/30 rounded-lg shadow-lg overflow-hidden">
+                <button
+                  onClick={() => setAdminSectionExpanded(true)}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-red-800/20 via-orange-800/20 to-yellow-800/20 hover:from-red-700/30 hover:via-orange-700/30 hover:to-yellow-700/30 border-b border-yellow-500/20 transition-all duration-300 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-yellow-400 text-lg">⚡</span>
+                      <span className="text-yellow-400 font-bold tracking-wide">ADMIN CONTROLS</span>
+                      <span className="text-xs bg-red-600 text-white px-2 py-1 rounded-full">ADMIN</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-yellow-400 group-hover:text-yellow-300 transition-colors duration-300">
+                      <span className="text-sm font-medium">Expand</span>
+                      <svg className="w-5 h-5 transform group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Main Grid Layout with Enhanced Animations */}
         <div 
           className="grid grid-cols-1 lg:grid-cols-4 gap-6"
@@ -660,60 +797,91 @@ export default function Home() {
                   <div className="space-y-3">
                     <div className="text-center">
                       <div className="text-cyan-400 font-bold text-sm">{gameData.gameType}</div>
-                      {gameData.baseUsed && (
+                      {gameData.baseUsed && gameData.baseUsed !== "Unknown Base" && gameData.baseUsed !== "InfServer.ConfigSetting" && (
                         <div className="text-gray-400 text-xs">{gameData.baseUsed}</div>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      {/* Offense Team */}
-                      <div className="bg-gray-800/50 border border-green-500/30 rounded-lg p-2">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-green-400 font-bold text-xs">
-                            🟢 Offense
-                          </h4>
-                          <span className="text-green-300 text-xs font-mono">
-                            {gameData.players.filter(p => p.isOffense).length}
-                          </span>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          {gameData.players
-                            .filter(p => p.isOffense)
-                            .map((player, index) => (
-                              <div key={index} className="text-xs">
-                                <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
-                                  {player.alias}{getWeaponEmoji(player.weapon || '')}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
+                    {(() => {
+                      // Group players by their actual team name
+                      const teamGroups: { [key: string]: GamePlayer[] } = {};
+                      gameData.players.forEach(player => {
+                        if (!teamGroups[player.team]) {
+                          teamGroups[player.team] = [];
+                        }
+                        teamGroups[player.team].push(player);
+                      });
 
-                      {/* Defense Team */}
-                      <div className="bg-gray-800/50 border border-red-500/30 rounded-lg p-2">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-red-400 font-bold text-xs">
-                            🔴 Defense
-                          </h4>
-                          <span className="text-red-300 text-xs font-mono">
-                            {gameData.players.filter(p => !p.isOffense).length}
-                          </span>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          {gameData.players
-                            .filter(p => !p.isOffense)
-                            .map((player, index) => (
-                              <div key={index} className="text-xs">
-                                <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
-                                  {player.alias}{getWeaponEmoji(player.weapon || '')}
-                                </span>
+                      // Helper function to get team color based on team name
+                      const getTeamColor = (teamName: string) => {
+                        if (teamName.includes(' T')) return 'green'; // Titan teams
+                        if (teamName.includes(' C')) return 'red';   // Collective teams
+                        return 'gray'; // Unknown teams
+                      };
+
+                      // Helper function to get CSS classes for team color
+                      const getTeamClasses = (teamName: string, type: 'border' | 'text' | 'count') => {
+                        const color = getTeamColor(teamName);
+                        if (type === 'border') {
+                          return color === 'green' ? 'border-green-500/30' : 
+                                 color === 'red' ? 'border-red-500/30' : 'border-gray-500/30';
+                        }
+                        if (type === 'text') {
+                          return color === 'green' ? 'text-green-400' : 
+                                 color === 'red' ? 'text-red-400' : 'text-gray-400';
+                        }
+                        if (type === 'count') {
+                          return color === 'green' ? 'text-green-300' : 
+                                 color === 'red' ? 'text-red-300' : 'text-gray-300';
+                        }
+                        return '';
+                      };
+
+                      // Helper function to get role indicator color (different from team color)
+                      const getRoleClasses = (isOffenseTeam: boolean, type: 'icon' | 'text') => {
+                        if (type === 'icon') {
+                          return isOffenseTeam ? '🗡️' : '🛡️'; // Sword for offense, shield for defense
+                        }
+                        if (type === 'text') {
+                          return isOffenseTeam ? 'text-orange-400' : 'text-blue-400'; // Orange for offense, blue for defense
+                        }
+                        return '';
+                      };
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {Object.entries(teamGroups).map(([teamName, players]) => {
+                            // Determine if this team is offense or defense based on majority
+                            const offensePlayers = players.filter(p => p.isOffense);
+                            const defensePlayers = players.filter(p => !p.isOffense);
+                            const isOffenseTeam = offensePlayers.length > defensePlayers.length;
+                            
+                            return (
+                              <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-2`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className={`font-bold text-xs ${getTeamClasses(teamName, 'text')}`}>
+                                    <span className={getRoleClasses(isOffenseTeam, 'text')}>{getRoleClasses(isOffenseTeam, 'icon')}</span> {teamName} <span className={getRoleClasses(isOffenseTeam, 'text')}>({isOffenseTeam ? 'Offense' : 'Defense'})</span>
+                                  </h4>
+                                  <span className={`text-xs font-mono ${getTeamClasses(teamName, 'count')}`}>
+                                    {players.length}
+                                  </span>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                  {players.map((player, index) => (
+                                    <div key={index} className="text-xs">
+                                      <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
+                                        {player.alias}{getWeaponEmoji(player.weapon || '')}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            ))}
+                            );
+                          })}
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="text-center py-8">

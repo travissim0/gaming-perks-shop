@@ -254,18 +254,18 @@ export default function AdminPerksPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
       <Navbar user={user} />
       
       <main className="container mx-auto py-8 px-4">
-        <div className="mb-6 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Admin: Manage Perks</h1>
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <h1 className="text-2xl font-bold text-white">Admin: Manage Perks</h1>
           
-          <div className="flex space-x-2">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
             <button
               onClick={handleSyncStripeProducts}
               disabled={syncing}
-              className={`bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center ${
+              className={`bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded transition-colors flex items-center justify-center ${
                 syncing ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
@@ -284,14 +284,14 @@ export default function AdminPerksPage() {
             {!showAddForm ? (
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
               >
                 Add New Perk
               </button>
             ) : (
               <button
                 onClick={resetForm}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
               >
                 Cancel
               </button>
@@ -300,14 +300,14 @@ export default function AdminPerksPage() {
         </div>
         
         {showAddForm && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">
+          <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-4 text-white">
               {editingId ? 'Edit Perk' : 'Add New Perk'}
             </h2>
             
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">
                   Name *
                 </label>
                 <input
@@ -317,12 +317,12 @@ export default function AdminPerksPage() {
                   value={formProduct.name}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
                   Description *
                 </label>
                 <textarea
@@ -332,13 +332,13 @@ export default function AdminPerksPage() {
                   onChange={handleInputChange}
                   required
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-1">
                     Price (USD) *
                   </label>
                   <input
@@ -350,15 +350,15 @@ export default function AdminPerksPage() {
                     required
                     min="0.01"
                     step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Enter the price in dollars (e.g., 9.99)
                   </p>
                 </div>
                 
                 <div>
-                  <label htmlFor="priceId" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="priceId" className="block text-sm font-medium text-gray-300 mb-1">
                     Stripe Price ID *
                   </label>
                   <input
@@ -368,16 +368,16 @@ export default function AdminPerksPage() {
                     value={formProduct.priceId}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     Price ID from your Stripe dashboard
                   </p>
                 </div>
               </div>
               
               <div>
-                <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="image" className="block text-sm font-medium text-gray-300 mb-1">
                   Image URL
                 </label>
                 <input
@@ -386,12 +386,12 @@ export default function AdminPerksPage() {
                   name="image"
                   value={formProduct.image}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               
               <div>
-                <label htmlFor="phrase" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="phrase" className="block text-sm font-medium text-gray-300 mb-1">
                   Custom Phrase
                 </label>
                 <input
@@ -402,10 +402,10 @@ export default function AdminPerksPage() {
                   onChange={handleInputChange}
                   maxLength={12}
                   pattern="[a-zA-Z0-9]*"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
                   placeholder="Up to 12 alphanumeric characters"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Optional custom phrase for in-game usage (1-12 alphanumeric characters only)
                 </p>
               </div>
@@ -417,9 +417,9 @@ export default function AdminPerksPage() {
                   name="active"
                   checked={formProduct.active}
                   onChange={handleCheckboxChange}
-                  className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                  className="h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="active" className="ml-2 block text-sm text-gray-300">
                   Active (visible to customers)
                 </label>
               </div>
@@ -428,7 +428,7 @@ export default function AdminPerksPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded ${
+                  className={`bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-2 rounded transition-all ${
                     submitting ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
@@ -443,51 +443,51 @@ export default function AdminPerksPage() {
           </div>
         )}
         
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold">Available Perks</h2>
+        <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-700">
+            <h2 className="text-lg font-semibold text-white">Available Perks</h2>
           </div>
           
           {loadingProducts ? (
             <div className="p-6">
               <div className="animate-pulse">
-                <div className="h-12 bg-gray-200 rounded mb-4"></div>
-                <div className="h-12 bg-gray-200 rounded mb-4"></div>
-                <div className="h-12 bg-gray-200 rounded"></div>
+                <div className="h-12 bg-gray-700 rounded mb-4"></div>
+                <div className="h-12 bg-gray-700 rounded mb-4"></div>
+                <div className="h-12 bg-gray-700 rounded"></div>
               </div>
             </div>
           ) : products.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
+            <div className="p-6 text-center text-gray-400">
               No perks found. Add your first perk using the form above.
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-900/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Name
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Price
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Phrase
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Created
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-gray-800/30 divide-y divide-gray-700">
                   {products.map((product) => (
-                    <tr key={product.id}>
+                    <tr key={product.id} className="hover:bg-gray-700/30">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           {product.image && (
@@ -498,18 +498,18 @@ export default function AdminPerksPage() {
                             />
                           )}
                           <div>
-                            <div className="font-medium text-gray-900">{product.name}</div>
-                            <div className="text-sm text-gray-500 truncate max-w-xs">
+                            <div className="font-medium text-white">{product.name}</div>
+                            <div className="text-sm text-gray-400 truncate max-w-xs">
                               {product.description}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 whitespace-nowrap text-green-400 font-semibold">
                         ${(product.price / 100).toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900 font-mono">
+                        <span className="text-sm text-gray-300 font-mono bg-gray-700 px-2 py-1 rounded">
                           {product.phrase || '-'}
                         </span>
                       </td>
@@ -517,26 +517,26 @@ export default function AdminPerksPage() {
                         <span
                           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             product.active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-green-900/50 text-green-300 border border-green-600'
+                              : 'bg-gray-700/50 text-gray-300 border border-gray-600'
                           }`}
                         >
                           {product.active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         {new Date(product.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEdit(product)}
-                          className="text-indigo-600 hover:text-indigo-900 mr-4"
+                          className="text-blue-400 hover:text-blue-300 mr-4 transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-400 hover:text-red-300 transition-colors"
                         >
                           Delete
                         </button>

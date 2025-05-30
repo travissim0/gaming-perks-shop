@@ -16,9 +16,9 @@ export default function Navbar({ user }: { user: any }) {
       
       try {
         const { data: profile } = await supabase
-          .from('user_profiles')
+          .from('profiles')
           .select('is_admin')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .single();
         
         setIsAdmin(profile?.is_admin || false);
@@ -105,19 +105,19 @@ export default function Navbar({ user }: { user: any }) {
               >
                 <span className="group-hover:text-shadow-glow">📋 Patch Notes</span>
               </Link>
-              {isAdmin && (
-                <Link 
-                  href="/admin/donations" 
-                  className="nav-link group px-3 py-2 text-gray-300 hover:text-yellow-400 transition-all duration-300 border border-transparent hover:border-yellow-500 rounded font-medium tracking-wide text-sm"
-                >
-                  <span className="group-hover:text-shadow-glow">💰 Admin</span>
-                </Link>
-              )}
             </div>
           )}
           
           {/* Desktop Right Side */}
           <div className="hidden md:flex items-center space-x-3">
+            {user && isAdmin && (
+              <Link 
+                href="/admin" 
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-3 py-2 rounded font-bold tracking-wide transition-all duration-300 shadow-lg hover:shadow-red-500/25 text-sm border border-red-500/50 hover:border-red-400"
+              >
+                ⚡ ADMIN
+              </Link>
+            )}
             {user && (
               <Link 
                 href="/donate" 
@@ -218,11 +218,11 @@ export default function Navbar({ user }: { user: any }) {
                   </Link>
                   {isAdmin && (
                     <Link 
-                      href="/admin/donations" 
+                      href="/admin" 
                       onClick={closeMobileMenu}
-                      className="block px-4 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-800 rounded transition-all duration-300"
+                      className="block mx-4 mt-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-4 py-2 rounded border border-red-500/50 hover:border-red-400 transition-all duration-300 font-bold tracking-wide shadow-lg hover:shadow-red-500/25 text-center"
                     >
-                      💰 Admin Donations
+                      ⚡ ADMIN
                     </Link>
                   )}
                   <Link 
