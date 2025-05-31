@@ -55,3 +55,48 @@ body {
     background-size: 20px 20px;
   }
 }
+
+/* Custom styles for forum quotes */
+.quote-block {
+  border-left: 4px solid #06b6d4;
+  padding-left: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  background-color: rgba(55, 65, 81, 0.3);
+  margin: 0.5rem 0;
+  font-style: italic;
+  color: #d1d5db;
+}
+
+/* Thread connection lines */
+.thread-line {
+  background: linear-gradient(to bottom, transparent 0%, #06b6d4 20%, #06b6d4 80%, transparent 100%);
+}
+
+/* Scroll margin for anchored posts */
+.scroll-mt-4 {
+  scroll-margin-top: 1rem;
+}
+
+/* Text shadow for glow effect */
+.text-shadow-glow {
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+/* Custom scrollbar for better forum experience */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}

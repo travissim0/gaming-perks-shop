@@ -291,7 +291,7 @@ export function useForum() {
         })
         .select(`
           *,
-          author:profiles!forum_posts_author_id_fkey(id, email, in_game_alias, avatar_url)
+          author:profiles!forum_posts_author_id_fkey(id, email, in_game_alias, avatar_url, posts_count)
         `)
         .single();
 
@@ -333,16 +333,82 @@ export function useForum() {
   };
 
   const deletePost = async (postId: string): Promise<boolean> => {
+    if (!user) {
+      console.error('Delete failed: No user logged in');
+      setError('You must be logged in to delete a post');
+      return false;
+    }
+
     try {
       setLoading(true);
-      const { error } = await supabase
+      
+      console.log('Attempting to delete post:', {
+        postId,
+        userId: user.id,
+        userEmail: user.email
+      });
+      
+      // First check if user can delete this post
+      const { data: postToDelete, error: fetchError } = await supabase
+        .from('forum_posts')
+        .select('author_id, content')
+        .eq('id', postId)
+        .eq('is_deleted', false)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching post for deletion:', fetchError);
+        setError('Post not found or already deleted');
+        return false;
+      }
+
+      if (!postToDelete) {
+        console.error('Post not found');
+        setError('Post not found');
+        return false;
+      }
+
+      console.log('Post to delete:', {
+        postId,
+        authorId: postToDelete.author_id,
+        currentUserId: user.id,
+        isOwner: postToDelete.author_id === user.id
+      });
+
+      // Check permissions
+      const isOwner = postToDelete.author_id === user.id;
+      const userMetadata = user.user_metadata || {};
+      const isAdmin = userMetadata.is_admin === true || (user as any).is_admin === true;
+      const isCtfAdmin = userMetadata.ctf_admin === true || (user as any).ctf_admin === true;
+
+      if (!isOwner && !isAdmin && !isCtfAdmin) {
+        console.error('Permission denied:', {
+          isOwner,
+          isAdmin,
+          isCtfAdmin,
+          userMetadata
+        });
+        setError('You do not have permission to delete this post');
+        return false;
+      }
+
+      // Perform the deletion using soft delete (update is_deleted = true)
+      const { data, error } = await supabase
         .from('forum_posts')
         .update({ is_deleted: true })
-        .eq('id', postId);
+        .eq('id', postId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase delete error:', error);
+        setError(`Failed to delete post: ${error.message}`);
+        return false;
+      }
+      
+      console.log('Delete successful:', data);
       return true;
     } catch (err) {
+      console.error('Delete post error:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete post');
       return false;
     } finally {
@@ -569,6 +635,23 @@ export function useForum() {
     }
   };
 
+  // User post counts
+  const getUserPostCount = async (userId: string): Promise<number> => {
+    try {
+      const { count, error } = await supabase
+        .from('forum_posts')
+        .select('id', { count: 'exact' })
+        .eq('author_id', userId)
+        .eq('is_deleted', false);
+
+      if (error) throw error;
+      return count || 0;
+    } catch (err) {
+      console.warn('Failed to get user post count:', err);
+      return 0;
+    }
+  };
+
   return {
     loading,
     error,
@@ -598,6 +681,8 @@ export function useForum() {
     // Search
     searchForum,
     // Stats
-    getForumStats
+    getForumStats,
+    // User post counts
+    getUserPostCount
   };
 } 

@@ -196,42 +196,85 @@ export default function CategoryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [sortBy, setSortBy] = useState<'latest' | 'oldest' | 'most_replies' | 'most_views'>('latest');
+  const [pageLoading, setPageLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
   const slug = params.slug as string;
   const threadsPerPage = 20;
 
+  // Single consolidated useEffect for all data loading
   useEffect(() => {
-    const loadCategory = async () => {
+    let isCancelled = false;
+
+    const loadAllData = async () => {
       if (!slug) return;
       
-      const categoryData = await getCategoryBySlug(slug);
-      if (!categoryData) {
-        router.push('/forum');
-        return;
+      try {
+        setPageLoading(true);
+        
+        // Load category first
+        const categoryData = await getCategoryBySlug(slug);
+        if (isCancelled) return;
+        
+        if (!categoryData) {
+          router.push('/forum');
+          return;
+        }
+        setCategory(categoryData);
+
+        // Load threads for this category
+        const threadsData = await getThreads({
+          category_id: categoryData.id,
+          page: currentPage,
+          per_page: threadsPerPage,
+          sort: sortBy
+        });
+        
+        if (!isCancelled) {
+          setThreads(threadsData.threads);
+          setTotalPages(Math.ceil(threadsData.total / threadsPerPage));
+          setInitialLoadComplete(true);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          console.error('Error loading category data:', err);
+        }
+      } finally {
+        if (!isCancelled) {
+          setPageLoading(false);
+        }
       }
-      setCategory(categoryData);
     };
 
-    loadCategory();
-  }, [slug, router]);
+    // Only load if we haven't completed initial load or if key dependencies changed
+    if (!initialLoadComplete || !category || category.slug !== slug) {
+      loadAllData();
+    } else {
+      // Just load threads if category exists and only page/sort changed
+      const loadThreadsOnly = async () => {
+        if (!category) return;
+        
+        const threadsData = await getThreads({
+          category_id: category.id,
+          page: currentPage,
+          per_page: threadsPerPage,
+          sort: sortBy
+        });
+        
+        if (!isCancelled) {
+          setThreads(threadsData.threads);
+          setTotalPages(Math.ceil(threadsData.total / threadsPerPage));
+        }
+      };
 
-  useEffect(() => {
-    const loadThreads = async () => {
-      if (!category) return;
-      
-      const threadsData = await getThreads({
-        category_id: category.id,
-        page: currentPage,
-        per_page: threadsPerPage,
-        sort: sortBy
-      });
-      
-      setThreads(threadsData.threads);
-      setTotalPages(Math.ceil(threadsData.total / threadsPerPage));
+      loadThreadsOnly();
+    }
+
+    // Cleanup function to cancel pending operations
+    return () => {
+      isCancelled = true;
     };
-
-    loadThreads();
-  }, [category, currentPage, sortBy]);
+  }, [slug, currentPage, sortBy]);
 
   const handleSortChange = (newSort: typeof sortBy) => {
     setSortBy(newSort);
@@ -243,7 +286,8 @@ export default function CategoryPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (authLoading || loading) {
+  // Show loading state to prevent flickering
+  if (pageLoading || authLoading || (!category && initialLoadComplete)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar user={user} />

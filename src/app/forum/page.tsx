@@ -95,44 +95,58 @@ const StatsCard = ({ stats }: { stats: ForumStats }) => {
   );
 };
 
-export default function ForumIndexPage() {
-  const { user, loading: authLoading } = useAuth();
+export default function ForumPage() {
+  const { user } = useAuth();
   const { getCategories, getForumStats, loading, error } = useForum();
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [stats, setStats] = useState<ForumStats | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
 
   useEffect(() => {
+    let isCancelled = false;
+
     const loadData = async () => {
-      const [categoriesData, statsData] = await Promise.all([
-        getCategories(),
-        getForumStats()
-      ]);
-      
-      setCategories(categoriesData);
-      setStats(statsData);
+      try {
+        setPageLoading(true);
+        
+        const [categoriesData, statsData] = await Promise.all([
+          getCategories(),
+          getForumStats()
+        ]);
+        
+        if (!isCancelled) {
+          setCategories(categoriesData);
+          setStats(statsData);
+        }
+      } catch (err) {
+        console.error('Error loading forum data:', err);
+      } finally {
+        if (!isCancelled) {
+          setPageLoading(false);
+        }
+      }
     };
 
     loadData();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
-  if (authLoading || (loading && categories.length === 0)) {
+  if (pageLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar user={user} />
         <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-12 bg-gray-700 rounded mb-6 w-64"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-lg border border-gray-600 p-6">
-                  <div className="flex space-x-4">
-                    <div className="w-16 h-16 bg-gray-700 rounded-lg"></div>
-                    <div className="flex-1">
-                      <div className="h-6 bg-gray-700 rounded mb-3"></div>
-                      <div className="h-4 bg-gray-700 rounded mb-3"></div>
-                      <div className="h-4 bg-gray-700 rounded w-32"></div>
-                    </div>
-                  </div>
+          <div className="animate-pulse space-y-6">
+            <div className="h-12 bg-gray-700 rounded w-48"></div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-gray-800 rounded-lg p-6 space-y-4">
+                  <div className="h-6 bg-gray-700 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-700 rounded w-full"></div>
+                  <div className="h-4 bg-gray-700 rounded w-1/2"></div>
                 </div>
               ))}
             </div>
