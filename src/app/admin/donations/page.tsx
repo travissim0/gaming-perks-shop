@@ -15,6 +15,12 @@ interface DonationTransaction {
   donation_message: string;
   created_at: string;
   completed_at: string;
+  payment_method?: string;
+  kofi_transaction_id?: string;
+  kofi_message?: string;
+  kofi_from_name?: string;
+  kofi_email?: string;
+  kofi_url?: string;
   user_profiles?: {
     in_game_alias: string;
   };
@@ -27,6 +33,7 @@ export default function AdminDonations() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isAdmin, setIsAdmin] = useState(false);
@@ -89,16 +96,18 @@ export default function AdminDonations() {
 
   const exportDonations = () => {
     const csvContent = [
-      ['Date', 'Amount', 'Status', 'Email', 'Name', 'In-Game Alias', 'Message', 'Transaction ID'].join(','),
+      ['Date', 'Amount', 'Status', 'Payment Method', 'Email', 'Name', 'In-Game Alias', 'Message', 'Transaction ID', 'Ko-fi ID'].join(','),
       ...filteredDonations.map(donation => [
         formatDate(donation.completed_at || donation.created_at),
         formatCurrency(donation.amount_cents, donation.currency),
         donation.status,
+        donation.payment_method || 'stripe',
         donation.customer_email,
         donation.customer_name || '',
         donation.user_profiles?.in_game_alias || '',
         `"${donation.donation_message || ''}"`,
-        donation.id
+        donation.id,
+        donation.kofi_transaction_id || ''
       ].join(','))
     ].join('\n');
 
@@ -121,11 +130,14 @@ export default function AdminDonations() {
         donation.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         donation.user_profiles?.in_game_alias?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         donation.donation_message?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.id.toLowerCase().includes(searchTerm.toLowerCase());
+        donation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        donation.kofi_transaction_id?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || donation.status === statusFilter;
+      const matchesPaymentMethod = paymentMethodFilter === 'all' || 
+        (donation.payment_method || 'stripe') === paymentMethodFilter;
       
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesPaymentMethod;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -157,6 +169,12 @@ export default function AdminDonations() {
 
   const totalAmount = filteredDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
   const totalCount = filteredDonations.length;
+  
+  // Calculate stats by payment method
+  const stripeDonations = filteredDonations.filter(d => (d.payment_method || 'stripe') === 'stripe');
+  const kofiDonations = filteredDonations.filter(d => d.payment_method === 'kofi');
+  const stripeAmount = stripeDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
+  const kofiAmount = kofiDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
 
   if (loading || isLoading) {
     return (
@@ -230,7 +248,7 @@ export default function AdminDonations() {
             </div>
             
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
                 <div className="text-2xl font-bold text-green-400">{totalCount}</div>
                 <div className="text-gray-400 text-sm">Total Donations</div>
@@ -243,12 +261,20 @@ export default function AdminDonations() {
                 <div className="text-2xl font-bold text-green-400">{formatCurrency(totalAmount / Math.max(totalCount, 1))}</div>
                 <div className="text-gray-400 text-sm">Average Donation</div>
               </div>
+              <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 rounded-lg p-4">
+                <div className="text-xl font-bold text-indigo-400">{stripeDonations.length}</div>
+                <div className="text-gray-400 text-sm">💳 Stripe ({formatCurrency(stripeAmount)})</div>
+              </div>
+              <div className="bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 rounded-lg p-4">
+                <div className="text-xl font-bold text-red-400">{kofiDonations.length}</div>
+                <div className="text-gray-400 text-sm">☕ Ko-fi ({formatCurrency(kofiAmount)})</div>
+              </div>
             </div>
           </div>
 
           {/* Filters */}
           <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-gray-400 text-sm font-medium mb-2">Search</label>
                 <input
@@ -271,6 +297,19 @@ export default function AdminDonations() {
                   <option value="completed">Completed</option>
                   <option value="pending">Pending</option>
                   <option value="failed">Failed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-sm font-medium mb-2">Payment Method</label>
+                <select
+                  value={paymentMethodFilter}
+                  onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-300 focus:border-cyan-500 focus:outline-none"
+                >
+                  <option value="all">All Methods</option>
+                  <option value="stripe">💳 Stripe</option>
+                  <option value="kofi">☕ Ko-fi</option>
                 </select>
               </div>
               
@@ -310,6 +349,7 @@ export default function AdminDonations() {
                   <tr>
                     <th className="px-4 py-3 text-left text-cyan-400 font-medium">Date</th>
                     <th className="px-4 py-3 text-left text-cyan-400 font-medium">Amount</th>
+                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Method</th>
                     <th className="px-4 py-3 text-left text-cyan-400 font-medium">Status</th>
                     <th className="px-4 py-3 text-left text-cyan-400 font-medium">Email</th>
                     <th className="px-4 py-3 text-left text-cyan-400 font-medium">In-Game Alias</th>
@@ -325,6 +365,15 @@ export default function AdminDonations() {
                       </td>
                       <td className="px-4 py-3 text-green-400 font-bold">
                         {formatCurrency(donation.amount_cents, donation.currency)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          (donation.payment_method || 'stripe') === 'stripe' 
+                            ? 'bg-indigo-900/50 text-indigo-400 border border-indigo-500/30' 
+                            : 'bg-red-900/50 text-red-400 border border-red-500/30'
+                        }`}>
+                          {(donation.payment_method || 'stripe') === 'stripe' ? '💳 STRIPE' : '☕ KO-FI'}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -351,8 +400,25 @@ export default function AdminDonations() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-400 font-mono text-xs">
-                        <div className="truncate max-w-32" title={donation.id}>
-                          {donation.id}
+                        <div className="space-y-1">
+                          <div className="truncate max-w-32" title={donation.id}>
+                            {donation.id}
+                          </div>
+                          {donation.kofi_transaction_id && (
+                            <div className="truncate max-w-32 text-red-400" title={`Ko-fi: ${donation.kofi_transaction_id}`}>
+                              Ko-fi: {donation.kofi_transaction_id}
+                            </div>
+                          )}
+                          {donation.kofi_url && (
+                            <a 
+                              href={donation.kofi_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-red-400 hover:text-red-300 text-xs underline"
+                            >
+                              View Ko-fi
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>

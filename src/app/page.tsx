@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import CTFAdminPanel from '@/components/CTFAdminPanel';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -71,10 +72,14 @@ interface Match {
 
 export default function Home() {
   const { user, loading } = useAuth();
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showCTFAdmin, setShowCTFAdmin] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [recentPatchNotes, setRecentPatchNotes] = useState<string>('');
   const [latestUpdateDate, setLatestUpdateDate] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminSectionExpanded, setAdminSectionExpanded] = useState(false);
+  const [ctfAdminSectionExpanded, setCTFAdminSectionExpanded] = useState(false);
   const [serverData, setServerData] = useState<ServerData>({
     zones: [],
     stats: { totalPlayers: 0, activeGames: 0, serverStatus: 'offline' },
@@ -142,70 +147,24 @@ export default function Home() {
   );
 
   useEffect(() => {
-    if (user) {
-      // Check if user is admin
-      const checkAdminStatus = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('is_admin')
-            .eq('id', user.id)
-            .single();
-
-          if (!error && data?.is_admin) {
-            setIsAdmin(true);
-          }
-        } catch (error) {
-          console.error('Error checking admin status:', error);
+    const fetchUserProfile = async () => {
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('is_admin, ctf_role')
+          .eq('id', user.id)
+          .single();
+        
+        if (data) {
+          setUserProfile(data);
+          setShowAdminPanel(data.is_admin);
+          setShowCTFAdmin(data.is_admin || data.ctf_role === 'ctf_admin');
         }
-      };
+      }
+    };
 
-      checkAdminStatus();
+    fetchUserProfile();
 
-      // Fetch recent patch notes for logged-in users
-      const fetchRecentPatchNotes = async () => {
-        try {
-          const response = await fetch('/api/patch-notes');
-          if (response.ok) {
-            const data = await response.json();
-            const content = data.content || '';
-            
-            // Extract the most recent update (first few lines)
-            const lines = content.split('\n');
-            let recentContent = '';
-            let foundFirstDate = false;
-            let dateFound = '';
-            
-            for (let i = 0; i < lines.length && i < 15; i++) {
-              const line = lines[i];
-              // Look for date patterns
-              if (line.includes('~6') || /\w{3} \d{1,2}, \d{4}/.test(line)) {
-                if (!foundFirstDate) {
-                  foundFirstDate = true;
-                  dateFound = line.replace(/~6/g, '').trim();
-                  recentContent += line + '\n';
-                } else {
-                  break; // Stop at second date
-                }
-              } else if (foundFirstDate) {
-                recentContent += line + '\n';
-                if (recentContent.split('\n').length > 8) break; // Limit to ~8 lines
-              } else {
-                recentContent += line + '\n';
-              }
-            }
-            
-            setRecentPatchNotes(recentContent.trim());
-            setLatestUpdateDate(dateFound);
-          }
-        } catch (error) {
-          console.error('Error fetching patch notes:', error);
-        }
-      };
-      
-      fetchRecentPatchNotes();
-    }
-    
     // Scroll effect handler
     const handleScroll = () => {
       setScrollY(window.scrollY);
@@ -629,7 +588,7 @@ export default function Home() {
         </div>
 
         {/* Admin Controls Section - Only visible to admins */}
-        {user && isAdmin && (
+        {showAdminPanel && (
           <div className="mb-8">
             {adminSectionExpanded ? (
               // Expanded Admin Section
@@ -740,6 +699,45 @@ export default function Home() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* CTF Administration */}
+        {showCTFAdmin && (
+          <div className="bg-purple-800/20 border-2 border-purple-500 rounded-xl p-6 transition-all duration-300 hover:bg-purple-800/30">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="bg-purple-600 p-3 rounded-lg">
+                  <span className="text-white text-xl">🎮</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">CTF Administration</h3>
+                  <p className="text-purple-200">
+                    Manage CTF roles and permissions
+                    {userProfile?.ctf_role && userProfile.ctf_role !== 'none' && (
+                      <span className="ml-2 bg-purple-600 text-white px-2 py-1 rounded text-xs">
+                        {userProfile.ctf_role.replace('ctf_', '').replace('_', ' ').toUpperCase()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <a
+                href="/admin/users"
+                className="bg-purple-700/50 hover:bg-purple-700 p-4 rounded-lg transition-colors border border-purple-600"
+              >
+                <h4 className="font-semibold text-white mb-2">🔧 Manage CTF Roles</h4>
+                <p className="text-purple-200 text-sm">Assign and manage CTF roles for users</p>
+              </a>
+              
+              <div className="bg-purple-700/30 p-4 rounded-lg border border-purple-600/50">
+                <h4 className="font-semibold text-white mb-2">📊 CTF Dashboard</h4>
+                <p className="text-purple-200 text-sm">Coming soon - CTF match management</p>
+              </div>
+            </div>
           </div>
         )}
 

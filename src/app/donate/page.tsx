@@ -15,6 +15,7 @@ export default function DonatePage() {
   const { user, loading } = useAuth();
   const [selectedAmount, setSelectedAmount] = useState<number>(10);
   const [donationMessage, setDonationMessage] = useState<string>('');
+  const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'kofi'>('stripe');
 
   const handleDonation = async () => {
     if (!user) {
@@ -24,6 +25,11 @@ export default function DonatePage() {
 
     if (selectedAmount < 1) {
       toast.error('Donation amount must be at least $1');
+      return;
+    }
+
+    if (selectedMethod === 'kofi') {
+      handleKofiDonation();
       return;
     }
 
@@ -68,6 +74,36 @@ export default function DonatePage() {
     } catch (error: any) {
       toast.error('Error creating donation session: ' + error.message);
     }
+  };
+
+  const handleKofiDonation = () => {
+    // Create Ko-fi URL with custom amount and message
+    const kofiUrl = new URL('https://ko-fi.com/ctfpl');
+    
+    // Ko-fi doesn't support direct amount setting via URL, but we can add the amount in a custom message
+    // The user will need to manually enter the amount on Ko-fi
+    if (donationMessage.trim()) {
+      // Add the selected amount and message to Ko-fi's message field
+      const fullMessage = `$${selectedAmount} - ${donationMessage.trim()}`;
+      kofiUrl.searchParams.set('message', fullMessage);
+    }
+    
+    // Store the intended donation in localStorage so we can potentially track it later
+    localStorage.setItem('pendingKofiDonation', JSON.stringify({
+      amount: selectedAmount,
+      message: donationMessage.trim(),
+      timestamp: new Date().toISOString(),
+      userId: user?.id
+    }));
+    
+    // Open Ko-fi in a new tab
+    window.open(kofiUrl.toString(), '_blank');
+    
+    // Show success message with instructions
+    toast.success(
+      `Redirecting to Ko-fi! Please donate $${selectedAmount} with your message.`,
+      { duration: 5000 }
+    );
   };
 
   // Mock data - in the future this could come from a database
@@ -142,6 +178,53 @@ export default function DonatePage() {
                 </div>
 
                 <div>
+                  <label className="block text-gray-300 font-medium mb-3">Choose Payment Method:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setSelectedMethod('stripe')}
+                      className={`p-4 rounded-lg border-2 transition-all duration-300 font-medium ${
+                        selectedMethod === 'stripe'
+                          ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/25'
+                          : 'bg-gray-700/50 border-gray-600 text-gray-300 hover:border-indigo-500/50 hover:bg-gray-600/70'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center space-y-2">
+                        <div className="text-2xl">💳</div>
+                        <div className="text-sm font-bold">Stripe</div>
+                        <div className="text-xs text-gray-400">Credit/Debit Cards</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => setSelectedMethod('kofi')}
+                      className={`p-4 rounded-lg border-2 transition-all duration-300 font-medium ${
+                        selectedMethod === 'kofi'
+                          ? 'bg-red-600 border-red-400 text-white shadow-lg shadow-red-500/25'
+                          : 'bg-gray-700/50 border-gray-600 text-gray-300 hover:border-red-500/50 hover:bg-gray-600/70'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center space-y-2">
+                        <div className="text-2xl">☕</div>
+                        <div className="text-sm font-bold">Ko-fi</div>
+                        <div className="text-xs text-gray-400">Buy Me a Coffee</div>
+                      </div>
+                    </button>
+                  </div>
+                  
+                  {selectedMethod === 'kofi' && (
+                    <div className="mt-3 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+                      <div className="flex items-start space-x-2">
+                        <div className="text-red-400 mt-0.5">ℹ️</div>
+                        <div className="text-red-200 text-sm">
+                          <div className="font-medium mb-1">Ko-fi Instructions:</div>
+                          <div>You'll be redirected to Ko-fi where you can manually enter the donation amount and message. Please include your selected amount (${selectedAmount}) in your donation.</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
                   <label className="block text-gray-300 font-medium mb-2">Donation Message (Optional):</label>
                   <textarea
                     value={donationMessage}
@@ -157,9 +240,13 @@ export default function DonatePage() {
                 <button 
                   onClick={handleDonation}
                   disabled={!user || selectedAmount < 1}
-                  className="w-full bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white py-4 rounded-lg font-bold text-lg tracking-wider border border-yellow-500 hover:border-yellow-400 disabled:border-gray-600 transition-all duration-300 shadow-2xl hover:shadow-yellow-500/25"
+                  className={`w-full py-4 rounded-lg font-bold text-lg tracking-wider border transition-all duration-300 shadow-2xl ${
+                    selectedMethod === 'stripe' 
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white border-indigo-500 hover:border-indigo-400 disabled:border-gray-600 hover:shadow-indigo-500/25'
+                      : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white border-red-500 hover:border-red-400 disabled:border-gray-600 hover:shadow-red-500/25'
+                  }`}
                 >
-                  💰 DONATE: ${selectedAmount}
+                  {selectedMethod === 'stripe' ? '💳' : '☕'} DONATE ${selectedAmount} via {selectedMethod === 'stripe' ? 'STRIPE' : 'KO-FI'}
                 </button>
 
                 {!user && (
