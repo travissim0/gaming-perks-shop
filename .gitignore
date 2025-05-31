@@ -45,3 +45,20 @@ next-env.d.ts
 ngrok/
 stripe-cli/
 archive/
+
+# Large executables and binaries
+*.exe
+postgresql-installer.exe
+
+# SQL files that are just for setup/debugging (keep essential schema files)
+debug-*.sql
+fix-*.sql
+apply-*.ps1
+db-manager*.ps1
+test-*.js
+check-*.sql
+
+# Build artifacts and logs
+*.log
+*.tmp
+*.temp
