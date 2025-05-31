@@ -115,6 +115,17 @@ export default function Home() {
   const [scrollY, setScrollY] = useState(0);
   const bannerRef = useRef<HTMLDivElement>(null);
   
+  // YouTube embed modal state
+  const [embedModal, setEmbedModal] = useState<{
+    isOpen: boolean;
+    videoId: string | null;
+    title: string;
+  }>({
+    isOpen: false,
+    videoId: null,
+    title: ''
+  });
+  
   // Banner slides data - filtered based on user status
   const getAllBannerSlides = () => [
     {
@@ -661,6 +672,15 @@ export default function Home() {
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
     const activityInterval = setInterval(updateUserActivity, 30000); // Update activity every 30 seconds
     
+    // Keyboard event listener for modal
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && embedModal.isOpen) {
+        closeEmbedModal();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
     return () => {
       clearInterval(serverInterval);
       clearInterval(gameInterval);
@@ -672,8 +692,9 @@ export default function Home() {
       clearInterval(activityInterval);
       clearInterval(carouselInterval);
       window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [user]);
+  }, [user, embedModal.isOpen]);
 
   useEffect(() => {
     // Reset current slide if it's out of bounds after filtering
@@ -797,6 +818,30 @@ export default function Home() {
     }
   };
 
+  // Function to open YouTube embed modal
+  const openVideoEmbed = (video: FeaturedVideo) => {
+    if (video.youtube_url) {
+      const videoId = getYouTubeVideoId(video.youtube_url);
+      if (videoId) {
+        setEmbedModal({
+          isOpen: true,
+          videoId: videoId,
+          title: video.title
+        });
+        recordVideoView(video.id);
+      }
+    }
+  };
+
+  // Function to close embed modal
+  const closeEmbedModal = () => {
+    setEmbedModal({
+      isOpen: false,
+      videoId: null,
+      title: ''
+    });
+  };
+
   // Parse patch notes with Infantry Online colors (simplified for feed)
   const parsePatchNotesFeed = (content: string) => {
     const lines = content.split('\n');
@@ -867,11 +912,11 @@ export default function Home() {
           <div 
             className={`absolute inset-0 transition-all duration-1000 ${
               bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] ? (
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'purple' ? 'bg-gradient-to-r from-gray-900/80 via-purple-900/40 to-gray-900/80' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'green' ? 'bg-gradient-to-r from-gray-900/80 via-green-900/40 to-gray-900/80' :
-                'bg-gradient-to-r from-gray-900/80 via-yellow-900/40 to-gray-900/80'
-              ) : 'bg-gradient-to-r from-gray-900/80 via-cyan-900/40 to-gray-900/80'
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'purple' ? 'bg-gradient-to-r from-gray-900/90 via-purple-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'green' ? 'bg-gradient-to-r from-gray-900/90 via-green-900/60 to-gray-900/90' :
+                'bg-gradient-to-r from-gray-900/90 via-yellow-900/60 to-gray-900/90'
+              ) : 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90'
             }`}
           ></div>
           
@@ -1255,10 +1300,9 @@ export default function Home() {
                           hover:border-red-500/50 transition-all duration-300 transform hover:scale-[1.02]
                         `}
                         onClick={() => {
-                          // Default click action - play the video
+                          // Default click action - prefer YouTube embed, fallback to external links
                           if (video.youtube_url) {
-                            recordVideoView(video.id);
-                            window.open(video.youtube_url, '_blank');
+                            openVideoEmbed(video);
                           } else if (video.vod_url) {
                             recordVideoView(video.id);
                             window.open(video.vod_url, '_blank');
@@ -1291,10 +1335,6 @@ export default function Home() {
                                     }
                                   }}
                                 />
-                                {/* Debug info overlay for thumbnails */}
-                                <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
-                                  📸
-                                </div>
                               </>
                             ) : (
                               <div className="w-full h-full bg-gray-700 flex items-center justify-center">
@@ -1326,6 +1366,13 @@ export default function Home() {
                               </span>
                             </div>
                             
+                            {/* Date Badge - Top Right */}
+                            <div className="absolute top-3 right-3">
+                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                                📅 {new Date(video.published_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                        
                             {/* View Count */}
                             <div className="absolute bottom-3 right-3">
                               <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
@@ -1346,16 +1393,14 @@ export default function Home() {
                               {video.description}
                             </p>
                             
-                            <div className="flex items-center justify-between text-xs text-gray-500">
-                              <span>
-                                {new Date(video.published_at).toLocaleDateString()}
-                              </span>
-                              {video.match_title && (
-                                <span className="text-blue-400">
+                            {/* Match Title if available */}
+                            {video.match_title && (
+                              <div className="mb-3">
+                                <span className="text-blue-400 text-xs">
                                   🎮 {video.match_title}
                                 </span>
-                              )}
-                            </div>
+                              </div>
+                            )}
                             
                             {/* Action Buttons */}
                             <div className="flex gap-2 mt-3">
@@ -1363,8 +1408,7 @@ export default function Home() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    recordVideoView(video.id);
-                                    window.open(video.youtube_url, '_blank');
+                                    openVideoEmbed(video);
                                   }}
                                   className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2 px-3 rounded transition-colors"
                                 >
@@ -1641,6 +1685,74 @@ export default function Home() {
           </div>
         </div>
       </main>
+      
+      {/* YouTube Embed Modal */}
+      {embedModal.isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            // Close modal if clicking on backdrop
+            if (e.target === e.currentTarget) {
+              closeEmbedModal();
+            }
+          }}
+        >
+          <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-xl font-bold text-white truncate pr-4">
+                {embedModal.title}
+              </h3>
+              <button
+                onClick={closeEmbedModal}
+                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Video Container */}
+            <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
+              {embedModal.videoId ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${embedModal.videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3`}
+                  title={embedModal.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  loading="eager"
+                ></iframe>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-white text-center">
+                    <div className="text-4xl mb-4">⚠️</div>
+                    <div>Unable to load video</div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-800 flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                🎬 Playing from YouTube
+              </div>
+              <button
+                onClick={() => {
+                  if (embedModal.videoId) {
+                    window.open(`https://www.youtube.com/watch?v=${embedModal.videoId}`, '_blank');
+                  }
+                }}
+                className="text-red-400 hover:text-red-300 text-sm border border-red-500/50 hover:border-red-400 px-3 py-1 rounded transition-colors"
+              >
+                🔗 Open in YouTube
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
