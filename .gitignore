@@ -46,6 +46,8 @@ node_modules/
 ngrok/
 stripe-cli/
 public/
+# Allow specific header video
+!public/CTFPL-Website-Header-1.webm
 archive/
 
 # Large executables and binaries
