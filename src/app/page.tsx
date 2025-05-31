@@ -1404,17 +1404,6 @@ export default function Home() {
                             
                             {/* Action Buttons */}
                             <div className="flex gap-2 mt-3">
-                              {video.youtube_url && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openVideoEmbed(video);
-                                  }}
-                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2 px-3 rounded transition-colors"
-                                >
-                                  ▶ Watch on YouTube
-                                </button>
-                              )}
                               {video.vod_url && (
                                 <button
                                   onClick={(e) => {
@@ -1435,16 +1424,6 @@ export default function Home() {
                                 >
                                   🎯 View Match
                                 </Link>
-                              )}
-                            </div>
-
-                            {/* Debug Info */}
-                            <div className="mt-2 text-xs text-gray-600 font-mono">
-                              {video.youtube_url && (
-                                <div>🔗 YouTube: {getYouTubeVideoId(video.youtube_url) || 'Invalid'}</div>
-                              )}
-                              {thumbnailUrl && (
-                                <div>🖼️ Thumb: {thumbnailUrl.substring(0, 50)}...</div>
                               )}
                             </div>
                           </div>
