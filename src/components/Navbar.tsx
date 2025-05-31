@@ -78,6 +78,12 @@ export default function Navbar({ user }: { user: any }) {
               >
                 <span className="group-hover:text-shadow-glow">🛍️ Perks</span>
               </Link>
+              <Link 
+                href="/forum" 
+                className="nav-link group px-3 py-2 text-gray-300 hover:text-cyan-400 transition-all duration-300 border border-transparent hover:border-cyan-500 rounded font-medium tracking-wide text-sm"
+              >
+                <span className="group-hover:text-shadow-glow">💬 Forum</span>
+              </Link>
               
               {/* Divider */}
               <div className="h-6 w-px bg-gray-600 mx-2"></div>
@@ -194,6 +200,13 @@ export default function Navbar({ user }: { user: any }) {
                     className="block px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800 rounded transition-all duration-300"
                   >
                     🛍️ Browse Perks
+                  </Link>
+                  <Link 
+                    href="/forum" 
+                    onClick={closeMobileMenu}
+                    className="block px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-800 rounded transition-all duration-300"
+                  >
+                    💬 Forum
                   </Link>
                   <Link 
                     href="/patch-notes" 

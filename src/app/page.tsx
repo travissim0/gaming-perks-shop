@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import UserAvatar from '@/components/UserAvatar';
 import CTFAdminPanel from '@/components/CTFAdminPanel';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +50,7 @@ interface OnlineUser {
   squad_name?: string;
   squad_tag?: string;
   role?: string;
+  avatar_url?: string | null;
 }
 
 interface Squad {
@@ -219,35 +221,40 @@ export default function Home() {
     // Fetch online users
     const fetchOnlineUsers = async () => {
       try {
-        const { data, error } = await supabase
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        
+        const { data: onlineData } = await supabase
           .from('profiles')
           .select(`
             id,
             in_game_alias,
-            updated_at,
-            squad_members(
+            last_seen,
+            avatar_url,
+            squad_members!inner (
               role,
-              squads(name, tag)
+              squads!inner (
+                name,
+                tag
+              )
             )
           `)
-          .eq('registration_status', 'completed')
+          .gte('last_seen', thirtyMinutesAgo)
           .not('in_game_alias', 'is', null)
-          .neq('in_game_alias', '')
-          .gte('updated_at', new Date(Date.now() - 15 * 60 * 1000).toISOString()) // Last 15 minutes
-          .order('updated_at', { ascending: false })
-          .limit(15);
+          .order('last_seen', { ascending: false })
+          .limit(20);
 
-        if (!error && data) {
-          const users: OnlineUser[] = data.map((user: any) => ({
+        if (onlineData) {
+          const formattedUsers = onlineData.map((user: any) => ({
             id: user.id,
             in_game_alias: user.in_game_alias,
-            last_seen: user.updated_at,
+            last_seen: user.last_seen,
             squad_name: user.squad_members?.[0]?.squads?.name || null,
             squad_tag: user.squad_members?.[0]?.squads?.tag || null,
             role: user.squad_members?.[0]?.role || null,
+            avatar_url: user.avatar_url,
           }));
           
-          setOnlineUsers(users);
+          setOnlineUsers(formattedUsers);
         }
       } catch (error) {
         console.error('Error fetching online users:', error);
@@ -824,14 +831,29 @@ export default function Home() {
                     </div>
 
                     {(() => {
-                      // Group players by their actual team name
-                      const teamGroups: { [key: string]: GamePlayer[] } = {};
+                      // Separate teams into main teams and spectators
+                      const mainTeams: { [key: string]: GamePlayer[] } = {};
+                      const allSpectators: GamePlayer[] = [];
+                      
                       gameData.players.forEach(player => {
-                        if (!teamGroups[player.team]) {
-                          teamGroups[player.team] = [];
+                        const teamName = player.team;
+                        const isSpectator = teamName.toLowerCase().includes('spec') || 
+                                          teamName.toLowerCase().includes('np') ||
+                                          teamName.toLowerCase() === 'spectator';
+                        
+                        if (isSpectator) {
+                          allSpectators.push(player);
+                        } else {
+                          if (!mainTeams[teamName]) {
+                            mainTeams[teamName] = [];
+                          }
+                          mainTeams[teamName].push(player);
                         }
-                        teamGroups[player.team].push(player);
                       });
+
+                      // Check if we should use two-team format (more than 10 players total)
+                      const totalMainPlayers = Object.values(mainTeams).reduce((sum, team) => sum + team.length, 0);
+                      const useTwoTeamFormat = totalMainPlayers > 10;
 
                       // Helper function to get team color based on team name
                       const getTeamColor = (teamName: string) => {
@@ -869,37 +891,104 @@ export default function Home() {
                         return '';
                       };
 
+                      // Organize main teams for display
+                      let displayTeams = mainTeams;
+                      
+                      if (useTwoTeamFormat && Object.keys(mainTeams).length > 2) {
+                        // Consolidate into two main teams: Collective and Titan
+                        const titanPlayers: GamePlayer[] = [];
+                        const collectivePlayers: GamePlayer[] = [];
+                        
+                        Object.entries(mainTeams).forEach(([teamName, players]) => {
+                          if (teamName.includes(' T')) {
+                            titanPlayers.push(...players);
+                          } else if (teamName.includes(' C')) {
+                            collectivePlayers.push(...players);
+                          } else {
+                            // Put unknown teams in the smaller group
+                            if (titanPlayers.length <= collectivePlayers.length) {
+                              titanPlayers.push(...players);
+                            } else {
+                              collectivePlayers.push(...players);
+                            }
+                          }
+                        });
+                        
+                        displayTeams = {};
+                        if (titanPlayers.length > 0) displayTeams['Titan Forces'] = titanPlayers;
+                        if (collectivePlayers.length > 0) displayTeams['Collective Forces'] = collectivePlayers;
+                      }
+
                       return (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {Object.entries(teamGroups).map(([teamName, players]) => {
-                            // Determine if this team is offense or defense based on majority
-                            const offensePlayers = players.filter(p => p.isOffense);
-                            const defensePlayers = players.filter(p => !p.isOffense);
-                            const isOffenseTeam = offensePlayers.length > defensePlayers.length;
-                            
-                            return (
-                              <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-2`}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <h4 className={`font-bold text-xs ${getTeamClasses(teamName, 'text')}`}>
-                                    <span className={getRoleClasses(isOffenseTeam, 'text')}>{getRoleClasses(isOffenseTeam, 'icon')}</span> {teamName} <span className={getRoleClasses(isOffenseTeam, 'text')}>({isOffenseTeam ? 'Offense' : 'Defense'})</span>
-                                  </h4>
-                                  <span className={`text-xs font-mono ${getTeamClasses(teamName, 'count')}`}>
-                                    {players.length}
-                                  </span>
+                        <div className="space-y-3">
+                          {/* Main Teams */}
+                          <div className={`grid gap-2 ${Object.keys(displayTeams).length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
+                            {Object.entries(displayTeams).map(([teamName, players]) => {
+                              // Determine if this team is offense or defense based on majority
+                              const offensePlayers = players.filter(p => p.isOffense);
+                              const defensePlayers = players.filter(p => !p.isOffense);
+                              const isOffenseTeam = offensePlayers.length > defensePlayers.length;
+                              
+                              return (
+                                <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-3`}>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <h4 className={`font-bold text-sm ${getTeamClasses(teamName, 'text')}`}>
+                                      <span className={getRoleClasses(isOffenseTeam, 'text')}>{getRoleClasses(isOffenseTeam, 'icon')}</span> {teamName} <span className={getRoleClasses(isOffenseTeam, 'text')}>({isOffenseTeam ? 'Offense' : 'Defense'})</span>
+                                    </h4>
+                                    <span className={`text-sm font-mono font-bold ${getTeamClasses(teamName, 'count')}`}>
+                                      {players.length}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    {players.map((player, index) => (
+                                      <div key={index} className="text-xs">
+                                        <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
+                                          {player.alias}{getWeaponEmoji(player.weapon || '')}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                                
-                                <div className="space-y-1">
-                                  {players.map((player, index) => (
-                                    <div key={index} className="text-xs">
-                                      <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
-                                        {player.alias}{getWeaponEmoji(player.weapon || '')}
+                              );
+                            })}
+                          </div>
+
+                          {/* Spectators Section - Collapsed by default */}
+                          {allSpectators.length > 0 && (
+                            <div className="border-t border-gray-700/30 pt-3">
+                              <details className="group">
+                                <summary className="cursor-pointer bg-gray-800/20 border border-gray-600/20 rounded-lg p-3 hover:bg-gray-800/30 transition-colors">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-500 text-sm font-medium flex items-center gap-2">
+                                      👁️ Spectators
+                                      <span className="text-xs text-gray-600 ml-1">
+                                        (click to {allSpectators.length > 0 ? 'expand' : 'view'})
+                                      </span>
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-500 text-sm font-mono bg-gray-700/30 px-2 py-1 rounded">
+                                        {allSpectators.length}
+                                      </span>
+                                      <span className="text-gray-600 text-xs group-open:rotate-90 transition-transform">
+                                        ▶
                                       </span>
                                     </div>
-                                  ))}
+                                  </div>
+                                </summary>
+                                
+                                <div className="mt-3 bg-gray-800/10 border border-gray-600/10 rounded-lg p-3">
+                                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                    {allSpectators.map((player, index) => (
+                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-2 py-1 rounded truncate">
+                                        {player.alias}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              </details>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -1078,32 +1167,44 @@ export default function Home() {
                 {onlineUsers.length > 0 ? (
                   <div className="space-y-2">
                     {onlineUsers.map((user) => (
-                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            {user.role && (
-                              <span className="text-xs">{getRoleIcon(user.role)}</span>
+                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-3">
+                        <div className="flex items-center space-x-3">
+                          <UserAvatar 
+                            user={{
+                              avatar_url: user.avatar_url,
+                              in_game_alias: user.in_game_alias,
+                              email: null
+                            }} 
+                            size="sm" 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                {user.role && (
+                                  <span className="text-xs">{getRoleIcon(user.role)}</span>
+                                )}
+                                <span className="text-green-400 font-mono text-sm font-bold">
+                                  {user.in_game_alias}
+                                </span>
+                              </div>
+                              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                            </div>
+                            
+                            {user.squad_name && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                <span className="text-purple-400">[{user.squad_tag}]</span> {user.squad_name}
+                                {user.role && (
+                                  <span className={`ml-1 ${getRoleColor(user.role)}`}>
+                                    ({user.role.replace('_', ' ')})
+                                  </span>
+                                )}
+                              </div>
                             )}
-                            <span className="text-green-400 font-mono text-sm font-bold">
-                              {user.in_game_alias}
-                            </span>
+                            
+                            <div className="text-xs text-gray-500 mt-1">
+                              {new Date(user.last_seen).toLocaleTimeString()}
+                            </div>
                           </div>
-                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                        </div>
-                        
-                        {user.squad_name && (
-                          <div className="text-xs text-gray-400 mt-1">
-                            <span className="text-purple-400">[{user.squad_tag}]</span> {user.squad_name}
-                            {user.role && (
-                              <span className={`ml-1 ${getRoleColor(user.role)}`}>
-                                ({user.role.replace('_', ' ')})
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="text-xs text-gray-500 mt-1">
-                          {new Date(user.last_seen).toLocaleTimeString()}
                         </div>
                       </div>
                     ))}

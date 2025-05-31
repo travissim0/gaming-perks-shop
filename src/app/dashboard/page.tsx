@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import UserAvatar from '@/components/UserAvatar';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { UserProduct } from '@/types';
@@ -249,11 +250,25 @@ export default function Dashboard() {
                   
                   {loadingData ? (
                     <div className="animate-pulse space-y-4">
+                      <div className="h-20 w-20 bg-gray-700 rounded-lg mx-auto mb-4"></div>
                       <div className="h-6 bg-gray-700 rounded"></div>
                       <div className="h-6 bg-gray-700 rounded w-3/4"></div>
                     </div>
                   ) : profile ? (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
+                      {/* User Avatar */}
+                      <div className="flex justify-center mb-6">
+                        <UserAvatar 
+                          user={{
+                            avatar_url: profile.avatar_url,
+                            in_game_alias: profile.in_game_alias,
+                            email: profile.email
+                          }} 
+                          size="xl" 
+                          className="ring-4 ring-cyan-500/30 shadow-2xl"
+                        />
+                      </div>
+                      
                       <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
                         <p className="text-gray-300">
                           <span className="font-bold text-cyan-400">Email:</span> 

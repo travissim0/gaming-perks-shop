@@ -17,17 +17,15 @@ interface AuthContextType {
   retryAuth: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  error: null,
-  signIn: async () => null,
-  signUp: async () => null,
-  signOut: async () => {},
-  retryAuth: async () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -309,22 +307,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let subscription: any = null;
+    // Properly type the subscription - Supabase auth returns { data: { subscription: ... } }
+    let authSubscription: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
     const initializeAuth = async () => {
       if (!mounted) return;
       
-      // Check if we should skip auth check
       if (shouldSkipAuthCheck()) {
-        console.log('⏸️ Skipping auth check (cooldown period)');
+        console.log('⏭️ Skipping auth check - too recent');
         setLoading(false);
         return;
       }
       
-      setLastAuthCheck(Date.now());
-      
       try {
-        await getSessionRobust();
+        console.log('🔍 Getting initial session...');
+        
+        const sessionPromise = withTimeout(
+          supabase.auth.getSession(),
+          8000,
+          'Session check timeout'
+        );
+
+        const { data: { session }, error: sessionError } = await sessionPromise;
+
+        if (!mounted) return;
+
+        if (sessionError) {
+          console.error('❌ Session error:', sessionError);
+          
+          if (isAuthTokenError(sessionError)) {
+            await clearSessionAndRedirect('Session validation failed');
+            return;
+          }
+          
+          throw sessionError;
+        }
+
+        console.log('📋 Initial session:', { 
+          hasSession: !!session,
+          user: session?.user?.email || 'No user',
+          hasAccessToken: !!session?.access_token,
+          hasRefreshToken: !!session?.refresh_token
+        });
+
+        setUser(session?.user ?? null);
+        setLastAuthCheck(Date.now());
+
+        // If there's a user, ensure they have a profile
+        if (session?.user) {
+          console.log('👤 Ensuring user profile...');
+          try {
+            await ensureUserProfileRobust(session.user);
+          } catch (profileError: any) {
+            console.error('❌ Profile error:', profileError);
+            
+            if (isAuthTokenError(profileError)) {
+              await clearSessionAndRedirect('Profile verification failed');
+              return;
+            }
+            
+            // Don't fail auth completely for profile issues
+            console.warn('⚠️ Profile creation/update failed but continuing with auth');
+          }
+        }
+
+        console.log('✅ Auth initialization complete');
+        setError(null);
+        setAuthAttempts(0);
+
+      } catch (error: any) {
+        console.error('❌ Auth initialization error:', error);
+        
+        if (!mounted) return;
+
+        if (error.message?.includes('timeout')) {
+          setError('Authentication check timed out. Please try again.');
+          if (authAttempts < 2) {
+            console.log('🔄 Retrying auth due to timeout...');
+            setAuthAttempts(prev => prev + 1);
+            return; // This will trigger a retry via the dependency array
+          }
+        } else if (isAuthTokenError(error)) {
+          await clearSessionAndRedirect('Authentication failed');
+          return;
+        } else {
+          setError(error.message || 'Authentication error occurred');
+        }
+        
+        setUser(null);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -332,10 +402,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Initialize auth
     initializeAuth();
 
     // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: authSubscription } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const authListenerResult = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
       console.log('🔄 Auth state changed:', { 
@@ -384,13 +455,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    subscription = authSubscription;
+    // Store the subscription properly - Supabase returns { data: { subscription } }
+    authSubscription = authListenerResult;
 
     return () => {
       mounted = false;
-      subscription?.unsubscribe();
+      // Properly handle subscription cleanup with error handling
+      try {
+        if (authSubscription?.data?.subscription?.unsubscribe) {
+          console.log('🧹 Cleaning up auth subscription...');
+          authSubscription.data.subscription.unsubscribe();
+        }
+      } catch (error) {
+        console.warn('⚠️ Error during auth subscription cleanup:', error);
+        // Don't throw - just log the warning
+      }
     };
-  }, [authAttempts]); // Re-run when authAttempts changes
+  }, [authAttempts]);
 
   // Enhanced sign in with timeout and retry
   const signIn = async (email: string, password: string) => {
