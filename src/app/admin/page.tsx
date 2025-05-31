@@ -498,6 +498,13 @@ export default function AdminDashboard() {
               >
                 View Donations
               </Link>
+
+              <Link
+                href="/admin/videos"
+                className="block px-4 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 rounded transition-colors"
+              >
+                Manage Videos
+              </Link>
             </nav>
             
             <div className="mt-6">

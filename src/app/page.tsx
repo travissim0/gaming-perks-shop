@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
-import CTFAdminPanel from '@/components/CTFAdminPanel';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -43,6 +42,21 @@ interface GameData {
   lastUpdated: string | null;
 }
 
+interface FeaturedVideo {
+  id: string;
+  title: string;
+  description: string;
+  youtube_url?: string;
+  vod_url?: string;
+  thumbnail_url?: string;
+  video_type: string;
+  match_id?: string;
+  match_title?: string;
+  match_date?: string;
+  view_count: number;
+  published_at: string;
+}
+
 interface OnlineUser {
   id: string;
   in_game_alias: string;
@@ -74,14 +88,9 @@ interface Match {
 
 export default function Home() {
   const { user, loading } = useAuth();
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showCTFAdmin, setShowCTFAdmin] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [recentPatchNotes, setRecentPatchNotes] = useState<string>('');
   const [latestUpdateDate, setLatestUpdateDate] = useState<string>('');
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminSectionExpanded, setAdminSectionExpanded] = useState(false);
-  const [ctfAdminSectionExpanded, setCTFAdminSectionExpanded] = useState(false);
   const [serverData, setServerData] = useState<ServerData>({
     zones: [],
     stats: { totalPlayers: 0, activeGames: 0, serverStatus: 'offline' },
@@ -99,6 +108,7 @@ export default function Home() {
   const [topSquads, setTopSquads] = useState<Squad[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
+  const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   
   // Carousel and animation states
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -151,21 +161,215 @@ export default function Home() {
   useEffect(() => {
     const fetchUserProfile = async () => {
       if (user) {
-        const { data } = await supabase
+        try {
+          console.log('Current authenticated user:', {
+            id: user.id,
+            email: user.email,
+            user_metadata: user.user_metadata,
+            app_metadata: user.app_metadata
+          });
+          
+          // Debug: Check current user's profile
+          const { data: currentProfile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+            
+          if (profileError) {
+            console.error('Error fetching user profile:', {
+              message: profileError.message,
+              details: profileError.details,
+              hint: profileError.hint,
+              code: profileError.code,
+              full_error: profileError
+            });
+          } else {
+            console.log('Current user profile:', currentProfile);
+          }
+          
+          const { data } = await supabase
+            .from('profiles')
+            .select('is_admin, ctf_role')
+            .eq('id', user.id)
+            .single();
+        
+          if (data) {
+            setUserProfile(data);
+          }
+        } catch (error) {
+          console.error('Error in fetchUserProfile (catch):', {
+            error,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
+          });
+        }
+      } else {
+        console.log('No authenticated user found');
+      }
+    };
+
+    // Comprehensive diagnostic function
+    const runDiagnostics = async () => {
+      console.log('🔍 Running comprehensive diagnostics...');
+      
+      // Test 1: Basic Supabase connection
+      try {
+        console.log('1️⃣ Testing basic Supabase connection...');
+        const { data: testData, error: testError } = await supabase
           .from('profiles')
-          .select('is_admin, ctf_role')
+          .select('count')
+          .limit(1);
+        
+        if (testError) {
+          console.error('❌ Basic connection failed:', testError);
+        } else {
+          console.log('✅ Basic Supabase connection working');
+        }
+      } catch (error) {
+        console.error('❌ Connection test failed:', error);
+      }
+
+      // Test 2: Check if user profile exists
+      if (user) {
+        try {
+          console.log('2️⃣ Checking if user profile exists...');
+          const { data: profileExists, error: existsError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', user.id);
+          
+          if (existsError) {
+            console.error('❌ Profile check failed:', existsError);
+          } else if (profileExists && profileExists.length > 0) {
+            console.log('✅ User profile exists');
+          } else {
+            console.log('⚠️ User profile does NOT exist - this might be the issue!');
+            
+            // Try to create profile
+            console.log('3️⃣ Attempting to create missing profile...');
+            const { error: createError } = await supabase
+              .from('profiles')
+              .insert([{
+                id: user.id,
+                email: user.email,
+                in_game_alias: user.email?.split('@')[0] || 'User',
+                last_seen: new Date().toISOString()
+              }]);
+            
+            if (createError) {
+              console.error('❌ Failed to create profile:', createError);
+            } else {
+              console.log('✅ Profile created successfully!');
+            }
+          }
+        } catch (error) {
+          console.error('❌ Profile existence check failed:', error);
+        }
+      }
+
+      // Test 3: Test last_seen column exists
+      try {
+        console.log('4️⃣ Testing last_seen column...');
+        const { data: columnTest, error: columnError } = await supabase
+          .from('profiles')
+          .select('last_seen')
+          .limit(1);
+        
+        if (columnError) {
+          console.error('❌ last_seen column test failed:', columnError);
+        } else {
+          console.log('✅ last_seen column exists and accessible');
+        }
+      } catch (error) {
+        console.error('❌ Column test failed:', error);
+      }
+
+      // Test 4: Simple update test
+      if (user) {
+        try {
+          console.log('5️⃣ Testing profile update...');
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ last_seen: new Date().toISOString() })
+            .eq('id', user.id);
+          
+          if (updateError) {
+            console.error('❌ Profile update failed:', updateError);
+          } else {
+            console.log('✅ Profile update successful');
+          }
+        } catch (error) {
+          console.error('❌ Update test failed:', error);
+        }
+      }
+
+      console.log('🔍 Diagnostics complete!');
+    };
+
+    // Quick profile check (simplified, no timeout issues)
+    const quickProfileCheck = async () => {
+      if (!user) return;
+      
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id')
           .eq('id', user.id)
           .single();
-        
-        if (data) {
-          setUserProfile(data);
-          setShowAdminPanel(data.is_admin);
-          setShowCTFAdmin(data.is_admin || data.ctf_role === 'ctf_admin');
+          
+        if (error && error.code === 'PGRST116') {
+          // Profile doesn't exist, create it
+          await supabase
+            .from('profiles')
+            .insert([{
+              id: user.id,
+              email: user.email,
+              in_game_alias: user.email?.split('@')[0] || 'User',
+              last_seen: new Date().toISOString()
+            }]);
+        }
+      } catch (error) {
+        console.error('Quick profile check error:', error);
+      }
+    };
+
+    // Update user's last_seen timestamp when they're active
+    const updateUserActivity = async () => {
+      if (user) {
+        try {
+          const now = new Date().toISOString();
+          console.log('Updating user activity for:', user.id, 'at', now);
+          
+          const { error } = await supabase
+            .from('profiles')
+            .update({ last_seen: now })
+            .eq('id', user.id);
+            
+          if (error) {
+            console.error('Error updating user activity:', {
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code,
+              full_error: error
+            });
+          } else {
+            console.log('User activity updated successfully');
+          }
+        } catch (error) {
+          console.error('Error updating user activity (catch):', {
+            error,
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
+          });
         }
       }
     };
 
     fetchUserProfile();
+    updateUserActivity();
+    quickProfileCheck(); // Quick profile check without timeout issues
 
     // Scroll effect handler
     const handleScroll = () => {
@@ -211,53 +415,140 @@ export default function Home() {
         const response = await fetch('/api/recent-donations');
         if (response.ok) {
           const data = await response.json();
-          setRecentDonations(data.donations || []);
+          setRecentDonations(data);
         }
       } catch (error) {
         console.error('Error fetching recent donations:', error);
       }
     };
 
-    // Fetch online users
+    // Fetch featured videos for homepage center
+    const fetchFeaturedVideos = async () => {
+      try {
+        console.log('🎬 Fetching featured videos...');
+        
+        // Use API endpoint instead of direct RPC
+        const response = await fetch('/api/featured-videos?limit=6');
+        
+        if (!response.ok) {
+          console.error('Featured videos API error:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+          return;
+        }
+        
+        const data = await response.json();
+        console.log('📊 Featured videos API response:', data);
+        
+        if (data.videos && Array.isArray(data.videos)) {
+          // Auto-generate YouTube thumbnails if missing
+          const videosWithThumbnails = data.videos.map((video: any) => {
+            const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
+            const finalThumbnail = video.thumbnail_url || autoThumbnail;
+            
+            console.log(`🎬 Video: "${video.title}"`);
+            console.log(`  📺 YouTube URL: ${video.youtube_url || 'None'}`);
+            console.log(`  🏷️ Stored Thumbnail: ${video.thumbnail_url || 'None'}`);
+            console.log(`  🔧 Auto-Generated: ${autoThumbnail || 'None'}`);
+            console.log(`  ✅ Final Thumbnail: ${finalThumbnail || 'None'}`);
+            
+            return {
+              ...video,
+              thumbnail_url: finalThumbnail
+            };
+          });
+          
+          setFeaturedVideos(videosWithThumbnails);
+          console.log('✅ Featured videos loaded:', videosWithThumbnails.length);
+        } else {
+          console.error('Invalid API response format:', data);
+        }
+      } catch (error) {
+        console.error('Error fetching featured videos (catch):', error);
+        
+        // Fallback: try direct RPC call
+        try {
+          console.log('🔄 Trying direct RPC fallback...');
+          const { data, error: rpcError } = await supabase.rpc('get_featured_videos', { limit_count: 6 });
+          
+          if (rpcError) {
+            console.error('RPC error:', rpcError);
+            return;
+          }
+          
+          if (data) {
+            const videosWithThumbnails = data.map((video: any) => {
+              const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
+              const finalThumbnail = video.thumbnail_url || autoThumbnail;
+              
+              return {
+                ...video,
+                thumbnail_url: finalThumbnail
+              };
+            });
+            
+            setFeaturedVideos(videosWithThumbnails);
+            console.log('✅ Featured videos loaded via RPC:', videosWithThumbnails.length);
+          }
+        } catch (rpcError) {
+          console.error('RPC fallback also failed:', rpcError);
+        }
+      }
+    };
+
+    // Fetch online users - improved to show truly active users
     const fetchOnlineUsers = async () => {
       try {
-        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+        // Consider users online if they've been active in the last 5 minutes
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        console.log('Fetching online users since:', fiveMinutesAgo);
         
-        const { data: onlineData } = await supabase
+        // Simple query for online users based on profiles table only
+        const { data: onlineData, error } = await supabase
           .from('profiles')
-          .select(`
-            id,
-            in_game_alias,
-            last_seen,
-            avatar_url,
-            squad_members!inner (
-              role,
-              squads!inner (
-                name,
-                tag
-              )
-            )
-          `)
-          .gte('last_seen', thirtyMinutesAgo)
-          .not('in_game_alias', 'is', null)
+          .select('id, in_game_alias, email, last_seen, avatar_url')
+          .gte('last_seen', fiveMinutesAgo)
           .order('last_seen', { ascending: false })
           .limit(20);
 
+        if (error) {
+          console.error('Error fetching online users:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+            full_error: error
+          });
+          return;
+        }
+
+        console.log('Raw online users data:', onlineData);
+
         if (onlineData) {
-          const formattedUsers = onlineData.map((user: any) => ({
-            id: user.id,
-            in_game_alias: user.in_game_alias,
-            last_seen: user.last_seen,
-            squad_name: user.squad_members?.[0]?.squads?.name || null,
-            squad_tag: user.squad_members?.[0]?.squads?.tag || null,
-            role: user.squad_members?.[0]?.role || null,
-            avatar_url: user.avatar_url,
-          }));
+          // Filter and format users, prioritizing those with in_game_alias but including others
+          const formattedUsers = onlineData
+            .filter(user => user.in_game_alias || user.email) // Include if they have either alias or email
+            .map((user: any) => ({
+              id: user.id,
+              in_game_alias: user.in_game_alias || user.email?.split('@')[0] || 'Unknown User',
+              last_seen: user.last_seen,
+              squad_name: undefined, // We'll add squad info back later as an enhancement
+              squad_tag: undefined,
+              role: undefined,
+              avatar_url: user.avatar_url,
+            }));
           
           setOnlineUsers(formattedUsers);
+          
+          // Debug log for troubleshooting
+          console.log(`Found ${formattedUsers.length} online users:`, formattedUsers.map(u => u.in_game_alias));
         }
       } catch (error) {
-        console.error('Error fetching online users:', error);
+        console.error('Error fetching online users (catch):', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
       }
     };
 
@@ -331,7 +622,7 @@ export default function Home() {
           .select(`
             squads!inner(id, name, tag)
           `)
-          .eq('player_id', user.id)
+          .eq('user_id', user.id)
           .eq('status', 'active')
           .maybeSingle();
 
@@ -354,6 +645,7 @@ export default function Home() {
     fetchServerData();
     fetchGameData();
     fetchRecentDonations();
+    fetchFeaturedVideos();
     fetchOnlineUsers();
     fetchTopSquads();
     fetchUpcomingMatches();
@@ -363,17 +655,21 @@ export default function Home() {
     const serverInterval = setInterval(fetchServerData, 60000);
     const gameInterval = setInterval(fetchGameData, 5000);
     const donationsInterval = setInterval(fetchRecentDonations, 30000);
-    const usersInterval = setInterval(fetchOnlineUsers, 15000); // Refresh every 15 seconds
+    const videosInterval = setInterval(fetchFeaturedVideos, 300000); // Refresh every 5 minutes
+    const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
     const squadsInterval = setInterval(fetchTopSquads, 60000);
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
+    const activityInterval = setInterval(updateUserActivity, 30000); // Update activity every 30 seconds
     
     return () => {
       clearInterval(serverInterval);
       clearInterval(gameInterval);
       clearInterval(donationsInterval);
+      clearInterval(videosInterval);
       clearInterval(usersInterval);
       clearInterval(squadsInterval);
       clearInterval(matchesInterval);
+      clearInterval(activityInterval);
       clearInterval(carouselInterval);
       window.removeEventListener('scroll', handleScroll);
     };
@@ -427,6 +723,80 @@ export default function Home() {
     }
   };
 
+  // Helper function to get YouTube video ID from URL
+  const getYouTubeVideoId = (url: string) => {
+    if (!url) return null;
+    
+    // Handle different YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,           // youtube.com/watch?v=
+      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,             // youtube.com/embed/
+      /(?:youtube\.com\/v\/)([^&\n?#]+)/,                 // youtube.com/v/
+      /(?:youtu\.be\/)([^&\n?#]+)/,                       // youtu.be/
+      /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/           // any youtube.com with v= parameter
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        console.log(`🔍 YouTube ID extracted: ${match[1]} from ${url}`);
+        return match[1];
+      }
+    }
+    
+    console.warn(`⚠️ Could not extract YouTube ID from: ${url}`);
+    return null;
+  };
+
+  // Helper function to get YouTube thumbnail URL with fallback
+  const getYouTubeThumbnail = (url: string, quality = 'hqdefault') => {
+    const videoId = getYouTubeVideoId(url);
+    if (!videoId) return null;
+    
+    // YouTube thumbnail qualities in order of preference:
+    // maxresdefault (1920x1080) - not always available
+    // hqdefault (480x360) - most reliable
+    // mqdefault (320x180) - fallback
+    // default (120x90) - always available
+    
+    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
+    console.log(`🖼️ Generated thumbnail URL: ${thumbnailUrl}`);
+    return thumbnailUrl;
+  };
+
+  // Helper function to get the best available YouTube thumbnail
+  const getBestYouTubeThumbnail = (url: string) => {
+    const videoId = getYouTubeVideoId(url);
+    if (!videoId) return null;
+    
+    // Try hqdefault first (most reliable high quality)
+    return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  };
+
+  // Helper function to get video type icon
+  const getVideoTypeIcon = (type: string) => {
+    switch (type) {
+      case 'match': return '🎮';
+      case 'highlight': return '⭐';
+      case 'tutorial': return '🎓';
+      case 'tournament': return '🏆';
+      default: return '📹';
+    }
+  };
+
+  // Helper function to record video view
+  const recordVideoView = async (videoId?: string, matchId?: string) => {
+    try {
+      await supabase.rpc('record_video_view', {
+        p_video_id: videoId || null,
+        p_match_id: matchId || null,
+        p_session_id: `session_${Date.now()}`
+      });
+    } catch (error) {
+      console.error('Error recording video view:', error);
+    }
+  };
+
   // Parse patch notes with Infantry Online colors (simplified for feed)
   const parsePatchNotesFeed = (content: string) => {
     const lines = content.split('\n');
@@ -466,19 +836,18 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black relative overflow-hidden">
       <Navbar user={user} />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Interactive Carousel Banner */}
         <div 
           ref={bannerRef}
-          className="relative mb-8 overflow-hidden rounded-xl h-64 lg:h-80"
+          className="relative mb-8 overflow-hidden rounded-2xl shadow-2xl"
           style={{
-            transform: `translateY(${scrollY * 0.5}px)`,
-            opacity: scrollY > 500 ? 0 : Math.max(0, 1 - scrollY / 400),
-            visibility: scrollY > 500 ? 'hidden' : 'visible',
-            pointerEvents: scrollY > 500 ? 'none' : 'auto'
+            height: '400px',
+            transform: `translateY(${Math.max(0, scrollY - 100) * -0.15}px)`,
+            opacity: Math.max(0.3, 1 - scrollY / 600)
           }}
         >
           {/* Video Background */}
@@ -594,163 +963,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Admin Controls Section - Only visible to admins */}
-        {showAdminPanel && (
-          <div className="mb-8">
-            {adminSectionExpanded ? (
-              // Expanded Admin Section
-              <div className="bg-gradient-to-r from-red-900/20 via-orange-900/20 to-yellow-900/20 border-2 border-yellow-500/50 rounded-xl shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-[1.02] hover:shadow-yellow-500/25">
-                <div className="bg-gradient-to-r from-red-800/30 via-orange-800/30 to-yellow-800/30 px-6 py-3 border-b border-yellow-500/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-2xl font-bold text-yellow-400 tracking-wider flex items-center">
-                        ⚡ ADMIN CONTROLS
-                        <span className="ml-3 text-sm bg-red-600 text-white px-3 py-1 rounded-full animate-pulse">
-                          ADMIN ONLY
-                        </span>
-                      </h2>
-                      <p className="text-gray-300 text-sm mt-1">Administrative Dashboard & Management Tools</p>
-                    </div>
-                    <button
-                      onClick={() => setAdminSectionExpanded(false)}
-                      className="text-yellow-400 hover:text-yellow-300 p-2 rounded-lg hover:bg-yellow-500/10 transition-all duration-300"
-                      title="Collapse Admin Section"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Main Admin Dashboard */}
-                    <Link href="/admin">
-                      <div className="group bg-gradient-to-br from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-red-500/25 cursor-pointer">
-                        <div className="text-3xl mb-2">🎛️</div>
-                        <div className="text-white font-bold text-lg">ADMIN DASHBOARD</div>
-                        <div className="text-red-200 text-sm mt-1">Main Control Panel</div>
-                      </div>
-                    </Link>
-
-                    {/* User Management */}
-                    <Link href="/admin/users">
-                      <div className="group bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-purple-500/25 cursor-pointer">
-                        <div className="text-3xl mb-2">👥</div>
-                        <div className="text-white font-bold text-lg">USER MANAGEMENT</div>
-                        <div className="text-purple-200 text-sm mt-1">Manage Roles & Access</div>
-                      </div>
-                    </Link>
-
-                    {/* Order Management */}
-                    <Link href="/admin/orders">
-                      <div className="group bg-gradient-to-br from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-green-500/25 cursor-pointer">
-                        <div className="text-3xl mb-2">📦</div>
-                        <div className="text-white font-bold text-lg">ORDERS</div>
-                        <div className="text-green-200 text-sm mt-1">Purchase Management</div>
-                      </div>
-                    </Link>
-
-                    {/* Donations Management */}
-                    <Link href="/admin/donations">
-                      <div className="group bg-gradient-to-br from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 rounded-lg p-4 text-center transition-all duration-300 transform hover:scale-105 hover:shadow-yellow-500/25 cursor-pointer">
-                        <div className="text-3xl mb-2">💰</div>
-                        <div className="text-white font-bold text-lg">DONATIONS</div>
-                        <div className="text-yellow-200 text-sm mt-1">Support Tracking</div>
-                      </div>
-                    </Link>
-                  </div>
-
-                  {/* Quick Admin Actions */}
-                  <div className="mt-6 pt-4 border-t border-yellow-500/30">
-                    <div className="flex flex-wrap gap-3 justify-center">
-                      <button
-                        onClick={() => window.open('https://dashboard.stripe.com', '_blank')}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm flex items-center space-x-2"
-                      >
-                        <span>💳</span>
-                        <span>Stripe Dashboard</span>
-                      </button>
-                      
-                      <Link href="/admin/perks">
-                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm flex items-center space-x-2">
-                          <span>🎁</span>
-                          <span>Manage Perks</span>
-                        </button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              // Collapsed Admin Section
-              <div className="bg-gradient-to-r from-red-900/10 via-orange-900/10 to-yellow-900/10 border border-yellow-500/30 rounded-lg shadow-lg overflow-hidden">
-                <button
-                  onClick={() => setAdminSectionExpanded(true)}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-red-800/20 via-orange-800/20 to-yellow-800/20 hover:from-red-700/30 hover:via-orange-700/30 hover:to-yellow-700/30 border-b border-yellow-500/20 transition-all duration-300 group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-yellow-400 text-lg">⚡</span>
-                      <span className="text-yellow-400 font-bold tracking-wide">ADMIN CONTROLS</span>
-                      <span className="text-xs bg-red-600 text-white px-2 py-1 rounded-full">ADMIN</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-yellow-400 group-hover:text-yellow-300 transition-colors duration-300">
-                      <span className="text-sm font-medium">Expand</span>
-                      <svg className="w-5 h-5 transform group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* CTF Administration */}
-        {showCTFAdmin && (
-          <div className="bg-purple-800/20 border-2 border-purple-500 rounded-xl p-6 transition-all duration-300 hover:bg-purple-800/30">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="bg-purple-600 p-3 rounded-lg">
-                  <span className="text-white text-xl">🎮</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">CTF Administration</h3>
-                  <p className="text-purple-200">
-                    Manage CTF roles and permissions
-                    {userProfile?.ctf_role && userProfile.ctf_role !== 'none' && (
-                      <span className="ml-2 bg-purple-600 text-white px-2 py-1 rounded text-xs">
-                        {userProfile.ctf_role.replace('ctf_', '').replace('_', ' ').toUpperCase()}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <a
-                href="/admin/users"
-                className="bg-purple-700/50 hover:bg-purple-700 p-4 rounded-lg transition-colors border border-purple-600"
-              >
-                <h4 className="font-semibold text-white mb-2">🔧 Manage CTF Roles</h4>
-                <p className="text-purple-200 text-sm">Assign and manage CTF roles for users</p>
-              </a>
-              
-              <div className="bg-purple-700/30 p-4 rounded-lg border border-purple-600/50">
-                <h4 className="font-semibold text-white mb-2">📊 CTF Dashboard</h4>
-                <p className="text-purple-200 text-sm">Coming soon - CTF match management</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main Grid Layout with Limited Scroll Effects */}
+        {/* NEW Layout: Videos Front and Center */}
         <div 
-          className="grid grid-cols-1 lg:grid-cols-4 gap-6"
+          className="grid grid-cols-1 xl:grid-cols-12 gap-6"
           style={{
             // Limit transform effect to top 300px of scroll
             transform: scrollY < 300 ? `translateY(${Math.max(0, scrollY - 200) * -0.05}px)` : 'none',
@@ -758,70 +973,71 @@ export default function Home() {
             opacity: scrollY < 400 ? Math.max(0.85, 1 - (scrollY - 200) / 300) : 1
           }}
         >
-          {/* Left Sidebar - Server Status & Game Data */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Server Status */}
+          {/* Left Sidebar - Simplified Server Status */}
+          <div className="xl:col-span-2 space-y-6">
+            {/* Simplified Server Status */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-green-500/20 hover:border-green-500/50">
               <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
                 <h3 className="text-green-400 font-bold text-sm tracking-wider">🌐 SERVER STATUS</h3>
-                <p className="text-gray-400 text-xs mt-1 font-mono">Live Game Data</p>
+                <p className="text-gray-400 text-xs mt-1 font-mono">
+                  {serverData.stats.serverStatus === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                </p>
               </div>
               
               <div className="p-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">Status</span>
-                    <span className={`text-sm font-bold ${
-                      serverData.stats.serverStatus === 'online' ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {serverData.stats.serverStatus === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
-                    </span>
+                <div className="text-center mb-4">
+                  <div className="text-2xl font-bold text-cyan-400 mb-1">
+                    {serverData.stats.totalPlayers}
                   </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">Players</span>
-                    <span className="text-cyan-400 font-bold text-sm">{serverData.stats.totalPlayers}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">Active Games</span>
-                    <span className="text-yellow-400 font-bold text-sm">{serverData.stats.activeGames}</span>
-                  </div>
+                  <div className="text-xs text-gray-400">TOTAL PLAYERS</div>
                 </div>
 
                 {serverData.zones.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-700">
-                    <h4 className="text-green-400 font-bold text-xs mb-2">ACTIVE ZONES</h4>
-                    <div className="space-y-1">
-                      {serverData.zones.map((zone, index) => (
-                        <div key={index} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-300">{zone.title}</span>
-                          <span className="text-cyan-400 font-mono">{zone.playerCount}</span>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="space-y-2">
+                    {serverData.zones.map((zone, index) => (
+                      <div key={index} className="flex items-center justify-between text-xs bg-gray-800/30 rounded px-2 py-1">
+                        <span className="text-gray-300 truncate">{zone.title}</span>
+                        <span className="text-cyan-400 font-mono font-bold">{zone.playerCount}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
                 
                 {serverData.lastUpdated && (
                   <p className="text-xs text-gray-500 mt-3 text-center font-mono">
-                    Updated: {new Date(serverData.lastUpdated).toLocaleTimeString()}
+                    {new Date(serverData.lastUpdated).toLocaleTimeString()}
                   </p>
                 )}
               </div>
             </section>
 
-            {/* Live Game Data */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/20 hover:border-blue-500/50">
-              <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
-                <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
-                <p className="text-gray-400 text-xs mt-1 font-mono">
-                  {gameData.arenaName || 'No Active Game'}
-                </p>
-              </div>
-              
-              <div className="p-3 bg-gray-900">
-                {gameData.players.length > 0 ? (
+            {/* Recent Patch Notes (if available and user logged in) */}
+            {user && recentPatchNotes && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-purple-500/30">
+                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">📋 UPDATES</h3>
+                  <p className="text-gray-400 text-xs mt-1 font-mono">{latestUpdateDate}</p>
+                </div>
+                
+                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
+                  <div className="text-xs font-mono leading-relaxed space-y-1">
+                    {parsePatchNotesFeed(recentPatchNotes)}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Live Game Data (only show if there are active players) */}
+            {gameData.players.length > 0 && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/20 hover:border-blue-500/50">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
+                  <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
+                  <p className="text-gray-400 text-xs mt-1 font-mono">
+                    {gameData.arenaName || 'Active Match'}
+                  </p>
+                </div>
+                
+                <div className="p-3 bg-gray-900">
                   <div className="space-y-3">
                     <div className="text-center">
                       <div className="text-cyan-400 font-bold text-sm">{gameData.gameType}</div>
@@ -851,9 +1067,9 @@ export default function Home() {
                         }
                       });
 
-                      // Check if we should use two-team format (more than 10 players total)
+                      // Check if we should use two-team format (more than 8 players total for compact view)
                       const totalMainPlayers = Object.values(mainTeams).reduce((sum, team) => sum + team.length, 0);
-                      const useTwoTeamFormat = totalMainPlayers > 10;
+                      const useTwoTeamFormat = totalMainPlayers > 8;
 
                       // Helper function to get team color based on team name
                       const getTeamColor = (teamName: string) => {
@@ -920,9 +1136,9 @@ export default function Home() {
                       }
 
                       return (
-                        <div className="space-y-3">
-                          {/* Main Teams */}
-                          <div className={`grid gap-2 ${Object.keys(displayTeams).length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
+                        <div className="space-y-2">
+                          {/* Main Teams - Compact view */}
+                          <div className="space-y-2">
                             {Object.entries(displayTeams).map(([teamName, players]) => {
                               // Determine if this team is offense or defense based on majority
                               const offensePlayers = players.filter(p => p.isOffense);
@@ -930,44 +1146,48 @@ export default function Home() {
                               const isOffenseTeam = offensePlayers.length > defensePlayers.length;
                               
                               return (
-                                <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-3`}>
-                                  <div className="flex items-center justify-between mb-2">
-                                    <h4 className={`font-bold text-sm ${getTeamClasses(teamName, 'text')}`}>
-                                      <span className={getRoleClasses(isOffenseTeam, 'text')}>{getRoleClasses(isOffenseTeam, 'icon')}</span> {teamName} <span className={getRoleClasses(isOffenseTeam, 'text')}>({isOffenseTeam ? 'Offense' : 'Defense'})</span>
+                                <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-2`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <h4 className={`font-bold text-xs ${getTeamClasses(teamName, 'text')} flex items-center gap-1`}>
+                                      <span className={getRoleClasses(isOffenseTeam, 'text')}>{getRoleClasses(isOffenseTeam, 'icon')}</span>
+                                      <span className="truncate">{teamName}</span>
                                     </h4>
-                                    <span className={`text-sm font-mono font-bold ${getTeamClasses(teamName, 'count')}`}>
+                                    <span className={`text-xs font-mono font-bold ${getTeamClasses(teamName, 'count')}`}>
                                       {players.length}
                                     </span>
                                   </div>
                                   
-                                  <div className="space-y-1">
-                                    {players.map((player, index) => (
-                                      <div key={index} className="text-xs">
-                                        <span className={`font-mono font-bold ${getClassColor(player.class)}`}>
+                                  <div className="grid grid-cols-1 gap-1">
+                                    {players.slice(0, 4).map((player, index) => (
+                                      <div key={index} className="text-xs flex items-center justify-between">
+                                        <span className={`font-mono truncate ${getClassColor(player.class)}`}>
                                           {player.alias}{getWeaponEmoji(player.weapon || '')}
                                         </span>
+                                        <span className="text-gray-500 text-xs">{player.class}</span>
                                       </div>
                                     ))}
+                                    {players.length > 4 && (
+                                      <div className="text-xs text-gray-500 text-center">
+                                        +{players.length - 4} more
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
-
-                          {/* Spectators Section - Collapsed by default */}
+                          
+                          {/* Spectators Section - Compact */}
                           {allSpectators.length > 0 && (
-                            <div className="border-t border-gray-700/30 pt-3">
+                            <div className="border-t border-gray-700/30 pt-2">
                               <details className="group">
-                                <summary className="cursor-pointer bg-gray-800/20 border border-gray-600/20 rounded-lg p-3 hover:bg-gray-800/30 transition-colors">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-gray-500 text-sm font-medium flex items-center gap-2">
+                                <summary className="cursor-pointer bg-gray-800/20 border border-gray-600/20 rounded p-2 hover:bg-gray-800/30 transition-colors">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 flex items-center gap-1">
                                       👁️ Spectators
-                                      <span className="text-xs text-gray-600 ml-1">
-                                        (click to {allSpectators.length > 0 ? 'expand' : 'view'})
-                                      </span>
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 text-sm font-mono bg-gray-700/30 px-2 py-1 rounded">
+                                      <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
                                         {allSpectators.length}
                                       </span>
                                       <span className="text-gray-600 text-xs group-open:rotate-90 transition-transform">
@@ -977,10 +1197,10 @@ export default function Home() {
                                   </div>
                                 </summary>
                                 
-                                <div className="mt-3 bg-gray-800/10 border border-gray-600/10 rounded-lg p-3">
-                                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                <div className="mt-2 bg-gray-800/10 border border-gray-600/10 rounded p-2">
+                                  <div className="grid grid-cols-1 gap-1">
                                     {allSpectators.map((player, index) => (
-                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-2 py-1 rounded truncate">
+                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
                                         {player.alias}
                                       </span>
                                     ))}
@@ -993,181 +1213,233 @@ export default function Home() {
                       );
                     })()}
                   </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="text-gray-500 text-lg">No active players detected</div>
-                    <div className="text-gray-600 text-sm mt-2">Waiting for game data...</div>
-                  </div>
-                )}
-                
-                {gameData.lastUpdated && (
-                  <p className="text-xs text-gray-500 mt-3 text-center font-mono">
-                    Last Update: {new Date(gameData.lastUpdated).toLocaleTimeString()}
-                  </p>
-                )}
-              </div>
-            </section>
-
-            {/* Recent Patch Notes for logged in users */}
-            {user && recentPatchNotes && (
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-2xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-purple-500/30">
-                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">📋 RECENT UPDATES</h3>
-                  <p className="text-gray-400 text-xs mt-1 font-mono">{latestUpdateDate}</p>
-                </div>
-                
-                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                  <div className="text-xs font-mono leading-relaxed space-y-1">
-                    {parsePatchNotesFeed(recentPatchNotes)}
-                  </div>
+                  
+                  {gameData.lastUpdated && (
+                    <p className="text-xs text-gray-500 mt-2 text-center font-mono">
+                      {new Date(gameData.lastUpdated).toLocaleTimeString()}
+                    </p>
+                  )}
                 </div>
               </section>
             )}
           </div>
 
-          {/* Main Content - Matches */}
-          <div className="lg:col-span-2">
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-8 shadow-2xl transform transition-all duration-300 hover:scale-[1.02] hover:shadow-cyan-500/20 hover:border-cyan-500/50">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-3xl font-bold text-cyan-400 tracking-wider">UPCOMING MATCHES</h3>
-                {user && (
-                  <Link 
-                    href="/matches" 
-                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm"
-                  >
-                    + CREATE MATCH
-                  </Link>
-                )}
+          {/* Center Content - Featured Videos */}
+          <div className="xl:col-span-7 space-y-6">
+            {/* Featured Videos Section */}
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-2xl overflow-hidden">
+              <div className="bg-gray-700/50 px-6 py-4 border-b border-red-500/30">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-3xl font-bold text-red-400 tracking-wider">🎥 FEATURED VIDEOS</h3>
+                  <span className="text-red-300 text-sm font-mono">
+                    Infantry Online Content
+                  </span>
+                </div>
+                <p className="text-gray-400 text-sm mt-2">
+                  Watch the latest matches, tutorials, and highlights from the Infantry community
+                </p>
               </div>
               
-              <div className="space-y-4 text-gray-300 leading-relaxed">
-                {upcomingMatches.length > 0 ? (
-                  upcomingMatches.map((match) => (
-                    <Link key={match.id} href={`/matches/${match.id}`}>
-                      <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-4 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-cyan-400 font-bold hover:text-cyan-300">{match.title}</h4>
-                          <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-                            {match.match_type.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3 mb-2">
-                          <span className="text-yellow-400 font-bold text-sm">
-                            🕘 {new Date(match.scheduled_at).toLocaleDateString()} at {new Date(match.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        
-                        {match.squad_a_name && match.squad_b_name && (
-                          <div className="flex items-center space-x-3">
-                            <span className="text-cyan-400 font-medium">{match.squad_a_name}</span>
-                            <span className="text-gray-400">vs</span>
-                            <span className="text-green-400 font-medium">{match.squad_b_name}</span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="text-gray-500 text-lg">No upcoming matches scheduled</div>
-                    <div className="text-gray-600 text-sm mt-2">
-                      {user ? 'Be the first to create a match!' : 'Login to create matches'}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Top Squads Section */}
-            <div className="mt-6 bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-6 shadow-2xl transform transition-all duration-300 hover:scale-[1.02] hover:shadow-purple-500/20 hover:border-purple-500/50">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-purple-400 tracking-wider">🛡️ ACTIVE SQUADS</h3>
-                {user && !userSquad && (
-                  <Link 
-                    href="/squads" 
-                    className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm"
-                  >
-                    + CREATE SQUAD
-                  </Link>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topSquads.length > 0 ? (
-                  topSquads.map((squad) => (
-                    <Link key={squad.id} href={`/squads/${squad.id}`}>
-                      <div className="bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
-                        <div className="p-3">
-                          <div className="flex gap-3">
-                            {/* Squad Picture */}
-                            {squad.banner_url && (
-                              <div className="w-16 h-16 flex-shrink-0">
-                                <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                                  <img 
-                                    src={squad.banner_url} 
-                                    alt={`${squad.name} picture`}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      e.currentTarget.parentElement!.style.display = 'none';
-                                    }}
-                                  />
+              <div className="p-6">
+                {featuredVideos.length > 0 ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {featuredVideos.map((video, index) => {
+                      const thumbnailUrl = video.thumbnail_url || 
+                        (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
+                      
+                      return (
+                        <div key={video.id} className={`
+                          ${index === 0 ? 'lg:col-span-2' : ''} 
+                          group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden 
+                          hover:border-red-500/50 transition-all duration-300 transform hover:scale-[1.02]
+                        `}
+                        onClick={() => {
+                          // Default click action - play the video
+                          if (video.youtube_url) {
+                            recordVideoView(video.id);
+                            window.open(video.youtube_url, '_blank');
+                          } else if (video.vod_url) {
+                            recordVideoView(video.id);
+                            window.open(video.vod_url, '_blank');
+                          }
+                        }}>
+                          {/* Video Thumbnail */}
+                          <div className={`relative ${index === 0 ? 'aspect-video' : 'aspect-video'} overflow-hidden`}>
+                            {thumbnailUrl ? (
+                              <>
+                                <img 
+                                  src={thumbnailUrl}
+                                  alt={video.title}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  onLoad={() => console.log('✅ Thumbnail loaded:', thumbnailUrl)}
+                                  onError={(e) => {
+                                    console.warn('❌ Thumbnail failed to load:', thumbnailUrl);
+                                    
+                                    // Try fallback thumbnails for YouTube videos
+                                    if (video.youtube_url && thumbnailUrl.includes('hqdefault')) {
+                                      console.log('🔄 Trying mqdefault fallback...');
+                                      const videoId = getYouTubeVideoId(video.youtube_url);
+                                      e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+                                    } else if (video.youtube_url && thumbnailUrl.includes('mqdefault')) {
+                                      console.log('🔄 Trying default fallback...');
+                                      const videoId = getYouTubeVideoId(video.youtube_url);
+                                      e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/default.jpg`;
+                                    } else {
+                                      // Use placeholder
+                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIyNSIgdmlld0JveD0iMCAwIDQwMCAyMjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjI1IiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTEyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzlDQTNBRiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmlkZW8gVGh1bWJuYWlsPC90ZXh0Pgo8L3N2Zz4K';
+                                    }
+                                  }}
+                                />
+                                {/* Debug info overlay for thumbnails */}
+                                <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
+                                  📸
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                                <div className="text-gray-400 text-center">
+                                  <div className="text-4xl mb-2">🎬</div>
+                                  <div className="text-sm">Video Thumbnail</div>
+                                  {video.youtube_url && (
+                                    <div className="text-xs mt-1 text-red-400">
+                                      Missing thumbnail for: {getYouTubeVideoId(video.youtube_url) || 'Invalid URL'}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
                             
-                            {/* Squad Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center space-x-2 mb-1">
-                                <span className="text-purple-400 font-bold text-sm">[{squad.tag}]</span>
-                                <span className="text-gray-300 font-medium text-sm hover:text-purple-300 truncate">{squad.name}</span>
+                            {/* Play Button Overlay */}
+                            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
+                              <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                                <svg className="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5v14l11-7z"/>
+                                </svg>
                               </div>
-                              
-                              <div className="flex items-center justify-between">
-                                <div className="text-xs text-gray-400">
-                                  Captain: <span className="text-yellow-400">{squad.captain_alias}</span>
-                                </div>
-                                <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-                                  {squad.member_count} members
+                            </div>
+                            
+                            {/* Video Type Badge */}
+                            <div className="absolute top-3 left-3">
+                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                                {getVideoTypeIcon(video.video_type)} {video.video_type.toUpperCase()}
+                              </span>
+                            </div>
+                            
+                            {/* View Count */}
+                            <div className="absolute bottom-3 right-3">
+                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                                👁️ {video.view_count}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Video Info */}
+                          <div className="p-4">
+                            <h4 className={`font-bold mb-2 group-hover:text-red-300 transition-colors ${
+                              index === 0 ? 'text-lg' : 'text-base'
+                            }`}>
+                              {video.title}
+                            </h4>
+                            
+                            <p className="text-gray-400 text-sm mb-3 line-clamp-2">
+                              {video.description}
+                            </p>
+                            
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>
+                                {new Date(video.published_at).toLocaleDateString()}
+                              </span>
+                              {video.match_title && (
+                                <span className="text-blue-400">
+                                  🎮 {video.match_title}
                                 </span>
-                              </div>
+                              )}
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex gap-2 mt-3">
+                              {video.youtube_url && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    recordVideoView(video.id);
+                                    window.open(video.youtube_url, '_blank');
+                                  }}
+                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2 px-3 rounded transition-colors"
+                                >
+                                  ▶ Watch on YouTube
+                                </button>
+                              )}
+                              {video.vod_url && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    recordVideoView(video.id);
+                                    window.open(video.vod_url, '_blank');
+                                  }}
+                                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-xs py-2 px-3 rounded transition-colors"
+                                >
+                                  📺 Watch VOD
+                                </button>
+                              )}
+                              {video.match_id && (
+                                <Link 
+                                  href={`/matches/${video.match_id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded transition-colors text-center"
+                                >
+                                  🎯 View Match
+                                </Link>
+                              )}
+                            </div>
+
+                            {/* Debug Info */}
+                            <div className="mt-2 text-xs text-gray-600 font-mono">
+                              {video.youtube_url && (
+                                <div>🔗 YouTube: {getYouTubeVideoId(video.youtube_url) || 'Invalid'}</div>
+                              )}
+                              {thumbnailUrl && (
+                                <div>🖼️ Thumb: {thumbnailUrl.substring(0, 50)}...</div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </Link>
-                  ))
+                      );
+                    })}
+                  </div>
                 ) : (
-                  <div className="col-span-2 text-center py-6">
-                    <div className="text-gray-500">No active squads</div>
-                    <div className="text-gray-600 text-sm mt-1">
-                      {user ? 'Create the first squad!' : 'Login to create squads'}
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🎬</div>
+                    <div className="text-gray-500 text-lg mb-2">No featured videos yet</div>
+                    <div className="text-gray-600 text-sm">
+                      Check back soon for the latest Infantry Online content!
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Right Sidebar - Online Users & Donations */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Online Users Section */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
-                <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                  👥 ONLINE USERS
-                  <span className="text-green-300 text-xs font-mono">
-                    {onlineUsers.length}
-                  </span>
-                </h3>
-                <p className="text-gray-400 text-xs mt-1 font-mono">Recently Active</p>
-              </div>
-              
-              <div className="p-3 bg-gray-900 max-h-96 overflow-y-auto">
-                {onlineUsers.length > 0 ? (
+          {/* Right Sidebar - Matches, Squads, Online Users (Dynamic) */}
+          <div className="xl:col-span-3 space-y-6">
+            {/* Dynamic content based on data availability - prioritize most important */}
+            
+            {/* Online Users (always show if there are users) */}
+            {onlineUsers.length > 0 && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
+                  <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
+                    👥 ONLINE NOW
+                    <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
+                      {onlineUsers.length}
+                    </span>
+                  </h3>
+                </div>
+                
+                <div className="p-3 bg-gray-900 max-h-72 overflow-y-auto">
                   <div className="space-y-2">
-                    {onlineUsers.map((user) => (
-                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-3">
+                    {onlineUsers.slice(0, 8).map((user) => (
+                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-2">
                         <div className="flex items-center space-x-3">
                           <UserAvatar 
                             user={{
@@ -1179,29 +1451,12 @@ export default function Home() {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                {user.role && (
-                                  <span className="text-xs">{getRoleIcon(user.role)}</span>
-                                )}
-                                <span className="text-green-400 font-mono text-sm font-bold">
-                                  {user.in_game_alias}
-                                </span>
-                              </div>
+                              <span className="text-green-400 font-mono text-sm font-bold truncate">
+                                {user.in_game_alias}
+                              </span>
                               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                             </div>
-                            
-                            {user.squad_name && (
-                              <div className="text-xs text-gray-400 mt-1">
-                                <span className="text-purple-400">[{user.squad_tag}]</span> {user.squad_name}
-                                {user.role && (
-                                  <span className={`ml-1 ${getRoleColor(user.role)}`}>
-                                    ({user.role.replace('_', ' ')})
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-500">
                               {new Date(user.last_seen).toLocaleTimeString()}
                             </div>
                           </div>
@@ -1209,35 +1464,152 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
+                  {onlineUsers.length > 8 && (
+                    <div className="text-center mt-3">
+                      <span className="text-gray-500 text-xs">
+                        +{onlineUsers.length - 8} more online
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Upcoming Matches */}
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-2xl overflow-hidden">
+              <div className="bg-gray-700/50 px-4 py-3 border-b border-cyan-500/30">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-cyan-400 font-bold text-sm tracking-wider">🎯 UPCOMING MATCHES</h3>
+                  {user && (
+                    <Link 
+                      href="/matches" 
+                      className="text-cyan-400 hover:text-cyan-300 text-xs border border-cyan-500/50 hover:border-cyan-400 px-2 py-1 rounded transition-all duration-300"
+                    >
+                      CREATE
+                    </Link>
+                  )}
+                </div>
+              </div>
+              
+              <div className="p-3 bg-gray-900 max-h-80 overflow-y-auto">
+                {upcomingMatches.length > 0 ? (
+                  <div className="space-y-3">
+                    {upcomingMatches.slice(0, 4).map((match) => (
+                      <Link key={match.id} href={`/matches/${match.id}`}>
+                        <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-3 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer">
+                          <h4 className="text-cyan-400 font-bold text-sm hover:text-cyan-300 mb-2 truncate">
+                            {match.title}
+                          </h4>
+                          
+                          <div className="text-xs text-gray-400 mb-2">
+                            🕘 {new Date(match.scheduled_at).toLocaleDateString()} at {new Date(match.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                          
+                          {match.squad_a_name && match.squad_b_name && (
+                            <div className="text-xs">
+                              <span className="text-cyan-400">{match.squad_a_name}</span>
+                              <span className="text-gray-400 mx-1">vs</span>
+                              <span className="text-green-400">{match.squad_b_name}</span>
+                            </div>
+                          )}
+                          
+                          <div className="text-xs text-gray-500 mt-1">
+                            {match.match_type.replace('_', ' ').toUpperCase()}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-center py-6">
-                    <div className="text-gray-500 text-sm">No users online</div>
-                    <div className="text-gray-600 text-xs mt-1">Be the first to log in!</div>
+                    <div className="text-gray-500 text-sm">No upcoming matches</div>
+                    <div className="text-gray-600 text-xs mt-1">
+                      {user ? 'Create the first match!' : 'Login to create matches'}
+                    </div>
                   </div>
                 )}
               </div>
             </section>
 
-            {/* Recent Donations Section */}
+            {/* Top Squads */}
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-2xl overflow-hidden">
+              <div className="bg-gray-700/50 px-4 py-3 border-b border-purple-500/30">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">🛡️ ACTIVE SQUADS</h3>
+                  {user && !userSquad && (
+                    <Link 
+                      href="/squads" 
+                      className="text-purple-400 hover:text-purple-300 text-xs border border-purple-500/50 hover:border-purple-400 px-2 py-1 rounded transition-all duration-300"
+                    >
+                      CREATE
+                    </Link>
+                  )}
+                </div>
+              </div>
+              
+              <div className="p-3 bg-gray-900 max-h-80 overflow-y-auto">
+                {topSquads.length > 0 ? (
+                  <div className="space-y-2">
+                    {topSquads.slice(0, 6).map((squad) => (
+                      <Link key={squad.id} href={`/squads/${squad.id}`}>
+                        <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-3 hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
+                          <div className="flex items-center space-x-3">
+                            {squad.banner_url && (
+                              <div className="w-8 h-8 flex-shrink-0">
+                                <img 
+                                  src={squad.banner_url} 
+                                  alt={`${squad.name} banner`}
+                                  className="w-full h-full object-cover rounded"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="text-purple-400 font-bold text-xs">[{squad.tag}]</span>
+                                <span className="text-gray-300 font-medium text-sm truncate">{squad.name}</span>
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                {squad.member_count} members • {squad.captain_alias}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="text-gray-500 text-sm">No active squads</div>
+                    <div className="text-gray-600 text-xs mt-1">
+                      {user ? 'Create the first squad!' : 'Login to create squads'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Recent Donations */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden">
               <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
-                <h3 className="text-yellow-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                  💰 RECENT SUPPORT
+                <div className="flex items-center justify-between">
+                  <h3 className="text-yellow-400 font-bold text-sm tracking-wider">💰 SUPPORT</h3>
                   <Link 
                     href="/donate" 
-                    className="text-yellow-400 hover:text-yellow-300 text-xs font-normal border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
+                    className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
                   >
                     DONATE
                   </Link>
-                </h3>
-                <p className="text-gray-400 text-xs mt-1 font-mono">Community Support</p>
+                </div>
               </div>
               
-              <div className="p-3 bg-gray-900 max-h-96 overflow-y-auto">
+              <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
                 {recentDonations.length > 0 ? (
                   <div className="space-y-2">
-                    {recentDonations.slice(0, 8).map((donation, index) => (
-                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-3">
+                    {recentDonations.slice(0, 5).map((donation, index) => (
+                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-yellow-400 font-bold text-sm">
                             ${donation.amount.toFixed(2)}
@@ -1246,11 +1618,11 @@ export default function Home() {
                             {new Date(donation.date).toLocaleDateString()}
                           </span>
                         </div>
-                        <div className="text-cyan-400 font-mono text-xs mb-1">
+                        <div className="text-cyan-400 font-mono text-xs truncate">
                           {donation.customerName}
                         </div>
                         {donation.message && (
-                          <div className="text-gray-300 text-xs italic truncate" title={donation.message}>
+                          <div className="text-gray-300 text-xs italic truncate mt-1" title={donation.message}>
                             "{donation.message}"
                           </div>
                         )}

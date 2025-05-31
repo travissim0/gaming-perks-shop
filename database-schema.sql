@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     in_game_alias TEXT,
     is_admin BOOLEAN DEFAULT FALSE,
     registration_status TEXT DEFAULT 'pending',
+    last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
