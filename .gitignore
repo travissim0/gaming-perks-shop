@@ -40,14 +40,17 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Additional files to ignore
-*.zip
+# Large directories that shouldn't be in git
+node_modules/
+.next/
 ngrok/
 stripe-cli/
+public/
 archive/
 
 # Large executables and binaries
 *.exe
+*.zip
 postgresql-installer.exe
 
 # SQL files that are just for setup/debugging (keep essential schema files)
@@ -62,3 +65,12 @@ check-*.sql
 *.log
 *.tmp
 *.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
