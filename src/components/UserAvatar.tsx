@@ -21,6 +21,17 @@ export default function UserAvatar({ user, size = 'md', className = '' }: UserAv
     '3xl': 'w-32 h-32 text-3xl'
   };
 
+  // Get pixel dimensions for the Image component based on size
+  const sizePixels = {
+    xs: 24,
+    sm: 32,
+    md: 40,
+    lg: 48,
+    xl: 64,
+    '2xl': 96,
+    '3xl': 128
+  };
+
   const getInitials = () => {
     const name = user.in_game_alias || user.email || 'Anonymous';
     if (name === 'Anonymous') return '?';
@@ -46,15 +57,19 @@ export default function UserAvatar({ user, size = 'md', className = '' }: UserAv
     ${className}
   `;
 
+  const pixelSize = sizePixels[size];
+
   if (user.avatar_url) {
     return (
       <div className={avatarClasses}>
         <Image
           src={user.avatar_url}
           alt={user.in_game_alias || 'User avatar'}
-          width={64}
-          height={64}
+          width={pixelSize}
+          height={pixelSize}
           className="w-full h-full object-cover rounded-lg"
+          quality={95}
+          priority={size === '2xl' || size === '3xl'}
           onError={(e) => {
             // Fallback to initials if image fails to load
             const target = e.target as HTMLElement;

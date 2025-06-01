@@ -969,14 +969,15 @@ export default function Home() {
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/20 hover:border-blue-500/50">
                 <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
-                    <div className="text-gray-400 text-xs font-mono">
+                    <h3 className="text-blue-400 font-bold text-sm tracking-wider">
                       {gameData.arenaName || 'Active Match'}
+                    </h3>
+                    <div className="text-gray-400 text-xs font-mono">
                       {gameData.gameType && (
-                        <span className="ml-2">{gameData.gameType}</span>
+                        <span>{gameData.gameType}</span>
                       )}
                       {gameData.baseUsed && gameData.baseUsed !== "Unknown Base" && gameData.baseUsed !== "InfServer.ConfigSetting" && (
-                        <span className="ml-1">({gameData.baseUsed})</span>
+                        <span className="ml-2">({gameData.baseUsed})</span>
                       )}
                     </div>
                   </div>
@@ -985,19 +986,32 @@ export default function Home() {
                 <div className="p-3 bg-gray-900">
                   <div className="space-y-3">
                     {(() => {
-                      // Separate teams into main teams and spectators
+                      // Separate players into duelers, main teams, and spectators
                       const mainTeams: { [key: string]: GamePlayer[] } = {};
-                      const allSpectators: GamePlayer[] = [];
+                      const duelers: GamePlayer[] = [];
+                      const npSpectators: GamePlayer[] = [];
+                      const specSpectators: GamePlayer[] = [];
                       
                       gameData.players.forEach(player => {
                         const teamName = player.team;
-                        const isSpectator = teamName.toLowerCase().includes('spec') || 
-                                          teamName.toLowerCase().includes('np') ||
-                                          teamName.toLowerCase() === 'spectator';
                         
-                        if (isSpectator) {
-                          allSpectators.push(player);
+                        // Check if player is a dueler first
+                        if (player.class === 'Dueler') {
+                          duelers.push(player);
+                          return;
+                        }
+                        
+                        // Check if spectator
+                        const isNpSpec = teamName.toLowerCase().includes('np');
+                        const isSpec = teamName.toLowerCase().includes('spec') || 
+                                      teamName.toLowerCase() === 'spectator';
+                        
+                        if (isNpSpec) {
+                          npSpectators.push(player);
+                        } else if (isSpec) {
+                          specSpectators.push(player);
                         } else {
+                          // Main team player
                           if (!mainTeams[teamName]) {
                             mainTeams[teamName] = [];
                           }
@@ -1075,6 +1089,33 @@ export default function Home() {
 
                       return (
                         <div className="space-y-2">
+                          {/* Duelers Section - Special styling for 1v1 dueling */}
+                          {duelers.length > 0 && (
+                            <div className="bg-gradient-to-r from-yellow-900/20 to-orange-900/20 border border-yellow-500/40 rounded-lg p-3 mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-bold text-sm text-yellow-400 flex items-center gap-2">
+                                  ⚔️ <span className="text-yellow-300">DUELING ARENA</span>
+                                </h4>
+                                <span className="text-xs font-mono font-bold text-yellow-300 bg-yellow-900/30 px-2 py-1 rounded">
+                                  {duelers.length} Fighter{duelers.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2">
+                                {duelers.map((player, index) => (
+                                  <div key={index} className="bg-yellow-900/20 border border-yellow-600/30 rounded p-2 text-center">
+                                    <span className="text-yellow-200 font-mono font-bold text-sm">
+                                      {player.alias}
+                                    </span>
+                                    <div className="text-xs text-yellow-400 mt-1">
+                                      {getWeaponEmoji(player.weapon || '')} Dueler
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Main Teams - Show all players, ordered by class priority */}
                           <div className="space-y-2">
                             {Object.entries(displayTeams).map(([teamName, players]) => {
@@ -1114,25 +1155,46 @@ export default function Home() {
                             })}
                           </div>
                           
-                          {/* Spectators Section - Always expanded */}
-                          {allSpectators.length > 0 && (
+                          {/* Spectators Section - Separated by type with subtle differences */}
+                          {(npSpectators.length > 0 || specSpectators.length > 0) && (
                             <div className="border-t border-gray-700/30 pt-2">
-                              <div className="bg-gray-800/20 border border-gray-600/20 rounded p-2">
-                                <div className="flex items-center justify-between text-xs mb-2">
-                                  <span className="text-gray-500">👁️ Spectators</span>
-                                  <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
-                                    {allSpectators.length}
-                                  </span>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 gap-1">
-                                  {allSpectators.map((player, index) => (
-                                    <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
-                                      {player.alias}
+                              {npSpectators.length > 0 && (
+                                <div className="bg-gray-800/15 border border-gray-600/15 rounded p-2 mb-2">
+                                  <div className="flex items-center justify-between text-xs mb-2">
+                                    <span className="text-gray-500">👁️ Not Playing</span>
+                                    <span className="text-gray-500 font-mono bg-gray-700/25 px-1 rounded">
+                                      {npSpectators.length}
                                     </span>
-                                  ))}
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 gap-1">
+                                    {npSpectators.map((player, index) => (
+                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/15 px-1 rounded truncate">
+                                        {player.alias}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              )}
+
+                              {specSpectators.length > 0 && (
+                                <div className="bg-gray-800/20 border border-gray-600/20 rounded p-2">
+                                  <div className="flex items-center justify-between text-xs mb-2">
+                                    <span className="text-gray-500">👁️ Spectators</span>
+                                    <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
+                                      {specSpectators.length}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-1 gap-1">
+                                    {specSpectators.map((player, index) => (
+                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
+                                        {player.alias}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

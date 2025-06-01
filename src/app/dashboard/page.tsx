@@ -396,234 +396,227 @@ export default function Dashboard() {
         Your browser does not support the audio element.
       </audio>
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-2 py-4 sm:px-4 sm:py-6">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">📊 Dashboard</h1>
-            <p className="text-xl text-gray-300">Your personal account overview</p>
-          </div>
+          <div className="space-y-4 sm:space-y-6">
+            {/* Dashboard Header + User Profile Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              {/* Dashboard Header - 1/3 width */}
+              <div className="lg:col-span-1">
+                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl h-full">
+                  <div className="text-center">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-cyan-400 mb-2 tracking-wider">📊 Dashboard</h1>
+                    <p className="text-sm sm:text-base text-gray-300">Your personal account overview</p>
+                  </div>
+                </div>
+              </div>
 
-          <div className="space-y-8">
-            {/* User Profile Section */}
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-8 shadow-2xl">
-              <h2 className="text-3xl font-bold text-cyan-400 mb-6 tracking-wider">🎖️ User Profile</h2>
-              
-              {loadingData ? (
-                <div className="animate-pulse space-y-4">
-                  <div className="h-24 w-24 bg-gray-700 rounded-lg mx-auto mb-4"></div>
-                  <div className="h-6 bg-gray-700 rounded"></div>
-                  <div className="h-6 bg-gray-700 rounded w-3/4"></div>
-                </div>
-              ) : profile ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="space-y-6">
-                    {/* User Avatar - Increased size and editable */}
-                    <div className="flex justify-center">
-                      <div className="relative">
-                        <UserAvatar 
-                          user={{
-                            avatar_url: avatarUrl,
-                            in_game_alias: profile.in_game_alias,
-                            email: profile.email
-                          }} 
-                          size="3xl"
-                          className="ring-4 ring-cyan-500/30 shadow-2xl"
-                        />
-                        {!editingAvatar && (
-                          <button
-                            onClick={() => setEditingAvatar(true)}
-                            className="absolute -bottom-2 -right-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full p-2 shadow-lg transition-all duration-300"
-                            title="Edit Avatar"
-                          >
-                            ✏️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {editingAvatar && (
-                      <div className="bg-gray-700/50 border border-cyan-500/30 rounded-lg p-4">
-                        <label className="block text-cyan-400 font-bold mb-2">Upload New Avatar</label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarFileChange}
-                          className="hidden"
-                          id="avatar-upload"
-                        />
-                        <div className="flex gap-2">
-                          <label
-                            htmlFor="avatar-upload"
-                            className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded cursor-pointer text-center transition-all duration-300"
-                          >
-                            Choose File
-                          </label>
-                          <button
-                            onClick={handleSaveAvatar}
-                            disabled={!avatarFile}
-                            className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded transition-all duration-300"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingAvatar(false);
-                              setAvatarFile(null);
-                              setAvatarUrl(profile.avatar_url);
-                            }}
-                            className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded transition-all duration-300"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        {avatarFile && (
-                          <p className="mt-2 text-sm text-cyan-300">📁 {avatarFile.name}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+              {/* User Profile Section - 2/3 width */}
+              <div className="lg:col-span-2">
+                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl">
+                  <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 mb-4 tracking-wider">🎖️ User Profile</h2>
                   
-                  <div className="space-y-6">
-                    {/* Email - Editable */}
-                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <span className="font-bold text-cyan-400">Email:</span> 
-                          {editingEmail ? (
-                            <div className="mt-2">
-                              <input
-                                type="email"
-                                value={newEmail}
-                                onChange={(e) => setNewEmail(e.target.value)}
-                                className="w-full bg-gray-800 border border-cyan-500/30 rounded px-3 py-2 text-white"
-                              />
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  onClick={handleSaveEmail}
-                                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setEditingEmail(false);
-                                    setNewEmail(profile.email || user.email || '');
-                                  }}
-                                  className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="ml-2 text-white font-mono">{profile.email}</span>
-                          )}
+                  {loadingData ? (
+                    <div className="animate-pulse space-y-4">
+                      <div className="h-16 sm:h-24 w-16 sm:w-24 bg-gray-700 rounded-lg mx-auto mb-4"></div>
+                      <div className="h-4 bg-gray-700 rounded"></div>
+                      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                    </div>
+                  ) : profile ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-4">
+                        {/* User Avatar - Increased size and editable */}
+                        <div className="flex justify-center">
+                          <div className="relative">
+                            <UserAvatar 
+                              user={{
+                                avatar_url: avatarUrl,
+                                in_game_alias: profile.in_game_alias,
+                                email: profile.email
+                              }} 
+                              size="2xl"
+                              className="ring-4 ring-cyan-500/30 shadow-2xl"
+                            />
+                            {!editingAvatar && (
+                              <button
+                                onClick={() => setEditingAvatar(true)}
+                                className="absolute -bottom-1 -right-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full p-1 shadow-lg transition-all duration-300 text-xs"
+                                title="Edit Avatar"
+                              >
+                                ✏️
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {!editingEmail && (
-                          <button
-                            onClick={() => setEditingEmail(true)}
-                            className="text-cyan-400 hover:text-cyan-300 ml-2"
-                            title="Edit Email"
-                          >
-                            ✏️
-                          </button>
+                        
+                        {editingAvatar && (
+                          <div className="bg-gray-700/50 border border-cyan-500/30 rounded-lg p-3">
+                            <label className="block text-cyan-400 font-bold mb-2 text-sm">Upload New Avatar</label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleAvatarFileChange}
+                              className="hidden"
+                              id="avatar-upload"
+                            />
+                            <div className="flex gap-2">
+                              <label
+                                htmlFor="avatar-upload"
+                                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded cursor-pointer text-center transition-all duration-300 text-sm"
+                              >
+                                Choose File
+                              </label>
+                              <button
+                                onClick={handleSaveAvatar}
+                                disabled={!avatarFile}
+                                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded transition-all duration-300 text-sm"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingAvatar(false);
+                                  setAvatarFile(null);
+                                  setAvatarUrl(profile.avatar_url);
+                                }}
+                                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded transition-all duration-300 text-sm"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {avatarFile && (
+                              <p className="mt-2 text-sm text-cyan-300">📁 {avatarFile.name}</p>
+                            )}
+                          </div>
                         )}
                       </div>
+                      
+                      <div className="space-y-4">
+                        {/* Email - Editable */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <span className="font-bold text-cyan-400 text-sm">Email:</span> 
+                              {editingEmail ? (
+                                <div className="mt-2">
+                                  <input
+                                    type="email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    className="w-full bg-gray-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm"
+                                  />
+                                  <div className="flex gap-2 mt-2">
+                                    <button
+                                      onClick={handleSaveEmail}
+                                      className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingEmail(false);
+                                        setNewEmail(profile.email || user.email || '');
+                                      }}
+                                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="ml-2 text-white font-mono text-sm">{profile.email}</span>
+                              )}
+                            </div>
+                            {!editingEmail && (
+                              <button
+                                onClick={() => setEditingEmail(true)}
+                                className="text-cyan-400 hover:text-cyan-300 ml-2"
+                                title="Edit Email"
+                              >
+                                ✏️
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* In-Game Alias - Read Only */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                          <p className="text-gray-300 text-sm">
+                            <span className="font-bold text-cyan-400">In-Game Alias:</span> 
+                            <span className="ml-2 text-yellow-400 font-mono">{profile.in_game_alias || 'Not Set'}</span>
+                            <span className="ml-2 text-xs text-gray-500">(Contact admin to change)</span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    
-                    {/* In-Game Alias - Read Only */}
-                    <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                      <p className="text-gray-300">
-                        <span className="font-bold text-cyan-400">In-Game Alias:</span> 
-                        <span className="ml-2 text-yellow-400 font-mono">{profile.in_game_alias || 'Not Set'}</span>
-                        <span className="ml-2 text-xs text-gray-500">(Contact admin to change)</span>
-                      </p>
+                  ) : (
+                    <div className="bg-gray-700/50 border border-red-500/50 rounded-lg p-4">
+                      <p className="text-red-400 font-bold text-sm">⚠️ Profile data unavailable</p>
+                      <p className="text-gray-300 mt-2 text-sm">Please check your connection and try again.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-gray-700/50 border border-red-500/50 rounded-lg p-6">
-                  <p className="text-red-400 font-bold">⚠️ Profile data unavailable</p>
-                  <p className="text-gray-300 mt-2">Please check your connection and try again.</p>
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Statistics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Forum Statistics */}
-              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-purple-400 mb-4">💬 Forum Stats</h3>
-                <div className="space-y-2">
+              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-3 sm:p-4 shadow-2xl">
+                <h3 className="text-sm sm:text-base font-bold text-purple-400 mb-2 sm:mb-3">💬 Forum</h3>
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Your Posts:</span>
-                    <span className="text-purple-400 font-bold">{forumStats.user_posts}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Posts:</span>
+                    <span className="text-purple-400 font-bold text-xs sm:text-sm">{forumStats.user_posts}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Your Threads:</span>
-                    <span className="text-purple-400 font-bold">{forumStats.user_threads}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Total Posts:</span>
-                    <span className="text-gray-400">{forumStats.total_posts}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Threads:</span>
+                    <span className="text-purple-400 font-bold text-xs sm:text-sm">{forumStats.user_threads}</span>
                   </div>
                 </div>
               </div>
 
               {/* Squad Statistics */}
-              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-blue-400 mb-4">⚔️ Squad Stats</h3>
-                <div className="space-y-2">
+              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg p-3 sm:p-4 shadow-2xl">
+                <h3 className="text-sm sm:text-base font-bold text-blue-400 mb-2 sm:mb-3">⚔️ Squad</h3>
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Your Squad:</span>
-                    <span className="text-blue-400 font-bold text-sm">{squadStats.user_squad || 'None'}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Squad:</span>
+                    <span className="text-blue-400 font-bold text-xs sm:text-sm truncate ml-1">{squadStats.user_squad || 'None'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Squad Size:</span>
-                    <span className="text-blue-400 font-bold">{squadStats.squad_members}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Total Squads:</span>
-                    <span className="text-gray-400">{squadStats.total_squads}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Size:</span>
+                    <span className="text-blue-400 font-bold text-xs sm:text-sm">{squadStats.squad_members}</span>
                   </div>
                 </div>
               </div>
 
               {/* Match Statistics */}
-              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-orange-400 mb-4">🏆 Match Stats</h3>
-                <div className="space-y-2">
+              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg p-3 sm:p-4 shadow-2xl">
+                <h3 className="text-sm sm:text-base font-bold text-orange-400 mb-2 sm:mb-3">🏆 Matches</h3>
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Your Matches:</span>
-                    <span className="text-orange-400 font-bold">{matchStats.user_matches}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Played:</span>
+                    <span className="text-orange-400 font-bold text-xs sm:text-sm">{matchStats.user_matches}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Upcoming:</span>
-                    <span className="text-orange-400 font-bold">{matchStats.upcoming_matches}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Total Matches:</span>
-                    <span className="text-gray-400">{matchStats.total_matches}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Upcoming:</span>
+                    <span className="text-orange-400 font-bold text-xs sm:text-sm">{matchStats.upcoming_matches}</span>
                   </div>
                 </div>
               </div>
 
               {/* Account Statistics */}
-              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-yellow-400 mb-4">📊 Account</h3>
-                <div className="space-y-2">
+              <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg p-3 sm:p-4 shadow-2xl">
+                <h3 className="text-sm sm:text-base font-bold text-yellow-400 mb-2 sm:mb-3">📊 Account</h3>
+                <div className="space-y-1 sm:space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Active Perks:</span>
-                    <span className="text-green-400 font-bold">{userProducts.length}</span>
+                    <span className="text-gray-300 text-xs sm:text-sm">Perks:</span>
+                    <span className="text-green-400 font-bold text-xs sm:text-sm">{userProducts.length}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">Status:</span>
-                    <span className="text-green-400 font-bold">ACTIVE</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Total Donated:</span>
-                    <span className="text-yellow-400 font-bold text-xs">
+                    <span className="text-gray-300 text-xs sm:text-sm">Donated:</span>
+                    <span className="text-yellow-400 font-bold text-xs sm:text-sm">
                       {loadingData ? '...' : formatCurrency(donationData.totalAmount, donationData.currency)}
                     </span>
                   </div>
@@ -631,122 +624,126 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Active Perks Section - Reduced Detail */}
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-8 shadow-2xl">
-              <h2 className="text-3xl font-bold text-cyan-400 mb-6 tracking-wider">🎮 ACTIVE PERKS</h2>
-              
-              {loadingData ? (
-                <div className="space-y-4">
-                  <div className="animate-pulse h-16 bg-gray-700 rounded"></div>
-                  <div className="animate-pulse h-16 bg-gray-700 rounded"></div>
-                </div>
-              ) : userProducts && userProducts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {userProducts.map((item) => (
-                    <div key={item.id} className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 hover:border-cyan-500/50 transition-all duration-300">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-bold text-cyan-400 text-lg">{item.products?.name || 'CLASSIFIED PERK'}</h3>
-                        <span className="text-green-400 font-bold text-sm">✅ ACTIVE</span>
+            {/* Recent Donations + Active Perks Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              {/* Recent Donations Section - 1/3 width */}
+              <div className="lg:col-span-1">
+                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden h-full">
+                  <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
+                    <h3 className="text-yellow-400 font-bold text-lg tracking-wider flex items-center justify-between">
+                      💰 DONATIONS
+                      <Link 
+                        href="/perks" 
+                        className="text-yellow-400 hover:text-yellow-300 text-xs font-normal border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
+                      >
+                        DONATE
+                      </Link>
+                    </h3>
+                    <p className="text-gray-400 text-xs mt-1 font-mono">
+                      Total: {formatCurrency(donationData.totalAmount, donationData.currency)}
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 bg-gray-900 max-h-48 overflow-y-auto">
+                    {loadingData ? (
+                      <div className="text-center py-4">
+                        <div className="text-gray-500 text-sm">Loading donations...</div>
                       </div>
-                      
-                      <div className="text-xs text-gray-500 font-mono mb-3">
-                        Purchased: {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
-                      </div>
-
-                      {item.products?.customizable && (
-                        <div className="mt-3 p-3 bg-gray-900/50 border border-purple-500/30 rounded">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-purple-400 font-bold text-sm">🎮 Text Visual Kill Macro</span>
-                            <button
-                              onClick={() => handleEditPhrase(item)}
-                              className="text-cyan-400 hover:text-cyan-300 text-sm font-bold transition-colors"
-                              title="Edit Custom Phrase"
-                            >
-                              ✏️ Edit
-                            </button>
-                          </div>
-                          {item.phrase ? (
-                            <div className="text-center">
-                              <div className="font-mono bg-gradient-to-r from-purple-600 to-blue-600 text-white px-3 py-2 rounded-lg text-lg font-bold shadow-lg">
-                                💥 {item.phrase} 💥
-                              </div>
+                    ) : donationData.recentDonations.length > 0 ? (
+                      <div className="space-y-2">
+                        {donationData.recentDonations.slice(0, 3).map((donation, index) => (
+                          <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-yellow-400 font-bold text-sm">
+                                {formatCurrency(donation.amount, donation.currency)}
+                              </span>
+                              <span className="text-gray-500 text-xs">
+                                {new Date(donation.date).toLocaleDateString()}
+                              </span>
                             </div>
-                          ) : (
-                            <div className="text-center text-gray-400 italic text-sm">
-                              No custom phrase set
+                            {donation.message && (
+                              <div className="text-gray-300 text-xs italic truncate" title={donation.message}>
+                                "{donation.message}"
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <div className="text-gray-500 text-sm">No donations yet</div>
+                        <div className="text-gray-600 text-xs mt-1">Support the mission!</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Perks Section - 2/3 width */}
+              <div className="lg:col-span-2">
+                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl">
+                  <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 mb-4 tracking-wider">🎮 ACTIVE PERKS</h2>
+                  
+                  {loadingData ? (
+                    <div className="space-y-3">
+                      <div className="animate-pulse h-12 bg-gray-700 rounded"></div>
+                      <div className="animate-pulse h-12 bg-gray-700 rounded"></div>
+                    </div>
+                  ) : userProducts && userProducts.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      {userProducts.map((item) => (
+                        <div key={item.id} className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-cyan-500/50 transition-all duration-300">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-bold text-cyan-400 text-sm sm:text-base">{item.products?.name || 'CLASSIFIED PERK'}</h3>
+                            <span className="text-green-400 font-bold text-xs">✅</span>
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 font-mono mb-2">
+                            {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                          </div>
+
+                          {item.products?.customizable && (
+                            <div className="mt-2 p-2 bg-gray-900/50 border border-purple-500/30 rounded">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-purple-400 font-bold text-xs">🎮 Kill Macro</span>
+                                <button
+                                  onClick={() => handleEditPhrase(item)}
+                                  className="text-cyan-400 hover:text-cyan-300 text-xs font-bold transition-colors"
+                                  title="Edit Custom Phrase"
+                                >
+                                  ✏️
+                                </button>
+                              </div>
+                              {item.phrase ? (
+                                <div className="text-center">
+                                  <div className="font-mono bg-gradient-to-r from-purple-600 to-blue-600 text-white px-2 py-1 rounded text-xs font-bold shadow-lg">
+                                    💥 {item.phrase} 💥
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-center text-gray-400 italic text-xs">
+                                  No phrase set
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="text-center py-6 bg-gray-700/30 border border-gray-600 rounded-lg">
+                      <div className="text-gray-400 text-4xl mb-3">🎮</div>
+                      <p className="mb-4 text-gray-400 text-base font-bold">No perks found</p>
+                      <p className="mb-4 text-gray-400 text-sm">Support the game server and unlock exclusive perks.</p>
+                      <Link 
+                        href="/perks" 
+                        className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm border border-cyan-500 hover:border-cyan-400 transition-all duration-300 shadow-lg hover:shadow-cyan-500/25"
+                      >
+                        🛍️ BROWSE PERKS
+                      </Link>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-8 bg-gray-700/30 border border-gray-600 rounded-lg">
-                  <div className="text-gray-400 text-6xl mb-4">🎮</div>
-                  <p className="mb-6 text-gray-400 text-lg font-bold italic">No perks found</p>
-                  <p className="mb-6 text-gray-400">Support the game server and unlock exclusive perks.</p>
-                  <Link 
-                    href="/perks" 
-                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-6 py-3 rounded-lg font-bold tracking-wide border border-cyan-500 hover:border-cyan-400 transition-all duration-300 shadow-lg hover:shadow-cyan-500/25"
-                  >
-                    🛍️ BROWSE DONATION PERKS
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Recent Donations Section */}
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-6 py-4 border-b border-yellow-500/30">
-                <h3 className="text-yellow-400 font-bold text-xl tracking-wider flex items-center justify-between">
-                  💰 YOUR RECENT DONATIONS
-                  <Link 
-                    href="/perks" 
-                    className="text-yellow-400 hover:text-yellow-300 text-sm font-normal border border-yellow-500/50 hover:border-yellow-400 px-3 py-1 rounded transition-all duration-300"
-                  >
-                    DONATE
-                  </Link>
-                </h3>
-                <p className="text-gray-400 text-sm mt-1 font-mono">
-                  Total: {formatCurrency(donationData.totalAmount, donationData.currency)}
-                </p>
-              </div>
-              
-              <div className="p-4 bg-gray-900 max-h-60 overflow-y-auto">
-                {loadingData ? (
-                  <div className="text-center py-6">
-                    <div className="text-gray-500 text-sm">Loading donations...</div>
-                  </div>
-                ) : donationData.recentDonations.length > 0 ? (
-                  <div className="space-y-3">
-                    {donationData.recentDonations.map((donation, index) => (
-                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-yellow-400 font-bold">
-                            {formatCurrency(donation.amount, donation.currency)}
-                          </span>
-                          <span className="text-gray-500 text-xs">
-                            {new Date(donation.date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {donation.message && (
-                          <div className="text-gray-300 text-xs italic truncate" title={donation.message}>
-                            "{donation.message}"
-                          </div>
-                        )}
-                        <div className="text-gray-500 text-xs mt-1">
-                          by {donation.customerName}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <div className="text-gray-500 text-sm">No donations yet</div>
-                    <div className="text-gray-600 text-xs mt-1">Support the mission!</div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
