@@ -115,6 +115,12 @@ export default function Navbar({ user }: { user: any }) {
                 >
                   ⚔️ Matches
                 </Link>
+                <Link 
+                  href="/logs" 
+                  className="px-3 py-1.5 text-sm text-orange-300 hover:text-orange-200 transition-all duration-200 border border-orange-600/50 hover:border-orange-400 rounded bg-orange-600/20 hover:bg-orange-500/30 font-medium"
+                >
+                  📜 Logs
+                </Link>
               </div>
               
               {/* Vertical separator */}
@@ -147,8 +153,8 @@ export default function Navbar({ user }: { user: any }) {
                 )}
                 {isCtfAdmin && (
                   <Link 
-                    href="/admin/users"
-                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                    href="/admin/ctf"
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                   >
                     🎮 CTF ADMIN
                   </Link>
@@ -285,6 +291,13 @@ export default function Navbar({ user }: { user: any }) {
                       >
                         ⚔️ Matches
                       </Link>
+                      <Link 
+                        href="/logs" 
+                        onClick={closeMobileMenu}
+                        className="block px-4 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-800 rounded transition-all duration-300"
+                      >
+                        📜 Logs
+                      </Link>
                     </div>
                   </div>
 
@@ -315,8 +328,8 @@ export default function Navbar({ user }: { user: any }) {
                         )}
                         {isCtfAdmin && (
                           <Link 
-                            href="/admin/users"
-                            className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                            href="/admin/ctf"
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                           >
                             🎮 CTF ADMIN
                           </Link>

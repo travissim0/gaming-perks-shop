@@ -8739,63 +8739,149 @@ private Player FindPlayerByAlias(string alias)
         public void playerLeave(Player player)
         {
             // Check if the player is still in the arena's player list
-            if (!arena.Players.Contains(player))
+            if (player == null || arena == null || !arena.Players.Contains(player))
+                return;
+
+            try
             {
                 int toxCount = player.getInventoryAmount(2009);
                 int tsoCount = player.getInventoryAmount(2005);
                 int panCount = player.getInventoryAmount(2007);
 
+                // Log.write(TLog.Normal, string.Format("[Debug] Player {0} leaving with Tox:{1} Tso:{2} Pan:{3}", 
+                //     player._alias, toxCount, tsoCount, panCount));
+
+                // Keep messages concise to avoid potential string length issues
                 if (toxCount > 0 || tsoCount > 0 || panCount > 0)
                 {
-                    string toxMessage = toxCount > 0 ? string.Format(" {0} Tox", toxCount) : "";
-                    string tsoMessage = tsoCount > 0 ? string.Format(" {0} Tso", tsoCount) : "";
-                    string panMessage = panCount > 0 ? string.Format(" {0} Pan", panCount) : "";
+                    // Build shorter resource messages
+                    var resources = new List<string>();
+                    if (toxCount > 0) resources.Add(string.Format("{0}T", toxCount));
+                    if (tsoCount > 0) resources.Add(string.Format("{0}Ts", tsoCount));
+                    if (panCount > 0) resources.Add(string.Format("{0}P", panCount));
 
-                    string message = string.Format("&{0} had{1}{2}{3}.", player._alias, toxMessage, tsoMessage, panMessage).Trim();
-                    if (!string.IsNullOrEmpty(message))
+                    // Keep message compact
+                    string message = string.Format("&{0}: {1}", player._alias, string.Join("/", resources));
+                    if (message.Length <= 128) // Add length check
                     {
                         arena.sendArenaMessage(message);
                     }
                 }
-                if (player._team._name.Contains(" T"))
+
+                if (player._team != null)
                 {
-                    // Spawn their minerals for any they had in the Titan DropShip fixed coordinate. Only if greater than 0 for each.
-                    if (toxCount > 0)
+                    // Log.write(TLog.Normal, string.Format("[Debug] Player {0} team: {1}", 
+                    //     player._alias, player._team._name));
+
+                    if (player._team._name.Contains(" T"))
                     {
-                        ItemInfo item2009 = arena._server._assets.getItemByID(2009);
-                        arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 457 * 16, null);
+                        // Log.write(TLog.Normal, "[Debug] Attempting to spawn minerals for Titan player");
+                        // Spawn their minerals for any they had in the Titan DropShip fixed coordinate
+                        if (toxCount > 0)
+                        {
+                            ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                            if (item2009 != null)
+                            {
+                                arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 457 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tox at Titan dropship", toxCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tox item info");
+                            }
+                        }
+                        if (tsoCount > 0)
+                        {
+                            ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                            if (item2005 != null)
+                            {
+                                arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 462 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tso at Titan dropship", tsoCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tso item info");
+                            }
+                        }
+                        if (panCount > 0)
+                        {
+                            ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                            if (item2007 != null)
+                            {
+                                arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 465 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Pan at Titan dropship", panCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Pan item info");
+                            }
+                        }
                     }
-                    if (tsoCount > 0)
+                    else if (player._team._name.Contains(" C"))
                     {
-                        ItemInfo item2005 = arena._server._assets.getItemByID(2005);
-                        arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 462 * 16, null);
+                        //Log.write(TLog.Normal, "[Debug] Attempting to spawn minerals for Collective player");
+                        // Spawn their minerals for any they had in the Collective DropShip fixed coordinate
+                        if (toxCount > 0)
+                        {
+                            ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                            if (item2009 != null)
+                            {
+                                arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 610 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tox at Collective dropship", toxCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tox item info");
+                            }
+                        }
+                        if (tsoCount > 0)
+                        {
+                            ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                            if (item2005 != null)
+                            {
+                                arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 615 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tso at Collective dropship", tsoCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tso item info");
+                            }
+                        }
+                        if (panCount > 0)
+                        {
+                            ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                            if (item2007 != null)
+                            {
+                                arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 618 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Pan at Collective dropship", panCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Pan item info");
+                            }
+                        }
+
+                        // Keep leave message short
+                        string leaveMsg = string.Format("&{0} left", player._alias);
+                        if (leaveMsg.Length <= 128)
+                        {
+                            arena.sendArenaMessage(leaveMsg);
+                        }
                     }
-                    if (panCount > 0)
+                    else
                     {
-                        ItemInfo item2007 = arena._server._assets.getItemByID(2007);
-                        arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 465 * 16, null);
+                        //Log.write(TLog.Normal, string.Format("[Debug] Player {0} team name did not match expected patterns", 
+                        //    player._alias));
                     }
                 }
-                else if (player._team._name.Contains(" C"))
+                else
                 {
-                    // Spawn their minerals for any they had in the Collective DropShip fixed coordinate. Only if greater than 0 for each.
-                    if (toxCount > 0)
-                    {
-                        ItemInfo item2009 = arena._server._assets.getItemByID(2009);
-                        arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 610 * 16, null);
-                    }
-                    if (tsoCount > 0)
-                    {
-                        ItemInfo item2005 = arena._server._assets.getItemByID(2005);
-                        arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 615 * 16, null);
-                    }
-                    if (panCount > 0)
-                    {
-                        ItemInfo item2007 = arena._server._assets.getItemByID(2007);
-                        arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 618 * 16, null);
-                    }
-                    arena.sendArenaMessage(string.Format("&{0} has left the arena.", player._alias));
+                    //Log.write(TLog.Normal, string.Format("[Debug] Player {0} has no team", player._alias));
                 }
+            }
+            catch (Exception ex)
+            {
+                //Log.write(TLog.Error, "Error in playerLeave: " + ex.ToString());
             }
             
             /* DISABLED: Vehicle tracking through portals
@@ -8823,6 +8909,147 @@ private Player FindPlayerByAlias(string alias)
         [Scripts.Event("Player.LeaveGame")]
         public bool playerLeaveGame(Player player)
         {
+            try
+            {
+                int toxCount = player.getInventoryAmount(2009);
+                int tsoCount = player.getInventoryAmount(2005);
+                int panCount = player.getInventoryAmount(2007);
+
+                //Log.write(TLog.Normal, string.Format("[Debug] Player {0} leaving with Tox:{1} Tso:{2} Pan:{3}", 
+                //    player._alias, toxCount, tsoCount, panCount));
+
+                // Keep messages concise to avoid potential string length issues
+                if (toxCount > 0 || tsoCount > 0 || panCount > 0)
+                {
+                    // Build shorter resource messages
+                    var resources = new List<string>();
+                    if (toxCount > 0) resources.Add(string.Format("{0} Tox", toxCount));
+                    if (tsoCount > 0) resources.Add(string.Format("{0} Tso", tsoCount));
+                    if (panCount > 0) resources.Add(string.Format("{0} Pan", panCount));
+
+                    // Keep message compact
+                    string message = string.Format("&{0}: {1}", player._alias, string.Join("/", resources));
+                    if (message.Length <= 128) // Add length check
+                    {
+                        arena.sendArenaMessage(message);
+                    }
+                }
+
+                if (player._team != null)
+                {
+                    //Log.write(TLog.Normal, string.Format("[Debug] Player {0} team: {1}", 
+                    //    player._alias, player._team._name));
+
+                    if (player._team._name.Contains(" T"))
+                    {
+                        //Log.write(TLog.Normal, "[Debug] Attempting to spawn minerals for Titan player");
+                        // Spawn their minerals for any they had in the Titan DropShip fixed coordinate
+                        if (toxCount > 0)
+                        {
+                            ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                            if (item2009 != null)
+                            {
+                                arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 457 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tox at Titan dropship", toxCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tox item info");
+                            }
+                        }
+                        if (tsoCount > 0)
+                        {
+                            ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                            if (item2005 != null)
+                            {
+                                arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 462 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tso at Titan dropship", tsoCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tso item info");
+                            }
+                        }
+                        if (panCount > 0)
+                        {
+                            ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                            if (item2007 != null)
+                            {
+                                arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 465 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Pan at Titan dropship", panCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Pan item info");
+                            }
+                        }
+                    }
+                    else if (player._team._name.Contains(" C"))
+                    {
+                        //Log.write(TLog.Normal, "[Debug] Attempting to spawn minerals for Collective player");
+                        // Spawn their minerals for any they had in the Collective DropShip fixed coordinate
+                        if (toxCount > 0)
+                        {
+                            ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                            if (item2009 != null)
+                            {
+                                arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 610 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tox at Collective dropship", toxCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tox item info");
+                            }
+                        }
+                        if (tsoCount > 0)
+                        {
+                            ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                            if (item2005 != null)
+                            {
+                                arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 615 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Tso at Collective dropship", tsoCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Tso item info");
+                            }
+                        }
+                        if (panCount > 0)
+                        {
+                            ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                            if (item2007 != null)
+                            {
+                                arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 618 * 16, null);
+                                //Log.write(TLog.Normal, string.Format("[Debug] Spawned {0} Pan at Collective dropship", panCount));
+                            }
+                            else
+                            {
+                                //Log.write(TLog.Error, "[Debug] Failed to get Pan item info");
+                            }
+                        }
+
+                        // Keep leave message short
+                        string leaveMsg = string.Format("&{0} left", player._alias);
+                        if (leaveMsg.Length <= 128)
+                        {
+                            arena.sendArenaMessage(leaveMsg);
+                        }
+                    }
+                    else
+                    {
+                        //Log.write(TLog.Normal, string.Format("[Debug] Player {0} team name did not match expected patterns", 
+                            //player._alias));
+                    }
+                }
+                else
+                {
+                    //Log.write(TLog.Normal, string.Format("[Debug] Player {0} has no team", player._alias));
+                }
+            }
+            catch (Exception ex)
+            {
+                //Log.write(TLog.Error, "Error in playerLeave: " + ex.ToString());
+            }
             if (!arena._name.Contains("Arena 1"))
                 deprizeMinPremades(player, false, false); // Remove items regardless of skill
 
