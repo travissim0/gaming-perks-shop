@@ -231,7 +231,7 @@ export default function AdminDonations() {
       <Navbar user={user} />
       
       <main className="container mx-auto py-8 px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[95vw] mx-auto">
           {/* Header */}
           <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -261,13 +261,13 @@ export default function AdminDonations() {
                 <div className="text-2xl font-bold text-green-400">{formatCurrency(totalAmount / Math.max(totalCount, 1))}</div>
                 <div className="text-gray-400 text-sm">Average Donation</div>
               </div>
-              <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 rounded-lg p-4">
-                <div className="text-xl font-bold text-indigo-400">{stripeDonations.length}</div>
-                <div className="text-gray-400 text-sm">💳 Stripe ({formatCurrency(stripeAmount)})</div>
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                <div className="text-2xl font-bold text-indigo-400">{formatCurrency(stripeAmount)} ({stripeDonations.length})</div>
+                <div className="text-gray-400 text-sm">💳 Stripe</div>
               </div>
-              <div className="bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 rounded-lg p-4">
-                <div className="text-xl font-bold text-red-400">{kofiDonations.length}</div>
-                <div className="text-gray-400 text-sm">☕ Ko-fi ({formatCurrency(kofiAmount)})</div>
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                <div className="text-2xl font-bold text-red-400">{formatCurrency(kofiAmount)} ({kofiDonations.length})</div>
+                <div className="text-gray-400 text-sm">☕ Ko-fi</div>
               </div>
             </div>
           </div>
@@ -344,30 +344,30 @@ export default function AdminDonations() {
           {/* Donations Table */}
           <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="bg-gray-700/50 border-b border-cyan-500/30">
                   <tr>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Date</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Amount</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Method</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Status</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Email</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">In-Game Alias</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Message</th>
-                    <th className="px-4 py-3 text-left text-cyan-400 font-medium">Transaction ID</th>
+                    <th className="w-48 px-4 py-3 text-left text-cyan-400 font-medium">Date</th>
+                    <th className="w-20 px-4 py-3 text-left text-cyan-400 font-medium">Amount</th>
+                    <th className="w-24 px-4 py-3 text-center text-cyan-400 font-medium">Method</th>
+                    <th className="w-28 px-4 py-3 text-center text-cyan-400 font-medium">Status</th>
+                    <th className="w-56 px-4 py-3 text-left text-cyan-400 font-medium">Email</th>
+                    <th className="w-32 px-4 py-3 text-left text-cyan-400 font-medium">Alias</th>
+                    <th className="flex-1 px-4 py-3 text-left text-cyan-400 font-medium">Message</th>
+                    <th className="w-96 px-4 py-3 text-left text-cyan-400 font-medium">Transaction ID</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDonations.map((donation, index) => (
                     <tr key={donation.id} className={`border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-gray-900/30'}`}>
-                      <td className="px-4 py-3 text-gray-300 text-sm">
+                      <td className="w-48 px-4 py-3 text-gray-300 text-sm truncate">
                         {formatDate(donation.completed_at || donation.created_at)}
                       </td>
-                      <td className="px-4 py-3 text-green-400 font-bold">
+                      <td className="w-20 px-4 py-3 text-green-400 font-bold text-sm">
                         {formatCurrency(donation.amount_cents, donation.currency)}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      <td className="w-24 px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
                           (donation.payment_method || 'stripe') === 'stripe' 
                             ? 'bg-indigo-900/50 text-indigo-400 border border-indigo-500/30' 
                             : 'bg-red-900/50 text-red-400 border border-red-500/30'
@@ -375,8 +375,8 @@ export default function AdminDonations() {
                           {(donation.payment_method || 'stripe') === 'stripe' ? '💳 STRIPE' : '☕ KO-FI'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      <td className="w-28 px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
                           donation.status === 'completed' ? 'bg-green-900/50 text-green-400 border border-green-500/30' :
                           donation.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
                           'bg-red-900/50 text-red-400 border border-red-500/30'
@@ -384,13 +384,13 @@ export default function AdminDonations() {
                           {donation.status.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-300 text-sm">
+                      <td className="w-56 px-4 py-3 text-gray-300 text-sm truncate">
                         {donation.customer_email}
                       </td>
-                      <td className="px-4 py-3 text-cyan-400 font-mono text-sm">
+                      <td className="w-32 px-4 py-3 text-cyan-400 font-mono text-sm truncate">
                         {donation.user_profiles?.in_game_alias || 'N/A'}
                       </td>
-                      <td className="px-4 py-3 text-gray-300 text-sm max-w-xs">
+                      <td className="flex-1 px-4 py-3 text-gray-300 text-sm">
                         {donation.donation_message ? (
                           <div className="truncate" title={donation.donation_message}>
                             "{donation.donation_message}"
@@ -399,13 +399,13 @@ export default function AdminDonations() {
                           <span className="text-gray-500 italic">No message</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">
+                      <td className="w-96 px-4 py-3 text-gray-400 font-mono text-xs">
                         <div className="space-y-1">
-                          <div className="truncate max-w-32" title={donation.id}>
+                          <div className="truncate" title={donation.id}>
                             {donation.id}
                           </div>
                           {donation.kofi_transaction_id && (
-                            <div className="truncate max-w-32 text-red-400" title={`Ko-fi: ${donation.kofi_transaction_id}`}>
+                            <div className="truncate text-red-400" title={`Ko-fi: ${donation.kofi_transaction_id}`}>
                               Ko-fi: {donation.kofi_transaction_id}
                             </div>
                           )}

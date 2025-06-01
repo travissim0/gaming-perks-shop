@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import MatchVideoManager from '@/components/MatchVideoManager';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'react-hot-toast';
@@ -433,6 +434,11 @@ export default function MatchDetailPage() {
               <div className="text-gray-600 text-sm mt-1">Be the first to join this match!</div>
             </div>
           )}
+        </div>
+
+        {/* Match Video Manager */}
+        <div className="mt-8">
+          <MatchVideoManager matchId={match.id} matchTitle={match.title} />
         </div>
       </div>
 

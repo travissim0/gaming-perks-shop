@@ -91,15 +91,16 @@ export default function AdminVideos() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('is_admin')
+        .select('is_admin, is_media_manager')
         .eq('id', user.id)
         .single();
 
       if (error) throw error;
 
-      setIsAdmin(data?.is_admin || false);
-      if (!data?.is_admin) {
-        toast.error('Access denied: Admin privileges required');
+      const hasAccess = data?.is_admin || data?.is_media_manager || false;
+      setIsAdmin(hasAccess);
+      if (!hasAccess) {
+        toast.error('Access denied: Admin or Media Manager privileges required');
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
@@ -297,7 +298,7 @@ export default function AdminVideos() {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h1>
-          <p className="text-gray-400 mb-4">Admin privileges required</p>
+          <p className="text-gray-400 mb-4">Admin or Media Manager privileges required</p>
           <Link href="/" className="text-cyan-400 hover:text-cyan-300">
             Return to Homepage
           </Link>

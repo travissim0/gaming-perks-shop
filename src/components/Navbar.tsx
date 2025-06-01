@@ -9,6 +9,7 @@ export default function Navbar({ user }: { user: any }) {
   const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCtfAdmin, setIsCtfAdmin] = useState(false);
+  const [isMediaManager, setIsMediaManager] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -18,12 +19,13 @@ export default function Navbar({ user }: { user: any }) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_admin, ctf_role')
+          .select('is_admin, ctf_role, is_media_manager')
           .eq('id', user.id)
           .single();
         
         setIsAdmin(profile?.is_admin || false);
         setIsCtfAdmin(profile?.is_admin || profile?.ctf_role === 'ctf_admin');
+        setIsMediaManager(profile?.is_media_manager || false);
       } catch (error) {
         console.error('Error checking admin status:', error);
       }
@@ -90,6 +92,12 @@ export default function Navbar({ user }: { user: any }) {
               {/* Community - Secondary priority */}
               <div className="flex items-center space-x-1">
                 <Link 
+                  href="/guides" 
+                  className="px-3 py-1.5 text-sm text-amber-300 hover:text-amber-200 transition-all duration-200 border border-amber-600/50 hover:border-amber-400 rounded bg-amber-600/20 hover:bg-amber-500/30 font-medium"
+                >
+                  📚 Guides
+                </Link>
+                <Link 
                   href="/forum" 
                   className="px-3 py-1.5 text-sm text-gray-400 hover:text-blue-400 transition-all duration-200 border border-gray-700/30 hover:border-blue-500/50 rounded bg-gray-800/20 hover:bg-blue-500/10 font-medium"
                 >
@@ -127,22 +135,30 @@ export default function Navbar({ user }: { user: any }) {
           {/* Desktop Right Side */}
           <div className="hidden md:flex items-center space-x-3">
             {/* Admin Controls - Critical but separate */}
-            {user && (isAdmin || isCtfAdmin) && (
+            {user && (isAdmin || isCtfAdmin || isMediaManager) && (
               <div className="flex items-center space-x-1">
                 {isAdmin && (
                   <Link 
-                    href="/admin" 
-                    className="px-3 py-1.5 text-sm text-red-200 hover:text-red-100 transition-all duration-200 border border-red-600/60 hover:border-red-400 rounded bg-red-600/25 hover:bg-red-500/40 font-bold"
+                    href="/admin"
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                   >
                     ⚡ ADMIN
                   </Link>
                 )}
                 {isCtfAdmin && (
                   <Link 
-                    href="/admin/users" 
-                    className="px-3 py-1.5 text-sm text-purple-200 hover:text-purple-100 transition-all duration-200 border border-purple-600/60 hover:border-purple-400 rounded bg-purple-600/25 hover:bg-purple-500/40 font-bold"
+                    href="/admin/users"
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                   >
                     🎮 CTF ADMIN
+                  </Link>
+                )}
+                {(isAdmin || isMediaManager) && (
+                  <Link 
+                    href="/admin/videos"
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                  >
+                    🎬 MEDIA
                   </Link>
                 )}
               </div>
@@ -242,6 +258,13 @@ export default function Navbar({ user }: { user: any }) {
                     <h4 className="text-xs text-purple-400 font-medium uppercase tracking-wider mb-2">Community</h4>
                     <div className="space-y-1">
                       <Link 
+                        href="/guides" 
+                        onClick={closeMobileMenu}
+                        className="block px-4 py-2 text-gray-300 hover:text-amber-400 hover:bg-gray-800 rounded transition-all duration-300"
+                      >
+                        📚 Guides
+                      </Link>
+                      <Link 
                         href="/forum" 
                         onClick={closeMobileMenu}
                         className="block px-4 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-800 rounded transition-all duration-300"
@@ -278,26 +301,32 @@ export default function Navbar({ user }: { user: any }) {
                   </div>
 
                   {/* Admin Controls */}
-                  {(isAdmin || isCtfAdmin) && (
+                  {(isAdmin || isCtfAdmin || isMediaManager) && (
                     <div className="px-4 py-2">
                       <h4 className="text-xs text-red-400 font-medium uppercase tracking-wider mb-2">Admin</h4>
                       <div className="space-y-2">
                         {isAdmin && (
                           <Link 
-                            href="/admin" 
-                            onClick={closeMobileMenu}
-                            className="block mx-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-4 py-2 rounded border border-red-500/50 hover:border-red-400 transition-all duration-300 font-bold tracking-wide shadow-lg hover:shadow-red-500/25 text-center"
+                            href="/admin"
+                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                           >
                             ⚡ ADMIN
                           </Link>
                         )}
                         {isCtfAdmin && (
                           <Link 
-                            href="/admin/users" 
-                            onClick={closeMobileMenu}
-                            className="block mx-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white px-4 py-2 rounded border border-purple-500/50 hover:border-purple-400 transition-all duration-300 font-bold tracking-wide shadow-lg hover:shadow-purple-500/25 text-center"
+                            href="/admin/users"
+                            className="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
                           >
                             🎮 CTF ADMIN
+                          </Link>
+                        )}
+                        {(isAdmin || isMediaManager) && (
+                          <Link 
+                            href="/admin/videos"
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                          >
+                            🎬 MEDIA
                           </Link>
                         )}
                       </div>

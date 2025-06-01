@@ -21,6 +21,7 @@ interface UserProfile {
   email: string;
   in_game_alias: string;
   is_admin: boolean;
+  is_media_manager: boolean;
   ctf_role: CTFRoleType;
   registration_status: string;
   created_at: string;
@@ -154,10 +155,14 @@ export default function AdminUsersPage() {
   const updateUserRole = async (userId: string, newRole: string) => {
     try {
       const isAdmin = newRole === 'admin';
+      const isMediaManager = newRole === 'media_manager';
       
       const { data, error } = await supabase
         .from('profiles')
-        .update({ is_admin: isAdmin })
+        .update({ 
+          is_admin: isAdmin,
+          is_media_manager: isMediaManager
+        })
         .eq('id', userId)
         .select();
 
@@ -169,9 +174,8 @@ export default function AdminUsersPage() {
         throw new Error('No rows were updated. This might be a permissions issue.');
       }
 
-      toast.success(
-        `User role updated to ${newRole === 'admin' ? 'Admin' : 'User'} successfully`
-      );
+      const roleLabel = newRole === 'admin' ? 'Admin' : newRole === 'media_manager' ? 'Media Manager' : 'User';
+      toast.success(`User role updated to ${roleLabel} successfully`);
       
       fetchUsers();
     } catch (error: any) {
@@ -234,7 +238,8 @@ export default function AdminUsersPage() {
       const matchesStatus = statusFilter === 'all' || user.registration_status === statusFilter;
       const matchesAdmin = adminFilter === 'all' || 
         (adminFilter === 'admin' && user.is_admin) ||
-        (adminFilter === 'user' && !user.is_admin);
+        (adminFilter === 'media_manager' && user.is_media_manager) ||
+        (adminFilter === 'user' && !user.is_admin && !user.is_media_manager);
 
       const matchesRole = roleFilter === 'all' || user.ctf_role === roleFilter;
       
@@ -270,6 +275,7 @@ export default function AdminUsersPage() {
 
   const totalUsers = filteredUsers.length;
   const adminCount = filteredUsers.filter(u => u.is_admin).length;
+  const mediaManagerCount = filteredUsers.filter(u => u.is_media_manager).length;
   const activeUsers = filteredUsers.filter(u => u.registration_status === 'completed').length;
   const ctfUsersCount = filteredUsers.filter(u => u.ctf_role && u.ctf_role !== 'none').length;
 
@@ -333,7 +339,7 @@ export default function AdminUsersPage() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
             <h2 className="text-lg text-gray-300 mb-2">Total Users</h2>
             <p className="text-3xl font-bold text-white">{totalUsers.toLocaleString()}</p>
@@ -342,6 +348,11 @@ export default function AdminUsersPage() {
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
             <h2 className="text-lg text-gray-300 mb-2">Admin Users</h2>
             <p className="text-3xl font-bold text-yellow-400">{adminCount.toLocaleString()}</p>
+          </div>
+
+          <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
+            <h2 className="text-lg text-gray-300 mb-2">Media Managers</h2>
+            <p className="text-3xl font-bold text-purple-400">{mediaManagerCount.toLocaleString()}</p>
           </div>
           
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
@@ -392,6 +403,7 @@ export default function AdminUsersPage() {
               >
                 <option value="all">All Users</option>
                 <option value="admin">Admins Only</option>
+                <option value="media_manager">Media Managers Only</option>
                 <option value="user">Regular Users</option>
               </select>
             </div>
@@ -521,15 +533,22 @@ export default function AdminUsersPage() {
 
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
-                          value={userProfile.is_admin ? 'admin' : 'user'}
+                          value={
+                            userProfile.is_admin ? 'admin' : 
+                            userProfile.is_media_manager ? 'media_manager' : 
+                            'user'
+                          }
                           onChange={(e) => updateUserRole(userProfile.id, e.target.value)}
                           className={`px-2 py-1 text-xs font-semibold rounded border ${
                             userProfile.is_admin
                               ? 'bg-purple-900/50 text-purple-300 border-purple-600'
+                              : userProfile.is_media_manager
+                              ? 'bg-indigo-900/50 text-indigo-300 border-indigo-600'
                               : 'bg-gray-700/50 text-gray-300 border-gray-600'
                           }`}
                         >
                           <option value="user">User</option>
+                          <option value="media_manager">Media Manager</option>
                           <option value="admin">Admin</option>
                         </select>
                       </td>

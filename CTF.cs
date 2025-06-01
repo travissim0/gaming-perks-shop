@@ -419,6 +419,13 @@ public static class ExplosionHelper
             {
                 letterWep = AssetManager.Manager.getItemByID(1356) as ItemInfo.Projectile;
             }
+            // Handle numbers by getting their spelled out names
+            else if (char.IsDigit(letter))
+            {
+                string[] numberNames = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
+                int digit = letter - '0';
+                letterWep = AssetManager.Manager.getItemByName(numberNames[digit]) as ItemInfo.Projectile;
+            }
             else
             {
                 letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
@@ -8750,8 +8757,46 @@ private Player FindPlayerByAlias(string alias)
                         arena.sendArenaMessage(message);
                     }
                 }
+                if (player._team._name.Contains(" T"))
+                {
+                    // Spawn their minerals for any they had in the Titan DropShip fixed coordinate. Only if greater than 0 for each.
+                    if (toxCount > 0)
+                    {
+                        ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                        arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 457 * 16, null);
+                    }
+                    if (tsoCount > 0)
+                    {
+                        ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                        arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 462 * 16, null);
+                    }
+                    if (panCount > 0)
+                    {
+                        ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                        arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 465 * 16, null);
+                    }
+                }
+                else if (player._team._name.Contains(" C"))
+                {
+                    // Spawn their minerals for any they had in the Collective DropShip fixed coordinate. Only if greater than 0 for each.
+                    if (toxCount > 0)
+                    {
+                        ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                        arena.itemSpawn(item2009, (ushort)toxCount, 689 * 16, 610 * 16, null);
+                    }
+                    if (tsoCount > 0)
+                    {
+                        ItemInfo item2005 = arena._server._assets.getItemByID(2005);
+                        arena.itemSpawn(item2005, (ushort)tsoCount, 689 * 16, 615 * 16, null);
+                    }
+                    if (panCount > 0)
+                    {
+                        ItemInfo item2007 = arena._server._assets.getItemByID(2007);
+                        arena.itemSpawn(item2007, (ushort)panCount, 689 * 16, 618 * 16, null);
+                    }
+                    arena.sendArenaMessage(string.Format("&{0} has left the arena.", player._alias));
+                }
             }
-
             
             /* DISABLED: Vehicle tracking through portals
             // Also clean up the last occupied vehicle entry
@@ -11530,6 +11575,23 @@ private Player FindPlayerByAlias(string alias)
                 // }
 
             // Test phrase instead of testupload
+
+            if (command.ToLower() == "testspawn")
+            {
+                // If Team contains " T" - Titan Dropship. If " C" - Collective Dropship.
+                if (player._team._name.Contains(" T"))
+                {
+                    ItemInfo item2009 = arena._server._assets.getItemByID(2009);
+                    arena.itemSpawn(item2009, 150, 689 * 16, 460 * 16, null);
+                }
+                else if (player._team._name.Contains(" C"))
+                {
+                    ItemInfo item2009 = arena._server._assets.getItemByID(2005);
+                    arena.itemSpawn(item2009, 150, 689 * 16, 615 * 16, null);
+                }
+                return true;
+            }
+
             if (command.ToLower() == "testphrase")
             {
                 player.sendMessage(0, "Testing phrase system...");

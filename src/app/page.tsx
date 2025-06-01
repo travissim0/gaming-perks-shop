@@ -303,7 +303,7 @@ export default function Home() {
         const response = await fetch('/api/recent-donations');
         if (response.ok) {
           const data = await response.json();
-          setRecentDonations(data);
+          setRecentDonations(data.donations || data);
         }
       } catch (error) {
         console.error('Error fetching recent donations:', error);

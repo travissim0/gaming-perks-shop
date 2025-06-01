@@ -9,19 +9,45 @@ export async function GET(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch recent completed donations
-    const { data: donations, error: donationsError } = await supabase
-      .from('donation_transactions')
-      .select(`
-        amount_cents,
-        currency,
-        donation_message,
-        customer_name,
-        created_at
-      `)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // Try both table names for compatibility
+    let donations, donationsError;
+    
+    try {
+      // First try donation_transactions table
+      const result = await supabase
+        .from('donation_transactions')
+        .select(`
+          amount_cents,
+          currency,
+          donation_message,
+          customer_name,
+          created_at
+        `)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      donations = result.data;
+      donationsError = result.error;
+    } catch (error) {
+      console.log('donation_transactions table not found, trying donations table...');
+      
+      // Fallback to donations table
+      const result = await supabase
+        .from('donations')
+        .select(`
+          amount,
+          message,
+          donor_name,
+          created_at
+        `)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      donations = result.data;
+      donationsError = result.error;
+    }
 
     if (donationsError) {
       console.error('Error fetching donations:', donationsError);
@@ -32,11 +58,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Format the donations for display
-    const formattedDonations = donations?.map(donation => ({
-      amount: donation.amount_cents / 100,
-      currency: donation.currency,
-      message: donation.donation_message,
-      customerName: donation.customer_name || 'Anonymous Supporter',
+    const formattedDonations = donations?.map((donation: any) => ({
+      amount: ((donation as any).amount_cents || (donation as any).amount || 0) / 100,
+      currency: (donation as any).currency || 'usd',
+      message: (donation as any).donation_message || (donation as any).message,
+      customerName: (donation as any).customer_name || (donation as any).donor_name || 'Anonymous Supporter',
       date: donation.created_at,
     })) || [];
 

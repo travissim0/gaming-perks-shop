@@ -15,7 +15,7 @@ export default function DonatePage() {
   const { user, loading } = useAuth();
   const [selectedAmount, setSelectedAmount] = useState<number>(10);
   const [donationMessage, setDonationMessage] = useState<string>('');
-  const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'kofi'>('stripe');
+  const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'kofi'>('kofi');
 
   const handleDonation = async () => {
     if (!user) {
@@ -108,8 +108,8 @@ export default function DonatePage() {
 
   // Mock data - in the future this could come from a database
   const serverCosts = {
-    monthly: 89.99,
-    annual: 1079.88
+    monthly: 30,
+    annual: 360
   };
 
   const developmentHours = {
