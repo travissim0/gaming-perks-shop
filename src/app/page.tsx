@@ -173,164 +173,50 @@ export default function Home() {
     const fetchUserProfile = async () => {
       if (user) {
         try {
-          console.log('Current authenticated user:', {
-            id: user.id,
-            email: user.email,
-            user_metadata: user.user_metadata,
-            app_metadata: user.app_metadata
-          });
-          
-          // Debug: Check current user's profile
-          const { data: currentProfile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-            
-          if (profileError) {
-            console.error('Error fetching user profile:', {
-              message: profileError.message,
-              details: profileError.details,
-              hint: profileError.hint,
-              code: profileError.code,
-              full_error: profileError
-            });
-          } else {
-            console.log('Current user profile:', currentProfile);
-          }
-          
-          const { data } = await supabase
-            .from('profiles')
-            .select('is_admin, ctf_role')
-            .eq('id', user.id)
-            .single();
+          // Simple profile fetch with timeout
+          const result = await Promise.race([
+            supabase
+              .from('profiles')
+              .select('is_admin, ctf_role')
+              .eq('id', user.id)
+              .single(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+            )
+          ]);
         
+          const { data } = result as any;
           if (data) {
             setUserProfile(data);
           }
         } catch (error) {
-          console.error('Error in fetchUserProfile (catch):', {
-            error,
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined
-          });
+          console.error('Error fetching user profile:', error);
+          // Don't throw - just log and continue
         }
-      } else {
-        console.log('No authenticated user found');
       }
     };
 
-    // Comprehensive diagnostic function
-    const runDiagnostics = async () => {
-      console.log('🔍 Running comprehensive diagnostics...');
-      
-      // Test 1: Basic Supabase connection
-      try {
-        console.log('1️⃣ Testing basic Supabase connection...');
-        const { data: testData, error: testError } = await supabase
-          .from('profiles')
-          .select('count')
-          .limit(1);
-        
-        if (testError) {
-          console.error('❌ Basic connection failed:', testError);
-        } else {
-          console.log('✅ Basic Supabase connection working');
-        }
-      } catch (error) {
-        console.error('❌ Connection test failed:', error);
-      }
-
-      // Test 2: Check if user profile exists
-      if (user) {
-        try {
-          console.log('2️⃣ Checking if user profile exists...');
-          const { data: profileExists, error: existsError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', user.id);
-          
-          if (existsError) {
-            console.error('❌ Profile check failed:', existsError);
-          } else if (profileExists && profileExists.length > 0) {
-            console.log('✅ User profile exists');
-          } else {
-            console.log('⚠️ User profile does NOT exist - this might be the issue!');
-            
-            // Try to create profile
-            console.log('3️⃣ Attempting to create missing profile...');
-            const { error: createError } = await supabase
-              .from('profiles')
-              .insert([{
-                id: user.id,
-                email: user.email,
-                in_game_alias: user.email?.split('@')[0] || 'User',
-                last_seen: new Date().toISOString()
-              }]);
-            
-            if (createError) {
-              console.error('❌ Failed to create profile:', createError);
-            } else {
-              console.log('✅ Profile created successfully!');
-            }
-          }
-        } catch (error) {
-          console.error('❌ Profile existence check failed:', error);
-        }
-      }
-
-      // Test 3: Test last_seen column exists
-      try {
-        console.log('4️⃣ Testing last_seen column...');
-        const { data: columnTest, error: columnError } = await supabase
-          .from('profiles')
-          .select('last_seen')
-          .limit(1);
-        
-        if (columnError) {
-          console.error('❌ last_seen column test failed:', columnError);
-        } else {
-          console.log('✅ last_seen column exists and accessible');
-        }
-      } catch (error) {
-        console.error('❌ Column test failed:', error);
-      }
-
-      // Test 4: Simple update test
-      if (user) {
-        try {
-          console.log('5️⃣ Testing profile update...');
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ last_seen: new Date().toISOString() })
-            .eq('id', user.id);
-          
-          if (updateError) {
-            console.error('❌ Profile update failed:', updateError);
-          } else {
-            console.log('✅ Profile update successful');
-          }
-        } catch (error) {
-          console.error('❌ Update test failed:', error);
-        }
-      }
-
-      console.log('🔍 Diagnostics complete!');
-    };
-
-    // Quick profile check (simplified, no timeout issues)
+    // Simple profile check without complex diagnostics
     const quickProfileCheck = async () => {
       if (!user) return;
       
       try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', user.id)
-          .single();
+        // Quick check with timeout
+        const result = await Promise.race([
+          supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', user.id)
+            .single(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile check timeout')), 3000)
+          )
+        ]);
+        
+        const { data: profile, error } = result as any;
           
         if (error && error.code === 'PGRST116') {
-          // Profile doesn't exist, create it
+          // Profile doesn't exist, create it quickly
           await supabase
             .from('profiles')
             .insert([{
@@ -342,45 +228,36 @@ export default function Home() {
         }
       } catch (error) {
         console.error('Quick profile check error:', error);
+        // Don't throw - just log and continue
       }
     };
 
-    // Update user's last_seen timestamp when they're active
+    // Simple user activity update with timeout
     const updateUserActivity = async () => {
       if (user) {
         try {
           const now = new Date().toISOString();
-          console.log('Updating user activity for:', user.id, 'at', now);
           
-          const { error } = await supabase
-            .from('profiles')
-            .update({ last_seen: now })
-            .eq('id', user.id);
-            
-          if (error) {
-            console.error('Error updating user activity:', {
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-              code: error.code,
-              full_error: error
-            });
-          } else {
-            console.log('User activity updated successfully');
-          }
+          await Promise.race([
+            supabase
+              .from('profiles')
+              .update({ last_seen: now })
+              .eq('id', user.id),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Activity update timeout')), 3000)
+            )
+          ]);
         } catch (error) {
-          console.error('Error updating user activity (catch):', {
-            error,
-            message: error instanceof Error ? error.message : 'Unknown error',
-            stack: error instanceof Error ? error.stack : undefined
-          });
+          console.error('Error updating user activity:', error);
+          // Don't throw - just log and continue
         }
       }
     };
 
+    // Run the simplified checks
     fetchUserProfile();
     updateUserActivity();
-    quickProfileCheck(); // Quick profile check without timeout issues
+    quickProfileCheck();
 
     // Scroll effect handler
     const handleScroll = () => {
@@ -670,7 +547,7 @@ export default function Home() {
     const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
     const squadsInterval = setInterval(fetchTopSquads, 60000);
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
-    const activityInterval = setInterval(updateUserActivity, 30000); // Update activity every 30 seconds
+    const activityInterval = setInterval(updateUserActivity, 300000); // Update activity every 5 minutes (was 30 seconds)
     
     // Keyboard event listener for modal
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -714,6 +591,20 @@ export default function Home() {
       case 'field medic': return 'text-yellow-400';
       case 'combat engineer': return 'text-amber-600';
       default: return 'text-gray-300';
+    }
+  };
+
+  // Helper function to get class priority order
+  const getClassPriority = (className: string): number => {
+    switch (className.toLowerCase()) {
+      case 'field medic': return 1;
+      case 'combat engineer': return 2;
+      case 'squad leader': return 3;
+      case 'heavy weapons': return 4;
+      case 'infantry': return 5;
+      case 'jump trooper': return 6;
+      case 'infiltrator': return 7;
+      default: return 8;
     }
   };
 
@@ -1077,21 +968,22 @@ export default function Home() {
             {gameData.players.length > 0 && (
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-blue-500/20 hover:border-blue-500/50">
                 <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
-                  <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
-                  <p className="text-gray-400 text-xs mt-1 font-mono">
-                    {gameData.arenaName || 'Active Match'}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-blue-400 font-bold text-sm tracking-wider">🎮 LIVE GAME</h3>
+                    <div className="text-gray-400 text-xs font-mono">
+                      {gameData.arenaName || 'Active Match'}
+                      {gameData.gameType && (
+                        <span className="ml-2">{gameData.gameType}</span>
+                      )}
+                      {gameData.baseUsed && gameData.baseUsed !== "Unknown Base" && gameData.baseUsed !== "InfServer.ConfigSetting" && (
+                        <span className="ml-1">({gameData.baseUsed})</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="p-3 bg-gray-900">
                   <div className="space-y-3">
-                    <div className="text-center">
-                      <div className="text-cyan-400 font-bold text-sm">{gameData.gameType}</div>
-                      {gameData.baseUsed && gameData.baseUsed !== "Unknown Base" && gameData.baseUsed !== "InfServer.ConfigSetting" && (
-                        <div className="text-gray-400 text-xs">{gameData.baseUsed}</div>
-                      )}
-                    </div>
-
                     {(() => {
                       // Separate teams into main teams and spectators
                       const mainTeams: { [key: string]: GamePlayer[] } = {};
@@ -1183,13 +1075,18 @@ export default function Home() {
 
                       return (
                         <div className="space-y-2">
-                          {/* Main Teams - Compact view */}
+                          {/* Main Teams - Show all players, ordered by class priority */}
                           <div className="space-y-2">
                             {Object.entries(displayTeams).map(([teamName, players]) => {
                               // Determine if this team is offense or defense based on majority
                               const offensePlayers = players.filter(p => p.isOffense);
                               const defensePlayers = players.filter(p => !p.isOffense);
                               const isOffenseTeam = offensePlayers.length > defensePlayers.length;
+                              
+                              // Sort players by class priority
+                              const sortedPlayers = [...players].sort((a, b) => 
+                                getClassPriority(a.class) - getClassPriority(b.class)
+                              );
                               
                               return (
                                 <div key={teamName} className={`bg-gray-800/50 border ${getTeamClasses(teamName, 'border')} rounded-lg p-2`}>
@@ -1204,55 +1101,38 @@ export default function Home() {
                                   </div>
                                   
                                   <div className="grid grid-cols-1 gap-1">
-                                    {players.slice(0, 4).map((player, index) => (
-                                      <div key={index} className="text-xs flex items-center justify-between">
-                                        <span className={`font-mono truncate ${getClassColor(player.class)}`}>
+                                    {sortedPlayers.map((player, index) => (
+                                      <div key={index} className="text-xs">
+                                        <span className={`font-mono ${getClassColor(player.class)}`}>
                                           {player.alias}{getWeaponEmoji(player.weapon || '')}
                                         </span>
-                                        <span className="text-gray-500 text-xs">{player.class}</span>
                                       </div>
                                     ))}
-                                    {players.length > 4 && (
-                                      <div className="text-xs text-gray-500 text-center">
-                                        +{players.length - 4} more
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
                           
-                          {/* Spectators Section - Compact */}
+                          {/* Spectators Section - Always expanded */}
                           {allSpectators.length > 0 && (
                             <div className="border-t border-gray-700/30 pt-2">
-                              <details className="group">
-                                <summary className="cursor-pointer bg-gray-800/20 border border-gray-600/20 rounded p-2 hover:bg-gray-800/30 transition-colors">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-gray-500 flex items-center gap-1">
-                                      👁️ Spectators
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
-                                        {allSpectators.length}
-                                      </span>
-                                      <span className="text-gray-600 text-xs group-open:rotate-90 transition-transform">
-                                        ▶
-                                      </span>
-                                    </div>
-                                  </div>
-                                </summary>
-                                
-                                <div className="mt-2 bg-gray-800/10 border border-gray-600/10 rounded p-2">
-                                  <div className="grid grid-cols-1 gap-1">
-                                    {allSpectators.map((player, index) => (
-                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
-                                        {player.alias}
-                                      </span>
-                                    ))}
-                                  </div>
+                              <div className="bg-gray-800/20 border border-gray-600/20 rounded p-2">
+                                <div className="flex items-center justify-between text-xs mb-2">
+                                  <span className="text-gray-500">👁️ Spectators</span>
+                                  <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
+                                    {allSpectators.length}
+                                  </span>
                                 </div>
-                              </details>
+                                
+                                <div className="grid grid-cols-1 gap-1">
+                                  {allSpectators.map((player, index) => (
+                                    <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
+                                      {player.alias}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>

@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 // Add these classes and methods to your existing CTF.cs script
 // This provides web integration functionality for your Infantry Online server
@@ -17,6 +18,259 @@ public class PlayerData
     public string className;
     public bool isOffense;
     public string weapon;
+}
+
+public class CustomPhrase
+{
+    public string player_alias { get; set; }
+    public string phrase { get; set; }
+    public DateTime expires_at { get; set; }
+    public bool is_active { get; set; }
+}
+
+public class PhraseExplosionManager
+{
+    private static readonly HttpClient httpClient = new HttpClient();
+    private static Dictionary<string, string> playerPhrases = new Dictionary<string, string>();
+    private static DateTime lastCacheUpdate = DateTime.MinValue;
+    private static readonly TimeSpan cacheExpiryTime = TimeSpan.FromMinutes(5); // Cache for 5 minutes
+    
+    // Your Supabase configuration
+    private const string SUPABASE_URL = "https://nkinpmqnbcjaftqduujf.supabase.co"; // Replace with your Supabase URL
+    private const string SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5raW5wbXFuYmNqYWZ0cWR1dWpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxMjA0NzYsImV4cCI6MjA2MzY5NjQ3Nn0.83gXbk6MVOI341RBW7h_SXeSZcIIgI9BOBUX5e0ivv8"; // Replace with your anon key
+    private const string PHRASES_API_ENDPOINT = SUPABASE_URL + "/rest/v1/rpc/get_player_phrases";
+    
+    public static async Task<string> GetPlayerPhrase(string playerAlias)
+    {
+        try
+        {
+            // Check if cache needs refreshing
+            if (DateTime.Now - lastCacheUpdate > cacheExpiryTime)
+            {
+                await RefreshPhrasesCache();
+            }
+            
+            // Return custom phrase if found, otherwise return default
+            if (playerPhrases.ContainsKey(playerAlias.ToLower()))
+            {
+                return playerPhrases[playerAlias.ToLower()];
+            }
+            
+            return "BLOOP"; // Default explosion text
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(String.Format("Error getting player phrase for {0}: {1}", playerAlias, ex.Message));
+            return "BLOOP"; // Fallback to default
+        }
+    }
+    
+    private static async Task RefreshPhrasesCache()
+    {
+        try
+        {
+            // Set headers for Supabase
+            httpClient.DefaultRequestHeaders.Clear();
+            httpClient.DefaultRequestHeaders.Add("apikey", SUPABASE_ANON_KEY);
+            httpClient.DefaultRequestHeaders.Add("Authorization", String.Format("Bearer {0}", SUPABASE_ANON_KEY));
+            
+            var response = await httpClient.PostAsync(PHRASES_API_ENDPOINT, new StringContent("", Encoding.UTF8, "application/json"));
+            
+            if (response.IsSuccessStatusCode)
+            {
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+                var phrases = ParsePhrasesJson(jsonResponse);
+                
+                // Update cache
+                playerPhrases.Clear();
+                foreach (var phrase in phrases)
+                {
+                    if (phrase.is_active && (phrase.expires_at == DateTime.MinValue || phrase.expires_at > DateTime.Now))
+                    {
+                        playerPhrases[phrase.player_alias.ToLower()] = phrase.phrase;
+                    }
+                }
+                
+                lastCacheUpdate = DateTime.Now;
+                Console.WriteLine(String.Format("Phrases cache refreshed: {0} active phrases loaded", playerPhrases.Count));
+            }
+            else
+            {
+                Console.WriteLine(String.Format("Failed to refresh phrases cache: {0}", response.StatusCode));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(String.Format("Error refreshing phrases cache: {0}", ex.Message));
+        }
+    }
+    
+    private static List<CustomPhrase> ParsePhrasesJson(string json)
+    {
+        var phrases = new List<CustomPhrase>();
+        
+        try
+        {
+            // Simple JSON parsing without external dependencies
+            json = json.Trim();
+            if (json.StartsWith("[") && json.EndsWith("]"))
+            {
+                json = json.Substring(1, json.Length - 2); // Remove array brackets
+                
+                var objects = SplitJsonObjects(json);
+                foreach (var obj in objects)
+                {
+                    var phrase = ParseSinglePhrase(obj);
+                    if (phrase != null)
+                        phrases.Add(phrase);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(String.Format("Error parsing phrases JSON: {0}", ex.Message));
+        }
+        
+        return phrases;
+    }
+    
+    private static List<string> SplitJsonObjects(string json)
+    {
+        var objects = new List<string>();
+        int depth = 0;
+        int start = 0;
+        
+        for (int i = 0; i < json.Length; i++)
+        {
+            if (json[i] == '{')
+                depth++;
+            else if (json[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    objects.Add(json.Substring(start, i - start + 1));
+                    start = i + 1;
+                    // Skip comma and whitespace
+                    while (start < json.Length && (json[start] == ',' || char.IsWhiteSpace(json[start])))
+                        start++;
+                    i = start - 1;
+                }
+            }
+        }
+        
+        return objects;
+    }
+    
+    private static CustomPhrase ParseSinglePhrase(string json)
+    {
+        try
+        {
+            var phrase = new CustomPhrase();
+            
+            // Extract fields using simple string parsing
+            phrase.player_alias = ExtractJsonValue(json, "player_alias");
+            phrase.phrase = ExtractJsonValue(json, "phrase");
+            
+            string expiresStr = ExtractJsonValue(json, "expires_at");
+            if (!string.IsNullOrEmpty(expiresStr) && expiresStr != "null")
+            {
+                DateTime.TryParse(expiresStr, out phrase.expires_at);
+            }
+            
+            string activeStr = ExtractJsonValue(json, "is_active");
+            phrase.is_active = activeStr == "true";
+            
+            return phrase;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(String.Format("Error parsing single phrase: {0}", ex.Message));
+            return null;
+        }
+    }
+    
+    private static string ExtractJsonValue(string json, string key)
+    {
+        string pattern = String.Format("\"{0}\"\\s*:\\s*", key);
+        var match = Regex.Match(json, pattern);
+        if (!match.Success) return "";
+        
+        int start = match.Index + match.Length;
+        if (start >= json.Length) return "";
+        
+        // Handle string values (quoted)
+        if (json[start] == '"')
+        {
+            start++; // Skip opening quote
+            int end = json.IndexOf('"', start);
+            if (end == -1) return "";
+            return json.Substring(start, end - start);
+        }
+        
+        // Handle other values (boolean, null, etc.)
+        int valueEnd = json.IndexOfAny(new char[] { ',', '}' }, start);
+        if (valueEnd == -1) valueEnd = json.Length;
+        
+        return json.Substring(start, valueEnd - start).Trim();
+    }
+    
+    // Method to manually refresh cache (call this from admin commands if needed)
+    public static async Task ForceRefreshPhrases()
+    {
+        await RefreshPhrasesCache();
+    }
+    
+    // Method to get all cached phrases (for debugging)
+    public static Dictionary<string, string> GetCachedPhrases()
+    {
+        return new Dictionary<string, string>(playerPhrases);
+    }
+}
+
+// Extension method to create custom explosion text
+public static class ExplosionHelper
+{
+    public static async Task CreateCustomExplosion(Player killerPlayer, Player victimPlayer, short posX, short posY)
+    {
+        try
+        {
+            // Get the killer's custom phrase
+            string customPhrase = await PhraseExplosionManager.GetPlayerPhrase(killerPlayer._alias);
+            
+            // Create the explosion with custom text
+            CreateTextExplosion(killerPlayer._arena, customPhrase, posX, posY, killerPlayer._team);
+            
+            // Optional: Log the explosion for debugging
+            // Console.WriteLine(String.Format("{0} triggered explosion with phrase: {1}", killerPlayer._alias, customPhrase));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(String.Format("Error creating custom explosion: {0}", ex.Message));
+            // Fallback to default explosion
+            CreateTextExplosion(killerPlayer._arena, "BLOOP", posX, posY, killerPlayer._team);
+        }
+    }
+    
+    private static void CreateTextExplosion(Arena arena, string text, short x, short y, Team team)
+    {
+        // This method should match your existing explosion creation logic
+        // Adapt this to your specific Infantry Online server implementation
+        
+        // Example implementation (you'll need to adapt this):
+        /*
+        Helpers.Player_RouteExplosion(
+            arena.Players,
+            724, // Explosion type ID - adjust as needed
+            x, y,
+            0, 0, // Velocity
+            0     // Duration
+        );
+        
+        // Create text overlay
+        arena.sendArenaMessage(text, team._id);
+        */
+    }
 }
 
 public class WebIntegration

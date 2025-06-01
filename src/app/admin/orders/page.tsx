@@ -16,6 +16,7 @@ interface Order {
   expires_at: string | null;
   created_at: string;
   updated_at: string;
+  phrase: string | null;
   profiles: {
     email: string;
     in_game_alias: string;
@@ -38,6 +39,7 @@ export default function AdminOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
+  const [phraseFilter, setPhraseFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -80,7 +82,7 @@ export default function AdminOrdersPage() {
       // Step 1: Get user_products data
       const { data: userProductsData, error: userProductsError } = await supabase
         .from('user_products')
-        .select('*')
+        .select('*, phrase')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -146,6 +148,7 @@ export default function AdminOrdersPage() {
 
         return {
           ...order,
+          phrase: order.phrase,
           profiles: {
             email: profile?.email || 'Unknown User',
             in_game_alias: profile?.in_game_alias || 'No Alias'
@@ -193,13 +196,14 @@ export default function AdminOrdersPage() {
 
   const exportOrders = () => {
     const csvContent = [
-      ['Order ID', 'Date', 'Customer Email', 'In-Game Alias', 'Product', 'Price', 'Status', 'Payment Intent', 'Expires'].join(','),
+      ['Order ID', 'Date', 'Customer Email', 'In-Game Alias', 'Product', 'Custom Phrase', 'Price', 'Status', 'Payment Intent', 'Expires'].join(','),
       ...filteredOrders.map(order => [
         order.id,
         new Date(order.created_at).toLocaleDateString(),
         order.profiles.email,
         order.profiles.in_game_alias || '',
         `"${order.products.name}"`,
+        order.phrase || '',
         (order.products.price / 100).toFixed(2),
         order.status,
         order.stripe_payment_intent_id || '',
@@ -229,12 +233,16 @@ export default function AdminOrdersPage() {
         order.profiles.in_game_alias?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.products.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.phrase?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.stripe_payment_intent_id?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       const matchesProduct = productFilter === 'all' || order.products.name === productFilter;
+      const matchesPhrase = phraseFilter === 'all' || 
+        (phraseFilter === 'with_phrase' && order.phrase) ||
+        (phraseFilter === 'without_phrase' && !order.phrase);
       
-      return matchesSearch && matchesStatus && matchesProduct;
+      return matchesSearch && matchesStatus && matchesProduct && matchesPhrase;
     })
     .sort((a, b) => {
       let aValue, bValue;
@@ -247,6 +255,10 @@ export default function AdminOrdersPage() {
         case 'product':
           aValue = a.products.name;
           bValue = b.products.name;
+          break;
+        case 'phrase':
+          aValue = a.phrase || '';
+          bValue = b.phrase || '';
           break;
         case 'price':
           aValue = a.products.price;
@@ -271,6 +283,7 @@ export default function AdminOrdersPage() {
   const totalOrders = filteredOrders.length;
   const totalRevenue = filteredOrders.reduce((sum, order) => sum + order.products.price, 0);
   const activeOrders = filteredOrders.filter(order => order.status === 'active').length;
+  const ordersWithPhrases = filteredOrders.filter(order => order.phrase).length;
 
   if (loading || !isAdmin) {
     return (
@@ -323,7 +336,7 @@ export default function AdminOrdersPage() {
         )}
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
             <h2 className="text-lg text-gray-300 mb-2">Total Orders</h2>
             <p className="text-3xl font-bold text-white">{totalOrders.toLocaleString()}</p>
@@ -338,18 +351,24 @@ export default function AdminOrdersPage() {
             <h2 className="text-lg text-gray-300 mb-2">Active Orders</h2>
             <p className="text-3xl font-bold text-blue-400">{activeOrders.toLocaleString()}</p>
           </div>
+
+          <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
+            <h2 className="text-lg text-gray-300 mb-2">Custom Phrases</h2>
+            <p className="text-3xl font-bold text-purple-400">{ordersWithPhrases.toLocaleString()}</p>
+            <p className="text-sm text-gray-400 mt-1">Text Visual Kill Macros</p>
+          </div>
         </div>
 
         {/* Filters */}
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Search</label>
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Email, alias, product, ID..."
+                placeholder="Email, alias, product, phrase..."
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
@@ -383,6 +402,19 @@ export default function AdminOrdersPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Custom Phrase</label>
+              <select
+                value={phraseFilter}
+                onChange={(e) => setPhraseFilter(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:border-blue-500 focus:ring-blue-500"
+              >
+                <option value="all">All Orders</option>
+                <option value="with_phrase">With Custom Phrase</option>
+                <option value="without_phrase">No Custom Phrase</option>
+              </select>
+            </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
@@ -394,6 +426,7 @@ export default function AdminOrdersPage() {
                 <option value="created_at">Order Date</option>
                 <option value="email">Customer Email</option>
                 <option value="product">Product Name</option>
+                <option value="phrase">Custom Phrase</option>
                 <option value="price">Price</option>
                 <option value="status">Status</option>
               </select>
@@ -443,6 +476,9 @@ export default function AdminOrdersPage() {
                       Product
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Custom Phrase
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                       Price
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -481,8 +517,22 @@ export default function AdminOrdersPage() {
                           <div className="font-medium text-white">{order.products.name}</div>
                           {order.products.phrase && (
                             <div className="text-sm text-blue-400 font-mono bg-blue-900/30 px-2 py-1 rounded">
-                              {order.products.phrase}
+                              Default: {order.products.phrase}
                             </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          {order.phrase ? (
+                            <div className="text-center">
+                              <span className="inline-block font-mono bg-gradient-to-r from-purple-600 to-blue-600 text-white px-3 py-2 rounded-lg text-lg font-bold shadow-lg">
+                                💥 {order.phrase} 💥
+                              </span>
+                              <div className="text-xs text-gray-400 mt-1">Text Visual Kill Macro</div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 italic text-sm">No custom phrase</span>
                           )}
                         </div>
                       </td>

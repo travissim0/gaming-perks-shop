@@ -9,6 +9,7 @@ import UserAvatar from '@/components/UserAvatar';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { UserProduct } from '@/types';
+import PhraseEditModal from '@/components/PhraseEditModal';
 
 interface DonationData {
   totalAmount: number;
@@ -76,6 +77,10 @@ export default function Dashboard() {
   // Email editing states
   const [editingEmail, setEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
+
+  // Phrase editing states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUserProduct, setEditingUserProduct] = useState<UserProduct | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -328,7 +333,32 @@ export default function Dashboard() {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency.toUpperCase(),
-    }).format(amount);
+    }).format(amount / 100);
+  };
+
+  const handleEditPhrase = (userProduct: UserProduct) => {
+    setEditingUserProduct(userProduct);
+    setShowEditModal(true);
+  };
+
+  const handlePhraseUpdate = async (newPhrase: string) => {
+    if (editingUserProduct) {
+      // Update local state
+      setUserProducts(prev => 
+        prev.map(up => 
+          up.id === editingUserProduct.id 
+            ? { ...up, phrase: newPhrase }
+            : up
+        )
+      );
+    }
+    setShowEditModal(false);
+    setEditingUserProduct(null);
+  };
+
+  const handleEditModalClose = () => {
+    setShowEditModal(false);
+    setEditingUserProduct(null);
   };
 
   // Show loading spinner only while checking authentication
@@ -614,16 +644,38 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {userProducts.map((item) => (
                     <div key={item.id} className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 hover:border-cyan-500/50 transition-all duration-300">
-                      <h3 className="font-bold text-cyan-400 text-lg mb-2">{item.products?.name || 'CLASSIFIED PERK'}</h3>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500 font-mono">
-                          {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
-                        </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold text-cyan-400 text-lg">{item.products?.name || 'CLASSIFIED PERK'}</h3>
                         <span className="text-green-400 font-bold text-sm">✅ ACTIVE</span>
                       </div>
-                      {item.phrase && item.products?.customizable && (
-                        <div className="mt-2 p-2 bg-gray-900/50 border border-yellow-500/30 rounded text-center">
-                          <span className="text-cyan-400 font-mono text-sm">"{item.phrase}"</span>
+                      
+                      <div className="text-xs text-gray-500 font-mono mb-3">
+                        Purchased: {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                      </div>
+
+                      {item.products?.customizable && (
+                        <div className="mt-3 p-3 bg-gray-900/50 border border-purple-500/30 rounded">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-purple-400 font-bold text-sm">🎮 Text Visual Kill Macro</span>
+                            <button
+                              onClick={() => handleEditPhrase(item)}
+                              className="text-cyan-400 hover:text-cyan-300 text-sm font-bold transition-colors"
+                              title="Edit Custom Phrase"
+                            >
+                              ✏️ Edit
+                            </button>
+                          </div>
+                          {item.phrase ? (
+                            <div className="text-center">
+                              <div className="font-mono bg-gradient-to-r from-purple-600 to-blue-600 text-white px-3 py-2 rounded-lg text-lg font-bold shadow-lg">
+                                💥 {item.phrase} 💥
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-400 italic text-sm">
+                              No custom phrase set
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -700,6 +752,16 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* Phrase Edit Modal */}
+      <PhraseEditModal
+        isOpen={showEditModal}
+        onClose={handleEditModalClose}
+        onUpdate={handlePhraseUpdate}
+        userProductId={editingUserProduct?.id || ''}
+        currentPhrase={editingUserProduct?.phrase || null}
+        productName={editingUserProduct?.products?.name || ''}
+      />
     </div>
   );
 } 
