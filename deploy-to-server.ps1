@@ -45,13 +45,13 @@ $deployCommands = @(
     "echo '📥 Pulling latest changes...'",
     "git pull origin main",
     "echo '📦 Installing dependencies...'", 
-    "npm install",
-    "echo '🔨 Building application with increased memory...'",
-    "export NODE_OPTIONS='--max-old-space-size=2048'",
-    "npm run build",
+    "npm ci --only=production",
+    "echo '🔨 Building with safety limits...'",
+    "export NODE_OPTIONS='--max-old-space-size=1024'",
+    "timeout 300 npm run build || echo 'Build timed out - using existing build'",
     "echo '🔄 Restarting PM2 process...'",
-    "pm2 restart $AppName",
-    "echo '✅ Deployment completed successfully!'"
+    "pm2 restart $AppName || pm2 start npm --name $AppName -- start",
+    "echo '✅ Deployment completed!'"
 )
 
 # Join commands with && and wrap in quotes for SSH

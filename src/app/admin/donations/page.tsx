@@ -87,7 +87,7 @@ export default function AdminDonations() {
   const formatCurrency = (cents: number, currency: string = 'usd') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currency.toUpperCase(),
+      currency: (currency || 'usd').toUpperCase(),
     }).format(cents / 100);
   };
 
@@ -127,12 +127,12 @@ export default function AdminDonations() {
   const filteredDonations = donations
     .filter(donation => {
       const matchesSearch = 
-        donation.customer_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.user_profiles?.in_game_alias?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.donation_message?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        donation.kofi_transaction_id?.toLowerCase().includes(searchTerm.toLowerCase());
+        (donation.customer_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (donation.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (donation.user_profiles?.in_game_alias || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (donation.donation_message || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (donation.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (donation.kofi_transaction_id || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || donation.status === statusFilter;
       const matchesPaymentMethod = paymentMethodFilter === 'all' || 
@@ -145,20 +145,20 @@ export default function AdminDonations() {
       
       switch (sortBy) {
         case 'amount':
-          aValue = a.amount_cents;
-          bValue = b.amount_cents;
+          aValue = a.amount_cents || 0;
+          bValue = b.amount_cents || 0;
           break;
         case 'email':
-          aValue = a.customer_email;
-          bValue = b.customer_email;
+          aValue = a.customer_email || '';
+          bValue = b.customer_email || '';
           break;
         case 'alias':
           aValue = a.user_profiles?.in_game_alias || '';
           bValue = b.user_profiles?.in_game_alias || '';
           break;
         default:
-          aValue = a.created_at;
-          bValue = b.created_at;
+          aValue = a.created_at || '';
+          bValue = b.created_at || '';
       }
       
       if (sortOrder === 'asc') {
@@ -392,7 +392,7 @@ export default function AdminDonations() {
                           donation.status === 'pending' ? 'bg-yellow-900/50 text-yellow-400 border border-yellow-500/30' :
                           'bg-red-900/50 text-red-400 border border-red-500/30'
                         }`}>
-                          {donation.status.toUpperCase()}
+                          {(donation.status || 'unknown').toUpperCase()}
                         </span>
                       </td>
                       <td className="w-56 px-4 py-3 text-gray-300 text-sm truncate">
