@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
+import { playPromotionSound, playSoundWithText } from '@/utils/sounds';
 
 function CheckoutSuccessContent() {
   const { user } = useAuth();
@@ -42,13 +43,18 @@ function CheckoutSuccessContent() {
           setCompleted(true);
           toast.success('Purchase completed successfully!');
           
-          // Play success sound after purchase is completed
-          if (!soundPlayed && audioRef.current) {
+          // Play success sound and congratulatory message after purchase is completed
+          if (!soundPlayed) {
             try {
-              await audioRef.current.play();
+              // Play the promotion sound with congratulatory message
+              playSoundWithText("Congratulations, you've been promoted!", 0.6);
               setSoundPlayed(true);
             } catch (err) {
-              console.log('Could not play audio:', err);
+              console.log('Could not play promotion sound:', err);
+              // Fallback to just playing the audio element
+              if (audioRef.current) {
+                audioRef.current.play().catch(console.log);
+              }
             }
           }
         }
@@ -67,7 +73,7 @@ function CheckoutSuccessContent() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
 
-      {/* Hidden audio element for success sound */}
+      {/* Hidden audio element for success sound (fallback) */}
       <audio 
         ref={audioRef} 
         preload="auto"
@@ -105,7 +111,8 @@ function CheckoutSuccessContent() {
           {!processing && completed && (
             <div className="text-center py-6">
               <div className="bg-green-900/20 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg mb-6">
-                <p className="font-medium">Thank you for your purchase!</p>
+                <div className="text-4xl mb-3">🎉</div>
+                <p className="font-medium text-lg">Congratulations, you've been promoted!</p>
                 <p className="mt-2">Your new perks have been added to your account.</p>
               </div>
               <div className="space-y-4">

@@ -24,6 +24,7 @@ interface DonationTransaction {
   user_profiles?: {
     in_game_alias: string;
   };
+  square_payment_id?: string;
 }
 
 export default function AdminDonations() {
@@ -101,7 +102,7 @@ export default function AdminDonations() {
         formatDate(donation.completed_at || donation.created_at),
         formatCurrency(donation.amount_cents, donation.currency),
         donation.status,
-        donation.payment_method || 'stripe',
+        donation.payment_method || 'kofi',
         donation.customer_email,
         donation.customer_name || '',
         donation.user_profiles?.in_game_alias || '',
@@ -135,7 +136,7 @@ export default function AdminDonations() {
       
       const matchesStatus = statusFilter === 'all' || donation.status === statusFilter;
       const matchesPaymentMethod = paymentMethodFilter === 'all' || 
-        (donation.payment_method || 'stripe') === paymentMethodFilter;
+        (donation.payment_method || 'kofi') === paymentMethodFilter;
       
       return matchesSearch && matchesStatus && matchesPaymentMethod;
     })
@@ -171,10 +172,12 @@ export default function AdminDonations() {
   const totalCount = filteredDonations.length;
   
   // Calculate stats by payment method
-  const stripeDonations = filteredDonations.filter(d => (d.payment_method || 'stripe') === 'stripe');
   const kofiDonations = filteredDonations.filter(d => d.payment_method === 'kofi');
-  const stripeAmount = stripeDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
+  const stripeDonations = filteredDonations.filter(d => d.payment_method === 'stripe');
+  const squareDonations = filteredDonations.filter(d => d.payment_method === 'square');
   const kofiAmount = kofiDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
+  const stripeAmount = stripeDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
+  const squareAmount = squareDonations.reduce((sum, donation) => sum + donation.amount_cents, 0);
 
   if (loading || isLoading) {
     return (
@@ -248,7 +251,7 @@ export default function AdminDonations() {
             </div>
             
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
                 <div className="text-2xl font-bold text-green-400">{totalCount}</div>
                 <div className="text-gray-400 text-sm">Total Donations</div>
@@ -262,12 +265,16 @@ export default function AdminDonations() {
                 <div className="text-gray-400 text-sm">Average Donation</div>
               </div>
               <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                <div className="text-2xl font-bold text-indigo-400">{formatCurrency(stripeAmount)} ({stripeDonations.length})</div>
-                <div className="text-gray-400 text-sm">💳 Stripe</div>
-              </div>
-              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
                 <div className="text-2xl font-bold text-red-400">{formatCurrency(kofiAmount)} ({kofiDonations.length})</div>
                 <div className="text-gray-400 text-sm">☕ Ko-fi</div>
+              </div>
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                <div className="text-2xl font-bold text-blue-400">{formatCurrency(squareAmount)} ({squareDonations.length})</div>
+                <div className="text-gray-400 text-sm">🟦 Square</div>
+              </div>
+              <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                <div className="text-2xl font-bold text-indigo-400">{formatCurrency(stripeAmount)} ({stripeDonations.length})</div>
+                <div className="text-gray-400 text-sm">💳 Stripe (Legacy)</div>
               </div>
             </div>
           </div>
@@ -308,8 +315,9 @@ export default function AdminDonations() {
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-gray-300 focus:border-cyan-500 focus:outline-none"
                 >
                   <option value="all">All Methods</option>
-                  <option value="stripe">💳 Stripe</option>
                   <option value="kofi">☕ Ko-fi</option>
+                  <option value="square">🟦 Square</option>
+                  <option value="stripe">💳 Stripe (Legacy)</option>
                 </select>
               </div>
               
@@ -368,11 +376,14 @@ export default function AdminDonations() {
                       </td>
                       <td className="w-24 px-4 py-3 text-center">
                         <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
-                          (donation.payment_method || 'stripe') === 'stripe' 
-                            ? 'bg-indigo-900/50 text-indigo-400 border border-indigo-500/30' 
-                            : 'bg-red-900/50 text-red-400 border border-red-500/30'
+                          (donation.payment_method || 'kofi') === 'kofi' 
+                            ? 'bg-red-900/50 text-red-400 border border-red-500/30' 
+                            : (donation.payment_method || 'kofi') === 'square'
+                            ? 'bg-blue-900/50 text-blue-400 border border-blue-500/30'
+                            : 'bg-indigo-900/50 text-indigo-400 border border-indigo-500/30'
                         }`}>
-                          {(donation.payment_method || 'stripe') === 'stripe' ? '💳 STRIPE' : '☕ KO-FI'}
+                          {(donation.payment_method || 'kofi') === 'kofi' ? '☕ KO-FI' : 
+                           (donation.payment_method || 'kofi') === 'square' ? '🟦 SQUARE' : '💳 STRIPE'}
                         </span>
                       </td>
                       <td className="w-28 px-4 py-3 text-center">
@@ -418,6 +429,11 @@ export default function AdminDonations() {
                             >
                               View Ko-fi
                             </a>
+                          )}
+                          {donation.square_payment_id && (
+                            <div className="truncate text-blue-400" title={`Square: ${donation.square_payment_id}`}>
+                              Square: {donation.square_payment_id}
+                            </div>
                           )}
                         </div>
                       </td>

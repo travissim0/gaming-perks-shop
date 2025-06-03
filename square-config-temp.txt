@@ -1,0 +1,7 @@
+# Square Configuration - Copy these lines to your .env.local file
+SQUARE_ACCESS_TOKEN=EAAAlx-7I3e78YMYMG-CI9bfavZgLq0_yPTQS1Btk0TRj53HZV8v7TD2NcV8ZPVA
+SQUARE_LOCATION_ID=LMR2WGBAGZ7VA
+SQUARE_ENVIRONMENT=sandbox
+
+# Optional - for webhook signature verification (get this from Square webhooks section)
+# SQUARE_WEBHOOK_SIGNATURE_KEY=your_webhook_signature_key_here 

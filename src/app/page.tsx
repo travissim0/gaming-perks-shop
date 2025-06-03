@@ -110,6 +110,10 @@ export default function Home() {
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   
+  // Collapsible states for player lists
+  const [isSpectatorsCollapsed, setIsSpectatorsCollapsed] = useState(false);
+  const [isNotPlayingCollapsed, setIsNotPlayingCollapsed] = useState(false);
+  
   // Carousel and animation states
   const [currentSlide, setCurrentSlide] = useState(0);
   const [scrollY, setScrollY] = useState(0);
@@ -849,10 +853,19 @@ export default function Home() {
                   onClick={() => {
                     const currentBannerSlide = bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)];
                     if (currentBannerSlide) {
-                      if (currentSlide === 1 || currentBannerSlide.highlight === "Build Your Team") window.location.href = '/squads';
-                      else if (currentSlide === 2 || currentBannerSlide.highlight === "Enter the Arena") window.location.href = '/matches';
-                      else if (currentSlide === 3 || currentBannerSlide.highlight === "Make a Difference") window.location.href = '/donate';
-                      else window.location.href = '/dashboard';
+                      // Use slide content instead of indices to determine navigation
+                      if (currentBannerSlide.highlight === "Build Your Team") {
+                        window.location.href = '/squads';
+                      } else if (currentBannerSlide.highlight === "Enter the Arena") {
+                        window.location.href = '/matches';
+                      } else if (currentBannerSlide.highlight === "Make a Difference") {
+                        window.location.href = '/donate';
+                      } else if (currentBannerSlide.highlight === "Join the Battle") {
+                        window.location.href = '/dashboard';
+                      } else {
+                        // Fallback for any other slides
+                        window.location.href = '/dashboard';
+                      }
                     }
                   }}
                 >
@@ -1155,44 +1168,64 @@ export default function Home() {
                             })}
                           </div>
                           
-                          {/* Spectators Section - Separated by type with subtle differences */}
+                          {/* Spectators Section - Separated by type with collapsible functionality */}
                           {(npSpectators.length > 0 || specSpectators.length > 0) && (
                             <div className="border-t border-gray-700/30 pt-2">
-                              {npSpectators.length > 0 && (
-                                <div className="bg-gray-800/15 border border-gray-600/15 rounded p-2 mb-2">
-                                  <div className="flex items-center justify-between text-xs mb-2">
-                                    <span className="text-gray-500">👁️ Not Playing</span>
-                                    <span className="text-gray-500 font-mono bg-gray-700/25 px-1 rounded">
-                                      {npSpectators.length}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="grid grid-cols-1 gap-1">
-                                    {npSpectators.map((player, index) => (
-                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/15 px-1 rounded truncate">
-                                        {player.alias}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
                               {specSpectators.length > 0 && (
-                                <div className="bg-gray-800/20 border border-gray-600/20 rounded p-2">
-                                  <div className="flex items-center justify-between text-xs mb-2">
-                                    <span className="text-gray-500">👁️ Spectators</span>
-                                    <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
+                                <div className="bg-gray-800/15 border border-gray-600/15 rounded p-2 mb-2">
+                                  <div 
+                                    className="flex items-center justify-between text-xs mb-2 cursor-pointer hover:bg-gray-700/20 rounded p-1 transition-colors"
+                                    onClick={() => setIsSpectatorsCollapsed(!isSpectatorsCollapsed)}
+                                  >
+                                    <span className="text-gray-500 flex items-center gap-2">
+                                      <span className="transition-transform duration-200" style={{ transform: isSpectatorsCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+                                        ▼
+                                      </span>
+                                      👁️ Spectators
+                                    </span>
+                                    <span className="text-gray-500 font-mono bg-gray-700/25 px-1 rounded">
                                       {specSpectators.length}
                                     </span>
                                   </div>
                                   
-                                  <div className="grid grid-cols-1 gap-1">
-                                    {specSpectators.map((player, index) => (
-                                      <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
-                                        {player.alias}
+                                  {!isSpectatorsCollapsed && (
+                                    <div className="grid grid-cols-1 gap-1">
+                                      {specSpectators.map((player, index) => (
+                                        <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/15 px-1 rounded truncate">
+                                          {player.alias}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {npSpectators.length > 0 && (
+                                <div className="bg-gray-800/20 border border-gray-600/20 rounded p-2">
+                                  <div 
+                                    className="flex items-center justify-between text-xs mb-2 cursor-pointer hover:bg-gray-700/20 rounded p-1 transition-colors"
+                                    onClick={() => setIsNotPlayingCollapsed(!isNotPlayingCollapsed)}
+                                  >
+                                    <span className="text-gray-500 flex items-center gap-2">
+                                      <span className="transition-transform duration-200" style={{ transform: isNotPlayingCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
+                                        ▼
                                       </span>
-                                    ))}
+                                      👁️ Not Playing
+                                    </span>
+                                    <span className="text-gray-500 font-mono bg-gray-700/30 px-1 rounded">
+                                      {npSpectators.length}
+                                    </span>
                                   </div>
+                                  
+                                  {!isNotPlayingCollapsed && (
+                                    <div className="grid grid-cols-1 gap-1">
+                                      {npSpectators.map((player, index) => (
+                                        <span key={index} className="text-xs text-gray-500 font-mono bg-gray-700/20 px-1 rounded truncate">
+                                          {player.alias}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@stripe/stripe-js": "^1.54.1",
     "@supabase/supabase-js": "^2.49.8",
     "dotenv": "^16.5.0",
     "framer-motion": "^12.15.0",
@@ -17,7 +16,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
-    "stripe": "^13.2.0"
+    "square": "^42.3.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

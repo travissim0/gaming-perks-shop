@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForum } from '@/hooks/useForum';
 import { useAuth } from '@/lib/AuthContext';
@@ -9,6 +9,8 @@ import UserAvatar from '@/components/UserAvatar';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import type { ForumThread, ForumPost, ForumCategory } from '@/types/forum';
+import UserMentionInput from '@/components/UserMentionInput';
+import { supabase } from '@/lib/supabase';
 
 export default function ThreadPage() {
   const params = useParams();
@@ -986,17 +988,17 @@ export default function ThreadPage() {
                         </button>
                       )}
                     </div>
-                    <textarea
+                    <UserMentionInput
                       id="reply"
                       value={replyContent}
-                      onChange={(e) => setReplyContent(e.target.value)}
-                      placeholder={replyingToPost ? "Write your reply..." : "Write your reply here..."}
+                      onChange={(value) => setReplyContent(value)}
+                      placeholder={replyingToPost ? "Write your reply..." : "Write your reply here... (type @ to mention users)"}
                       rows={8}
                       className="w-full bg-gradient-to-b from-gray-700 to-gray-800 border border-cyan-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400 transition-all duration-300 resize-vertical"
                       required
                     />
                     <div className="text-xs text-gray-500 mt-2">
-                      💡 Tip: Use <code>&gt;</code> at the start of a line to create quotes
+                      💡 Tip: Use <code>&gt;</code> at the start of a line to create quotes, or type <code>@</code> to mention users
                     </div>
                   </div>
                 </div>

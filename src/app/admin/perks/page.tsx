@@ -27,6 +27,8 @@ export default function AdminPerksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string>('');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -245,6 +247,65 @@ export default function AdminPerksPage() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type (images and GIFs)
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Please upload a valid image file (JPEG, PNG, GIF, WebP)');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      // Create a unique filename
+      const timestamp = Date.now();
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `product_${timestamp}.${fileExtension}`;
+      const filePath = `products/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
+
+      if (error) {
+        throw error;
+      }
+
+      // Get the public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+      
+      // Update form with the new URL
+      setFormProduct({
+        ...formProduct,
+        image: publicUrl,
+      });
+      
+      setImagePreview(publicUrl);
+      toast.success('Image uploaded successfully!');
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error('Error uploading image: ' + error.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   if (loading || !isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -377,17 +438,62 @@ export default function AdminPerksPage() {
               </div>
               
               <div>
-                <label htmlFor="image" className="block text-sm font-medium text-gray-300 mb-1">
-                  Image URL
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Product Image
                 </label>
-                <input
-                  type="url"
-                  id="image"
-                  name="image"
-                  value={formProduct.image}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
-                />
+                
+                {/* Image Upload */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">Upload Image/GIF</label>
+                    <input
+                      type="file"
+                      accept="image/*,.gif"
+                      onChange={handleFileUpload}
+                      disabled={uploadingImage}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                    />
+                    {uploadingImage && (
+                      <div className="flex items-center mt-2 text-blue-400">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400 mr-2"></div>
+                        <span className="text-sm">Uploading image...</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="text-center text-gray-400 text-sm">OR</div>
+                  
+                  {/* URL Input */}
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-2">Image URL</label>
+                    <input
+                      type="url"
+                      id="image"
+                      name="image"
+                      value={formProduct.image}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="https://example.com/image.jpg"
+                    />
+                  </div>
+                  
+                  {/* Image Preview */}
+                  {(formProduct.image || imagePreview) && (
+                    <div className="mt-3">
+                      <label className="block text-xs text-gray-400 mb-2">Preview</label>
+                      <div className="w-32 h-32 border border-gray-600 rounded-lg overflow-hidden bg-gray-800">
+                        <img
+                          src={imagePreview || formProduct.image}
+                          alt="Product preview"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder-image.png';
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div>

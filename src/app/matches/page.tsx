@@ -48,6 +48,8 @@ interface UserSquad {
 export default function MatchesPage() {
   const { user, loading } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
+  const [pastMatches, setPastMatches] = useState<Match[]>([]);
+  const [isPastMatchesCollapsed, setIsPastMatchesCollapsed] = useState(true);
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [allSquads, setAllSquads] = useState<Squad[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -56,6 +58,7 @@ export default function MatchesPage() {
   const [showParticipantModal, setShowParticipantModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'player' | 'commentator' | 'recording' | 'referee'>('player');
   const [allowMultipleRoles, setAllowMultipleRoles] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState<string>('');
 
   // Form states
   const [matchTitle, setMatchTitle] = useState('');
@@ -78,6 +81,10 @@ export default function MatchesPage() {
       fetchMatches().catch(error => {
         console.error('Error fetching matches:', error);
         setMatches([]);
+      }),
+      fetchPastMatches().catch(error => {
+        console.error('Error fetching past matches:', error);
+        setPastMatches([]);
       }),
       fetchUserSquad().catch(error => {
         console.error('Error fetching user squad:', error);
@@ -118,6 +125,20 @@ export default function MatchesPage() {
       }
     } catch (error) {
       console.error('Error fetching matches:', error);
+    }
+  };
+
+  const fetchPastMatches = async () => {
+    try {
+      const response = await fetch('/api/matches?status=completed,cancelled&limit=20');
+      if (response.ok) {
+        const data = await response.json();
+        setPastMatches(data.matches || []);
+      } else {
+        console.error('Failed to fetch past matches:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching past matches:', error);
     }
   };
 
@@ -406,19 +427,8 @@ export default function MatchesPage() {
           </button>
         </div>
 
-        {/* Matches List */}
-        {dataLoading ? (
-          <div className="grid gap-6">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-gray-800 rounded-lg p-6 animate-pulse">
-                <div className="h-6 bg-gray-700 rounded w-1/3 mb-4"></div>
-                <div className="h-4 bg-gray-700 rounded w-2/3 mb-3"></div>
-                <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
-                <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-              </div>
-            ))}
-          </div>
-        ) : (
+        {/* Matches Grid */}
+        {matches.length > 0 && (
           <div className="grid gap-6">
             {matches.map((match) => {
               const { date, time } = formatDateTime(match.scheduled_at);
@@ -451,61 +461,59 @@ export default function MatchesPage() {
                     </div>
                     
                     {/* Action Buttons - Mobile Responsive */}
-                    <div className="flex flex-col sm:flex-row gap-2 lg:ml-4">
-                      {match.status === 'scheduled' && (
-                        <button
-                          onClick={() => {
-                            setSelectedMatch(match);
-                            setAllowMultipleRoles(isParticipant);
-                            
-                            // If joining additional roles, set to first available role
-                            if (isParticipant) {
-                              const currentRoles = getUserRoles(match);
-                              const availableRoles = ['player', 'commentator', 'recording', 'referee'] as const;
-                              const firstAvailable = availableRoles.find(role => !currentRoles.includes(role));
-                              if (firstAvailable) {
-                                setSelectedRole(firstAvailable);
-                              }
-                            } else {
-                              setSelectedRole('player');
-                            }
-                            
-                            setShowParticipantModal(true);
-                          }}
-                          className={`px-3 py-2 rounded text-sm whitespace-nowrap ${
-                            isParticipant 
-                              ? 'bg-blue-600 hover:bg-blue-700' 
-                              : 'bg-green-600 hover:bg-green-700'
-                          }`}
-                        >
-                          {isParticipant ? 'Join Additional Role' : 'Join Match'}
-                        </button>
-                      )}
-                      {isParticipant && match.status === 'scheduled' && (
-                        <div className="flex flex-col gap-1">
-                          <button
-                            onClick={() => leaveMatch(match.id)}
-                            className="bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-sm whitespace-nowrap"
-                          >
-                            Leave All Roles
-                          </button>
-                          <div className="text-xs text-gray-400 text-center">
-                            Joined as: {userRoles.join(', ')}
-                          </div>
-                        </div>
-                      )}
-                      {match.created_by === user?.id && match.status === 'scheduled' && (
+                    <div className="flex flex-col sm:flex-row gap-2 lg:ml-6 min-w-0 lg:min-w-[200px]">
+                      {match.created_by === user?.id && (
                         <button
                           onClick={() => deleteMatch(match.id)}
-                          className="bg-red-800 hover:bg-red-900 px-3 py-2 rounded text-sm whitespace-nowrap"
+                          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
                         >
-                          Delete Match
+                          🗑️ Delete
                         </button>
+                      )}
+                      
+                      {match.status === 'scheduled' && (
+                        <>
+                          {!isParticipant ? (
+                            <button
+                              onClick={() => {
+                                setSelectedMatchId(match.id);
+                                setSelectedRole('player');
+                                setAllowMultipleRoles(false);
+                                setShowParticipantModal(true);
+                              }}
+                              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                            >
+                              ✅ Join
+                            </button>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <button
+                                onClick={() => leaveMatch(match.id)}
+                                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                              >
+                                🚫 Leave
+                              </button>
+                              {userRoles.length < 4 && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedMatchId(match.id);
+                                    setSelectedRole(userRoles.includes('player') ? 'commentator' : 'player');
+                                    setAllowMultipleRoles(true);
+                                    setShowParticipantModal(true);
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                                >
+                                  ➕ Add Role
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
-
-                  {/* Participants - Mobile Responsive */}
+                  
+                  {/* Participants */}
                   {match.participants.length > 0 && (
                     <div>
                       <h4 className="text-lg font-semibold mb-3">Participants ({match.participants.length})</h4>
@@ -545,6 +553,84 @@ export default function MatchesPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Past Matches - Collapsible Section */}
+        {pastMatches.length > 0 && (
+          <div className="mt-8">
+            <div 
+              className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
+              onClick={() => setIsPastMatchesCollapsed(!isPastMatchesCollapsed)}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-400 flex items-center gap-3">
+                  <span className={`transition-transform duration-200 ${isPastMatchesCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}`}>
+                    ▼
+                  </span>
+                  📚 Past Matches ({pastMatches.length})
+                </h2>
+                <div className="text-gray-500 text-sm">
+                  {isPastMatchesCollapsed ? 'Click to expand' : 'Click to collapse'}
+                </div>
+              </div>
+            </div>
+            
+            {!isPastMatchesCollapsed && (
+              <div className="mt-4 space-y-4">
+                {pastMatches.map((match) => {
+                  const { date, time } = formatDateTime(match.scheduled_at);
+                  
+                  return (
+                    <div key={match.id} className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-4 opacity-75">
+                      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start">
+                        <div className="flex-1">
+                          <Link href={`/matches/${match.id}`}>
+                            <h3 className="text-lg font-bold mb-2 text-gray-400 hover:text-gray-300 cursor-pointer">{match.title}</h3>
+                          </Link>
+                          <p className="text-gray-400 mb-2 text-sm">{match.description}</p>
+                          <div className="flex flex-wrap gap-2 text-sm text-gray-500 mb-2">
+                            <span>📅 {date} at {time}</span>
+                            <span className={getStatusColor(match.status)}>
+                              {getStatusIcon(match.status)} {match.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                            <span>🎯 {match.match_type.replace('_', ' ').toUpperCase()}</span>
+                          </div>
+                          {match.match_type === 'squad_vs_squad' && (
+                            <div className="text-sm text-gray-500 mb-2">
+                              {match.squad_a_name} vs {match.squad_b_name || 'TBD'}
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-600">
+                            Created by {match.created_by_alias}
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 lg:mt-0 lg:ml-6">
+                          <Link 
+                            href={`/matches/${match.id}`}
+                            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors inline-block"
+                          >
+                            📋 View Details
+                          </Link>
+                        </div>
+                      </div>
+                      
+                      {/* Simplified participants display for past matches */}
+                      {match.participants.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-700/50">
+                          <div className="text-sm text-gray-500">
+                            <span className="font-medium">Participants:</span> {' '}
+                            {match.participants.slice(0, 3).map(p => p.in_game_alias).join(', ')}
+                            {match.participants.length > 3 && ` +${match.participants.length - 3} more`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -669,62 +755,71 @@ export default function MatchesPage() {
         )}
 
         {/* Join Match Modal */}
-        {showParticipantModal && selectedMatch && (
+        {showParticipantModal && selectedMatchId && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-xl font-bold mb-4">
-                {allowMultipleRoles ? 'Join Additional Role' : 'Join Match'}: {selectedMatch.title}
-              </h3>
-              
-              {allowMultipleRoles && (
-                <div className="mb-4 p-3 bg-gray-700 rounded">
-                  <div className="text-sm text-gray-300 mb-2">Currently joined as:</div>
-                  <div className="text-sm text-cyan-400">
-                    {getUserRoles(selectedMatch).join(', ')}
-                  </div>
-                </div>
-              )}
-              
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2">Select Role</label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as any)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
-                >
-                  <option value="player" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('player')}>
-                    🎮 Player {allowMultipleRoles && getUserRoles(selectedMatch).includes('player') ? '(Already joined)' : ''}
-                  </option>
-                  <option value="commentator" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator')}>
-                    🎤 Commentator {allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator') ? '(Already joined)' : ''}
-                  </option>
-                  <option value="recording" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('recording')}>
-                    📹 Recorder {allowMultipleRoles && getUserRoles(selectedMatch).includes('recording') ? '(Already joined)' : ''}
-                  </option>
-                  <option value="referee" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('referee')}>
-                    👨‍⚖️ Referee {allowMultipleRoles && getUserRoles(selectedMatch).includes('referee') ? '(Already joined)' : ''}
-                  </option>
-                </select>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => joinMatch(selectedMatch.id, selectedRole)}
-                  className={`flex-1 py-2 rounded ${
-                    allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)
-                      ? 'bg-gray-500 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700'
-                  }`}
-                  disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)}
-                >
-                  Join as {selectedRole}
-                </button>
-                <button
-                  onClick={() => setShowParticipantModal(false)}
-                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
-                >
-                  Cancel
-                </button>
-              </div>
+              {(() => {
+                const selectedMatch = matches.find(m => m.id === selectedMatchId);
+                if (!selectedMatch) return null;
+                
+                return (
+                  <>
+                    <h3 className="text-xl font-bold mb-4">
+                      {allowMultipleRoles ? 'Join Additional Role' : 'Join Match'}: {selectedMatch.title}
+                    </h3>
+                    
+                    {allowMultipleRoles && (
+                      <div className="mb-4 p-3 bg-gray-700 rounded">
+                        <div className="text-sm text-gray-300 mb-2">Currently joined as:</div>
+                        <div className="text-sm text-cyan-400">
+                          {getUserRoles(selectedMatch).join(', ')}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium mb-2">Select Role</label>
+                      <select
+                        value={selectedRole}
+                        onChange={(e) => setSelectedRole(e.target.value as any)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                      >
+                        <option value="player" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('player')}>
+                          🎮 Player {allowMultipleRoles && getUserRoles(selectedMatch).includes('player') ? '(Already joined)' : ''}
+                        </option>
+                        <option value="commentator" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator')}>
+                          🎤 Commentator {allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator') ? '(Already joined)' : ''}
+                        </option>
+                        <option value="recording" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('recording')}>
+                          📹 Recorder {allowMultipleRoles && getUserRoles(selectedMatch).includes('recording') ? '(Already joined)' : ''}
+                        </option>
+                        <option value="referee" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('referee')}>
+                          👨‍⚖️ Referee {allowMultipleRoles && getUserRoles(selectedMatch).includes('referee') ? '(Already joined)' : ''}
+                        </option>
+                      </select>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => joinMatch(selectedMatch.id, selectedRole)}
+                        className={`flex-1 py-2 rounded ${
+                          allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)
+                            ? 'bg-gray-500 cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
+                        disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)}
+                      >
+                        Join as {selectedRole}
+                      </button>
+                      <button
+                        onClick={() => setShowParticipantModal(false)}
+                        className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

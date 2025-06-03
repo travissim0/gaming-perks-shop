@@ -617,7 +617,7 @@ export default function Dashboard() {
                   <div className="flex justify-between">
                     <span className="text-gray-300 text-xs sm:text-sm">Donated:</span>
                     <span className="text-yellow-400 font-bold text-xs sm:text-sm">
-                      {loadingData ? '...' : formatCurrency(donationData.totalAmount, donationData.currency)}
+                      {loadingData ? '...' : formatCurrency(donationData.totalCents, donationData.currency)}
                     </span>
                   </div>
                 </div>
@@ -640,7 +640,7 @@ export default function Dashboard() {
                       </Link>
                     </h3>
                     <p className="text-gray-400 text-xs mt-1 font-mono">
-                      Total: {formatCurrency(donationData.totalAmount, donationData.currency)}
+                      Total: {formatCurrency(donationData.totalCents, donationData.currency)}
                     </p>
                   </div>
                   
@@ -655,7 +655,7 @@ export default function Dashboard() {
                           <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-yellow-400 font-bold text-sm">
-                                {formatCurrency(donation.amount, donation.currency)}
+                                {formatCurrency(donation.amount * 100, donation.currency)}
                               </span>
                               <span className="text-gray-500 text-xs">
                                 {new Date(donation.date).toLocaleDateString()}
