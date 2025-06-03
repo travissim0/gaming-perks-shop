@@ -1,10 +1,10 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import Link from 'next/link';
 
-export default function DonateSuccessPage() {
+function DonateSuccessContent() {
   const searchParams = useSearchParams();
   const paymentMethod = searchParams.get('payment_method');
   const [isLoading, setIsLoading] = useState(true);
@@ -162,5 +162,24 @@ export default function DonateSuccessPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+        <p className="text-gray-300">Loading success page...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function DonateSuccessPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <DonateSuccessContent />
+    </Suspense>
   );
 } 
