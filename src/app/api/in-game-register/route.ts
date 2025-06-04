@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Send invitation email directly (this creates the user and sends email in one step)
     console.log('📧 Sending invitation email...');
-    const redirectUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/complete-registration?alias=${encodeURIComponent(alias)}`;
+    const redirectUrl = `https://freeinf.org/auth/complete-registration?alias=${encodeURIComponent(alias)}`;
     
     const { data: inviteData, error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: redirectUrl,

@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         ]
       },
       checkoutOptions: {
-        redirectUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/perks?purchase_success=true&product_id=${productId}`,
+        redirectUrl: `https://freeinf.org/perks?purchase_success=true&product_id=${productId}`,
         merchantSupportEmail: process.env.MERCHANT_SUPPORT_EMAIL || userEmail
       },
       prePopulatedData: {

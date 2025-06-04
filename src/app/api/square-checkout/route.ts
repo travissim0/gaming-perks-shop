@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
             metadata: {
               userEmail: userEmail,
               inGameAlias: userAlias || '',
-              donationMessage: message || '',
+              donationMessage: message || 'Thank you for supporting Infantry Online CTF!',
               webhookSource: 'square-checkout'
             }
           }
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           userEmail: userEmail,
           inGameAlias: userAlias || '',
-          donationMessage: message || '',
+          donationMessage: message || 'Thank you for supporting Infantry Online CTF!',
           webhookSource: 'square-checkout',
           amount: amount.toString(),
           createdByWebsite: 'true'
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       },
       checkoutOptions: {
         // Redirect back to our success page immediately after payment
-        redirectUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/donate/success?payment_method=square&amount=${amount}`,
+        redirectUrl: `https://freeinf.org/donate/success?payment_method=square&amount=${amount}`,
         // Auto-accept terms to reduce clicks
         acceptedPaymentMethods: {
           applePay: true,
@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Creating Square payment link with enhanced metadata...');
     console.log('📧 User Email:', userEmail);
     console.log('👤 User Alias:', userAlias || 'None found');
+    console.log('🔗 Redirect URL:', `https://freeinf.org/donate/success?payment_method=square&amount=${amount}`);
     
     const response = await legacySquareClient.checkoutApi.createPaymentLink(checkoutRequest);
 

@@ -1573,7 +1573,7 @@ namespace InfServer.Script.GameType_CTF
                 long currentTime = Environment.TickCount;
                 if (fireDelay > 0 && (currentTime - player._lastMovement) < fireDelay)
                 {
-                    player.sendMessage(-1, "Cannot use Energizer command while switching weapons or moving.");
+                    player.sendMessage(-1, "Cannot use Energizer command while switching weapons or moving/drifting (must come to complete stop).");
                     return;
                 }
             }

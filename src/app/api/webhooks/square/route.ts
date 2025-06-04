@@ -170,11 +170,12 @@ export async function POST(request: NextRequest) {
       // Square uses HMAC-SHA256 with signature_key + notification_url + body
       // According to Square docs, the signature is calculated as:
       // HMAC-SHA256(signature_key, notification_url + request_body)
+      // Square sends signatures in base64 format
       const url = request.url;
       const hash = crypto
         .createHmac('sha256', SQUARE_WEBHOOK_SIGNATURE_KEY)
         .update(url + body)
-        .digest('hex');
+        .digest('base64');
 
       if (signature !== hash) {
         console.error('❌ Square webhook signature verification failed');
