@@ -1445,29 +1445,185 @@ namespace InfServer.Script.GameType_CTF
                 }
             }
         }
-
-private void CheckSUTVictory()
-{
-    foreach (Team team in arena.Teams)
-    {
-        if (team._currentGameKills >= 50)
+        private void CheckSUTVictory()
         {
-            arena.sendArenaMessage(string.Format("{0} has won the SUT event with {1} kills!", team._name, team._currentGameKills));
-
-            // Launch fireworks for all players on the winning team
-            foreach (Player player in team.ActivePlayers)
+            foreach (Team team in arena.Teams)
             {
-                LaunchFireworks(player);
+                if (team._currentGameKills >= 50)
+                {
+                    arena.sendArenaMessage(string.Format("{0} has won the SUT event with {1} kills!", team._name, team._currentGameKills));
+
+                    // Launch fireworks for all players on the winning team
+                    foreach (Player player in team.ActivePlayers)
+                    {
+                        LaunchFireworks(player);
+                    }
+
+                    EndEvent();
+                    return;
+                }
+            }
+        }
+
+        private Dictionary<int, long> stimPackCooldowns = new Dictionary<int, long>();
+        private Dictionary<int, long> energizerCooldowns = new Dictionary<int, long>();
+        private const int STIM_PACK_COOLDOWN_MS = 1000; // 1 second cooldown
+        private const int ENERGIZER_COOLDOWN_MS = 1000; // 1 second cooldown
+
+        private void UseStimPack(Player player)
+        {
+            // Check if player is on terrains 1-4
+            int terrainID = player._arena.getTerrainID(player._state.positionX, player._state.positionY);
+            if (terrainID >= 1 && terrainID <= 4)
+            {
+                player.sendMessage(-1, "Cannot use Stim Pack on this terrain.");
+                return;
             }
 
-            EndEvent();
-            return;
+            // Check cooldown
+            if (stimPackCooldowns.ContainsKey(player._id))
+            {
+                long lastUseTime = stimPackCooldowns[player._id];
+                if (Environment.TickCount - lastUseTime < STIM_PACK_COOLDOWN_MS)
+                {
+                    player.sendMessage(-1, "Stim Pack is still on cooldown.");
+                    return;
+                }
+            }
+
+            // Get the stim pack item info from asset manager
+            ItemInfo.RepairItem stimPack = AssetManager.Manager.getItemByName("Stim Pack") as ItemInfo.RepairItem;
+            if (stimPack != null)
+            {
+                // Check if player has stim pack in inventory
+                if (player.getInventoryAmount(stimPack.id) > 0)
+                {
+                    // Create and send reload packet
+                    SC_ItemReload reloadPacket = new SC_ItemReload
+                    {
+                        itemID = (short)stimPack.id
+                    };
+                    player._client.sendReliable(reloadPacket);
+
+                    // Trigger item use animation
+                    Helpers.Player_RouteItemUsed(player, player, player._id, (short)stimPack.id, 
+                        player._state.positionX, player._state.positionY, (byte)player._state.yaw);
+
+                    //Remove item from players inventory
+                    player.inventoryModify(stimPack.id, -1);
+                    // Sync player state
+                    player.syncState();
+
+                    // Update cooldown
+                    stimPackCooldowns[player._id] = Environment.TickCount;
+                }
+                else
+                {
+                    //player.sendMessage(-1, "You don't have any stim packs in your inventory.");
+                }
+            }
         }
-    }
-}
 
+        private void UseEnergizer(Player player)
+        {
+            // Check if player is on terrains 1-4
+            int terrainID = player._arena.getTerrainID(player._state.positionX, player._state.positionY);
+            if (terrainID >= 1 && terrainID <= 4)
+            {
+                player.sendMessage(-1, "Cannot use Energizer on this terrain.");
+                return;
+            }
 
+            // Check if player is in weapon switch animation
+            ItemInfo item = AssetManager.Manager.getItemByID(player._lastItemUseID);
+            if (item != null)
+            {
+                int fireDelay = 0;
+                
+                if (item is ItemInfo.ControlItem)
+                {
+                    fireDelay = ((ItemInfo.ControlItem)item).fireDelayOther * 10; // Convert to milliseconds
+                }
+                else if (item is ItemInfo.ItemMaker)
+                {
+                    fireDelay = ((ItemInfo.ItemMaker)item).fireDelayOther * 10;
+                }
+                else if (item is ItemInfo.MultiUse)
+                {
+                    fireDelay = ((ItemInfo.MultiUse)item).fireDelayOther * 10;
+                }
+                else if (item is ItemInfo.Projectile)
+                {
+                    fireDelay = ((ItemInfo.Projectile)item).fireDelayOther * 10;
+                }
+                else if (item is ItemInfo.RepairItem)
+                {
+                    fireDelay = ((ItemInfo.RepairItem)item).fireDelayOther * 10;
+                }
+                else if (item is ItemInfo.VehicleMaker)
+                {
+                    fireDelay = ((ItemInfo.VehicleMaker)item).fireDelayOther * 10;
+                }
+                else if (item is ItemInfo.WarpItem)
+                {
+                    fireDelay = ((ItemInfo.WarpItem)item).fireDelayOther * 10;
+                }
 
+                // Check if enough time has passed since last weapon use
+                long currentTime = Environment.TickCount;
+                if (fireDelay > 0 && (currentTime - player._lastMovement) < fireDelay)
+                {
+                    player.sendMessage(-1, "Cannot use Energizer command while switching weapons or moving.");
+                    return;
+                }
+            }
+
+            // Check cooldown
+            if (energizerCooldowns.ContainsKey(player._id))
+            {
+                long lastUseTime = energizerCooldowns[player._id];
+                if (Environment.TickCount - lastUseTime < ENERGIZER_COOLDOWN_MS)
+                {
+                    player.sendMessage(-1, "Energizer is still on cooldown.");
+                    return;
+                }
+            }
+
+            // Get the energizer item info from asset manager
+            ItemInfo.RepairItem energizer = AssetManager.Manager.getItemByName("Energizer") as ItemInfo.RepairItem;
+            if (energizer != null)
+            {
+                // Check if player has energizer in inventory
+                if (player.getInventoryAmount(energizer.id) > 0)
+                {
+                    // Create and send reload packet
+                    SC_ItemReload reloadPacket = new SC_ItemReload
+                    {
+                        itemID = (short)energizer.id
+                    };
+                    player._client.sendReliable(reloadPacket);
+
+                    // Trigger item use animation
+                    Helpers.Player_RouteItemUsed(player, player, player._id, (short)energizer.id, 
+                        player._state.positionX, player._state.positionY, (byte)player._state.yaw);
+
+                    // Set the players energy instead. Get their current energy first, then add onto it.
+                    // short currentEnergy = player._state.energy;
+                    // short newEnergy = (short)Math.Min(1000, currentEnergy + 0);
+                    // player.setEnergy(newEnergy);
+
+                    //Remove item from players inventory
+                    player.inventoryModify(energizer.id, -1);
+                    // Sync player state
+                    player.syncState();
+
+                    // Update cooldown
+                    energizerCooldowns[player._id] = Environment.TickCount;
+                }
+            }
+        }
+
+        
 
 
 
@@ -4498,32 +4654,48 @@ private void SpawnVehicle(string side, string location)
             // Define the fixed drop locations relative to flag A7
             List<Tuple<short, short>> dropLocations = new List<Tuple<short, short>>
             {
+                // A7 base locations
                 new Tuple<short, short>((short)(24 * 16), (short)(445 * 16)),
                 new Tuple<short, short>((short)(37 * 16), (short)(445 * 16)), 
                 new Tuple<short, short>((short)(48 * 16), (short)(445 * 16)),
-                new Tuple<short, short>((short)(26 * 16), (short)(456 * 16))
+                new Tuple<short, short>((short)(26 * 16), (short)(456 * 16)),
+                new Tuple<short, short>((short)(13 * 16), (short)(444 * 16)),
+
+                // D7 base locations 
+                new Tuple<short, short>((short)(275 * 16), (short)(495 * 16)),
+                new Tuple<short, short>((short)(279 * 16), (short)(492 * 16)),
+                new Tuple<short, short>((short)(286 * 16), (short)(487 * 16)),
+                new Tuple<short, short>((short)(289 * 16), (short)(494 * 16)),
+                new Tuple<short, short>((short)(284 * 16), (short)(498 * 16)),
+
+                // F5 base locations
+                new Tuple<short, short>((short)(414 * 16), (short)(375 * 16)),
+                new Tuple<short, short>((short)(410 * 16), (short)(380 * 16)),
+                new Tuple<short, short>((short)(398 * 16), (short)(380 * 16)),
+                new Tuple<short, short>((short)(407 * 16), (short)(387 * 16)),
+                new Tuple<short, short>((short)(419 * 16), (short)(386 * 16)),
+
+                // F6 base locations
+                new Tuple<short, short>((short)(445 * 16), (short)(462 * 16)),
+                new Tuple<short, short>((short)(435 * 16), (short)(462 * 16)),
+                new Tuple<short, short>((short)(453 * 16), (short)(468 * 16)),
+                new Tuple<short, short>((short)(453 * 16), (short)(474 * 16)),
+                new Tuple<short, short>((short)(459 * 16), (short)(454 * 16)),
+
+                // A5 base locations
+                new Tuple<short, short>((short)(39 * 16), (short)(374 * 16)),
+                new Tuple<short, short>((short)(42 * 16), (short)(365 * 16)),
+                new Tuple<short, short>((short)(55 * 16), (short)(375 * 16)),
+                new Tuple<short, short>((short)(65 * 16), (short)(375 * 16)),
+                new Tuple<short, short>((short)(56 * 16), (short)(369 * 16)),
+
+                // B8 base locations
+                new Tuple<short, short>((short)(149 * 16), (short)(607 * 16)),
+                new Tuple<short, short>((short)(149 * 16), (short)(596 * 16)), 
+                new Tuple<short, short>((short)(139 * 16), (short)(586 * 16)),
+                new Tuple<short, short>((short)(158 * 16), (short)(597 * 16)),
+                new Tuple<short, short>((short)(159 * 16), (short)(604 * 16))
             };
-
-            // Check if flag A7 is in the correct position using the defined bounds
-            bool flagInPosition = false;
-            foreach (var flag in _flags)
-            {
-                // Check if flag is in A7 base area
-                if (flag.posX >= 3 * 16 && flag.posX <= 73 * 16 &&
-                    flag.posY >= 432 * 16 && flag.posY <= 514 * 16)
-                {
-                    flagInPosition = true;
-                    arena.sendArenaMessage("A7 flag detected in correct position");
-                    break;
-                }
-                else
-                {
-                    arena.sendArenaMessage(string.Format("Flag not in A7 position. Current coordinates: ({0}, {1})", flag.posX/16, flag.posY/16));
-                }
-            }
-
-            if (!flagInPosition)
-                return;
 
             // Define item types and their max quantities
             Dictionary<string, int> itemMaxQuantities = new Dictionary<string, int>
@@ -4540,61 +4712,62 @@ private void SpawnVehicle(string side, string location)
                 {"sentry", 1}
             };
 
-            // For each drop location
-            foreach (var location in dropLocations)
+            foreach (var flag in _flags)
             {
-                short xOffset = 0;
-                // For each item type
-                foreach (var itemEntry in itemMaxQuantities)
+                List<Tuple<short, short>> selectedLocations = null;
+
+                // Check which base area the flag is in and select corresponding drop locations
+                if (flag.posX >= 3 * 16 && flag.posX <= 73 * 16 && flag.posY >= 432 * 16 && flag.posY <= 514 * 16)
                 {
-                    string itemName = itemEntry.Key;
-                    int maxQuantity = itemEntry.Value;
+                    selectedLocations = dropLocations.Take(5).ToList(); // A7 locations
+                }
+                else if (flag.posX >= 255 * 16 && flag.posX <= 324 * 16 && flag.posY >= 419 * 16 && flag.posY <= 506 * 16)
+                {
+                    selectedLocations = dropLocations.Skip(5).Take(5).ToList(); // D7 locations
+                }
+                else if (flag.posX >= 368 * 16 && flag.posX <= 434 * 16 && flag.posY >= 321 * 16 && flag.posY <= 399 * 16)
+                {
+                    selectedLocations = dropLocations.Skip(10).Take(5).ToList(); // F5 locations
+                }
+                else if (flag.posX >= 379 * 16 && flag.posX <= 479 * 16 && flag.posY >= 439 * 16 && flag.posY <= 508 * 16)
+                {
+                    selectedLocations = dropLocations.Skip(15).Take(5).ToList(); // F6 locations
+                }
+                else if (flag.posX >= 3 * 16 && flag.posX <= 76 * 16 && flag.posY >= 315 * 16 && flag.posY <= 385 * 16)
+                {
+                    selectedLocations = dropLocations.Skip(20).Take(5).ToList(); // A5 locations
+                }
+                else if (flag.posX >= 128 * 16 && flag.posX <= 212 * 16 && flag.posY >= 556 * 16 && flag.posY <= 628 * 16)
+                {
+                    selectedLocations = dropLocations.Skip(25).Take(5).ToList(); // B8 locations
+                }
 
-                    // Calculate the actual x position based on spreadItems parameter
-                    short actualX = spreadItems ? (short)(location.Item1 + (xOffset * 16)) : location.Item1;
-
-                    // Find existing drops of this item type at this location
-                    var existingDrops = arena._items.Values
-                        .Where(item => item.item.name.Equals(itemName, StringComparison.OrdinalIgnoreCase) &&
-                                     item.positionX == actualX &&
-                                     item.positionY == location.Item2)
-                        .ToList();
-
-                    if (existingDrops.Any())
+                if (selectedLocations != null)
+                {
+                    foreach (var location in selectedLocations)
                     {
-                        // Get total quantity of this item type at this location
-                        int totalQuantity = existingDrops.Sum(drop => drop.quantity);
-
-                        if (totalQuantity < maxQuantity)
+                        short xOffset = 0;
+                        foreach (var itemEntry in itemMaxQuantities)
                         {
-                            // Only spawn the difference needed to reach max
-                            int quantityNeeded = maxQuantity - totalQuantity;
-                            if (quantityNeeded > 0)
+                            string itemName = itemEntry.Key;
+                            int maxQuantity = itemEntry.Value;
+
+                            short actualX = spreadItems ? (short)(location.Item1 + (xOffset * 16)) : location.Item1;
+
+                            arena.itemSpawn(arena._server._assets.getItemByName(itemName),
+                                          (ushort)maxQuantity,
+                                          actualX,
+                                          location.Item2,
+                                          0,
+                                          null);
+
+                            if (spreadItems)
                             {
-                                arena.itemSpawn(arena._server._assets.getItemByName(itemName),
-                                              (ushort)quantityNeeded,
-                                              actualX,
-                                              location.Item2,
-                                              0,
-                                              null);
+                                xOffset++;
                             }
                         }
                     }
-                    else
-                    {
-                        // No existing drops of this type at this location, create new
-                        arena.itemSpawn(arena._server._assets.getItemByName(itemName),
-                                      (ushort)maxQuantity,
-                                      actualX,
-                                      location.Item2,
-                                      0,
-                                      null);
-                    }
-
-                    if (spreadItems)
-                    {
-                        xOffset++; // Increment x offset for next item
-                    }
+                    break; // Exit after spawning for the first valid flag location
                 }
             }
         }
@@ -5721,7 +5894,7 @@ private Player FindPlayerByAlias(string alias)
             /// </summary>
             /// <param name="player">The player issuing the command.</param>
             /// <param name="skillName">The input string after the ?swap command.</param>
-            public void HandleSwapCommand(Player player, string skillName, CfgInfo CFG, Script_CTF script, bool force = false)
+            public void HandleSwapCommand(Player player, string skillName, CfgInfo CFG, Script_CTF script, bool force = false, bool ignoreEnergy = false)
             {
                 if (!force && player.IsDead)
                 {
@@ -5779,7 +5952,7 @@ private Player FindPlayerByAlias(string alias)
                 int energyNeeded = 500;
 
                 // Check if the player has enough energy to change the skill
-                if (player._state.energy < energyNeeded)
+                if (!ignoreEnergy && player._state.energy < energyNeeded)
                 {
                     player.sendMessage(-1, string.Format("*You need {0} energy to change your skill. Current energy: {1}.", energyNeeded, player._state.energy));
                     return;
@@ -5879,7 +6052,10 @@ private Player FindPlayerByAlias(string alias)
                 }
 
                 // Deduct the energy required for the skill change
-                player._state.energy -= (short)energyNeeded; // Deduct and cast to short to match expected type
+                if (!ignoreEnergy)
+                {
+                    player._state.energy -= (short)energyNeeded; // Deduct and cast to short to match expected type
+                }
 
                 // Synchronize player state to reflect the new skill and vehicle
                 // Reset the players warp, but keep their position
@@ -8283,7 +8459,7 @@ private Player FindPlayerByAlias(string alias)
             if (queuedClassSwap.ContainsKey(player))
             {
                 string skillName = queuedClassSwap[player];
-                commandHandler.HandleSwapCommand(player, skillName, CFG, this, true);
+                commandHandler.HandleSwapCommand(player, skillName, CFG, this, true, true);
                 queuedClassSwap.Remove(player);
                 player.sendMessage(0, string.Format("Your class has been changed to: {0}", skillName));
             }
@@ -9646,6 +9822,7 @@ private Player FindPlayerByAlias(string alias)
                 }
                 _lastgamePlayerWeaponStats[playerEntry.Key] = weaponCopy;
             }
+            _averageItemsUsedPerDeath.Clear();
             _playerWeaponStats.Clear();
             _ebHitStats.Clear();
             minedStats.Clear();
@@ -9801,6 +9978,44 @@ private Player FindPlayerByAlias(string alias)
             data.Kills++;
             data.PlayersKilled.Add(victim._id);
 
+            int fragCount = victim.getInventoryAmount(1011);
+            int wpCount = victim.getInventoryAmount(1176);
+            int repCoilCount = victim.getInventoryAmount(2011);
+            int repChargeCount = victim.getInventoryAmount(1049);
+            int energizerCount = victim.getInventoryAmount(15);
+            int stimCount = victim.getInventoryAmount(47);
+
+            // Update average items used per death for this player
+            if (!_averageItemsUsedPerDeath.ContainsKey(victim._alias))
+            {
+                _averageItemsUsedPerDeath[victim._alias] = new Dictionary<string, double>()
+                {
+                    {"Frag", fragCount},
+                    {"WP", wpCount}, 
+                    {"RepCoil", repCoilCount},
+                    {"RepCharge", repChargeCount},
+                    {"Energizer", energizerCount},
+                    {"Stim", stimCount}
+                };
+            }
+            else
+            {
+                var playerStats = _averageItemsUsedPerDeath[victim._alias];
+                playerStats["Frag"] = (playerStats["Frag"] + fragCount) / 2;
+                playerStats["WP"] = (playerStats["WP"] + wpCount) / 2;
+                playerStats["RepCoil"] = (playerStats["RepCoil"] + repCoilCount) / 2;
+                playerStats["RepCharge"] = (playerStats["RepCharge"] + repChargeCount) / 2;
+                playerStats["Energizer"] = (playerStats["Energizer"] + energizerCount) / 2;
+                playerStats["Stim"] = (playerStats["Stim"] + stimCount) / 2;
+            }
+
+            // arena message calling out the player for dying to the turret by humiliating them.
+            // Send a humiliating message about dying to a turret
+            if (turretType == "Auto Turret-Rocket"){
+                string message = string.Format("&WOW! {0} just got destroyed by a {1} turret! How embarrassing!", victim._alias, turretType);
+                arena.sendArenaMessage(message, 4);
+            }
+
             return true;
         }
 
@@ -9874,6 +10089,9 @@ private Player FindPlayerByAlias(string alias)
             });
         }
 
+        // Arena boolean if ?energizer command is useable or not, starts disabled
+        private bool _energizerCommandEnabled = false;
+
         /// <summary>
         /// Called when a player sends a chat command
         /// </summary>
@@ -9893,7 +10111,16 @@ private Player FindPlayerByAlias(string alias)
                 //     };
                 //     player._client.sendReliable(pkt);
                 //     break;
-
+                case "stim":
+                    UseStimPack(player);
+                    break;
+                case "energizer":
+                    if (!_energizerCommandEnabled){
+                        player.sendMessage(0, "Energizer command is currently disabled.");
+                        break;
+                    }
+                    UseEnergizer(player);
+                    break;
                 case "register":
                     InGameRegistration.HandleRegisterCommand(player, command, payload);
                     break;
@@ -9905,6 +10132,9 @@ private Player FindPlayerByAlias(string alias)
                     break;
                 case "stats":
                     ListPlayerWeaponStats(player, payload);
+                    break;
+                case "itemusage":
+                    ListPlayerItemUsedAverage(player, payload);
                     break;
                 case "playing":
                 case "p": // Alias for playing
@@ -9951,7 +10181,7 @@ private Player FindPlayerByAlias(string alias)
                     }
                     else
                     {
-                        commandHandler.HandleSwapCommand(player, payload, CFG, this);
+                        commandHandler.HandleSwapCommand(player, payload, CFG, this, true, false);
                         // If MiniTP event, warp player to dropship based on team on.
                         if (currentEventType == EventType.MiniTP){
                             if (player._team._name.Contains("Titan")) {
@@ -10246,6 +10476,66 @@ private Player FindPlayerByAlias(string alias)
                     {
                         requestingPlayer.sendMessage(0, string.Format("No current game stats found for player '{0}'", alias));
                     }
+                }
+                else
+                {
+                    requestingPlayer.sendMessage(0, string.Format("No stats found for player '{0}'", alias));
+                }
+            }
+        }
+
+        private void ListPlayerItemUsedAverage(Player requestingPlayer, string alias = null)
+        {
+            if (string.IsNullOrEmpty(alias))
+            {
+                requestingPlayer.sendMessage(0, "#Average Resources Left Rankings");
+
+                // Calculate explosive and resource totals per player
+                var playerTotals = _averageItemsUsedPerDeath.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => new {
+                        Name = kvp.Key,
+                        ExplosivesLeft = (int)(kvp.Value["Frag"] + kvp.Value["WP"]),
+                        ResourcesLeft = (int)(kvp.Value["RepCoil"] + kvp.Value["RepCharge"] + 
+                                    kvp.Value["Energizer"] + kvp.Value["Stim"])
+                    }
+                );
+
+                // Sort and display explosive rankings (lower is better)
+                requestingPlayer.sendMessage(0, "*Top Explosive Users (Average Frags + WP left per death):");
+                var explosiveRankings = playerTotals.OrderBy(p => p.Value.ExplosivesLeft).Take(5);
+                foreach (var player in explosiveRankings)
+                {
+                    requestingPlayer.sendMessage(0, string.Format("{0} - {1:F1}", 
+                        player.Key, player.Value.ExplosivesLeft));
+                }
+
+                // Sort and display resource rankings (lower is better)
+                requestingPlayer.sendMessage(0, "*Top Resource Users (Average Repcoil, charge, stim, gizer left per death - 7/7 max):");
+                var resourceRankings = playerTotals.OrderBy(p => p.Value.ResourcesLeft).Take(5);
+                foreach (var player in resourceRankings)
+                {
+                    requestingPlayer.sendMessage(0, string.Format("{0} - {1:F1}", 
+                        player.Key, player.Value.ResourcesLeft));
+                }
+            }
+            else
+            {
+                // Show specific player stats
+                if (_averageItemsUsedPerDeath.ContainsKey(alias))
+                {
+                    var stats = _averageItemsUsedPerDeath[alias];
+                    requestingPlayer.sendMessage(0, string.Format("#{0}'s Resources Left Per Death:", alias));
+                    
+                    requestingPlayer.sendMessage(0, "*Explosives Left:");
+                    requestingPlayer.sendMessage(0, string.Format("  Frags: {0:F1}", (int)stats["Frag"]));
+                    requestingPlayer.sendMessage(0, string.Format("  WPs: {0:F1}", (int)stats["WP"]));
+                    
+                    requestingPlayer.sendMessage(0, "*Resources Left:");
+                    requestingPlayer.sendMessage(0, string.Format("  Repulsor Coils: {0:F1}", (int)stats["RepCoil"]));
+                    requestingPlayer.sendMessage(0, string.Format("  Repulsor Charge: {0:F1}", (int)stats["RepCharge"]));
+                    requestingPlayer.sendMessage(0, string.Format("  Energizers: {0:F1}", (int)stats["Energizer"]));
+                    requestingPlayer.sendMessage(0, string.Format("  Stims: {0:F1}", (int)stats["Stim"]));
                 }
                 else
                 {
@@ -11209,6 +11499,9 @@ private Player FindPlayerByAlias(string alias)
             return true; 
         }
 
+        //Dictionary to store average items used per death per player.
+        private Dictionary<string, Dictionary<string, double>> _averageItemsUsedPerDeath = new Dictionary<string, Dictionary<string, double>>();
+
         /// <summary>
         /// Triggered when a player has died, by any means
         /// </summary>
@@ -11287,6 +11580,38 @@ private Player FindPlayerByAlias(string alias)
             //         }
             //     }
             // }
+
+            // Track items used before death
+            int fragCount = victim.getInventoryAmount(1011);
+            int wpCount = victim.getInventoryAmount(1176);
+            int repCoilCount = victim.getInventoryAmount(2011);
+            int repChargeCount = victim.getInventoryAmount(1049);
+            int energizerCount = victim.getInventoryAmount(15);
+            int stimCount = victim.getInventoryAmount(47);
+
+            // Update average items used per death for this player
+            if (!_averageItemsUsedPerDeath.ContainsKey(victim._alias))
+            {
+                _averageItemsUsedPerDeath[victim._alias] = new Dictionary<string, double>()
+                {
+                    {"Frag", fragCount},
+                    {"WP", wpCount}, 
+                    {"RepCoil", repCoilCount},
+                    {"RepCharge", repChargeCount},
+                    {"Energizer", energizerCount},
+                    {"Stim", stimCount}
+                };
+            }
+            else
+            {
+                var playerStats = _averageItemsUsedPerDeath[victim._alias];
+                playerStats["Frag"] = (playerStats["Frag"] + fragCount) / 2;
+                playerStats["WP"] = (playerStats["WP"] + wpCount) / 2;
+                playerStats["RepCoil"] = (playerStats["RepCoil"] + repCoilCount) / 2;
+                playerStats["RepCharge"] = (playerStats["RepCharge"] + repChargeCount) / 2;
+                playerStats["Energizer"] = (playerStats["Energizer"] + energizerCount) / 2;
+                playerStats["Stim"] = (playerStats["Stim"] + stimCount) / 2;
+            }
 
             string victimSkill = GetPrimarySkillName(victim);
 
@@ -11800,6 +12125,12 @@ private Player FindPlayerByAlias(string alias)
                 
             //     return false; // Return false to prevent other handlers from processing
                 // }
+
+            // Toggle Enable/Disable of energizer command
+            if (command.ToLower() == "togglegizer"){
+                _energizerCommandEnabled = !_energizerCommandEnabled;
+                return true;
+            }
 
             // Test phrase instead of testupload
 
@@ -12521,20 +12852,20 @@ private Player FindPlayerByAlias(string alias)
                 is5v5 = true;
                 Base defense = bases[payload.ToUpper()];
 
-                arena.itemSpawn(arena._server._assets.getItemByName("Fuel Canister"), 600, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Ammo MG"), 1250, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Light HE"), 250, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Heavy HE"), 100, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Ammo Pistol"), 2500, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Fuel Canister"), 600, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Ammo MG"), 1250, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Light HE"), 250, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Heavy HE"), 100, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Ammo Pistol"), 2500, defense.x, defense.y, 0, null);
 
-                arena.itemSpawn(arena._server._assets.getItemByName("AP Mine"), 25, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Plasma Mine"), 25, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("Bullet Mine"), 100, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("AP Mine"), 25, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Plasma Mine"), 25, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("Bullet Mine"), 100, defense.x, defense.y, 0, null);
 
-                arena.itemSpawn(arena._server._assets.getItemByName("rocket"), 200, defense.x, defense.y, 0, null);
-                arena.itemSpawn(arena._server._assets.getItemByName("tranq"), 50, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("rocket"), 200, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("tranq"), 50, defense.x, defense.y, 0, null);
 
-                arena.itemSpawn(arena._server._assets.getItemByName("sentry"), 5, defense.x, defense.y, 0, null);
+                // arena.itemSpawn(arena._server._assets.getItemByName("sentry"), 5, defense.x, defense.y, 0, null);
 
                 arena.itemSpawn(arena._server._assets.getItemByID(2005), 150, defense.x, defense.y, 100, null);
                 arena.itemSpawn(arena._server._assets.getItemByID(2009), 150, defense.x, defense.y, 100, null);
@@ -12594,8 +12925,9 @@ private Player FindPlayerByAlias(string alias)
                 Helpers.Object_Flags(arena.Players, flag);
                 //Store the base used in a global variable
                 baseUsed = payload.ToUpper();
+                ManageFixedDropLocations();
                 WebIntegration.SendGameDataToWebsite(arena, baseUsed);
-                arena.sendArenaMessage(String.Format("&Minerals, flag, and auto-kits dropped at {0}", payload.ToUpper()));
+                arena.sendArenaMessage(String.Format("&Minerals, flag, and drops spawned at {0}", payload.ToUpper()));
                 return true;
             }
             // Trigger command overtime or ot with optional minutes parameter

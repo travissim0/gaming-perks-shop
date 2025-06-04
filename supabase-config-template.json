@@ -1,0 +1,10 @@
+{
+  "supabase": {
+    "url": "https://your-project.supabase.co",
+    "anon_key": "your_anon_key_here",
+    "service_role_key": "your_service_role_key_here"
+  },
+  "api": {
+    "phrases_endpoint": "/rest/v1/rpc/get_simple_player_phrases"
+  }
+} 

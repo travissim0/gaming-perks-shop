@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { legacySquareClient } from '@/lib/square';
 import { randomUUID } from 'crypto';
+import { createClient } from '@supabase/supabase-js';
+
+// Use service role client to get user profile info
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +19,25 @@ export async function POST(request: NextRequest) {
 
     if (!userEmail) {
       return NextResponse.json({ error: 'User email required' }, { status: 400 });
+    }
+
+    console.log('🔄 Creating Square checkout for:', userEmail);
+
+    // Try to get user's in_game_alias for better tracking
+    let userAlias = null;
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('in_game_alias')
+        .eq('email', userEmail)
+        .single();
+      
+      if (profile?.in_game_alias) {
+        userAlias = profile.in_game_alias;
+        console.log('👤 Found user alias:', userAlias);
+      }
+    } catch (error) {
+      console.log('No profile found for email, will use email only');
     }
 
     // Convert amount to cents (Square uses base currency units)
@@ -29,7 +55,7 @@ export async function POST(request: NextRequest) {
       `Donation: ${message}` : 
       `Thank you for supporting the Infantry Online CTF community!`;
 
-    // Create checkout request with optimized settings
+    // Create checkout request with enhanced metadata for webhook
     const checkoutRequest = {
       idempotencyKey,
       order: {
@@ -42,9 +68,25 @@ export async function POST(request: NextRequest) {
               amount: BigInt(amountInCents),
               currency: 'USD'
             },
-            note: donationNote
+            note: donationNote,
+            // Try to embed user info in metadata that the webhook can access
+            metadata: {
+              userEmail: userEmail,
+              inGameAlias: userAlias || '',
+              donationMessage: message || '',
+              webhookSource: 'square-checkout'
+            }
           }
-        ]
+        ],
+        // Also add metadata at order level
+        metadata: {
+          userEmail: userEmail,
+          inGameAlias: userAlias || '',
+          donationMessage: message || '',
+          webhookSource: 'square-checkout',
+          amount: amount.toString(),
+          createdByWebsite: 'true'
+        }
       },
       checkoutOptions: {
         // Redirect back to our success page immediately after payment
@@ -67,7 +109,10 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    console.log('🔄 Creating Square payment link...');
+    console.log('🔄 Creating Square payment link with enhanced metadata...');
+    console.log('📧 User Email:', userEmail);
+    console.log('👤 User Alias:', userAlias || 'None found');
+    
     const response = await legacySquareClient.checkoutApi.createPaymentLink(checkoutRequest);
 
     if (!response.result || !response.result.paymentLink?.url) {
@@ -76,9 +121,13 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Square payment link created successfully');
+    console.log('🔗 Order ID:', response.result.paymentLink.orderId);
+    
     return NextResponse.json({
       checkoutUrl: response.result.paymentLink.url,
-      orderId: response.result.paymentLink.orderId
+      orderId: response.result.paymentLink.orderId,
+      userEmail: userEmail,
+      userAlias: userAlias
     });
 
   } catch (error: any) {

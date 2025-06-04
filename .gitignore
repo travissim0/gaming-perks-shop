@@ -40,6 +40,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Configuration files with sensitive data
+supabase-config.json
+*-config.json
+*.config.json
+
 # Large directories that shouldn't be in git
 node_modules/
 .next/
