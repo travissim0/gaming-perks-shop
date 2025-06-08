@@ -17,6 +17,7 @@ export interface Product {
   active: boolean;
   phrase?: string;
   customizable?: boolean;
+  kofi_direct_link_code?: string; // Ko-fi shop item direct link code
   createdAt: string;
   updatedAt: string;
 }

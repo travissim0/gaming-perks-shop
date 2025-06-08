@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import MatchVideoManager from '@/components/MatchVideoManager';
+import GameStatsViewer from '@/components/GameStatsViewer';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'react-hot-toast';
@@ -434,6 +435,15 @@ export default function MatchDetailPage() {
               <div className="text-gray-600 text-sm mt-1">Be the first to join this match!</div>
             </div>
           )}
+        </div>
+
+        {/* Game Statistics */}
+        <div className="mt-8">
+          <GameStatsViewer 
+            matchId={match.id} 
+            matchTitle={match.title} 
+            matchStatus={match.status}
+          />
         </div>
 
         {/* Match Video Manager */}

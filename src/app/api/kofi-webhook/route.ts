@@ -26,7 +26,13 @@ interface KofiWebhookData {
   is_subscription_payment: boolean;
   is_first_subscription_payment: boolean;
   kofi_transaction_id: string;
-  shop_items?: any[];
+  shop_items?: {
+    direct_link_code: string;
+    variation_name?: string;
+    quantity: number;
+  }[];
+  tier_name?: string;
+  shipping?: any;
 }
 
 export async function POST(request: NextRequest) {
@@ -61,14 +67,16 @@ export async function POST(request: NextRequest) {
 
     // Verify the webhook (if verification token is set)
     if (KOFI_VERIFICATION_TOKEN && kofiData.verification_token !== KOFI_VERIFICATION_TOKEN) {
-      console.error('❌ Ko-fi webhook verification failed');
+      console.error('❌ Ko-fi webhook verification failed - Expected:', KOFI_VERIFICATION_TOKEN, 'Got:', kofiData.verification_token);
       return NextResponse.json({ error: 'Verification failed' }, { status: 401 });
     }
+    
+    console.log('✅ Ko-fi webhook verification passed');
 
-    // Only process donation types
-    if (kofiData.type !== 'Donation' && kofiData.type !== 'Subscription') {
-      console.log('ℹ️ Ignoring non-donation Ko-fi webhook type:', kofiData.type);
-      return NextResponse.json({ message: 'Non-donation type ignored' });
+    // Process donations, subscriptions, and shop orders
+    if (!['Donation', 'Subscription', 'Shop Order'].includes(kofiData.type)) {
+      console.log('ℹ️ Ignoring Ko-fi webhook type:', kofiData.type);
+      return NextResponse.json({ message: 'Unsupported type ignored' });
     }
 
     // Convert amount to cents
@@ -136,12 +144,84 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Ko-fi donation saved successfully:', donation.id);
 
+    // Process shop items if this is a shop order
+    let processedItems = [];
+    if (kofiData.type === 'Shop Order' && kofiData.shop_items && kofiData.shop_items.length > 0) {
+      console.log('🛒 Processing shop order with items:', kofiData.shop_items);
+
+      for (const item of kofiData.shop_items) {
+        try {
+          // Find product by direct_link_code (we'll need to add this field to products table)
+          const { data: product } = await supabaseAdmin
+            .from('products')
+            .select('*')
+            .eq('kofi_direct_link_code', item.direct_link_code)
+            .single();
+
+          if (product && userId) {
+            // Create user_product entry automatically
+            // Clean and validate phrase
+            let cleanPhrase = null;
+            if (item.variation_name && item.variation_name.trim()) {
+              // Remove any characters not allowed by the constraint
+              cleanPhrase = item.variation_name.trim().replace(/[^a-zA-Z0-9 !?._-]/g, '');
+              // Limit to 12 characters max
+              if (cleanPhrase.length > 12) {
+                cleanPhrase = cleanPhrase.substring(0, 12);
+              }
+              // If it becomes empty after cleaning, set to null
+              if (cleanPhrase.length === 0) {
+                cleanPhrase = null;
+              }
+            }
+
+            console.log('🔤 Processing phrase:', item.variation_name, '→', cleanPhrase);
+
+            const { data: userProduct, error: productError } = await supabaseAdmin
+              .from('user_products')
+              .insert({
+                user_id: userId,
+                product_id: product.id,
+                phrase: cleanPhrase,
+                status: 'active',
+                purchase_method: 'kofi',
+                created_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (productError) {
+              console.error('❌ Error creating user product:', productError);
+              console.error('Purchase creation error:', {
+                userId,
+                productId: product.id,
+                phrase: cleanPhrase,
+                variation_name: item.variation_name
+              });
+            } else {
+              console.log('✅ User product created:', userProduct.id);
+              processedItems.push({
+                product_name: product.name,
+                variation: item.variation_name,
+                user_product_id: userProduct.id
+              });
+            }
+          } else {
+            console.warn('⚠️ Product not found for direct_link_code:', item.direct_link_code);
+          }
+        } catch (error) {
+          console.error('❌ Error processing shop item:', error);
+        }
+      }
+    }
+
     // Return success response
     return NextResponse.json({ 
-      message: 'Ko-fi donation processed successfully',
+      message: kofiData.type === 'Shop Order' ? 'Ko-fi shop order processed successfully' : 'Ko-fi donation processed successfully',
       donation_id: donation.id,
       amount: amountFloat,
-      currency: kofiData.currency
+      currency: kofiData.currency,
+      processed_items: processedItems
     });
 
   } catch (error: any) {

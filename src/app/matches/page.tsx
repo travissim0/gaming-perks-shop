@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
+import { toast } from 'react-hot-toast';
 
 interface Match {
   id: string;
@@ -12,15 +13,28 @@ interface Match {
   description: string;
   scheduled_at: string;
   match_type: 'squad_vs_squad' | 'pickup' | 'tournament';
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'expired' | 'auto_logged';
+  game_mode?: string;
+  map_name?: string;
   squad_a_id?: string;
   squad_b_id?: string;
   squad_a_name?: string;
   squad_b_name?: string;
+  squad_a_score?: number;
+  squad_b_score?: number;
+  winner_name?: string;
+  winner_tag?: string;
+  game_id?: string;
+  vod_url?: string;
+  vod_title?: string;
+  actual_start_time?: string;
+  actual_end_time?: string;
+  match_notes?: string;
   created_by: string;
   created_by_alias: string;
   created_at: string;
   participants: MatchParticipant[];
+  gameStats?: any;
 }
 
 interface MatchParticipant {
@@ -45,11 +59,28 @@ interface UserSquad {
   role: string;
 }
 
+interface UnlinkedGame {
+  gameId: string;
+  gameDate: string;
+  arena: string;
+  gameMode: string;
+  totalPlayers: number;
+  teams: string[];
+}
+
 export default function MatchesPage() {
   const { user, loading } = useAuth();
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [pastMatches, setPastMatches] = useState<Match[]>([]);
-  const [isPastMatchesCollapsed, setIsPastMatchesCollapsed] = useState(true);
+  const [plannedMatches, setPlannedMatches] = useState<Match[]>([]);
+  const [expiredMatches, setExpiredMatches] = useState<Match[]>([]);
+  const [completedMatches, setCompletedMatches] = useState<Match[]>([]);
+  const [autoLoggedMatches, setAutoLoggedMatches] = useState<Match[]>([]);
+  const [unlinkedGames, setUnlinkedGames] = useState<UnlinkedGame[]>([]);
+  
+  const [isExpiredCollapsed, setIsExpiredCollapsed] = useState(true);
+  const [isCompletedCollapsed, setIsCompletedCollapsed] = useState(false);
+  const [isAutoLoggedCollapsed, setIsAutoLoggedCollapsed] = useState(false);
+  const [isUnlinkedCollapsed, setIsUnlinkedCollapsed] = useState(true);
+  
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [allSquads, setAllSquads] = useState<Squad[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -68,6 +99,17 @@ export default function MatchesPage() {
   const [matchType, setMatchType] = useState<'squad_vs_squad' | 'pickup' | 'tournament'>('pickup');
   const [selectedSquadB, setSelectedSquadB] = useState('');
 
+  // VOD management states
+  const [showVodModal, setShowVodModal] = useState(false);
+  const [vodMatchId, setVodMatchId] = useState<string>('');
+  const [vodUrl, setVodUrl] = useState('');
+  const [vodTitle, setVodTitle] = useState('');
+
+  // Game linking states
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkMatchId, setLinkMatchId] = useState<string>('');
+  const [suggestedGames, setSuggestedGames] = useState<any[]>([]);
+
   useEffect(() => {
     if (user) {
       loadInitialData();
@@ -78,13 +120,25 @@ export default function MatchesPage() {
     setDataLoading(true);
     
     const promises = [
-      fetchMatches().catch(error => {
-        console.error('Error fetching matches:', error);
-        setMatches([]);
+      fetchPlannedMatches().catch(error => {
+        console.error('Error fetching planned matches:', error);
+        setPlannedMatches([]);
       }),
-      fetchPastMatches().catch(error => {
-        console.error('Error fetching past matches:', error);
-        setPastMatches([]);
+      fetchExpiredMatches().catch(error => {
+        console.error('Error fetching expired matches:', error);
+        setExpiredMatches([]);
+      }),
+      fetchCompletedMatches().catch(error => {
+        console.error('Error fetching completed matches:', error);
+        setCompletedMatches([]);
+      }),
+      fetchAutoLoggedMatches().catch((error: any) => {
+        console.error('Error fetching auto-logged matches:', error);
+        setAutoLoggedMatches([]);
+      }),
+      fetchUnlinkedGames().catch(error => {
+        console.error('Error fetching unlinked games:', error);
+        setUnlinkedGames([]);
       }),
       fetchUserSquad().catch(error => {
         console.error('Error fetching user squad:', error);
@@ -113,32 +167,109 @@ export default function MatchesPage() {
     }
   }, [showCreateForm, scheduledDate]);
 
-  const fetchMatches = async () => {
+  const fetchPlannedMatches = async () => {
     try {
       const response = await fetch('/api/matches?status=scheduled&limit=50');
       if (response.ok) {
         const data = await response.json();
-
-        setMatches(data.matches || []);
+        setPlannedMatches(data.matches || []);
       } else {
-        console.error('Failed to fetch matches:', response.status, response.statusText);
+        console.error('Failed to fetch planned matches:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error fetching matches:', error);
+      console.error('Error fetching planned matches:', error);
     }
   };
 
-  const fetchPastMatches = async () => {
+  const fetchExpiredMatches = async () => {
     try {
-      const response = await fetch('/api/matches?status=completed,cancelled&limit=20');
+      const response = await fetch('/api/matches?status=expired&limit=20');
       if (response.ok) {
         const data = await response.json();
-        setPastMatches(data.matches || []);
+        setExpiredMatches(data.matches || []);
       } else {
-        console.error('Failed to fetch past matches:', response.status, response.statusText);
+        console.error('Failed to fetch expired matches:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error fetching past matches:', error);
+      console.error('Error fetching expired matches:', error);
+    }
+  };
+
+  const fetchCompletedMatches = async () => {
+    try {
+      const response = await fetch('/api/matches?status=completed&includeStats=true&limit=30');
+      if (response.ok) {
+        const data = await response.json();
+        setCompletedMatches(data.matches || []);
+      } else {
+        console.error('Failed to fetch completed matches:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching completed matches:', error);
+    }
+  };
+
+  const fetchAutoLoggedMatches = async () => {
+    try {
+      const response = await fetch('/api/matches?status=auto_logged&includeStats=true&limit=30');
+      if (response.ok) {
+        const data = await response.json();
+        setAutoLoggedMatches(data.matches || []);
+      } else {
+        console.error('Failed to fetch auto-logged matches:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching auto-logged matches:', error);
+    }
+  };
+
+  const fetchUnlinkedGames = async () => {
+    try {
+      // Get recent games that aren't linked to any match
+      const response = await fetch('/api/player-stats/leaderboard?limit=100&sortBy=game_date&sortOrder=desc');
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Group by game_id and get unique games
+        const gameMap = new Map();
+        data.players?.forEach((player: any) => {
+          if (player.game_id && !gameMap.has(player.game_id)) {
+            gameMap.set(player.game_id, {
+              gameId: player.game_id,
+              gameDate: player.game_date,
+              arena: player.arena,
+              gameMode: player.game_mode,
+              totalPlayers: 1,
+              teams: [player.team]
+            });
+          } else if (player.game_id) {
+            const game = gameMap.get(player.game_id);
+            game.totalPlayers++;
+            if (!game.teams.includes(player.team)) {
+              game.teams.push(player.team);
+            }
+          }
+        });
+
+        // Check which games are already linked to matches
+        const gameIds = Array.from(gameMap.keys());
+        const { data: linkedMatches } = await supabase
+          .from('matches')
+          .select('game_id')
+          .in('game_id', gameIds)
+          .not('game_id', 'is', null);
+
+        const linkedGameIds = new Set(linkedMatches?.map(m => m.game_id) || []);
+        
+        const unlinked = Array.from(gameMap.values())
+          .filter(game => !linkedGameIds.has(game.gameId))
+          .sort((a, b) => new Date(b.gameDate).getTime() - new Date(a.gameDate).getTime())
+          .slice(0, 10); // Show last 10 unlinked games
+
+        setUnlinkedGames(unlinked);
+      }
+    } catch (error) {
+      console.error('Error fetching unlinked games:', error);
     }
   };
 
@@ -199,26 +330,112 @@ export default function MatchesPage() {
         body: JSON.stringify({
           title: matchTitle,
           description: matchDescription,
-          matchType: matchType,
+          matchType,
           scheduledAt: scheduledDateTime,
-          squadAId: matchType === 'squad_vs_squad' ? userSquad?.id : null,
-          squadBId: matchType === 'squad_vs_squad' ? selectedSquadB : null,
-          createdBy: user?.id,
+          squadAId: userSquad?.id,
+          squadBId: selectedSquadB || null,
+          createdBy: user?.id
         }),
       });
 
       if (response.ok) {
+        const data = await response.json();
+        toast.success('Match created successfully!');
         setShowCreateForm(false);
         resetForm();
-        fetchMatches();
+        loadInitialData(); // Refresh the match list
       } else {
-        const error = await response.json();
-        alert(`Error creating match: ${error.error}`);
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to create match');
       }
     } catch (error) {
       console.error('Error creating match:', error);
-      alert('Error creating match');
+      toast.error('Failed to create match');
     }
+  };
+
+  const updateMatchVod = async () => {
+    if (!vodMatchId || !vodUrl) {
+      toast.error('VOD URL is required');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/matches', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          matchId: vodMatchId,
+          userId: user?.id,
+          vodUrl,
+          vodTitle: vodTitle || 'Match VOD'
+        }),
+      });
+
+      if (response.ok) {
+        toast.success('VOD added successfully!');
+        setShowVodModal(false);
+        setVodUrl('');
+        setVodTitle('');
+        setVodMatchId('');
+        loadInitialData(); // Refresh the match list
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to add VOD');
+      }
+    } catch (error) {
+      console.error('Error adding VOD:', error);
+      toast.error('Failed to add VOD');
+    }
+  };
+
+  const linkGameToMatch = async (gameId: string, matchId: string) => {
+    try {
+      const response = await fetch('/api/matches/link-game', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gameId,
+          matchId,
+          userId: user?.id
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message);
+        setShowLinkModal(false);
+        loadInitialData(); // Refresh all data
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to link game');
+      }
+    } catch (error) {
+      console.error('Error linking game:', error);
+      toast.error('Failed to link game');
+    }
+  };
+
+  const openLinkModal = async (matchId: string) => {
+    setLinkMatchId(matchId);
+    
+    // Find potential games around the match time
+    const match = [...plannedMatches, ...expiredMatches].find(m => m.id === matchId);
+    if (match) {
+      const matchDate = new Date(match.scheduled_at);
+      const potentialGames = unlinkedGames.filter(game => {
+        const gameDate = new Date(game.gameDate);
+        const timeDiff = Math.abs(matchDate.getTime() - gameDate.getTime()) / (1000 * 60 * 60); // hours
+        return timeDiff <= 6; // Games within 6 hours of match time
+      });
+      setSuggestedGames(potentialGames);
+    }
+    
+    setShowLinkModal(true);
   };
 
   const joinMatch = async (matchId: string, role: string) => {
@@ -233,7 +450,7 @@ export default function MatchesPage() {
 
       if (error) throw error;
 
-      fetchMatches();
+      loadInitialData();
       setShowParticipantModal(false);
     } catch (error) {
       console.error('Error joining match:', error);
@@ -251,7 +468,7 @@ export default function MatchesPage() {
 
       if (error) throw error;
 
-      fetchMatches();
+      loadInitialData();
     } catch (error) {
       console.error('Error leaving match:', error);
       alert('Error leaving match');
@@ -267,7 +484,7 @@ export default function MatchesPage() {
 
       if (error) throw error;
 
-      fetchMatches();
+      loadInitialData();
     } catch (error) {
       console.error('Error leaving match role:', error);
       alert('Error leaving match role');
@@ -283,7 +500,7 @@ export default function MatchesPage() {
       });
 
       if (response.ok) {
-        fetchMatches();
+        loadInitialData();
       } else {
         const error = await response.json();
         alert(`Error deleting match: ${error.error}`);
@@ -428,9 +645,9 @@ export default function MatchesPage() {
         </div>
 
         {/* Matches Grid */}
-        {matches.length > 0 && (
+        {plannedMatches.length > 0 && (
           <div className="grid gap-6">
-            {matches.map((match) => {
+            {plannedMatches.map((match) => {
               const { date, time } = formatDateTime(match.scheduled_at);
               const isParticipant = isUserParticipant(match);
               const userRoles = getUserRoles(match);
@@ -556,29 +773,135 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {/* Past Matches - Collapsible Section */}
-        {pastMatches.length > 0 && (
+        {/* Auto-Logged Matches - Collapsible Section */}
+        {autoLoggedMatches.length > 0 && (
           <div className="mt-8">
             <div 
-              className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
-              onClick={() => setIsPastMatchesCollapsed(!isPastMatchesCollapsed)}
+              className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 cursor-pointer hover:bg-yellow-900/30 transition-all duration-300"
+              onClick={() => setIsAutoLoggedCollapsed(!isAutoLoggedCollapsed)}
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-400 flex items-center gap-3">
-                  <span className={`transition-transform duration-200 ${isPastMatchesCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}`}>
+                <h2 className="text-lg font-bold text-yellow-400 flex items-center gap-3">
+                  <span className={`transition-transform duration-200 ${isAutoLoggedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}`}>
                     ▼
                   </span>
-                  📚 Past Matches ({pastMatches.length})
+                  🎮 Recent Games ({autoLoggedMatches.length})
                 </h2>
-                <div className="text-gray-500 text-sm">
-                  {isPastMatchesCollapsed ? 'Click to expand' : 'Click to collapse'}
+                <div className="text-yellow-500 text-sm">
+                  {isAutoLoggedCollapsed ? 'Click to expand' : 'Click to collapse'}
                 </div>
               </div>
             </div>
             
-            {!isPastMatchesCollapsed && (
+            {!isAutoLoggedCollapsed && (
               <div className="mt-4 space-y-4">
-                {pastMatches.map((match) => {
+                {autoLoggedMatches.map((match) => {
+                  const { date, time } = formatDateTime(match.scheduled_at);
+                  
+                  return (
+                    <div key={match.id} className="bg-yellow-900/10 border border-yellow-700/30 rounded-lg p-4">
+                      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold mb-2 text-yellow-300">{match.title}</h3>
+                          <div className="flex flex-wrap gap-2 text-sm text-yellow-400/80 mb-3">
+                            <span>📅 {date} at {time}</span>
+                            <span>🎯 {match.match_type?.replace('_', ' ').toUpperCase()}</span>
+                            {match.game_mode && <span>🎮 {match.game_mode}</span>}
+                            {match.map_name && <span>🗺️ {match.map_name}</span>}
+                          </div>
+                          
+                          {/* Game Stats Players */}
+                          {match.gameStats && match.gameStats.length > 0 && (
+                            <div className="mt-3">
+                              <div className="text-sm text-yellow-200 mb-2">
+                                <span className="font-medium">Players ({match.gameStats.length}):</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {match.gameStats.map((player: any, index: number) => (
+                                  <div key={index} className="flex items-center justify-between bg-yellow-900/20 rounded px-3 py-2">
+                                    <div className="flex-1">
+                                      <span className="font-medium text-yellow-200">{player.player_name}</span>
+                                      {player.team && (
+                                        <span className="text-yellow-400/80 text-xs ml-2">({player.team})</span>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2 text-xs">
+                                      <span className="text-green-400">{player.kills || 0}K</span>
+                                      <span className="text-red-400">{player.deaths || 0}D</span>
+                                      {player.captures > 0 && <span className="text-blue-400">{player.captures}C</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              
+                              {/* Team Results */}
+                              {match.gameStats.some((p: any) => p.team) && (
+                                <div className="mt-3 pt-3 border-t border-yellow-700/30">
+                                  <div className="text-sm">
+                                    {Array.from(new Set(match.gameStats.map((p: any) => p.team).filter(Boolean))).map((team: any) => {
+                                      const teamPlayers = match.gameStats.filter((p: any) => p.team === team);
+                                      const teamScore = teamPlayers.reduce((sum: number, p: any) => sum + (p.captures || 0), 0);
+                                      return (
+                                        <span key={team} className="inline-block mr-4 text-yellow-200">
+                                          <span className="font-medium">{team}:</span> {teamScore} points
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="mt-3 lg:mt-0 lg:ml-6 flex gap-2">
+                          {match.game_id && (
+                            <Link 
+                              href={`/stats/game/${match.game_id}`}
+                              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                            >
+                              🎮 Game Stats
+                            </Link>
+                          )}
+                          <Link 
+                            href={`/matches/${match.id}`}
+                            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+                          >
+                            📋 Match Details
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Past Matches - Collapsible Section */}
+        {expiredMatches.length > 0 && (
+          <div className="mt-8">
+            <div 
+              className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
+              onClick={() => setIsExpiredCollapsed(!isExpiredCollapsed)}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-400 flex items-center gap-3">
+                  <span className={`transition-transform duration-200 ${isExpiredCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}`}>
+                    ▼
+                  </span>
+                  📚 Expired Matches ({expiredMatches.length})
+                </h2>
+                <div className="text-gray-500 text-sm">
+                  {isExpiredCollapsed ? 'Click to expand' : 'Click to collapse'}
+                </div>
+              </div>
+            </div>
+            
+            {!isExpiredCollapsed && (
+              <div className="mt-4 space-y-4">
+                {expiredMatches.map((match) => {
                   const { date, time } = formatDateTime(match.scheduled_at);
                   
                   return (
@@ -634,7 +957,84 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {matches.length === 0 && !dataLoading && (
+        {completedMatches.length > 0 && (
+          <div className="mt-8">
+            <div 
+              className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
+              onClick={() => setIsCompletedCollapsed(!isCompletedCollapsed)}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-400 flex items-center gap-3">
+                  <span className={`transition-transform duration-200 ${isCompletedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}`}>
+                    ▼
+                  </span>
+                  📚 Completed Matches ({completedMatches.length})
+                </h2>
+                <div className="text-gray-500 text-sm">
+                  {isCompletedCollapsed ? 'Click to expand' : 'Click to collapse'}
+                </div>
+              </div>
+            </div>
+            
+            {!isCompletedCollapsed && (
+              <div className="mt-4 space-y-4">
+                {completedMatches.map((match) => {
+                  const { date, time } = formatDateTime(match.scheduled_at);
+                  
+                  return (
+                    <div key={match.id} className="bg-gray-800/30 border border-gray-700/50 rounded-lg p-4 opacity-75">
+                      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start">
+                        <div className="flex-1">
+                          <Link href={`/matches/${match.id}`}>
+                            <h3 className="text-lg font-bold mb-2 text-gray-400 hover:text-gray-300 cursor-pointer">{match.title}</h3>
+                          </Link>
+                          <p className="text-gray-400 mb-2 text-sm">{match.description}</p>
+                          <div className="flex flex-wrap gap-2 text-sm text-gray-500 mb-2">
+                            <span>📅 {date} at {time}</span>
+                            <span className={getStatusColor(match.status)}>
+                              {getStatusIcon(match.status)} {match.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                            <span>🎯 {match.match_type.replace('_', ' ').toUpperCase()}</span>
+                          </div>
+                          {match.match_type === 'squad_vs_squad' && (
+                            <div className="text-sm text-gray-500 mb-2">
+                              {match.squad_a_name} vs {match.squad_b_name || 'TBD'}
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-600">
+                            Created by {match.created_by_alias}
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 lg:mt-0 lg:ml-6">
+                          <Link 
+                            href={`/matches/${match.id}`}
+                            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors inline-block"
+                          >
+                            📋 View Details
+                          </Link>
+                        </div>
+                      </div>
+                      
+                      {/* Simplified participants display for past matches */}
+                      {match.participants.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-700/50">
+                          <div className="text-sm text-gray-500">
+                            <span className="font-medium">Participants:</span> {' '}
+                            {match.participants.slice(0, 3).map(p => p.in_game_alias).join(', ')}
+                            {match.participants.length > 3 && ` +${match.participants.length - 3} more`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {plannedMatches.length === 0 && expiredMatches.length === 0 && completedMatches.length === 0 && autoLoggedMatches.length === 0 && !dataLoading && (
           <div className="text-center py-12">
             <h2 className="text-xl font-semibold mb-4">No matches scheduled</h2>
             <p className="text-gray-400 mb-6">Be the first to create a match!</p>
@@ -759,7 +1159,7 @@ export default function MatchesPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
               {(() => {
-                const selectedMatch = matches.find(m => m.id === selectedMatchId);
+                const selectedMatch = plannedMatches.find(m => m.id === selectedMatchId);
                 if (!selectedMatch) return null;
                 
                 return (
@@ -820,6 +1220,99 @@ export default function MatchesPage() {
                   </>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* VOD Modal */}
+        {showVodModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4">Update Match VOD</h3>
+              <form onSubmit={updateMatchVod}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">VOD URL</label>
+                  <input
+                    type="text"
+                    value={vodUrl}
+                    onChange={(e) => setVodUrl(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">VOD Title</label>
+                  <input
+                    type="text"
+                    value={vodTitle}
+                    onChange={(e) => setVodTitle(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded"
+                  >
+                    Update VOD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowVodModal(false);
+                      setVodUrl('');
+                      setVodTitle('');
+                    }}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Link Game Modal */}
+        {showLinkModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-xl font-bold mb-4">Link Game to Match</h3>
+              <form onSubmit={openLinkModal}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Suggested Games</label>
+                  <select
+                    value={linkMatchId}
+                    onChange={(e) => setLinkMatchId(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  >
+                    <option value="">Select a game...</option>
+                    {suggestedGames.map((game) => (
+                      <option key={game.gameId} value={game.gameId}>
+                        {game.gameDate} - {game.arena} - {game.gameMode}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded"
+                  >
+                    Link Game
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLinkModal(false);
+                      setLinkMatchId('');
+                    }}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

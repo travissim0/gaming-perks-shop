@@ -383,7 +383,7 @@ export default function AdminDonations() {
                             : 'bg-indigo-900/50 text-indigo-400 border border-indigo-500/30'
                         }`}>
                           {(donation.payment_method || 'kofi') === 'kofi' ? '☕ KO-FI' : 
-                           (donation.payment_method || 'kofi') === 'square' ? '🟦 SQUARE' : '💳 STRIPE'}
+                           '💳 STRIPE'}
                         </span>
                       </td>
                       <td className="w-28 px-4 py-3 text-center">

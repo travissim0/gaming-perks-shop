@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS products (
     image TEXT,
     active BOOLEAN DEFAULT TRUE,
     phrase TEXT, -- Custom phrase for in-game usage
+    kofi_direct_link_code VARCHAR(50), -- Ko-fi shop item direct link code
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

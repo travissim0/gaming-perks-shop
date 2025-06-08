@@ -8211,6 +8211,14 @@ private Player FindPlayerByAlias(string alias)
             var flag = arena.getFlag("Bridge3");
             // Send a message to the arena that they have been summoned if they're carrying a flag
             if (item.id == 35){
+                //If Overtime, Summoning players empowers them with a "Steron Boost" (getItemByName("Steron Boost"))
+                if (isSD){
+                    ItemInfo.UtilityItem steronBoost = AssetManager.Manager.getItemByName("Steron Boost") as ItemInfo.UtilityItem;
+                    if (steronBoost != null){
+                        player.inventoryModify(steronBoost.id, 1);
+                    }
+                }
+
                 // Track summoned count for target player
                 if (!summonedCounts.ContainsKey(targetPlayerID))
                     summonedCounts[targetPlayerID] = 0;
@@ -8932,15 +8940,15 @@ private Player FindPlayerByAlias(string alias)
                 {
                     // Build shorter resource messages
                     var resources = new List<string>();
-                    if (toxCount > 0) resources.Add(string.Format("{0}T", toxCount));
-                    if (tsoCount > 0) resources.Add(string.Format("{0}Ts", tsoCount));
-                    if (panCount > 0) resources.Add(string.Format("{0}P", panCount));
+                    if (toxCount > 0) resources.Add(string.Format("{0}Tox", toxCount));
+                    if (tsoCount > 0) resources.Add(string.Format("{0}Tso", tsoCount));
+                    if (panCount > 0) resources.Add(string.Format("{0}Pan", panCount));
 
                     // Keep message compact
                     string message = string.Format("&{0}: {1}", player._alias, string.Join("/", resources));
                     if (message.Length <= 128) // Add length check
                     {
-                        arena.sendArenaMessage(message);
+                        //arena.sendArenaMessage(message);
                     }
                 }
 
@@ -9038,11 +9046,11 @@ private Player FindPlayerByAlias(string alias)
                         }
 
                         // Keep leave message short
-                        string leaveMsg = string.Format("&{0} left", player._alias);
-                        if (leaveMsg.Length <= 128)
-                        {
-                            arena.sendArenaMessage(leaveMsg);
-                        }
+                        // string leaveMsg = string.Format("&{0} left", player._alias);
+                        // if (leaveMsg.Length <= 128)
+                        // {
+                        //     arena.sendArenaMessage(leaveMsg);
+                        // }
                     }
                     else
                     {
@@ -9591,7 +9599,10 @@ private Player FindPlayerByAlias(string alias)
                         string gameStatsPath = System.IO.Path.Combine(baseStatsDir, string.Format("game_stats_{0}_{1}.csv", DateTime.Now.ToString("MM_dd_yyyy_HH_mm_ss"), arena._name.Replace(" ", "_")));
                         using (System.IO.StreamWriter writer = new System.IO.StreamWriter(gameStatsPath))
                         {
-                            writer.WriteLine("PlayerName,Team,Kills,Deaths,Captures,CarrierKills,CarryTimeSeconds,GameLengthMinutes,Result,MainClass,ClassSwaps,TurretDamage,GameMode,Side,BaseUsed");
+                            writer.WriteLine("PlayerName,Team,Kills,Deaths,Captures,CarrierKills,CarryTimeSeconds,GameLengthMinutes,Result,MainClass,ClassSwaps,TurretDamage,GameMode,Side,BaseUsed,Accuracy,AvgResourceUnusedPerDeath,AvgExplosiveUnusedPerDeath,EBHits");
+
+                            // Prepare player stats for web integration
+                            var playerStatsForWeb = new List<CTFGameType.PlayerStatData>();
 
                             // Get teams with more than 9 players
                             var largeTeams = arena.Teams.Where(t => t.ActivePlayerCount > 9).ToList();
@@ -9771,7 +9782,48 @@ private Player FindPlayerByAlias(string alias)
                                 int turretDamage = playerDamageStats.ContainsKey(p._id) ? playerDamageStats[p._id] : 0;
                                 int classSwaps = playerClassSwaps.ContainsKey(p) ? playerClassSwaps[p] : 0;
 
-                                writer.WriteLine(string.Format("{0},{1},{2},{3},{4},{5},{6},{7:F2},{8},{9},{10},{11},{12},{13},{14}",
+                                // Calculate Accuracy - get best weapon accuracy for this player
+                                double accuracy = 0.0;
+                                if (_lastgamePlayerWeaponStats != null && _lastgamePlayerWeaponStats.ContainsKey(p))
+                                {
+                                    var weaponAccuracies = _lastgamePlayerWeaponStats[p]
+                                        .Where(w => w.Value != null && w.Value.ShotsFired > 0)
+                                        .Select(w => (double)w.Value.ShotsLanded / w.Value.ShotsFired);
+                                    
+                                    if (weaponAccuracies.Any())
+                                    {
+                                        accuracy = weaponAccuracies.Max();
+                                    }
+                                }
+
+                                // Calculate AvgResourcePerDeath - average of RepCoil, RepCharge, Energizer, Stim left per death
+                                double avgResourcePerDeath = 0.0;
+                                if (_averageItemsUsedPerDeath != null && _averageItemsUsedPerDeath.ContainsKey(p._alias))
+                                {
+                                    var stats = _averageItemsUsedPerDeath[p._alias];
+                                    avgResourcePerDeath = (stats.ContainsKey("RepCoil") ? stats["RepCoil"] : 0) +
+                                                         (stats.ContainsKey("RepCharge") ? stats["RepCharge"] : 0) +
+                                                         (stats.ContainsKey("Energizer") ? stats["Energizer"] : 0) +
+                                                         (stats.ContainsKey("Stim") ? stats["Stim"] : 0);
+                                }
+
+                                // Calculate AvgExplosivePerDeath - average of Frag and WP left per death
+                                double avgExplosivePerDeath = 0.0;
+                                if (_averageItemsUsedPerDeath != null && _averageItemsUsedPerDeath.ContainsKey(p._alias))
+                                {
+                                    var stats = _averageItemsUsedPerDeath[p._alias];
+                                    avgExplosivePerDeath = (stats.ContainsKey("Frag") ? stats["Frag"] : 0) +
+                                                          (stats.ContainsKey("WP") ? stats["WP"] : 0);
+                                }
+
+                                // Get EBHits - number of EB hits for this player
+                                int ebHits = 0;
+                                if (_ebHitStats != null && _ebHitStats.ContainsKey(p))
+                                {
+                                    ebHits = _ebHitStats[p];
+                                }
+
+                                writer.WriteLine(string.Format("{0},{1},{2},{3},{4},{5},{6},{7:F2},{8},{9},{10},{11},{12},{13},{14},{15:F3},{16:F2},{17:F2},{18}",
                                     p._alias.Replace(",", ""),
                                     p._team._name ?? "None",
                                     p.StatsLastGame.kills,
@@ -9786,9 +9838,62 @@ private Player FindPlayerByAlias(string alias)
                                     turretDamage,
                                     gameMode,
                                     side,
-                                    baseUsed));
+                                    baseUsed,
+                                    accuracy,
+                                    avgResourcePerDeath,
+                                    avgExplosivePerDeath,
+                                    ebHits));
+
+                                // Add to web integration data
+                                playerStatsForWeb.Add(new CTFGameType.PlayerStatData
+                                {
+                                    PlayerName = p._alias.Replace(",", ""),
+                                    Team = p._team._name ?? "None",
+                                    GameMode = gameMode,
+                                    ArenaName = arena._name,
+                                    BaseUsed = baseUsed,
+                                    Side = side,
+                                    Result = result,
+                                    MainClass = mainClass,
+                                    Kills = p.StatsLastGame.kills,
+                                    Deaths = p.StatsLastGame.deaths,
+                                    Captures = p.StatsLastGame.zonestat5,
+                                    CarrierKills = p.StatsLastGame.zonestat7,
+                                    CarryTimeSeconds = p.StatsLastGame.zonestat3,
+                                    ClassSwaps = classSwaps,
+                                    TurretDamage = turretDamage,
+                                    EBHits = ebHits,
+                                    Accuracy = accuracy,
+                                    AvgResourceUnusedPerDeath = avgResourcePerDeath,
+                                    AvgExplosiveUnusedPerDeath = avgExplosivePerDeath,
+                                    GameLengthMinutes = gameLengthMinutes
+                                });
 
                                 ctfPlayerProxy.player = null;
+                            }
+
+                            // Send player stats to website
+                            if (playerStatsForWeb.Count > 0)
+                            {
+                                try
+                                {
+                                    string gameId = string.Format("{0}_{1}", arena._name, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+                                    // Use Task.Run to avoid blocking the main thread, but still get proper error handling
+                                    Task.Run(async () => {
+                                        try
+                                        {
+                                            await CTFGameType.PlayerStatsIntegration.SendPlayerStatsToWebsite(playerStatsForWeb, gameId);
+                                        }
+                                        catch (Exception asyncEx)
+                                        {
+                                            Console.WriteLine(string.Format("Error in async player stats submission: {0}", asyncEx.Message));
+                                        }
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(string.Format("Error initiating player stats submission: {0}", ex.Message));
+                                }
                             }
                         }
                     }
@@ -10010,10 +10115,30 @@ private Player FindPlayerByAlias(string alias)
             }
 
             // arena message calling out the player for dying to the turret by humiliating them.
-            // Send a humiliating message about dying to a turret
-            if (turretType == "Auto Turret-Rocket"){
-                string message = string.Format("&WOW! {0} just got destroyed by a {1} turret! How embarrassing!", victim._alias, turretType);
-                arena.sendArenaMessage(message, 4);
+            // Send a humiliating message about dying to a turret with different sounds
+            if (turretType == "Auto Turret-Rocket" && DateTime.Now.DayOfWeek != DayOfWeek.Sunday){
+                Random rand = new Random();
+                int soundNum = rand.Next(1, 5); // 1-4
+                string message;
+                
+                switch(soundNum) {
+                    case 1:
+                        message = string.Format("*BOOM* {0} was blown to bits by a {1}! Better luck next time!", victim._alias, turretType);
+                        arena.sendArenaMessage(message, 1);
+                        break;
+                    case 2:
+                        message = string.Format("*KABOOM* {0} didn't see that {1} coming! What a rookie mistake!", victim._alias, turretType);
+                        arena.sendArenaMessage(message, 2);
+                        break;
+                    case 3:
+                        message = string.Format("*SPLAT* {0} became target practice for a {1}! Maybe try dodging next time?", victim._alias, turretType);
+                        arena.sendArenaMessage(message, 3);
+                        break;
+                    case 4:
+                        message = string.Format("&WOW! {0} just got destroyed by a {1}! How embarrassing!", victim._alias, turretType);
+                        arena.sendArenaMessage(message, 4);
+                        break;
+                }
             }
 
             return true;
@@ -12125,6 +12250,12 @@ private Player FindPlayerByAlias(string alias)
                 
             //     return false; // Return false to prevent other handlers from processing
                 // }
+
+            // test sl steron
+            if (command.ToLower() == "testslsteron"){
+                player.inventoryModify(360, 1);
+                return true;
+            }
 
             // Toggle Enable/Disable of energizer command
             if (command.ToLower() == "togglegizer"){

@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') || 'scheduled';
     const limit = parseInt(searchParams.get('limit') || '10');
     const matchId = searchParams.get('id');
+    const includeStats = searchParams.get('includeStats') === 'true';
+
+    // Update match statuses first
+    await updateMatchStatuses();
 
     let query = supabase
       .from('matches')
@@ -36,6 +40,13 @@ export async function GET(req: NextRequest) {
         completed_at,
         created_at,
         created_by,
+        game_id,
+        winner_squad_id,
+        vod_url,
+        video_title,
+        actual_start_time,
+        actual_end_time,
+        match_notes,
         profiles!matches_created_by_fkey(in_game_alias),
         squad_a:squads!matches_squad_a_id_fkey(name, tag),
         squad_b:squads!matches_squad_b_id_fkey(name, tag),
@@ -53,7 +64,13 @@ export async function GET(req: NextRequest) {
     if (matchId) {
       query = query.eq('id', matchId);
     } else {
-      query = query.eq('status', status);
+      // Handle multiple statuses (comma-separated)
+      const statuses = status.split(',');
+      if (statuses.length > 1) {
+        query = query.in('status', statuses);
+      } else {
+        query = query.eq('status', status);
+      }
     }
 
     let finalQuery = query;
@@ -69,30 +86,152 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const matches = await Promise.all(data.map(async (match: any) => {
+      const baseMatch = {
+        ...match,
+        created_by_alias: match.profiles?.in_game_alias || 'Unknown',
+        squad_a_name: match.squad_a?.name,
+        squad_a_tag: match.squad_a?.tag,
+        squad_b_name: match.squad_b?.name,
+        squad_b_tag: match.squad_b?.tag,
+        winner_name: match.winner_squad?.name,
+        winner_tag: match.winner_squad?.tag,
+        participant_count: match.match_participants?.length || 0,
+        participants: match.match_participants?.map((p: any) => ({
+          id: p.id,
+          player_id: p.player_id,
+          in_game_alias: p.profiles?.in_game_alias || 'Unknown',
+          role: p.role,
+          status: p.status,
+          joined_at: p.signed_up_at || new Date().toISOString()
+        })) || []
+      };
 
+      // If this match has game stats, fetch them
+      if (includeStats && match.game_id) {
+        try {
+          const statsResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/player-stats/game/${match.game_id}`);
+          if (statsResponse.ok) {
+            const statsData = await statsResponse.json();
+            baseMatch.gameStats = statsData;
+          }
+        } catch (error) {
+          console.error('Error fetching game stats for match:', error);
+        }
+      }
 
-    const matches = data.map((match: any) => ({
-      ...match,
-      created_by_alias: match.profiles?.in_game_alias || 'Unknown',
-      squad_a_name: match.squad_a?.name,
-      squad_a_tag: match.squad_a?.tag,
-      squad_b_name: match.squad_b?.name,
-      squad_b_tag: match.squad_b?.tag,
-      winner_name: match.winner_squad?.name,
-      participant_count: match.match_participants?.length || 0,
-      participants: match.match_participants?.map((p: any) => ({
-        id: p.id,
-        player_id: p.player_id,
-        in_game_alias: p.profiles?.in_game_alias || 'Unknown',
-        role: p.role,
-        status: p.status,
-        joined_at: p.signed_up_at || new Date().toISOString()
-      })) || []
+      return baseMatch;
     }));
 
     return NextResponse.json({ matches });
   } catch (error: any) {
     console.error('Match API error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// Helper function to update match statuses
+async function updateMatchStatuses() {
+  try {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+    // Mark expired scheduled matches as 'expired'
+    await supabaseAdmin
+      .from('matches')
+      .update({ status: 'expired' })
+      .eq('status', 'scheduled')
+      .lt('scheduled_at', twoHoursAgo.toISOString())
+      .is('game_id', null);
+
+    // Mark matches with game_id as 'completed' if they're still 'scheduled'
+    await supabaseAdmin
+      .from('matches')
+      .update({ status: 'completed' })
+      .eq('status', 'scheduled')
+      .not('game_id', 'is', null);
+
+  } catch (error) {
+    console.error('Error updating match statuses:', error);
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      matchId,
+      userId,
+      gameId,
+      winnerSquadId,
+      squadAScore,
+      squadBScore,
+      vodUrl,
+      vodTitle,
+      actualStartTime,
+      actualEndTime,
+      matchNotes,
+      status
+    } = body;
+
+    if (!matchId || !userId) {
+      return NextResponse.json(
+        { error: 'Match ID and User ID are required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if user can update this match (creator or admin)
+    const { data: match, error: fetchError } = await supabase
+      .from('matches')
+      .select('created_by')
+      .eq('id', matchId)
+      .single();
+
+    if (fetchError) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+
+    const isAdmin = profile?.is_admin || false;
+    const isCreator = match.created_by === userId;
+
+    if (!isCreator && !isAdmin) {
+      return NextResponse.json({ error: 'Only the match creator or admin can update match results' }, { status: 403 });
+    }
+
+    // Build update object with only provided fields
+    const updateData: any = {};
+    if (gameId !== undefined) updateData.game_id = gameId;
+    if (winnerSquadId !== undefined) updateData.winner_squad_id = winnerSquadId;
+    if (squadAScore !== undefined) updateData.squad_a_score = squadAScore;
+    if (squadBScore !== undefined) updateData.squad_b_score = squadBScore;
+    if (vodUrl !== undefined) updateData.vod_url = vodUrl;
+    if (vodTitle !== undefined) updateData.vod_title = vodTitle;
+    if (actualStartTime !== undefined) updateData.actual_start_time = actualStartTime;
+    if (actualEndTime !== undefined) updateData.actual_end_time = actualEndTime;
+    if (matchNotes !== undefined) updateData.match_notes = matchNotes;
+    if (status !== undefined) updateData.status = status;
+
+    const { error: updateError } = await supabaseAdmin
+      .from('matches')
+      .update(updateData)
+      .eq('id', matchId);
+
+    if (updateError) {
+      console.error('Error updating match:', updateError);
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Match updated successfully' });
+
+  } catch (error: any) {
+    console.error('Match update error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -199,10 +338,9 @@ export async function POST(req: NextRequest) {
           title,
           description,
           match_type: matchType,
-          status: 'scheduled',
           scheduled_at: scheduledAt,
-          duration_minutes: durationMinutes || 60,
-          max_participants: maxParticipants || 20,
+          duration_minutes: durationMinutes,
+          max_participants: maxParticipants,
           map_name: mapName,
           game_mode: gameMode,
           server_info: serverInfo,
@@ -210,7 +348,8 @@ export async function POST(req: NextRequest) {
           prize_info: prizeInfo,
           squad_a_id: squadAId,
           squad_b_id: squadBId,
-          created_by: createdBy
+          created_by: createdBy,
+          status: 'scheduled'
         }
       ])
       .select()
@@ -221,56 +360,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: matchError.message }, { status: 500 });
     }
 
-    // If squads are specified, automatically add them as participants
-    if (squadAId) {
-      // Get squad A members
-      const { data: squadAMembers } = await supabase
-        .from('squad_members')
-        .select('player_id')
-        .eq('squad_id', squadAId)
-        .eq('status', 'active');
-
-      if (squadAMembers) {
-        const squadAParticipants = squadAMembers.map(member => ({
-          match_id: newMatch.id,
-          player_id: member.player_id,
-          role: 'player',
-          squad_id: squadAId
-        }));
-
-        await supabaseAdmin
-          .from('match_participants')
-          .insert(squadAParticipants);
-      }
-    }
-
-    if (squadBId) {
-      // Get squad B members
-      const { data: squadBMembers } = await supabase
-        .from('squad_members')
-        .select('player_id')
-        .eq('squad_id', squadBId)
-        .eq('status', 'active');
-
-      if (squadBMembers) {
-        const squadBParticipants = squadBMembers.map(member => ({
-          match_id: newMatch.id,
-          player_id: member.player_id,
-          role: 'player',
-          squad_id: squadBId
-        }));
-
-        await supabaseAdmin
-          .from('match_participants')
-          .insert(squadBParticipants);
-      }
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      match: newMatch,
-      message: 'Match created successfully!'
-    });
+    return NextResponse.json({ match: newMatch }, { status: 201 });
 
   } catch (error: any) {
     console.error('Match creation error:', error);

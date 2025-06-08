@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
+
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { Product } from '@/types';
@@ -121,51 +121,21 @@ export default function PerksPage() {
     fetchUserProducts();
   }, [user]);
 
-  useEffect(() => {
-    if (userProfile?.email && products.length > 0) {
-      checkPurchaseStatuses();
-    }
-  }, [userProfile, products]);
+  // Removed automatic purchase checking - now manual only via button clicks
 
   const checkPurchaseStatuses = async () => {
     if (!userProfile?.email) return;
     
-    const statuses: {[key: string]: PurchaseStatus} = {};
-    
-    for (const product of products) {
-      try {
-        const response = await fetch(`/api/verify-kofi-purchase?email=${encodeURIComponent(userProfile.email)}&productId=${product.id}`);
-        if (response.ok) {
-          const status = await response.json();
-          statuses[product.id] = status;
-        }
-      } catch (error) {
-        console.error(`Error checking status for product ${product.id}:`, error);
+    try {
+      // Single API call to check all products at once
+      const response = await fetch(`/api/verify-kofi-purchases?email=${encodeURIComponent(userProfile.email)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPurchaseStatuses(data.productStatuses || {});
+        console.log(`✅ Checked ${Object.keys(data.productStatuses || {}).length} products in single API call`);
       }
-    }
-    
-    setPurchaseStatuses(statuses);
-  };
-
-  const handleBuyClick = (product: Product) => {
-    console.log('Buy clicked - Auth state:', { 
-      user: user?.email || 'null', 
-      loading, 
-      userObject: user 
-    });
-    
-    if (!user) {
-      toast.error('Please sign in to purchase perks');
-      return;
-    }
-
-    setSelectedProduct(product);
-    
-    // If product is customizable, show phrase modal. Otherwise, go directly to Ko-fi
-    if (product.customizable) {
-      setShowPhraseModal(true);
-    } else {
-      handleDirectPurchase(product);
+    } catch (error) {
+      console.error('Error checking purchase statuses:', error);
     }
   };
 
@@ -175,26 +145,45 @@ export default function PerksPage() {
       return;
     }
 
-    // Create Ko-fi URL with product information
-    const message = `Purchase: ${product.name} - User: ${userProfile.email}`;
-    const kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${product.price / 100}&message=${encodeURIComponent(message)}`;
+    // Use Ko-fi shop URL if available, otherwise fallback to donation URL
+    let kofiUrl: string;
+    if (product.kofi_direct_link_code) {
+      // Ko-fi shop item URL - this will trigger "Shop Order" webhook
+      kofiUrl = `https://ko-fi.com/s/${product.kofi_direct_link_code}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi shop for ${product.name}! Your purchase will be automatically activated after payment.`,
+        { duration: 8000 }
+      );
+
+      toast(
+        'Ko-fi will process your purchase and automatically activate your perk - no verification needed!',
+        { 
+          duration: 10000,
+          icon: '✨'
+        }
+      );
+    } else {
+      // Fallback to donation URL for products without shop links
+      const message = `Purchase: ${product.name} - User: ${userProfile.email}`;
+      kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${product.price / 100}&message=${encodeURIComponent(message)}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi for ${product.name} purchase! Your email (${userProfile.email}) has been included.`,
+        { duration: 8000 }
+      );
+
+      toast(
+        'After payment, return here and click "Check for Existing Donation" to activate your perk!',
+        { 
+          duration: 10000,
+          icon: '🔄'
+        }
+      );
+    }
 
     // Open Ko-fi in a new tab
     window.open(kofiUrl, '_blank');
-    
-    toast.success(
-      `Redirecting to Ko-fi for ${product.name} purchase! Your email (${userProfile.email}) has been included.`,
-      { duration: 8000 }
-    );
-
-    // Show instructions for automatic verification
-    toast(
-      'After payment, return here and click "Check for Existing Donation" to automatically activate your perk!',
-      { 
-        duration: 10000,
-        icon: '🔄'
-      }
-    );
   };
 
   const handlePhraseConfirm = (phrase: string) => {
@@ -203,26 +192,46 @@ export default function PerksPage() {
       return;
     }
 
-    // Create Ko-fi URL with product and phrase information
-    const message = `Purchase: ${selectedProduct.name} - Phrase: "${phrase}" - User: ${userProfile.email}`;
-    const kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${selectedProduct.price / 100}&message=${encodeURIComponent(message)}`;
+    // Use Ko-fi shop URL if available, otherwise fallback to donation URL
+    let kofiUrl: string;
+    if (selectedProduct.kofi_direct_link_code) {
+      // Ko-fi shop item URL with variation for custom phrase
+      // Note: Ko-fi variations will be passed as variation_name in webhook
+      kofiUrl = `https://ko-fi.com/s/${selectedProduct.kofi_direct_link_code}?variation=${encodeURIComponent(phrase)}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi shop for ${selectedProduct.name} with phrase "${phrase}"! Your purchase will be automatically activated.`,
+        { duration: 8000 }
+      );
+
+      toast(
+        'Ko-fi will process your purchase and automatically activate your perk with your custom phrase!',
+        { 
+          duration: 10000,
+          icon: '✨'
+        }
+      );
+    } else {
+      // Fallback to donation URL for products without shop links
+      const message = `Purchase: ${selectedProduct.name} - Phrase: "${phrase}" - User: ${userProfile.email}`;
+      kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${selectedProduct.price / 100}&message=${encodeURIComponent(message)}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi for ${selectedProduct.name} with phrase "${phrase}"! Your details have been included.`,
+        { duration: 8000 }
+      );
+
+      toast(
+        'After payment, return here and click "Check for Existing Donation" to activate your perk!',
+        { 
+          duration: 10000,
+          icon: '🔄'
+        }
+      );
+    }
 
     // Open Ko-fi in a new tab
     window.open(kofiUrl, '_blank');
-    
-    toast.success(
-      `Redirecting to Ko-fi for ${selectedProduct.name} with phrase "${phrase}"! Your details have been included.`,
-      { duration: 8000 }
-    );
-
-    // Show instructions for automatic verification
-    toast(
-      'After payment, return here and click "Check for Existing Donation" to automatically activate your perk with the custom phrase!',
-      { 
-        duration: 10000,
-        icon: '🔄'
-      }
-    );
 
     setShowPhraseModal(false);
     setSelectedProduct(null);
@@ -307,44 +316,6 @@ export default function PerksPage() {
     }
   };
 
-  const handleSquarePurchase = async (product: Product) => {
-    if (!userProfile?.email) {
-      toast.error('Please sign in to make purchases');
-      return;
-    }
-
-    const customPhrase = customPhrases[product.id] || '';
-    
-    try {
-      const response = await fetch('/api/square-product-checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          productId: product.id,
-          userEmail: userProfile.email,
-          customPhrase: customPhrase || null
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        toast.error(data.error);
-        return;
-      }
-
-      // Redirect to Square checkout
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      }
-    } catch (error) {
-      console.error('Square checkout error:', error);
-      toast.error('Error creating Square checkout');
-    }
-  };
-
   const handleKofiPurchase = (product: Product) => {
     if (!userProfile?.email) {
       toast.error('Please sign in to make purchases');
@@ -352,8 +323,52 @@ export default function PerksPage() {
     }
 
     const customPhrase = customPhrases[product.id] || '';
-    const message = `Purchase: ${product.name}${customPhrase ? ` | Custom Phrase: ${customPhrase}` : ''} | Email: ${userProfile.email}`;
-    const kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${product.price / 100}&message=${encodeURIComponent(message)}`;
+    
+    // For customizable products, require a phrase
+    if (product.customizable && !customPhrase.trim()) {
+      toast.error('🎮 Please enter a custom phrase for this product before purchasing!');
+      // Focus on the phrase input
+      const phraseInput = document.querySelector(`input[value="${customPhrase}"]`) as HTMLInputElement;
+      if (phraseInput) {
+        phraseInput.focus();
+        phraseInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    // Validate phrase if provided
+    if (customPhrase && customPhrase.trim()) {
+      const cleanPhrase = customPhrase.trim();
+      if (cleanPhrase.length > 12) {
+        toast.error('Custom phrase must be 12 characters or less');
+        return;
+      }
+      if (!/^[a-zA-Z0-9 !?._-]+$/.test(cleanPhrase)) {
+        toast.error('Custom phrase can only contain letters, numbers, spaces, and these symbols: ! ? . _ -');
+        return;
+      }
+    }
+    
+    // Use Ko-fi shop URL if available, otherwise fallback to donation URL
+    let kofiUrl: string;
+    if (product.kofi_direct_link_code) {
+      // Ko-fi shop item URL with variation for custom phrase
+      kofiUrl = `https://ko-fi.com/s/${product.kofi_direct_link_code}${customPhrase ? `?variation=${encodeURIComponent(customPhrase)}` : ''}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi shop for ${product.name}${customPhrase ? ` with phrase "${customPhrase}"` : ''}! Your purchase will be automatically activated.`,
+        { duration: 8000 }
+      );
+    } else {
+      // Fallback to donation URL for products without shop links
+      const message = `Purchase: ${product.name}${customPhrase ? ` | Custom Phrase: ${customPhrase}` : ''} | Email: ${userProfile.email}`;
+      kofiUrl = `https://ko-fi.com/ctfpl?donation_amount=${product.price / 100}&message=${encodeURIComponent(message)}`;
+      
+      toast.success(
+        `Redirecting to Ko-fi for ${product.name}${customPhrase ? ` with phrase "${customPhrase}"` : ''}!`,
+        { duration: 8000 }
+      );
+    }
     
     window.open(kofiUrl, '_blank');
   };
@@ -508,34 +523,42 @@ export default function PerksPage() {
                           {/* Ko-fi Purchase Button */}
                           <button
                             onClick={() => handleKofiPurchase(product)}
-                            disabled={!user || !userProfile}
-                            className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!user || !userProfile || (product.customizable && !customPhrases[product.id]?.trim())}
+                            className={`w-full font-bold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                              product.customizable && !customPhrases[product.id]?.trim()
+                                ? 'bg-gray-600 hover:bg-gray-600 text-gray-300'
+                                : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white'
+                            }`}
                           >
-                            ☕ Purchase via Ko-fi
+                            {product.customizable && !customPhrases[product.id]?.trim() 
+                              ? '🔒 Enter Phrase First' 
+                              : '☕ Purchase via Ko-fi'
+                            }
                           </button>
                           
-                          {/* Square Purchase Button */}
-                          <button
-                            onClick={() => handleSquarePurchase(product)}
-                            disabled={!user || !userProfile}
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            💳 Purchase via Square
-                          </button>
+
                           
                           {/* Custom Phrase Input for Customizable Products */}
                           {product.customizable && (
                             <div className="mt-3">
-                              <label className="block text-xs text-gray-400 mb-2">Custom Phrase (Optional):</label>
+                              <label className="block text-xs text-yellow-400 mb-2 font-semibold">🎮 Custom Phrase (Required):</label>
                               <input
                                 type="text"
                                 value={customPhrases[product.id] || ''}
                                 onChange={(e) => setCustomPhrases(prev => ({ ...prev, [product.id]: e.target.value }))}
-                                placeholder="Enter custom phrase..."
+                                placeholder="Enter your custom phrase..."
                                 maxLength={12}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:border-cyan-500 focus:outline-none"
+                                className={`w-full px-3 py-2 bg-gray-700 border rounded text-white placeholder-gray-400 text-sm focus:outline-none transition-colors ${
+                                  customPhrases[product.id]?.trim() 
+                                    ? 'border-green-500 focus:border-green-400' 
+                                    : 'border-red-500 focus:border-red-400'
+                                }`}
+                                required
                               />
-                              <p className="text-xs text-gray-500 mt-1">Max 12 characters, alphanumeric only</p>
+                              <p className="text-xs text-gray-500 mt-1">Max 12 characters: letters, numbers, spaces, ! ? . _ -</p>
+                              {!customPhrases[product.id]?.trim() && (
+                                <p className="text-xs text-red-400 mt-1 font-semibold">⚠️ Phrase required before purchase</p>
+                              )}
                             </div>
                           )}
                           

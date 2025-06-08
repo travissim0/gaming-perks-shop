@@ -1421,6 +1421,124 @@ export default function Home() {
 
           {/* Right Sidebar - Matches, Squads, Online Users (Dynamic) */}
           <div className="xl:col-span-3 space-y-6">
+            {/* Player Statistics Quick Access */}
+            {user && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-indigo-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-indigo-500/30">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-indigo-400 font-bold text-sm tracking-wider">📊 PLAYER STATS</h3>
+                    <Link 
+                      href="/stats" 
+                      className="text-indigo-400 hover:text-indigo-300 text-xs border border-indigo-500/50 hover:border-indigo-400 px-2 py-1 rounded transition-all duration-300"
+                    >
+                      VIEW ALL
+                    </Link>
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-gray-900">
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <Link 
+                      href="/stats?gameMode=all&sortBy=total_kills" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-red-400 text-lg mb-1">🎯</div>
+                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Top Killers</div>
+                      </div>
+                    </Link>
+                    
+                    <Link 
+                      href="/stats?gameMode=all&sortBy=win_percentage" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-green-400 text-lg mb-1">🏆</div>
+                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Win Rate</div>
+                      </div>
+                    </Link>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <Link 
+                      href="/stats?gameMode=CTF&sortBy=flag_captures" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-blue-400 text-lg mb-1">🚩</div>
+                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Flag Caps</div>
+                      </div>
+                    </Link>
+                    
+                    <Link 
+                      href="/stats?gameMode=all&sortBy=total_games" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-purple-400 text-lg mb-1">🎮</div>
+                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Most Active</div>
+                      </div>
+                    </Link>
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t border-gray-700">
+                    <div className="text-xs text-gray-500 text-center">
+                      Track performance across all game modes
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Dueling Arena Quick Access */}
+            {user && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-orange-500/30">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-orange-400 font-bold text-sm tracking-wider">⚔️ DUELING ARENA</h3>
+                    <Link 
+                      href="/dueling/stats" 
+                      className="text-orange-400 hover:text-orange-300 text-xs border border-orange-500/50 hover:border-orange-400 px-2 py-1 rounded transition-all duration-300"
+                    >
+                      RANKINGS
+                    </Link>
+                  </div>
+                </div>
+                
+                <div className="p-4 bg-gray-900">
+                  <div className="grid grid-cols-1 gap-3">
+                    <Link 
+                      href="/dueling" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-orange-400 text-lg mb-1">🏆</div>
+                        <div className="text-xs text-gray-400 group-hover:text-orange-300">Tournament Brackets</div>
+                        <div className="text-xs text-gray-500 mt-1">Simulate & Create Tournaments</div>
+                      </div>
+                    </Link>
+                    
+                    <Link 
+                      href="/dueling/stats" 
+                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+                    >
+                      <div className="text-center">
+                        <div className="text-yellow-400 text-lg mb-1">📊</div>
+                        <div className="text-xs text-gray-400 group-hover:text-orange-300">Player Rankings</div>
+                        <div className="text-xs text-gray-500 mt-1">View Duel Statistics</div>
+                      </div>
+                    </Link>
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t border-gray-700">
+                    <div className="text-xs text-gray-500 text-center">
+                      1v1 competitive dueling system
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+            
             {/* Dynamic content based on data availability - prioritize most important */}
             
             {/* Online Users (always show if there are users) */}

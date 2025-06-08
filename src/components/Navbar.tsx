@@ -267,6 +267,12 @@ export default function Navbar({ user }: { user: any }) {
                 ⚔️ Matches
               </Link>
               <Link 
+                href="/stats" 
+                className="px-3 py-2 text-sm text-indigo-300 hover:text-indigo-400 transition-all duration-200 border border-indigo-700/50 hover:border-indigo-500/50 rounded-lg bg-indigo-800/20 hover:bg-indigo-500/10 font-medium"
+              >
+                📊 Stats
+              </Link>
+              <Link 
                 href="/guides" 
                 className="px-3 py-2 text-sm text-amber-300 hover:text-amber-400 transition-all duration-200 border border-amber-700/50 hover:border-amber-500/50 rounded-lg bg-amber-800/20 hover:bg-amber-500/10 font-medium"
               >
@@ -464,6 +470,13 @@ export default function Navbar({ user }: { user: any }) {
                         className="block px-4 py-2 text-gray-300 hover:text-green-400 hover:bg-gray-800 rounded transition-all duration-300"
                       >
                         ⚔️ Matches
+                      </Link>
+                      <Link 
+                        href="/stats" 
+                        onClick={closeMobileMenu}
+                        className="block px-4 py-2 text-gray-300 hover:text-indigo-400 hover:bg-gray-800 rounded transition-all duration-300"
+                      >
+                        📊 Player Stats
                       </Link>
                       <Link 
                         href="/guides" 
