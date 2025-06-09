@@ -171,6 +171,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return timeSinceLastCheck < cooldownPeriod && authAttempts > 0;
   };
 
+  // Clear corrupted session data
+  const clearCorruptedSession = async (): Promise<void> => {
+    console.log('🧹 Clearing potentially corrupted session data...');
+    
+    try {
+      // Clear Supabase auth state
+      await supabase.auth.signOut({ scope: 'local' });
+      
+      // Clear localStorage items
+      if (typeof window !== 'undefined') {
+        const keysToRemove = Object.keys(localStorage).filter(key => 
+          key.includes('supabase') || 
+          key.includes('auth-token') ||
+          key.includes('sb-')
+        );
+        
+        keysToRemove.forEach(key => {
+          try {
+            localStorage.removeItem(key);
+            console.log(`🗑️ Removed localStorage key: ${key}`);
+          } catch (error) {
+            console.warn(`⚠️ Failed to remove localStorage key ${key}:`, error);
+          }
+        });
+        
+        // Clear sessionStorage as well
+        const sessionKeysToRemove = Object.keys(sessionStorage).filter(key => 
+          key.includes('supabase') || 
+          key.includes('auth-token') ||
+          key.includes('sb-')
+        );
+        
+        sessionKeysToRemove.forEach(key => {
+          try {
+            sessionStorage.removeItem(key);
+            console.log(`🗑️ Removed sessionStorage key: ${key}`);
+          } catch (error) {
+            console.warn(`⚠️ Failed to remove sessionStorage key ${key}:`, error);
+          }
+        });
+      }
+      
+      // Reset auth state
+      setUser(null);
+      setError(null);
+      setAuthAttempts(0);
+      setLastAuthCheck(0);
+      
+      console.log('✅ Session cleanup completed');
+    } catch (error) {
+      console.error('❌ Error during session cleanup:', error);
+    }
+  };
+
   // Robust session getter with retry logic
   const getSessionRobust = async (attempt: number = 1): Promise<void> => {
     const maxAttempts = 3;
@@ -340,14 +394,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔄 Manual auth retry requested');
     setLoading(true);
     setError(null);
-    setAuthAttempts(0);
-    setLastAuthCheck(0);
     
-    try {
-      await getSessionRobust();
-    } finally {
-      setLoading(false);
-      setLastAuthCheck(Date.now());
+    // If we've had multiple failures, clear session data first
+    if (authAttempts >= 2) {
+      console.log('🧹 Clearing session data before retry due to multiple failures');
+      await clearCorruptedSession();
+    } else {
+      setAuthAttempts(0);
+      setLastAuthCheck(0);
+      
+      try {
+        await getSessionRobust();
+      } finally {
+        setLoading(false);
+        setLastAuthCheck(Date.now());
+      }
     }
   };
 
@@ -361,6 +422,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (shouldSkipAuthCheck()) {
         console.log('⏭️ Skipping auth check - too recent');
+        setLoading(false);
+        return;
+      }
+
+      // Check for session corruption indicators before proceeding
+      if (authAttempts >= 3) {
+        console.log('🚨 Multiple auth failures detected - clearing potentially corrupted session');
+        await clearCorruptedSession();
         setLoading(false);
         return;
       }
@@ -431,7 +500,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (authAttempts < 2) {
             console.log('🔄 Retrying auth due to timeout...');
             setAuthAttempts(prev => prev + 1);
-            return; // This will trigger a retry via the dependency array
+            // Schedule a retry without changing dependencies to avoid infinite loop
+            setTimeout(() => {
+              if (mounted) {
+                console.log('🔄 Executing scheduled auth retry...');
+                initializeAuth();
+              }
+            }, 2000); // 2-second delay before retry
+            return;
           }
         } else if (isAuthTokenError(error)) {
           await clearSessionAndRedirect('Authentication failed');
@@ -517,7 +593,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Don't throw - just log the warning
       }
     };
-  }, [authAttempts]);
+  }, []); // Remove authAttempts dependency to prevent infinite loop
 
   // Enhanced sign in with timeout and retry - mobile optimized
   const signIn = async (email: string, password: string) => {
