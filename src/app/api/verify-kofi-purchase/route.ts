@@ -110,9 +110,35 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingPurchase) {
+      // For customizable products, allow phrase updates
+      if (product.customizable && body.customPhrase) {
+        const { data: updatedPurchase, error: updateError } = await supabase
+          .from('user_products')
+          .update({
+            phrase: body.customPhrase,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingPurchase.id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('Phrase update error:', updateError);
+          return NextResponse.json({ error: 'Failed to update phrase', details: updateError.message }, { status: 500 });
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'Custom phrase updated successfully!',
+          purchase: updatedPurchase,
+          action: 'phrase_updated'
+        });
+      }
+      
       return NextResponse.json({ 
         error: 'User already owns this product',
-        purchase: existingPurchase
+        purchase: existingPurchase,
+        canUpdatePhrase: product.customizable
       }, { status: 400 });
     }
 
@@ -194,9 +220,18 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (existingPurchase) {
+      // Get product details to check if it's customizable
+      const { data: product } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', productId)
+        .single();
+
       return NextResponse.json({ 
         owned: true,
-        purchase: existingPurchase
+        purchase: existingPurchase,
+        canUpdatePhrase: product?.customizable || false,
+        productName: product?.name || 'Unknown Product'
       });
     }
 
