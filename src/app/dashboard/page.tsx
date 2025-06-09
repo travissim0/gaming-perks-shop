@@ -171,11 +171,16 @@ export default function Dashboard() {
 
   const fetchSquadStats = async () => {
     try {
-      // Get squad stats
-      const [totalSquadsResult, userSquadResult] = await Promise.all([
-        supabase.from('squads').select('id', { count: 'exact' }).eq('is_active', true),
-        supabase.from('squad_members').select('squad:squads(name), squad_id').eq('user_id', user?.id).eq('status', 'active').maybeSingle()
-      ]);
+      // Get squad stats - try both possible column names for compatibility
+      const totalSquadsResult = await supabase.from('squads').select('id', { count: 'exact' }).eq('is_active', true);
+      
+      // Try with player_id first (newer schema)
+      let userSquadResult = await supabase.from('squad_members').select('squad:squads(name), squad_id').eq('player_id', user?.id).eq('status', 'active').maybeSingle();
+      
+      // If that fails, try with user_id (older schema)
+      if (userSquadResult.error) {
+        userSquadResult = await supabase.from('squad_members').select('squad:squads(name), squad_id').eq('user_id', user?.id).eq('status', 'active').maybeSingle();
+      }
 
       let squadMembersCount = 0;
       let squadName = null;

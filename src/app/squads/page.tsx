@@ -184,45 +184,159 @@ export default function SquadsPage() {
   const loadUserSquad = async () => {
     if (!user || !isMountedRef.current) return;
 
-    const { data, success } = await robustFetch(
-      async () => {
-        // Use optimized function instead of complex joins
-        const result = await supabase.rpc('get_user_squad_optimized', {
-          user_id_param: user.id
-        });
-
-        if (result.error) throw new Error(result.error.message);
-        return result.data?.[0] || null;
-      },
-      { showErrorToast: false } // Don't show error if user has no squad
-    );
-
-    if (!isMountedRef.current) return;
-
-    if (success && data) {
-      // Get squad members using optimized function
-      const { data: membersData } = await supabase.rpc('get_squad_members_optimized', {
-        squad_id_param: data.squad_id
-      });
+    try {
+      // First, get the user's squad membership - try both possible column names
+      let membershipData = null;
+      let membershipError = null;
       
+      // Try with player_id first (newer schema)
+      const { data: membershipData1, error: membershipError1 } = await supabase
+        .from('squad_members')
+        .select(`
+          id,
+          squad_id,
+          role,
+          joined_at,
+          squads!inner(
+            id,
+            name,
+            tag,
+            description,
+            discord_link,
+            website_link,
+            captain_id,
+            created_at,
+            banner_url
+          )
+        `)
+        .eq('player_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (!membershipError1) {
+        membershipData = membershipData1;
+        membershipError = membershipError1;
+      } else {
+        // Try with user_id (older schema)
+        const { data: membershipData2, error: membershipError2 } = await supabase
+          .from('squad_members')
+          .select(`
+            id,
+            squad_id,
+            role,
+            joined_at,
+            squads!inner(
+              id,
+              name,
+              tag,
+              description,
+              discord_link,
+              website_link,
+              captain_id,
+              created_at,
+              banner_url
+            )
+          `)
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        membershipData = membershipData2;
+        membershipError = membershipError2;
+      }
+
+      if (membershipError && membershipError.code !== 'PGRST116') {
+        console.error('Error loading user squad membership:', membershipError);
+        return;
+      }
+
+      if (!membershipData || !isMountedRef.current) {
+        setUserSquad(null);
+        return;
+      }
+
+      const squadData = membershipData.squads as any;
+      
+      // Get squad members first, then fetch their profiles separately for better reliability
+      // Try both possible column names for compatibility
+      let membersData = null;
+      let membersError = null;
+      let userIdColumn = 'player_id'; // Track which column is being used
+      
+      // Try with player_id first (newer schema)
+      const { data: membersData1, error: membersError1 } = await supabase
+        .from('squad_members')
+        .select('id, player_id, role, joined_at')
+        .eq('squad_id', squadData.id)
+        .eq('status', 'active')
+        .order('joined_at', { ascending: true });
+
+      if (!membersError1) {
+        membersData = membersData1;
+        membersError = membersError1;
+        userIdColumn = 'player_id';
+      } else {
+        // Try with user_id (older schema)
+        const { data: membersData2, error: membersError2 } = await supabase
+          .from('squad_members')
+          .select('id, user_id, role, joined_at')
+          .eq('squad_id', squadData.id)
+          .eq('status', 'active')
+          .order('joined_at', { ascending: true });
+        
+        membersData = membersData2;
+        membersError = membersError2;
+        userIdColumn = 'user_id';
+      }
+
+      if (membersError) {
+        console.error('Error loading squad members:', membersError);
+        // Continue with squad data even if members fail to load
+      }
+
+      let allMembersData: any[] = [];
+      
+      if (membersData && membersData.length > 0) {
+        // Get profile data for all members using the correct column
+        const memberIds = membersData.map((m: any) => m[userIdColumn]);
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, in_game_alias')
+          .in('id', memberIds);
+
+        if (profilesError) {
+          console.error('Error loading member profiles:', profilesError);
+        }
+
+        // Combine member data with profile data
+        allMembersData = membersData.map((member: any) => {
+          const profile = profilesData?.find(p => p.id === member[userIdColumn]);
+          return {
+            ...member,
+            player_id: member[userIdColumn], // Normalize to player_id for consistency
+            profiles: profile ? { in_game_alias: profile.in_game_alias } : null
+          };
+        });
+      }
+
       if (!isMountedRef.current) return;
 
       const formattedSquad: Squad = {
-        id: data.squad_id,
-        name: data.squad_name,
-        tag: data.squad_tag,
-        description: data.squad_description,
-        discord_link: data.discord_link,
-        website_link: data.website_link,
-        captain_id: data.captain_id,
-        created_at: data.created_at,
-        banner_url: data.banner_url,
-        captain_alias: 'Loading...', // Will be loaded with members
-        member_count: data.member_count,
-        members: membersData?.map((member: any) => ({
-          id: member.member_id,
+        id: squadData.id,
+        name: squadData.name,
+        tag: squadData.tag,
+        description: squadData.description,
+        discord_link: squadData.discord_link,
+        website_link: squadData.website_link,
+        captain_id: squadData.captain_id,
+        created_at: squadData.created_at,
+        banner_url: squadData.banner_url,
+        captain_alias: 'Loading...',
+        member_count: allMembersData?.length || 0,
+        members: allMembersData?.map((member: any) => ({
+          id: member.id,
           player_id: member.player_id,
-          in_game_alias: member.in_game_alias,
+          in_game_alias: member.profiles?.in_game_alias || 'Unknown',
           role: member.role,
           joined_at: member.joined_at
         })) || []
@@ -233,41 +347,59 @@ export default function SquadsPage() {
       formattedSquad.captain_alias = captain?.in_game_alias || 'Unknown';
 
       setUserSquad(formattedSquad);
+    } catch (error) {
+      console.error('Error loading user squad:', error);
+      setUserSquad(null);
     }
   };
 
   const loadAllSquads = async () => {
     if (!isMountedRef.current) return;
     
-    const { data, success } = await robustFetch(
-      async () => {
-        // Use single optimized query instead of multiple individual calls
-        const result = await supabase.rpc('get_all_squads_optimized');
-        if (result.error) throw new Error(result.error.message);
-        return result.data;
-      },
-      { errorMessage: 'Failed to load squads' }
-    );
+    try {
+      const { data: squadsData, error } = await supabase
+        .from('squads')
+        .select(`
+          id,
+          name,
+          tag,
+          description,
+          discord_link,
+          website_link,
+          captain_id,
+          created_at,
+          banner_url,
+          profiles!squads_captain_id_fkey(in_game_alias),
+          squad_members!inner(id)
+        `)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-    if (!isMountedRef.current) return;
+      if (error) {
+        console.error('Error loading squads:', error);
+        return;
+      }
 
-    if (success && data) {
-      const formattedSquads: Squad[] = data.map((squad: any) => ({
-        id: squad.squad_id,
-        name: squad.squad_name,
-        tag: squad.squad_tag,
-        description: squad.squad_description,
+      if (!isMountedRef.current) return;
+
+      const formattedSquads: Squad[] = squadsData.map((squad: any) => ({
+        id: squad.id,
+        name: squad.name,
+        tag: squad.tag,
+        description: squad.description,
         discord_link: squad.discord_link,
         website_link: squad.website_link,
         captain_id: squad.captain_id,
-        captain_alias: squad.captain_alias,
+        captain_alias: squad.profiles?.in_game_alias || 'Unknown',
         created_at: squad.created_at,
         banner_url: squad.banner_url,
-        member_count: Number(squad.member_count),
+        member_count: squad.squad_members?.length || 0,
         members: [] // Not needed for list view
       }));
 
       setAllSquads(formattedSquads);
+    } catch (error) {
+      console.error('Error loading all squads:', error);
     }
   };
 
@@ -1128,102 +1260,121 @@ export default function SquadsPage() {
                   </a>
                 )}
               </div>
-              <div className="flex gap-2">
+              {/* Squad Management Actions - Mobile Optimized */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Primary Actions Group */}
                 {canManageSquad && (
-                  <>
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={() => setShowInviteForm(true)}
-                      className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
+                      <span>👥</span>
                       Invite Player
                     </button>
+                    
                     {isCaptain && (
-                      <>
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <button
                           onClick={() => setShowBannerForm(true)}
-                          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
                         >
+                          <span>🖼️</span>
                           {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
                         </button>
                         <button
                           onClick={openEditForm}
-                          className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
                         >
+                          <span>✏️</span>
                           Edit Details
                         </button>
-                      </>
+                      </div>
                     )}
-                  </>
+                  </div>
                 )}
-                {isCaptain ? (
-                  <div className="flex gap-2">
+                
+                {/* Danger Zone Actions */}
+                <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto">
+                  {isCaptain ? (
                     <button
                       onClick={disbandSquad}
-                      className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-red-500"
                     >
+                      <span>💥</span>
                       Disband Squad
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={leaveSquad}
-                    className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                  >
-                    Leave Squad
-                  </button>
-                )}
+                  ) : (
+                    <button
+                      onClick={leaveSquad}
+                      className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-orange-500"
+                    >
+                      <span>🚪</span>
+                      Leave Squad
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Squad Members */}
             <div className="mb-6">
-              <h3 className="text-xl font-semibold mb-4">Members</h3>
+              <h3 className="text-xl font-semibold mb-4 text-cyan-400 flex items-center gap-2">
+                <span>👥</span>
+                Members ({userSquad.member_count})
+              </h3>
               <div className="grid gap-3">
                 {userSquad.members.map((member) => (
-                  <div key={member.id} className="bg-gray-700 rounded p-4 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{getRoleIcon(member.role)}</span>
-                      <div>
-                        <span className={`font-semibold ${getRoleColor(member.role)}`}>
-                          {member.in_game_alias}
-                        </span>
-                        <div className="text-sm text-gray-400">
-                          {member.role.replace('_', ' ').toUpperCase()} • Joined {new Date(member.joined_at).toLocaleDateString()}
+                  <div key={member.id} className="bg-gradient-to-r from-gray-700/80 to-gray-600/60 rounded-lg p-4 border border-gray-600/30">
+                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{getRoleIcon(member.role)}</span>
+                        <div>
+                          <span className={`font-semibold text-lg ${getRoleColor(member.role)}`}>
+                            {member.in_game_alias}
+                          </span>
+                          <div className="text-sm text-gray-400">
+                            {member.role.replace('_', ' ').toUpperCase()} • Joined {new Date(member.joined_at).toLocaleDateString()}
+                          </div>
                         </div>
                       </div>
+                      {isCaptain && member.player_id !== user?.id && (
+                        <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 w-full lg:w-auto">
+                          {member.role === 'player' && (
+                            <button
+                              onClick={() => promoteMember(member.id, 'co_captain')}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
+                            >
+                              <span>⬆️</span>
+                              Promote
+                            </button>
+                          )}
+                          {member.role === 'co_captain' && (
+                            <button
+                              onClick={() => promoteMember(member.id, 'player')}
+                              className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
+                            >
+                              <span>⬇️</span>
+                              Demote
+                            </button>
+                          )}
+                          <button
+                            onClick={() => transferOwnership(member.player_id)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
+                          >
+                            <span>👑</span>
+                            Make Captain
+                          </button>
+                          <button
+                            onClick={() => kickMember(member.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 border border-red-500 shadow-sm"
+                          >
+                            <span>🚫</span>
+                            Kick
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {isCaptain && member.player_id !== user?.id && (
-                      <div className="flex gap-2">
-                        {member.role === 'player' && (
-                          <button
-                            onClick={() => promoteMember(member.id, 'co_captain')}
-                            className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"
-                          >
-                            Promote
-                          </button>
-                        )}
-                        {member.role === 'co_captain' && (
-                          <button
-                            onClick={() => promoteMember(member.id, 'player')}
-                            className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-sm"
-                          >
-                            Demote
-                          </button>
-                        )}
-                        <button
-                          onClick={() => transferOwnership(member.player_id)}
-                          className="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm"
-                        >
-                          Make Captain
-                        </button>
-                        <button
-                          onClick={() => kickMember(member.id)}
-                          className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
-                        >
-                          Kick
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
