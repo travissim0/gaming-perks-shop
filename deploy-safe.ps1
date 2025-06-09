@@ -63,6 +63,16 @@ try {
     # Use scp with compression for faster upload
     scp -C -r .next ${Username}@linux-1.freeinfantry.com:/var/www/gaming-perks-shop/
     
+    # Ensure static directory exists and verify upload
+    ssh ${Username}@linux-1.freeinfantry.com "mkdir -p /var/www/gaming-perks-shop/.next/static"
+    
+    # Double-check static files uploaded correctly
+    $staticCheck = ssh ${Username}@linux-1.freeinfantry.com "ls -la /var/www/gaming-perks-shop/.next/static/ | wc -l"
+    if ([int]$staticCheck -lt 3) {
+        Write-ColorOutput "WARNING Static files missing, re-uploading..." $Yellow
+        scp -C -r .next/static/* ${Username}@linux-1.freeinfantry.com:/var/www/gaming-perks-shop/.next/static/
+    }
+    
     # Step 4: Check if dependencies need updating (skip if package-lock.json unchanged)
     Write-ColorOutput "SEARCH Checking if dependencies need updating..." $Yellow
     $packageChanged = ssh ${Username}@linux-1.freeinfantry.com "cd /var/www/gaming-perks-shop && git diff HEAD~1 HEAD --name-only | grep -E '(package\.json|package-lock\.json)'"
