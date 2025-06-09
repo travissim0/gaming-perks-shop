@@ -68,6 +68,7 @@ export default function SquadsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [showBannerForm, setShowBannerForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [selectedInvitee, setSelectedInvitee] = useState('');
   const [pendingInvitesError, setPendingInvitesError] = useState(false);
 
@@ -78,6 +79,14 @@ export default function SquadsPage() {
   const [discordLink, setDiscordLink] = useState('');
   const [websiteLink, setWebsiteLink] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  
+  // Edit form states
+  const [editSquadName, setEditSquadName] = useState('');
+  const [editSquadTag, setEditSquadTag] = useState('');
+  const [editSquadDescription, setEditSquadDescription] = useState('');
+  const [editDiscordLink, setEditDiscordLink] = useState('');
+  const [editWebsiteLink, setEditWebsiteLink] = useState('');
 
   // Add cleanup tracking
   const isMountedRef = useRef(true);
@@ -896,8 +905,41 @@ export default function SquadsPage() {
     if (!userSquad || !isCaptain) return;
 
     try {
-      // Validate URL if provided
-      if (bannerUrl.trim() && !isValidImageUrl(bannerUrl.trim())) {
+      let finalBannerUrl = bannerUrl.trim();
+
+      // If there's a file to upload, upload it first
+      if (bannerFile) {
+        try {
+          const fileExt = bannerFile.name.split('.').pop();
+          const fileName = `squad-${userSquad.id}-${Date.now()}.${fileExt}`;
+          const filePath = `squad-banners/${fileName}`;
+          
+          const { error: uploadError, data } = await supabase.storage
+            .from('avatars') // Using existing avatars bucket
+            .upload(filePath, bannerFile, {
+              upsert: true
+            });
+            
+          if (uploadError) {
+            if (uploadError.message?.includes('Bucket not found')) {
+              toast.error('Image storage not set up yet. Please use a URL instead.');
+              return;
+            } else {
+              throw uploadError;
+            }
+          }
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+            
+          finalBannerUrl = publicUrl;
+        } catch (uploadError: any) {
+          console.error('Error uploading banner:', uploadError);
+          toast.error('Failed to upload image. Please try a URL instead.');
+          return;
+        }
+      } else if (bannerUrl.trim() && !isValidImageUrl(bannerUrl.trim())) {
         toast.error('Please enter a valid image URL (jpg, png, gif, webp)');
         return;
       }
@@ -905,15 +947,16 @@ export default function SquadsPage() {
       const { error } = await supabase
         .from('squads')
         .update({ 
-          banner_url: bannerUrl.trim() || null 
+          banner_url: finalBannerUrl || null 
         })
         .eq('id', userSquad.id);
 
       if (error) throw error;
 
-      toast.success(bannerUrl.trim() ? 'Squad picture updated!' : 'Squad picture removed!');
+      toast.success(finalBannerUrl ? 'Squad picture updated!' : 'Squad picture removed!');
       setShowBannerForm(false);
       setBannerUrl('');
+      setBannerFile(null);
       
       // Refresh squad data
       loadUserSquad();
@@ -921,6 +964,36 @@ export default function SquadsPage() {
     } catch (error) {
       console.error('Error updating squad banner:', error);
       toast.error('Failed to update squad picture');
+    }
+  };
+
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      if (!validTypes.includes(file.type)) {
+        toast.error('Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.');
+        return;
+      }
+      
+      if (file.size > maxSize) {
+        toast.error('File is too large. Maximum size is 5MB.');
+        return;
+      }
+      
+      setBannerFile(file);
+      setBannerUrl(''); // Clear URL if file is selected
+      
+      // Create a preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setBannerUrl(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -936,6 +1009,48 @@ export default function SquadsPage() {
              url.includes('i.redd.it');
     } catch {
       return false;
+    }
+  };
+
+  const openEditForm = () => {
+    if (!userSquad) return;
+    
+    // Pre-populate form with current values
+    setEditSquadName(userSquad.name);
+    setEditSquadTag(userSquad.tag);
+    setEditSquadDescription(userSquad.description || '');
+    setEditDiscordLink(userSquad.discord_link || '');
+    setEditWebsiteLink(userSquad.website_link || '');
+    setShowEditForm(true);
+  };
+
+  const updateSquadDetails = async () => {
+    if (!userSquad || !isCaptain) return;
+
+    try {
+      const { error } = await supabase
+        .from('squads')
+        .update({
+          name: editSquadName.trim(),
+          tag: editSquadTag.trim(),
+          description: editSquadDescription.trim() || null,
+          discord_link: editDiscordLink.trim() || null,
+          website_link: editWebsiteLink.trim() || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userSquad.id);
+
+      if (error) throw error;
+
+      toast.success('Squad details updated successfully!');
+      setShowEditForm(false);
+      
+      // Refresh squad data
+      loadUserSquad();
+      loadAllSquads();
+    } catch (error) {
+      console.error('Error updating squad details:', error);
+      toast.error('Failed to update squad details');
     }
   };
 
@@ -1023,12 +1138,20 @@ export default function SquadsPage() {
                       Invite Player
                     </button>
                     {isCaptain && (
-                      <button
-                        onClick={() => setShowBannerForm(true)}
-                        className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm"
-                      >
-                        {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setShowBannerForm(true)}
+                          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm"
+                        >
+                          {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
+                        </button>
+                        <button
+                          onClick={openEditForm}
+                          className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm"
+                        >
+                          Edit Details
+                        </button>
+                      </>
                     )}
                   </>
                 )}
@@ -1486,22 +1609,64 @@ export default function SquadsPage() {
               )}
 
               <form onSubmit={(e) => { e.preventDefault(); updateSquadBanner(); }}>
+                {/* File Upload Option */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Upload Image File</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBannerFileChange}
+                    className="hidden"
+                    id="banner-upload"
+                  />
+                  <label
+                    htmlFor="banner-upload"
+                    className="inline-block bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 px-4 py-2 rounded cursor-pointer text-white font-medium transition-all duration-300 text-center w-full"
+                  >
+                    Choose Image File
+                  </label>
+                  {bannerFile && (
+                    <p className="mt-2 text-sm text-green-400">
+                      📁 {bannerFile.name}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">
+                    Max 5MB. Supports: JPG, PNG, GIF, WebP
+                  </p>
+                </div>
+
+                {/* OR Divider */}
+                <div className="mb-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-600" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-4 bg-gray-800 text-gray-400">OR</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">Squad Picture URL</label>
                   <input
                     type="url"
-                    value={bannerUrl}
-                    onChange={(e) => setBannerUrl(e.target.value)}
+                    value={bannerFile ? '' : bannerUrl}
+                    onChange={(e) => {
+                      setBannerUrl(e.target.value);
+                      setBannerFile(null); // Clear file if URL is entered
+                    }}
                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
                     placeholder="https://example.com/image.jpg"
+                    disabled={!!bannerFile}
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Supports: JPG, PNG, GIF, WebP. Square or portrait images work best (1:1 to 3:4 ratio).
+                    Square or portrait images work best (1:1 to 3:4 ratio).
                   </p>
                 </div>
 
                 {/* Live Preview */}
-                {bannerUrl && isValidImageUrl(bannerUrl) && (
+                {(bannerUrl && (bannerFile || isValidImageUrl(bannerUrl))) && (
                   <div className="mb-4">
                     <label className="block text-sm font-medium mb-2">Preview</label>
                     <div className="w-full max-w-xs mx-auto bg-gray-700 rounded-lg overflow-hidden">
@@ -1553,6 +1718,88 @@ export default function SquadsPage() {
                       setShowBannerForm(false);
                       setBannerUrl('');
                     }}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Squad Details Modal */}
+        {showEditForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold mb-4">Edit Squad Details</h3>
+              <form onSubmit={(e) => { e.preventDefault(); updateSquadDetails(); }}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Squad Name</label>
+                  <input
+                    type="text"
+                    value={editSquadName}
+                    onChange={(e) => setEditSquadName(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    required
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Squad Tag (3-5 chars)</label>
+                  <input
+                    type="text"
+                    value={editSquadTag}
+                    onChange={(e) => setEditSquadTag(e.target.value.toUpperCase())}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    maxLength={5}
+                    required
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Description</label>
+                  <textarea
+                    value={editSquadDescription}
+                    onChange={(e) => setEditSquadDescription(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    rows={4}
+                    placeholder="Describe your squad..."
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Discord Link (optional)</label>
+                  <input
+                    type="url"
+                    value={editDiscordLink}
+                    onChange={(e) => setEditDiscordLink(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    placeholder="https://discord.gg/..."
+                  />
+                </div>
+                
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Website Link (optional)</label>
+                  <input
+                    type="url"
+                    value={editWebsiteLink}
+                    onChange={(e) => setEditWebsiteLink(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    placeholder="https://..."
+                  />
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded"
+                  >
+                    Update Squad
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditForm(false)}
                     className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
                   >
                     Cancel

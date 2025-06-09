@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 
 export default function ProfilePage() {
@@ -18,6 +19,7 @@ export default function ProfilePage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [defaultAvatars, setDefaultAvatars] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [userSquad, setUserSquad] = useState<any>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -47,6 +49,9 @@ export default function ProfilePage() {
           
           // Get current email from user object
           setEmail(user.email || '');
+
+          // Fetch user's squad information
+          await loadUserSquad();
 
           // Fetch default avatars (skip if bucket doesn't exist yet)
           try {
@@ -198,6 +203,37 @@ export default function ProfilePage() {
     setAvatarFile(null);
   };
 
+  const loadUserSquad = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('squad_members')
+        .select(`
+          squads!inner(
+            id,
+            name,
+            tag,
+            description
+          )
+        `)
+        .eq('player_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading user squad:', error);
+        return;
+      }
+
+      if (data?.squads) {
+        setUserSquad(data.squads);
+      }
+    } catch (error) {
+      console.error('Error loading user squad:', error);
+    }
+  };
+
   // Show loading spinner only while checking authentication
   if (loading) {
     return (
@@ -347,6 +383,41 @@ export default function ProfilePage() {
                       placeholder="Enter your combat alias..."
                     />
                   </div>
+                </div>
+                
+                {/* Squad Information */}
+                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
+                  <label className="block text-lg font-bold text-cyan-400 mb-3 tracking-wide">
+                    🏆 Squad
+                  </label>
+                  {userSquad ? (
+                    <div className="bg-gray-800 border border-cyan-500/30 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xl font-bold text-cyan-400">
+                          [{userSquad.tag}] {userSquad.name}
+                        </h3>
+                        <Link
+                          href="/squads"
+                          className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded text-sm font-medium transition-colors duration-300"
+                        >
+                          Manage Squad
+                        </Link>
+                      </div>
+                      {userSquad.description && (
+                        <p className="text-gray-300 text-sm">{userSquad.description}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 text-center">
+                      <p className="text-gray-400 mb-3">You are not currently in a squad</p>
+                      <Link
+                        href="/squads"
+                        className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-medium transition-colors duration-300"
+                      >
+                        Join or Create Squad
+                      </Link>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex justify-center pt-6">

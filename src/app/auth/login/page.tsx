@@ -10,6 +10,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
   const { signIn } = useAuth();
 
@@ -37,14 +38,32 @@ export default function Login() {
       
       if (error) {
         console.error('Login error:', error);
+        
+        // Check if this is a mobile timeout error and offer retry
+        if (error.message?.includes('mobile') && error.message?.includes('timeout') && retryCount < 2) {
+          setRetryCount(prev => prev + 1);
+          toast.error(`${error.message} (Attempt ${retryCount + 1}/3)`);
+          
+          // Auto-retry after a short delay
+          setTimeout(() => {
+            if (!loading) {
+              handleLogin(e);
+            }
+          }, 2000);
+          return;
+        }
+        
         toast.error(error.message);
+        setRetryCount(0); // Reset retry count on non-timeout errors
       } else {
         toast.success('Logged in successfully!');
+        setRetryCount(0); // Reset retry count on success
         router.push('/');
       }
     } catch (error: any) {
       console.error('Login exception:', error);
       toast.error(error.message || 'An error occurred during login');
+      setRetryCount(0);
     } finally {
       setLoading(false);
     }

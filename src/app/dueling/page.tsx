@@ -55,6 +55,8 @@ export default function DuelingPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [winnersCollapsed, setWinnersCollapsed] = useState(false);
+  const [losersCollapsed, setLosersCollapsed] = useState(false);
 
   useEffect(() => {
     fetchPlayers();
@@ -440,144 +442,467 @@ export default function DuelingPage() {
 
   // Double Elimination Bracket Component
   const DoubleEliminationBracket = ({ tournament }: { tournament: Tournament }) => {
-    const MATCH_HEIGHT = 80;
-    const SPACING = 20;
-    
-    const WinnersBracket = () => (
-      <div className="flex-1">
-        <h3 className="text-xl font-bold text-cyan-400 text-center mb-6">Winners Bracket</h3>
-        <div className="flex justify-center space-x-16">
-          {[1, 2, 3, 4].map(round => {
-            const roundMatches = tournament.winnersMatches.filter(m => m.roundNumber === round);
-            const roundName = round === 1 ? 'Round 1' : round === 2 ? 'Quarterfinals' : 
-                             round === 3 ? 'Semifinals' : 'Winners Finals';
-            
-            return (
-              <div key={round} className="flex flex-col items-center">
-                <div className="text-sm font-bold text-cyan-400 mb-4">{roundName}</div>
-                <div className="space-y-6">
-                  {roundMatches.map(match => (
-                    <div key={match.id} className={`bg-gray-800/70 border rounded-lg p-3 w-40 ${
-                      match.status === 'completed' ? 'border-green-500/60' : 'border-gray-600'
-                    }`}>
-                      <div className={`p-2 rounded mb-1 text-xs ${
-                        match.winner?.id === match.player1?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-                      }`}>
-                        {match.player1?.in_game_alias || 'TBD'}
-                        {match.winner?.id === match.player1?.id && ' 👑'}
-                      </div>
-                      <div className="text-center text-xs text-gray-500">vs</div>
-                      <div className={`p-2 rounded text-xs ${
-                        match.winner?.id === match.player2?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-                      }`}>
-                        {match.player2?.in_game_alias || 'TBD'}
-                        {match.winner?.id === match.player2?.id && ' 👑'}
-                      </div>
-                      <div className="text-center mt-1 text-xs">
-                        {match.status === 'completed' ? '✓' : match.player1 && match.player2 ? '🔄' : '⏳'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+    // Match box dimensions for calculation consistency
+    const MATCH_BOX = {
+      width: 192, // 48 * 4 = 192px
+      height: 80, // 20 * 4 = 80px
+      largeWidth: 256, // 64 * 4 = 256px
+      largeHeight: 96 // 24 * 4 = 96px
+    };
+
+    const MatchBox = ({ match, size = 'normal' }: { match: TournamentMatch, size?: 'normal' | 'large' }) => (
+      <div className={`bg-gray-800/70 border rounded p-1 shadow-lg ${
+        size === 'large' ? 'w-32 h-14' : 'w-24 h-10'
+      } ${match.status === 'completed' ? 'border-green-500/60 shadow-green-500/20' : 'border-gray-600'} flex flex-col justify-center`}>
+        <div className={`px-1 py-0.5 rounded mb-0.5 text-xs ${
+          match.winner?.id === match.player1?.id ? 'bg-green-600/40 font-bold text-green-100 border border-green-500/50' : 'bg-gray-700/60'
+        }`}>
+          <div className="truncate text-xs leading-tight">
+            {match.player1?.in_game_alias || 'TBD'}
+            {match.winner?.id === match.player1?.id && ' 👑'}
+          </div>
+        </div>
+        <div className={`px-1 py-0.5 rounded text-xs ${
+          match.winner?.id === match.player2?.id ? 'bg-green-600/40 font-bold text-green-100 border border-green-500/50' : 'bg-gray-700/60'
+        }`}>
+          <div className="truncate text-xs leading-tight">
+            {match.player2?.in_game_alias || 'TBD'}
+            {match.winner?.id === match.player2?.id && ' 👑'}
+          </div>
         </div>
       </div>
     );
 
-    const LosersBracket = () => (
-      <div className="flex-1">
-        <h3 className="text-xl font-bold text-red-400 text-center mb-6">Losers Bracket</h3>
-        <div className="flex justify-center space-x-16">
-          {[1, 2, 3, 4, 5].map(round => {
-            const roundMatches = tournament.losersMatches.filter(m => m.roundNumber === round);
-            if (roundMatches.length === 0) return null;
-            
-            const roundName = `LR ${round}`;
-            
-            return (
-              <div key={round} className="flex flex-col items-center">
-                <div className="text-sm font-bold text-red-400 mb-4">{roundName}</div>
-                <div className="space-y-6">
-                  {roundMatches.map(match => (
-                    <div key={match.id} className={`bg-gray-800/70 border rounded-lg p-3 w-40 ${
-                      match.status === 'completed' ? 'border-green-500/60' : 'border-gray-600'
-                    }`}>
-                      <div className={`p-2 rounded mb-1 text-xs ${
-                        match.winner?.id === match.player1?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-                      }`}>
-                        {match.player1?.in_game_alias || 'TBD'}
-                        {match.winner?.id === match.player1?.id && ' 👑'}
-                      </div>
-                      <div className="text-center text-xs text-gray-500">vs</div>
-                      <div className={`p-2 rounded text-xs ${
-                        match.winner?.id === match.player2?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-                      }`}>
-                        {match.player2?.in_game_alias || 'TBD'}
-                        {match.winner?.id === match.player2?.id && ' 👑'}
-                      </div>
-                      <div className="text-center mt-1 text-xs">
-                        {match.status === 'completed' ? '✓' : match.player1 && match.player2 ? '🔄' : '⏳'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+    const WinnersBracket = () => {
+      const round1Matches = tournament.winnersMatches.filter(m => m.roundNumber === 1);
+      const round2Matches = tournament.winnersMatches.filter(m => m.roundNumber === 2);
+      const round3Matches = tournament.winnersMatches.filter(m => m.roundNumber === 3);
+      const round4Matches = tournament.winnersMatches.filter(m => m.roundNumber === 4);
+
+      // Compact spacing - half scale
+      const ROUND_SPACING = 160; // Horizontal spacing between rounds
+      const HEADER_HEIGHT = 30; // Height of round headers
+      const MATCH_HEIGHT = 60; // Match box height + margin (compact)
+      const MATCH_BOX_WIDTH = 96; // Match box width (w-24 = 96px)
+      const MATCH_BOX_HEIGHT = 48; // Actual match box height for center calculation (h-12 = 48px)
+      
+      return (
+        <div className="mb-8">
+          <div className="flex items-center justify-center mb-6">
+            <h3 className="text-2xl font-bold text-cyan-400">🏆 Winners Bracket</h3>
+            <button
+              onClick={() => setWinnersCollapsed(!winnersCollapsed)}
+              className="ml-4 px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 rounded text-sm transition-colors"
+            >
+              {winnersCollapsed ? '▼ Expand' : '▲ Collapse'}
+            </button>
+          </div>
+          
+          {!winnersCollapsed && (
+            <div className="relative" style={{ height: '550px' }}>
+            {/* Round 1 - 8 matches */}
+            {round1Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + idx * MATCH_HEIGHT) + 'px',
+                left: '0px' 
+              }}>
+                <MatchBox match={match} />
               </div>
-            );
-          })}
+            ))}
+            <div className="absolute text-xs font-bold text-cyan-400 text-center w-24 bg-cyan-500/10 py-1 rounded" 
+                 style={{ left: '0px', top: '0px' }}>
+              Round 1
+            </div>
+
+            {/* Round 2 - 4 matches (Quarterfinals) */}
+            {round2Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT/2 + idx * MATCH_HEIGHT * 2) + 'px',
+                left: ROUND_SPACING + 'px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            <div className="absolute text-xs font-bold text-cyan-400 text-center w-24 bg-cyan-500/10 py-1 rounded" 
+                 style={{ left: ROUND_SPACING + 'px', top: '0px' }}>
+              Quarterfinals
+            </div>
+
+            {/* Round 3 - 2 matches (Semifinals) */}
+            {round3Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + idx * MATCH_HEIGHT * 4) + 'px',
+                left: (ROUND_SPACING * 2) + 'px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            <div className="absolute text-xs font-bold text-cyan-400 text-center w-24 bg-cyan-500/10 py-1 rounded" 
+                 style={{ left: (ROUND_SPACING * 2) + 'px', top: '0px' }}>
+              Semifinals
+            </div>
+
+            {/* Round 4 - 1 match (Winners Finals) */}
+            {round4Matches.map((match) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT * 3.5) + 'px',
+                left: (ROUND_SPACING * 3) + 'px' 
+              }}>
+                <MatchBox match={match} size="large" />
+              </div>
+            ))}
+            <div className="absolute text-xs font-bold text-cyan-400 text-center w-32 bg-cyan-500/10 py-1 rounded" 
+                 style={{ left: (ROUND_SPACING * 3) + 'px', top: '0px' }}>
+              Winners Finals
+            </div>
+
+            {/* Connection Lines for Winners Bracket - Fixed Drawing */}
+            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
+              <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" />
+                </marker>
+              </defs>
+              
+              {/* Round 1 to Quarterfinals - Perfect Center Alignment */}
+              {round1Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + idx * MATCH_HEIGHT + (MATCH_BOX_HEIGHT / 2) + 2; // Perfect center with offset
+                const targetMatchIdx = Math.floor(idx / 2);
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT/2 + targetMatchIdx * MATCH_HEIGHT * 2 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const startX = MATCH_BOX_WIDTH + 5; // Small offset from box edge
+                const endX = ROUND_SPACING - 5; // Small offset to box edge
+                const midX = startX + (endX - startX) / 2;
+                
+                                  return (
+                  <g key={`r1-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+              {/* Quarterfinals to Semifinals - Perfect Center Alignment */}
+              {round2Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + MATCH_HEIGHT/2 + idx * MATCH_HEIGHT * 2 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const targetMatchIdx = Math.floor(idx / 2);
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + targetMatchIdx * MATCH_HEIGHT * 4 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const startX = ROUND_SPACING + MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING * 2 - 5;
+                const midX = startX + (endX - startX) / 2;
+                
+                                  return (
+                  <g key={`r2-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+                            {/* Semifinals to Finals - Perfect Center Alignment */}
+              {round3Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + idx * MATCH_HEIGHT * 4 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT * 3.5 + (MATCH_BOX_HEIGHT / 2) + 2; // Center of finals
+                const startX = ROUND_SPACING * 2 + MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING * 3 - 5;
+                const midX = startX + (endX - startX) / 2;
+                
+                return (
+                  <g key={`r3-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#38bdf8" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+
+            </svg>
+          </div>
+          )}
         </div>
-      </div>
-    );
+      );
+    };
+
+    const LosersBracket = () => {
+      const round1Matches = tournament.losersMatches.filter(m => m.roundNumber === 1);
+      const round2Matches = tournament.losersMatches.filter(m => m.roundNumber === 2);
+      const round3Matches = tournament.losersMatches.filter(m => m.roundNumber === 3);
+      const round4Matches = tournament.losersMatches.filter(m => m.roundNumber === 4);
+      const round5Matches = tournament.losersMatches.filter(m => m.roundNumber === 5);
+
+      // Compact spacing - half scale
+      const ROUND_SPACING = 160;
+      const HEADER_HEIGHT = 30;
+      const MATCH_HEIGHT = 65; // Compact spacing for losers bracket
+      const MATCH_BOX_WIDTH = 96; // Match box width (w-24 = 96px)
+      const MATCH_BOX_HEIGHT = 48; // Actual match box height for center calculation (h-12 = 48px)
+
+      return (
+        <div className="mb-8 border-t-2 border-red-500/30 pt-6">
+          <div className="flex items-center justify-center mb-6">
+            <h3 className="text-2xl font-bold text-red-400">💀 Losers Bracket</h3>
+            <button
+              onClick={() => setLosersCollapsed(!losersCollapsed)}
+              className="ml-4 px-3 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded text-sm transition-colors"
+            >
+              {losersCollapsed ? '▼ Expand' : '▲ Collapse'}
+            </button>
+          </div>
+          
+          {!losersCollapsed && (
+            <div className="relative" style={{ height: '325px' }}>
+            {/* LR1 - 4 matches */}
+            {round1Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + idx * MATCH_HEIGHT) + 'px',
+                left: '0px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            {round1Matches.length > 0 && (
+              <div className="absolute text-xs font-bold text-red-400 text-center w-24 bg-red-500/10 py-1 rounded" 
+                   style={{ left: '0px', top: '0px' }}>
+                LR1
+              </div>
+            )}
+
+            {/* LR2 - 4 matches */}
+            {round2Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + idx * MATCH_HEIGHT) + 'px',
+                left: ROUND_SPACING + 'px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            {round2Matches.length > 0 && (
+              <div className="absolute text-xs font-bold text-red-400 text-center w-24 bg-red-500/10 py-1 rounded" 
+                   style={{ left: ROUND_SPACING + 'px', top: '0px' }}>
+                LR2
+              </div>
+            )}
+
+            {/* LR3 - 2 matches */}
+            {round3Matches.map((match, idx) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT/2 + idx * MATCH_HEIGHT * 2) + 'px',
+                left: (ROUND_SPACING * 2) + 'px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            {round3Matches.length > 0 && (
+              <div className="absolute text-xs font-bold text-red-400 text-center w-24 bg-red-500/10 py-1 rounded" 
+                   style={{ left: (ROUND_SPACING * 2) + 'px', top: '0px' }}>
+                LR3
+              </div>
+            )}
+
+            {/* LR4 - 1 match */}
+            {round4Matches.map((match) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT * 1.5) + 'px',
+                left: (ROUND_SPACING * 3) + 'px' 
+              }}>
+                <MatchBox match={match} />
+              </div>
+            ))}
+            {round4Matches.length > 0 && (
+              <div className="absolute text-xs font-bold text-red-400 text-center w-24 bg-red-500/10 py-1 rounded" 
+                   style={{ left: (ROUND_SPACING * 3) + 'px', top: '0px' }}>
+                LR4
+              </div>
+            )}
+
+            {/* LR5 - Losers Finals */}
+            {round5Matches.map((match) => (
+              <div key={match.id} className="absolute" style={{ 
+                top: (HEADER_HEIGHT + MATCH_HEIGHT * 1.5) + 'px',
+                left: (ROUND_SPACING * 4) + 'px' 
+              }}>
+                <MatchBox match={match} size="large" />
+              </div>
+            ))}
+            {round5Matches.length > 0 && (
+              <div className="absolute text-xs font-bold text-red-400 text-center w-32 bg-red-500/10 py-1 rounded" 
+                   style={{ left: (ROUND_SPACING * 4) + 'px', top: '0px' }}>
+                Losers Finals
+              </div>
+            )}
+
+            {/* Connection Lines for Losers Bracket - Fixed Drawing */}
+            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
+              <defs>
+                <marker id="losers-arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                </marker>
+              </defs>
+              
+              {/* LR1 to LR2 - Perfect Center Alignment */}
+              {round1Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + idx * MATCH_HEIGHT + (MATCH_BOX_HEIGHT / 2) + 2; // Perfect center with offset
+                const targetMatchIdx = Math.floor(idx / 2);
+                const endY = HEADER_HEIGHT + (targetMatchIdx + 2) * MATCH_HEIGHT + (MATCH_BOX_HEIGHT / 2) + 2;
+                const startX = MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING - 5;
+                const midX = startX + (endX - startX) / 2;
+                
+                                  return (
+                  <g key={`lr1-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+              {/* LR2 to LR3 - Perfect Center Alignment */}
+              {round2Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + idx * MATCH_HEIGHT + (MATCH_BOX_HEIGHT / 2) + 2;
+                const targetMatchIdx = Math.floor(idx / 2);
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT/2 + targetMatchIdx * MATCH_HEIGHT * 2 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const startX = ROUND_SPACING + MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING * 2 - 5;
+                const midX = startX + (endX - startX) / 2;
+                
+                                  return (
+                  <g key={`lr2-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+              {/* LR3 to LR4 - Perfect Center Alignment */}
+              {round3Matches.map((match, idx) => {
+                const startY = HEADER_HEIGHT + MATCH_HEIGHT/2 + idx * MATCH_HEIGHT * 2 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + (MATCH_BOX_HEIGHT / 2) + 2;
+                const startX = ROUND_SPACING * 2 + MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING * 3 - 5;
+                const midX = startX + (endX - startX) / 2;
+                
+                                  return (
+                  <g key={`lr3-${idx}`}>
+                    <line x1={startX} y1={startY} x2={midX} y2={startY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={startY} x2={midX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                    <line x1={midX} y1={endY} x2={endX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+                            {/* LR4 to LR5 (Losers Finals) - Perfect Center Alignment */}
+              {round4Matches.map((match) => {
+                const startY = HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + (MATCH_BOX_HEIGHT / 2);
+                const endY = HEADER_HEIGHT + MATCH_HEIGHT * 1.5 + (MATCH_BOX_HEIGHT / 2); // Center of finals
+                const startX = ROUND_SPACING * 3 + MATCH_BOX_WIDTH + 5;
+                const endX = ROUND_SPACING * 4 - 5;
+                
+                return (
+                  <g key="lr4-lr5">
+                    <line x1={startX} y1={startY} x2={endX} y2={endY} 
+                          stroke="#ef4444" strokeWidth="3" opacity="0.8"/>
+                  </g>
+                );
+              })}
+
+
+            </svg>
+          </div>
+          )}
+        </div>
+      );
+    };
 
     const GrandFinals = () => {
       const match = tournament.grandFinalsMatches[0];
       if (!match) return null;
 
       return (
-        <div className="mt-8">
-          <h3 className="text-2xl font-bold text-yellow-400 text-center mb-6">Grand Finals</h3>
-          <div className="flex justify-center">
-            <div className={`bg-gray-800/70 border rounded-lg p-4 w-60 ${
-              match.status === 'completed' ? 'border-yellow-500/60' : 'border-gray-600'
+        <div className="relative">
+          <h3 className="text-lg font-bold text-yellow-400 text-center mb-3">🏆 Grand Finals</h3>
+          <div className={`bg-gradient-to-br from-gray-800/90 to-gray-900/90 border-2 rounded-lg p-3 w-36 ${
+            match.status === 'completed' ? 'border-yellow-500/80' : 'border-yellow-600/60'
+          } shadow-xl`}>
+            <div className="text-center text-xs text-yellow-400 mb-2 font-bold">
+              Championship
+            </div>
+            <div className={`p-1 rounded mb-1 text-center ${
+              match.winner?.id === match.player1?.id ? 'bg-green-600/40 font-bold border border-green-500/50' : 'bg-gray-700/60'
             }`}>
-              <div className="text-center text-sm text-yellow-400 mb-2">Winners vs Losers Champion</div>
-              <div className={`p-3 rounded mb-2 ${
-                match.winner?.id === match.player1?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-              }`}>
-                {match.player1?.in_game_alias || 'Winners Champion'}
+              <div className="text-cyan-300 text-xs">Winners</div>
+              <div className="text-white text-xs truncate">
+                {match.player1?.in_game_alias || 'TBD'}
                 {match.winner?.id === match.player1?.id && ' 👑'}
               </div>
-              <div className="text-center text-gray-500 mb-2">vs</div>
-              <div className={`p-3 rounded ${
-                match.winner?.id === match.player2?.id ? 'bg-green-600/30 font-bold' : 'bg-gray-700/60'
-              }`}>
-                {match.player2?.in_game_alias || 'Losers Champion'}
+            </div>
+            <div className="text-center text-yellow-400 font-bold text-xs mb-1">VS</div>
+            <div className={`p-1 rounded mb-2 text-center ${
+              match.winner?.id === match.player2?.id ? 'bg-green-600/40 font-bold border border-green-500/50' : 'bg-gray-700/60'
+            }`}>
+              <div className="text-red-300 text-xs">Losers</div>
+              <div className="text-white text-xs truncate">
+                {match.player2?.in_game_alias || 'TBD'}
                 {match.winner?.id === match.player2?.id && ' 👑'}
               </div>
-              <div className="text-center mt-3">
-                {match.status === 'completed' ? (
-                  <span className="text-yellow-400 font-bold">🏆 Tournament Complete!</span>
-                ) : match.player1 && match.player2 ? (
-                  <span className="text-blue-400">🔄 Ready to Play</span>
-                ) : (
-                  <span className="text-gray-500">⏳ Waiting for Champions</span>
-                )}
-              </div>
+            </div>
+            <div className="text-center">
+              {match.status === 'completed' ? (
+                <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 p-1 rounded border border-yellow-500/50">
+                  <div className="text-yellow-400 font-bold text-xs">🏆 Champion!</div>
+                  <div className="text-yellow-300 text-xs truncate">{match.winner?.in_game_alias}</div>
+                </div>
+              ) : match.player1 && match.player2 ? (
+                <span className="text-blue-400 font-bold text-xs">🔄 Ready!</span>
+              ) : (
+                <span className="text-gray-400 text-xs">⏳ Waiting</span>
+              )}
             </div>
           </div>
         </div>
       );
     };
 
-    return (
-      <div className="bg-gray-900/80 p-6 rounded-xl overflow-x-auto">
-        <div className="space-y-8">
-          <div className="flex space-x-8">
-            <WinnersBracket />
-            <LosersBracket />
+          return (
+      <div className="bg-gradient-to-br from-gray-900/95 to-gray-800/95 p-4 rounded-2xl border border-gray-700/50 w-full overflow-x-auto">
+        <div className="min-w-max" style={{ width: '900px' }}>
+          <div className="relative">
+            <div className="space-y-10">
+              <WinnersBracket />
+              <LosersBracket />
+            </div>
+            {/* Grand Finals positioned to the right */}
+            <div className="absolute" style={{ 
+              top: '300px', 
+              right: '25px',
+              zIndex: 10 
+            }}>
+              <GrandFinals />
+            </div>
+            
+
           </div>
-          <GrandFinals />
         </div>
       </div>
     );
@@ -618,7 +943,7 @@ export default function DuelingPage() {
                 <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
                   ⚔️ Tournament Bracket
                 </h1>
-                <p className="text-gray-400 mt-2">16-Player Single Elimination Tournament</p>
+                <p className="text-gray-400 mt-2">16-Player Double Elimination Tournament</p>
               </div>
               <div className="flex items-center space-x-4">
                 <Link 
@@ -633,7 +958,7 @@ export default function DuelingPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {tournament && (
           <>
             {/* Tournament Info */}
@@ -642,7 +967,7 @@ export default function DuelingPage() {
                 <div>
                   <h2 className="text-2xl font-bold text-white mb-2">{tournament.name}</h2>
                   <div className="flex items-center gap-4 text-sm">
-                    <span className="text-gray-400">16 Players • Single Elimination</span>
+                    <span className="text-gray-400">16 Players • Double Elimination</span>
                     <span className={`px-3 py-1 rounded text-xs font-bold ${
                       tournament.status === 'completed' ? 'bg-green-600' :
                       tournament.status === 'in_progress' ? 'bg-yellow-600' :
@@ -681,7 +1006,7 @@ export default function DuelingPage() {
             </div>
 
             {/* Tournament Bracket */}
-            <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
+            <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-2 w-full">
               <DoubleEliminationBracket tournament={tournament} />
             </div>
           </>

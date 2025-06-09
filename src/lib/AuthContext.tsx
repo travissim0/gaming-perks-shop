@@ -33,17 +33,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [authAttempts, setAuthAttempts] = useState(0);
   const [lastAuthCheck, setLastAuthCheck] = useState<number>(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [connectionQuality, setConnectionQuality] = useState<'fast' | 'slow' | 'unknown'>('unknown');
 
-  // Use our loading timeout hook with auth-specific handling
+  // Detect mobile and connection quality
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Detect mobile
+      const checkMobile = () => {
+        const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+      };
+      setIsMobile(checkMobile());
+
+      // Check connection quality
+      const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+      if (connection) {
+        const updateConnectionQuality = () => {
+          const effectiveType = connection.effectiveType;
+          if (effectiveType === '4g' || effectiveType === '3g') {
+            setConnectionQuality('fast');
+          } else {
+            setConnectionQuality('slow');
+          }
+        };
+        
+        updateConnectionQuality();
+        connection.addEventListener('change', updateConnectionQuality);
+        
+        return () => {
+          connection.removeEventListener('change', updateConnectionQuality);
+        };
+      }
+    }
+  }, []);
+
+  // Dynamic timeout based on device and connection - Extended to 30-60 minutes
+  const getAuthTimeout = () => {
+    if (connectionQuality === 'slow' || isMobile) {
+      return 3600000; // 60 minutes (1 hour) for slow connections or mobile
+    }
+    return 1800000; // 30 minutes for fast connections
+  };
+
+  // Use our loading timeout hook with auth-specific handling - extended for mobile
   useLoadingTimeout({
     isLoading: loading,
-    timeout: 12000, // 12 seconds for auth
-    onTimeout: () => {
-      console.error('⏰ Authentication timeout - forcing completion');
-      setError('Authentication check took too long. Please try refreshing the page.');
-      setLoading(false);
-      toast.error('Authentication timeout. Please refresh the page or try signing in again.');
-    }
+    timeout: getAuthTimeout(),
+          onTimeout: () => {
+        console.error('⏰ Authentication timeout - forcing completion');
+        const message = isMobile ? 
+          'Authentication timed out (after 1 hour). Please check your connection and try again.' :
+          'Authentication check timed out (after 30 minutes). This might be due to a slow connection.';
+        setError(message);
+        setLoading(false);
+        toast.error(message);
+      }
   });
 
   // Clear session and redirect to login
@@ -54,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clear Supabase session with timeout
       await withTimeout(
         supabase.auth.signOut(),
-        5000,
+        1800000, // 30 minutes timeout for session cleanup
         'Session signout timeout'
       );
     } catch (signOutError) {
@@ -132,10 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log(`🔐 Getting session (attempt ${attempt}/${maxAttempts})...`);
     
     try {
-      // Use timeout wrapper for session check
+      // Use timeout wrapper for session check - extended to 30-60 minutes
+      const sessionTimeout = isMobile || connectionQuality === 'slow' ? 3600000 : 1800000; // 1 hour or 30 minutes
       const sessionResult = await withTimeout(
         supabase.auth.getSession(),
-        8000, // 8 second timeout for individual session check
+        sessionTimeout, // Dynamic timeout based on device and connection
         'Session check timeout'
       );
 
@@ -209,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
       
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile check timeout')), 10000) // Increased from 5s to 10s
+        setTimeout(() => reject(new Error('Profile check timeout')), 1800000) // 30 minutes for profile check
       );
       
       const profileResult = await Promise.race([profileCheckPromise, timeoutPromise]) as any;
@@ -250,7 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ]);
         
         const insertTimeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Profile creation timeout')), 10000) // Increased from 5s to 10s
+          setTimeout(() => reject(new Error('Profile creation timeout')), 1800000) // 30 minutes for profile creation
         );
         
         const insertResult = await Promise.race([insertPromise, insertTimeoutPromise]) as any;
@@ -324,7 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         const sessionPromise = withTimeout(
           supabase.auth.getSession(),
-          8000,
+          1800000, // 30 minutes for initial session check
           'Session check timeout'
         );
 
@@ -473,14 +519,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [authAttempts]);
 
-  // Enhanced sign in with timeout and retry
+  // Enhanced sign in with timeout and retry - mobile optimized
   const signIn = async (email: string, password: string) => {
     try {
       console.log('🔑 Attempting sign in...');
       
+      // Use much longer timeout for mobile/slow connections - 30-60 minutes
+      const signInTimeout = isMobile || connectionQuality === 'slow' ? 3600000 : 1800000; // 1 hour or 30 minutes
+      
       const result = await withTimeout(
         supabase.auth.signInWithPassword({ email, password }),
-        10000,
+        signInTimeout,
         'Sign in timeout'
       );
       
@@ -491,6 +540,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (result.error) {
         console.error('❌ Sign in error:', result.error);
+        
+        // Enhanced mobile error messaging
+        if (result.error.message?.includes('timeout') && isMobile) {
+          result.error.message = 'Sign in timed out (after 1 hour). Please check your connection and try again.';
+        }
       } else {
         console.log('✅ Sign in successful');
         setError(null);
@@ -503,6 +557,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (isAuthTokenError(error)) {
         await clearSessionAndRedirect('Sign in authentication error');
+      }
+      
+      // Enhanced mobile error handling
+      if (error.message?.includes('timeout') && isMobile) {
+        error.message = 'Sign in timed out (after 1 hour). Please ensure you have a stable internet connection and try again.';
       }
       
       throw error;
@@ -524,7 +583,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
           },
         }),
-        15000, // Longer timeout for sign up
+        3600000, // 1 hour timeout for sign up
         'Sign up timeout'
       );
 
@@ -548,7 +607,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       await withTimeout(
         supabase.auth.signOut(),
-        5000,
+        1800000, // 30 minutes timeout for sign out
         'Sign out timeout'
       );
       

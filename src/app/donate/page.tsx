@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
+import Link from 'next/link';
 
 export default function DonatePage() {
   const { user } = useAuth();
@@ -24,11 +25,6 @@ export default function DonatePage() {
   ];
 
   const handlePrepareKofiDonation = () => {
-    if (!user) {
-      toast.error('Please sign in to make a donation');
-      return;
-    }
-
     if (selectedAmount < 5) {
       toast.error('Donation amount must be at least $5 (Ko-fi minimum)');
       return;
@@ -53,7 +49,7 @@ export default function DonatePage() {
        purpose: donationPurpose,
        message: donationMessage,
        timestamp: Date.now(),
-       email: user?.email
+       email: user?.email || 'guest'
      };
     
     localStorage.setItem('pendingDonation', JSON.stringify(donationData));
@@ -199,7 +195,7 @@ export default function DonatePage() {
                     {/* Donate Button - Positioned here */}
                     <button 
                       onClick={handlePrepareKofiDonation}
-                      disabled={!user || selectedAmount < 5 || isProcessing}
+                      disabled={selectedAmount < 5 || isProcessing}
                       className={`w-full py-4 rounded-lg font-bold text-lg tracking-wider border-2 transition-all duration-300 shadow-xl disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white disabled:border-gray-600 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 border-red-500 hover:border-red-400 hover:shadow-red-500/25 hover:scale-105 ${isProcessing ? 'opacity-75 cursor-not-allowed' : ''}`}
                     >
                       {isProcessing ? (
@@ -236,9 +232,9 @@ export default function DonatePage() {
                 </div>
 
                 {!user && (
-                  <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
-                    <p className="text-yellow-400 font-medium">
-                      🔐 Please sign in to make a donation and track your contributions
+                  <div className="text-center p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                    <p className="text-blue-400 font-medium">
+                      💡 <Link href="/auth" className="underline hover:text-blue-300">Sign in</Link> to track your donation history, or continue as guest
                     </p>
                   </div>
                 )}

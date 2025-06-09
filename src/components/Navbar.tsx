@@ -294,6 +294,14 @@ export default function Navbar({ user }: { user: any }) {
               <div className="flex items-center space-x-2">
                 {isAdmin && (
                   <Link 
+                    href="/dueling"
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all hover:scale-105 border border-orange-500/50 shadow-lg shadow-orange-500/20"
+                  >
+                    ⚔️ DUELING
+                  </Link>
+                )}
+                {isAdmin && (
+                  <Link 
                     href="/admin"
                     className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all hover:scale-105 border border-red-500/50 shadow-lg shadow-red-500/20"
                   >
@@ -500,6 +508,15 @@ export default function Navbar({ user }: { user: any }) {
                     <div className="px-4 py-2">
                       <h4 className="text-xs text-red-400 font-medium uppercase tracking-wider mb-2">Admin</h4>
                       <div className="space-y-2">
+                        {isAdmin && (
+                          <Link 
+                            href="/dueling"
+                            onClick={closeMobileMenu}
+                            className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                          >
+                            ⚔️ DUELING
+                          </Link>
+                        )}
                         {isAdmin && (
                           <Link 
                             href="/admin"
