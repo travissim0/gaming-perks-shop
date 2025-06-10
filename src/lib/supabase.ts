@@ -30,19 +30,54 @@ console.log('🔧 Supabase configuration:', {
   environment: process.env.NODE_ENV || 'development'
 });
 
+// Optimized client configuration for better performance
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  },
+  global: {
+    headers: {
+      'Cache-Control': 'max-age=300' // 5 minute cache for static data
+    }
+  },
+  // Connection pooling configuration
+  db: {
+    schema: 'public'
   }
 });
 
+// Service client with optimizations for server-side operations
 export const getServiceSupabase = () => createClient(
   supabaseUrl,
-  supabaseAnonKey,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey,
   {
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    global: {
+      headers: {
+        'Cache-Control': 'max-age=300'
+      }
+    }
+  }
+);
+
+// Cached client for read-heavy operations
+export const getCachedSupabase = () => createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    },
+    global: {
+      headers: {
+        'Cache-Control': 'max-age=600' // 10 minute cache for read operations
+      }
     }
   }
 ); 

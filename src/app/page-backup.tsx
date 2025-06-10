@@ -544,7 +544,7 @@ export default function Home() {
     fetchUserSquad();
     
     // Set up intervals to refresh data
-    const serverInterval = setInterval(fetchServerData, 300000); // Poll every 5 minutes instead of 1 minute
+    const serverInterval = setInterval(fetchServerData, 60000);
     const gameInterval = setInterval(fetchGameData, 5000);
     const donationsInterval = setInterval(fetchRecentDonations, 30000);
     const videosInterval = setInterval(fetchFeaturedVideos, 300000); // Refresh every 5 minutes

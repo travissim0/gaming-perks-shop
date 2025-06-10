@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedSupabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 
 interface FetchOptions {
@@ -7,6 +7,8 @@ interface FetchOptions {
   retryDelay?: number;
   showErrorToast?: boolean;
   errorMessage?: string;
+  useCache?: boolean;
+  cacheKey?: string;
 }
 
 interface FetchResult<T> {
@@ -15,10 +17,49 @@ interface FetchResult<T> {
   success: boolean;
 }
 
+// Simple in-memory cache for read-heavy operations
+const cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+
+// Cache utility functions
+export const cacheUtils = {
+  get: <T>(key: string): T | null => {
+    const cached = cache.get(key);
+    if (!cached) return null;
+    
+    if (Date.now() - cached.timestamp > cached.ttl) {
+      cache.delete(key);
+      return null;
+    }
+    
+    return cached.data;
+  },
+  
+  set: <T>(key: string, data: T, ttlMs: number = 300000): void => { // 5 min default
+    cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl: ttlMs
+    });
+  },
+  
+  clear: (pattern?: string): void => {
+    if (!pattern) {
+      cache.clear();
+      return;
+    }
+    
+    for (const key of cache.keys()) {
+      if (key.includes(pattern)) {
+        cache.delete(key);
+      }
+    }
+  }
+};
+
 // Timeout wrapper for any async operation
 export function withTimeout<T>(
   promise: Promise<T>,
-  timeoutMs: number = 15000,
+  timeoutMs: number = 10000, // Reduced from 15s to 10s for snappier UX
   timeoutMessage: string = 'Operation timed out'
 ): Promise<T> {
   return Promise.race([
@@ -29,18 +70,29 @@ export function withTimeout<T>(
   ]);
 }
 
-// Robust fetch function with retry logic
+// Robust fetch function with retry logic and caching
 export async function robustFetch<T>(
   fetchFunction: () => Promise<T>,
   options: FetchOptions = {}
 ): Promise<FetchResult<T>> {
   const {
-    timeout = 15000,
-    retries = 2,
-    retryDelay = 1000,
+    timeout = 10000, // Reduced timeout
+    retries = 1, // Reduced retries for faster failure
+    retryDelay = 500, // Reduced retry delay
     showErrorToast = true,
-    errorMessage = 'Failed to load data'
+    errorMessage = 'Failed to load data',
+    useCache = false,
+    cacheKey
   } = options;
+
+  // Check cache first if enabled
+  if (useCache && cacheKey) {
+    const cachedData = cacheUtils.get<T>(cacheKey);
+    if (cachedData !== null) {
+      console.log(`🎯 Cache hit for: ${cacheKey}`);
+      return { data: cachedData, error: null, success: true };
+    }
+  }
 
   let lastError: Error | null = null;
 
@@ -49,6 +101,12 @@ export async function robustFetch<T>(
       console.log(`Fetch attempt ${attempt + 1}/${retries + 1}`);
       
       const data = await withTimeout(fetchFunction(), timeout);
+      
+      // Cache successful results if enabled
+      if (useCache && cacheKey && data !== null) {
+        cacheUtils.set(cacheKey, data);
+        console.log(`💾 Cached result for: ${cacheKey}`);
+      }
       
       console.log('✅ Fetch successful');
       return { data, error: null, success: true };
@@ -86,7 +144,7 @@ export async function robustFetch<T>(
   return { data: null, error: lastError, success: false };
 }
 
-// Specific Supabase query wrapper
+// Specific Supabase query wrapper with optimizations
 export async function supabaseQuery<T>(
   queryFunction: () => Promise<{ data: T | null; error: any }>,
   options: FetchOptions = {}
@@ -102,42 +160,85 @@ export async function supabaseQuery<T>(
   }, options);
 }
 
-// Pre-configured queries for common operations
+// Batch query utility for multiple related queries
+export async function batchQueries<T>(
+  queries: Array<{
+    key: string;
+    query: () => Promise<{ data: T | null; error: any }>;
+    options?: FetchOptions;
+  }>
+): Promise<Record<string, FetchResult<T | null>>> {
+  const results = await Promise.allSettled(
+    queries.map(async ({ key, query, options = {} }) => ({
+      key,
+      result: await supabaseQuery(query, options)
+    }))
+  );
+
+  const batchResult: Record<string, FetchResult<T | null>> = {};
+  
+  results.forEach((result, index) => {
+    const key = queries[index].key;
+    if (result.status === 'fulfilled') {
+      batchResult[key] = result.value.result;
+    } else {
+      batchResult[key] = {
+        data: null,
+        error: new Error(result.reason),
+        success: false
+      };
+    }
+  });
+
+  return batchResult;
+}
+
+// Pre-configured optimized queries for common operations
 export const queries = {
   getUserSquad: async (userId: string) => {
     return supabaseQuery(
       async () => {
-        const query = supabase
+        // Optimized with specific field selection
+        const query = getCachedSupabase()
           .from('squad_members')
           .select(`squads!inner(id, name, tag)`)
           .eq('player_id', userId)
           .eq('status', 'active')
+          .limit(1)
           .maybeSingle();
         return await query;
       },
-      { errorMessage: 'Failed to load user squad' }
+      { 
+        errorMessage: 'Failed to load user squad',
+        useCache: true,
+        cacheKey: `user_squad_${userId}`
+      }
     );
   },
 
   getSquadDetails: async (squadId: string) => {
     return supabaseQuery(
       async () => {
-        const query = supabase
+        const query = getCachedSupabase()
           .from('squads')
-          .select('*')
+          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at')
           .eq('id', squadId)
           .eq('is_active', true)
           .single();
         return await query;
       },
-      { errorMessage: 'Failed to load squad details' }
+      { 
+        errorMessage: 'Failed to load squad details',
+        useCache: true,
+        cacheKey: `squad_details_${squadId}`
+      }
     );
   },
 
   getSquadMembers: async (squadId: string) => {
     return supabaseQuery(
       async () => {
-        const query = supabase
+        const query = getCachedSupabase()
           .from('squad_members')
           .select(`
             id,
@@ -148,59 +249,135 @@ export const queries = {
           `)
           .eq('squad_id', squadId)
           .eq('status', 'active')
-          .order('joined_at', { ascending: true });
+          .order('joined_at', { ascending: true })
+          .limit(50); // Add reasonable limit
         return await query;
       },
-      { errorMessage: 'Failed to load squad members' }
+      { 
+        errorMessage: 'Failed to load squad members',
+        useCache: true,
+        cacheKey: `squad_members_${squadId}`
+      }
     );
   },
 
-  getAllSquads: async () => {
+  getTopSquads: async (limit: number = 10) => {
     return supabaseQuery(
       async () => {
-        const query = supabase
+        // Optimized query avoiding complex joins
+        const query = getCachedSupabase()
           .from('squads')
           .select(`
             id,
             name,
             tag,
             description,
-            discord_link,
-            website_link,
             captain_id,
-            created_at,
-            squad_members!inner(
-              id,
-              player_id,
-              role,
-              profiles!squad_members_player_id_fkey(in_game_alias)
-            )
+            created_at
           `)
           .eq('is_active', true)
-          .eq('squad_members.status', 'active')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(limit);
         return await query;
       },
-      { errorMessage: 'Failed to load squads' }
+      { 
+        errorMessage: 'Failed to load top squads',
+        useCache: true,
+        cacheKey: `top_squads_${limit}`
+      }
     );
   },
 
   getPendingInvites: async (userId: string) => {
     return supabaseQuery(
       async () => {
-        const query = supabase
+        const query = supabase // Don't cache user-specific data
           .from('squad_invites')
           .select(`
-            *,
+            id,
+            squad_id,
+            invited_by,
+            expires_at,
+            created_at,
             squads!squad_invites_squad_id_fkey(name, tag),
             inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
           `)
           .eq('invited_player_id', userId)
           .eq('status', 'pending')
-          .gt('expires_at', new Date().toISOString());
+          .gt('expires_at', new Date().toISOString())
+          .limit(10);
         return await query;
       },
       { errorMessage: 'Failed to load pending invites' }
+    );
+  },
+
+  // New optimized queries for home page
+  getRecentDonations: async (limit: number = 10) => {
+    return supabaseQuery(
+      async () => {
+        const query = getCachedSupabase()
+          .from('donations')
+          .select('amount, donor_name, message, created_at')
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        return await query;
+      },
+      { 
+        errorMessage: 'Failed to load recent donations',
+        useCache: true,
+        cacheKey: `recent_donations_${limit}`
+      }
+    );
+  },
+
+  getOnlineUsers: async (limit: number = 20) => {
+    return supabaseQuery(
+      async () => {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const query = getCachedSupabase()
+          .from('profiles')
+          .select('id, in_game_alias, last_seen')
+          .gte('last_seen', fiveMinutesAgo)
+          .order('last_seen', { ascending: false })
+          .limit(limit);
+        return await query;
+      },
+      { 
+        errorMessage: 'Failed to load online users',
+        useCache: true,
+        cacheKey: `online_users_${limit}`
+      }
+    );
+  },
+
+  getUpcomingMatches: async (limit: number = 5) => {
+    return supabaseQuery(
+      async () => {
+        const now = new Date().toISOString();
+        const query = getCachedSupabase()
+          .from('matches')
+          .select(`
+            id,
+            title,
+            scheduled_at,
+            match_type,
+            status,
+            squad_a:squads!matches_squad_a_id_fkey(name, tag),
+            squad_b:squads!matches_squad_b_id_fkey(name, tag)
+          `)
+          .gte('scheduled_at', now)
+          .eq('status', 'scheduled')
+          .order('scheduled_at', { ascending: true })
+          .limit(limit);
+        return await query;
+      },
+      { 
+        errorMessage: 'Failed to load upcoming matches',
+        useCache: true,
+        cacheKey: `upcoming_matches_${limit}`
+      }
     );
   }
 }; 
