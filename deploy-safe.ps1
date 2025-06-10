@@ -36,12 +36,12 @@ Write-ColorOutput "=============================================" $Blue
 try {
     # Step 0: Clear local .next directory to prevent build cache issues
     Write-ColorOutput "CLEANING Clearing local .next directory..." $Yellow
-    if (Test-Path ".next") {
-        Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
-        Write-ColorOutput "INFO Local .next directory cleared successfully" $Yellow
-    } else {
-        Write-ColorOutput "INFO No local .next directory found, skipping cleanup" $Yellow
-    }
+    # if (Test-Path ".next") {
+    #     Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+    #     Write-ColorOutput "INFO Local .next directory cleared successfully" $Yellow
+    # } else {
+    #     Write-ColorOutput "INFO No local .next directory found, skipping cleanup" $Yellow
+    # }
 
     # Step 1: Build locally
     Write-ColorOutput "HAMMER Building locally (safer for server)..." $Yellow
@@ -58,7 +58,7 @@ try {
     Write-ColorOutput "PACKAGE Uploading built files..." $Yellow
     
     # Remove old .next directory on server and upload fresh (still faster than full dependency install)
-    ssh ${Username}@linux-1.freeinfantry.com "rm -rf /var/www/gaming-perks-shop/.next"
+    # ssh ${Username}@linux-1.freeinfantry.com "rm -rf /var/www/gaming-perks-shop/.next"
     
     # Use scp with compression for faster upload
     scp -C -r .next ${Username}@linux-1.freeinfantry.com:/var/www/gaming-perks-shop/

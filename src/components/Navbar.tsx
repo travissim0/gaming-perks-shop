@@ -284,6 +284,12 @@ export default function Navbar({ user }: { user: any }) {
               >
                 📜 Logs
               </Link>
+              <Link 
+                href="/affiliate-sites" 
+                className="px-3 py-2 text-sm text-blue-300 hover:text-blue-400 transition-all duration-200 border border-blue-700/50 hover:border-blue-500/50 rounded-lg bg-blue-800/20 hover:bg-blue-500/10 font-medium"
+              >
+                🌐 Community Sites
+              </Link>
             </div>
           )}
           
@@ -499,6 +505,13 @@ export default function Navbar({ user }: { user: any }) {
                         className="block px-4 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-800 rounded transition-all duration-300"
                       >
                         📜 Logs
+                      </Link>
+                      <Link 
+                        href="/affiliate-sites" 
+                        onClick={closeMobileMenu}
+                        className="block px-4 py-2 text-gray-300 hover:text-blue-400 hover:bg-gray-800 rounded transition-all duration-300"
+                      >
+                        🌐 Community Sites
                       </Link>
                     </div>
                   </div>
