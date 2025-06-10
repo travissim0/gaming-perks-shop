@@ -56,6 +56,8 @@ public/
 # Allow specific header video and sounds
 !public/CTFPL-Website-Header-1.webm
 !public/sounds/
+# Allow site images for affiliate sites page
+!public/images/sites/
 archive/
 
 # Large executables and binaries
