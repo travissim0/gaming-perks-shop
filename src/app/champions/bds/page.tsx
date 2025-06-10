@@ -19,7 +19,7 @@ const BDSPage = () => {
     established: '2024',
     motto: 'From the Shadows, We Strike',
     seasonRecord: {
-      overall: { wins: 149, losses: 12, draws: 5 },
+      overall: { wins: 221, losses: 17, draws: 7 },
       championships: 8,
       championshipSeasons: [3, 4, 5, 6, 10, 13, 16, 17],
       seasonRecords: [
@@ -36,8 +36,9 @@ const BDSPage = () => {
       ]
     },
     players: [
+      { alias: 'Seifer', rings: 8 },
+      { alias: 'LiNgo', rings: 8 },
       { alias: 'Thor', rings: 8 },
-      { alias: 'Rhylic', rings: 8 },
       { alias: 'Plaps', rings: 7 },
       { alias: 'Prisoner', rings: 7 },
       { alias: 'Emp', rings: 5 },
@@ -46,7 +47,6 @@ const BDSPage = () => {
       { alias: 'An RR User', rings: 3 },
       { alias: 'funk', rings: 3 },
       { alias: 'Strike', rings: 3 },
-      { alias: 'LiNgo', rings: 3 },
       { alias: 'panT', rings: 3 },
       { alias: 'Goliath', rings: 2 },
       { alias: 'Nac', rings: 2 },
@@ -313,10 +313,10 @@ const BDSPage = () => {
           <Flame className="mx-auto text-orange-500 mb-6 animate-pulse" size={64} />
           <h2 className="text-4xl font-bold text-orange-400 mb-6">The Dragon's Legacy</h2>
           <p className="text-xl text-orange-200 max-w-4xl mx-auto leading-relaxed">
-            From the shadows they emerged, forging the greatest dynasty in Infantry history. The Black Dragon Society's 
+            From the shadows they emerged, forging the greatest dynasty in CTFPL history. The Black Dragon Society's 
             eight championship conquests across Seasons 3, 4, 5, 6, 10, 13, 16, and 17 established an unmatched legacy 
             of tactical supremacy and brotherhood. No squad has matched their dominance, no dynasty has burned brighter. 
-            Their legend endures eternal in the halls of Infantry history, an impossible standard for future champions to chase.
+            Their legend endures eternal in the halls of CTFPL history, an impossible standard for future champions to chase.
           </p>
           <div className="mt-8">
             <div className="w-32 h-1 bg-gradient-to-r from-red-500 via-orange-400 to-yellow-500 mx-auto animate-pulse"></div>
