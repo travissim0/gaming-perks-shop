@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 
-export default function Navbar({ user }: { user: any }) {
+export default function ImprovedNavbar({ user }: { user: any }) {
   const router = useRouter();
   const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -61,7 +61,6 @@ export default function Navbar({ user }: { user: any }) {
   const communityNavItems = [
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
-    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
   ];
 
@@ -206,14 +205,6 @@ export default function Navbar({ user }: { user: any }) {
                         <Settings className="w-4 h-4 mr-3" />
                         Profile
                       </Link>
-                      <Link 
-                        href="/perks" 
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                        onClick={() => setShowUserDropdown(false)}
-                      >
-                        <span className="text-lg mr-3">🛍️</span>
-                        <span className="font-medium">Perks</span>
-                      </Link>
                       <div className="border-t border-gray-600/50 mt-2"></div>
                       <button
                         onClick={handleSignOut}
@@ -320,6 +311,15 @@ export default function Navbar({ user }: { user: any }) {
                 </div>
               </div>
             </div>
+
+            {/* Direct Links */}
+            <Link 
+              href="/perks"
+              className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-purple-400 transition-colors rounded-lg hover:bg-purple-800/20"
+            >
+              <span>🛍️</span>
+              <span className="font-medium">Perks</span>
+            </Link>
           </div>
         </div>
       </div>
@@ -389,28 +389,6 @@ export default function Navbar({ user }: { user: any }) {
                         {item.label}
                       </Link>
                     ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Account</h4>
-                  <div className="space-y-1">
-                    <Link 
-                      href="/perks" 
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
-                    >
-                      <span className="mr-3">🛍️</span>
-                      Perks
-                    </Link>
-                    <Link 
-                      href="/dashboard" 
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                    >
-                      <BarChart3 className="w-4 h-4 mr-3" />
-                      Dashboard
-                    </Link>
                   </div>
                 </div>
               </div>
