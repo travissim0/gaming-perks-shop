@@ -61,25 +61,37 @@ export default function DonatePage() {
     
     setTimeout(() => {
       toast('📝 Your donation details have been prepared. Redirecting to Ko-fi for payment...', { 
-        duration: 5000,
+        duration: 3000,
         icon: '💳'
       });
       
-      // Use mobile-friendly Ko-Fi redirect handler
-      handleKofiRedirect(kofiUrl, {
-        mobileToastMessage: '📱 Redirecting to Ko-fi for secure payment...'
-      });
+      // Direct mobile-friendly redirect without additional delays
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       
-      setIsProcessing(false);
-      
-      // Show return instructions for desktop users
-      setTimeout(() => {
-        toast('🔄 After completing payment on Ko-fi, return here to see your contribution!', { 
-          duration: 8000,
-          icon: '🏠'
+      if (isMobile) {
+        // On mobile, use same-window redirect to avoid popup blockers
+        toast('📱 Redirecting to Ko-fi payment page...', { 
+          duration: 2000,
+          icon: '📱'
         });
-      }, 2000);
-    }, 1500);
+        // Immediate redirect for mobile
+        setTimeout(() => {
+          window.location.href = kofiUrl;
+        }, 100);
+      } else {
+        // On desktop, open in new tab
+        window.open(kofiUrl, '_blank');
+        setIsProcessing(false);
+        
+        // Show return instructions for desktop users
+        setTimeout(() => {
+          toast('🔄 After completing payment on Ko-fi, return here to see your contribution!', { 
+            duration: 8000,
+            icon: '🏠'
+          });
+        }, 1000);
+      }
+    }, 1000);
   };
 
   // Check for returning donation and fetch recent donations
@@ -249,13 +261,14 @@ export default function DonatePage() {
 
           {/* Side Panel */}
           <div className="space-y-4">
-            {/* Supporters - Top Supporters (larger) and Recent in split layout */}
+            {/* Supporters - Mobile-first responsive layout */}
             <div className="bg-gradient-to-b from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4 shadow-2xl">
-              <div className="grid grid-cols-3 gap-6">
-                {/* Top Supporters - Left Side (2/3 width) */}
-                <div className="col-span-2">
-                  <h3 className="text-xl font-bold text-white mb-3 text-center">🏆 Top Supporters</h3>
-                  <div className="space-y-2">
+              {/* Mobile Layout: Top supporters full width, recent supporters 1/3 at bottom */}
+              <div className="block lg:hidden">
+                {/* Top Supporters - Full Width on Mobile */}
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-white mb-4 text-center">🏆 Top Supporters</h3>
+                  <div className="space-y-3">
                     {recentDonations.length > 0 ? (
                       (() => {
                         // Group donations by amount to handle ties
@@ -263,31 +276,16 @@ export default function DonatePage() {
                           .slice()
                           .sort((a, b) => b.amount - a.amount);
                         
-                        // Debug: Log all donations to see what we're working with
-                        console.log('All donations:', sortedDonations.map(d => ({
-                          name: d.customerName,
-                          amount: d.amount,
-                          rounded: Math.round(d.amount * 100) / 100
-                        })));
-                        
                         // Get unique amounts and group supporters by amount
-                        // Round to 2 decimal places to handle floating point precision issues
                         const amountGroups: { [key: string]: any[] } = {};
                         sortedDonations.forEach(donation => {
-                          const amount = Math.round(donation.amount * 100) / 100; // Round to 2 decimal places
+                          const amount = Math.round(donation.amount * 100) / 100;
                           const amountKey = amount.toFixed(2);
                           if (!amountGroups[amountKey]) {
                             amountGroups[amountKey] = [];
                           }
                           amountGroups[amountKey].push({...donation, amount});
                         });
-                        
-                        // Debug: Log the grouped amounts
-                        console.log('Amount groups:', Object.entries(amountGroups).map(([amount, supporters]) => ({
-                          amount,
-                          count: supporters.length,
-                          supporters: supporters.map(s => s.customerName)
-                        })));
                         
                         // Get the top 3 unique amounts
                         const topAmounts = Object.keys(amountGroups)
@@ -297,9 +295,9 @@ export default function DonatePage() {
                         
                         const trophyIcons = ['🥇', '🥈', '🥉'];
                         const trophyColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
-                        const nameTextSizes = ['text-2xl', 'text-xl', 'text-lg']; // Larger names
-                        const amountTextSizes = ['text-xl', 'text-lg', 'text-base']; // Smaller amounts
-                        const paddingSizes = ['p-4', 'p-3.5', 'p-3']; // Graduated padding
+                        const nameTextSizes = ['text-xl', 'text-lg', 'text-base']; // Mobile-optimized sizes
+                        const amountTextSizes = ['text-lg', 'text-base', 'text-sm']; // Mobile-optimized sizes
+                        const paddingSizes = ['p-4', 'p-3', 'p-3']; 
                         const cardThemes = [
                           'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30', // Gold
                           'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',       // Silver
@@ -311,15 +309,11 @@ export default function DonatePage() {
                           const isMultiple = supporters.length > 1;
                           
                           if (isMultiple) {
-                            // Multiple supporters with same amount - show consolidated
                             return (
-                              <div key={`rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                {/* Background Trophy Emoji */}
+                              <div key={`mobile-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
                                 <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
                                   <div className="text-9xl">{trophyIcons[rankIndex]}</div>
                                 </div>
-                                
-                                {/* Content */}
                                 <div className="relative z-10">
                                   <div className="flex items-start justify-between mb-2">
                                     <div className="flex-1">
@@ -327,7 +321,7 @@ export default function DonatePage() {
                                         {supporters.map((supporter, idx) => {
                                           const displayName = supporter.customerName || 'Anonymous Supporter';
                                           return (
-                                            <div key={`supporter-${idx}`} className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+                                            <div key={`mobile-supporter-${idx}`} className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
                                               {displayName}
                                             </div>
                                           );
@@ -342,17 +336,13 @@ export default function DonatePage() {
                               </div>
                             );
                           } else {
-                            // Single supporter
                             const supporter = supporters[0];
                             const displayName = supporter.customerName || 'Anonymous Supporter';
                             return (
-                              <div key={`rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                {/* Background Trophy Emoji */}
+                              <div key={`mobile-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
                                 <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
                                   <div className="text-9xl">{trophyIcons[rankIndex]}</div>
                                 </div>
-                                
-                                {/* Content */}
                                 <div className="relative z-10 flex items-center justify-between">
                                   <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
                                     {displayName}
@@ -376,10 +366,10 @@ export default function DonatePage() {
                   </div>
                 </div>
 
-                {/* Recent Supporters - Right Side (1/3 width) */}
-                <div className="col-span-1">
-                  <h3 className="text-sm font-bold text-white mb-3 text-center">Recent</h3>
-                  <div className="space-y-1.5">
+                {/* Recent Supporters - Bottom 1/3 on Mobile with horizontal spread */}
+                <div className="border-t border-gray-700/50 pt-4">
+                  <h3 className="text-sm font-bold text-white mb-3 text-center">Recent Supporters</h3>
+                  <div className="grid grid-cols-2 gap-2">
                     {recentDonations.length > 0 ? (
                       <>
                         {recentDonations.slice(0, 6).map((donation, index) => {
@@ -389,8 +379,8 @@ export default function DonatePage() {
                           const avatarColor = colors[index % colors.length];
                           
                           return (
-                            <div key={`recent-${index}`} className="flex items-center gap-1.5 p-1.5 bg-gray-700/30 rounded">
-                              <div className={`w-4 h-4 ${avatarColor} rounded-full flex items-center justify-center text-white font-bold text-xs`}>
+                            <div key={`mobile-recent-${index}`} className="flex items-center gap-2 p-2 bg-gray-700/30 rounded">
+                              <div className={`w-6 h-6 ${avatarColor} rounded-full flex items-center justify-center text-white font-bold text-xs`}>
                                 {initials}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -404,11 +394,153 @@ export default function DonatePage() {
                         })}
                       </>
                     ) : (
-                      <div className="text-center py-4">
+                      <div className="col-span-2 text-center py-4">
                         <div className="text-lg mb-1">🤗</div>
                         <div className="text-gray-500 text-xs">Be our first!</div>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop Layout: Side-by-side 2/3 and 1/3 */}
+              <div className="hidden lg:block">
+                <div className="grid grid-cols-3 gap-6">
+                  {/* Top Supporters - Left Side (2/3 width) */}
+                  <div className="col-span-2">
+                    <h3 className="text-xl font-bold text-white mb-3 text-center">🏆 Top Supporters</h3>
+                    <div className="space-y-2">
+                      {recentDonations.length > 0 ? (
+                        (() => {
+                          // Group donations by amount to handle ties
+                          const sortedDonations = recentDonations
+                            .slice()
+                            .sort((a, b) => b.amount - a.amount);
+                          
+                          // Get unique amounts and group supporters by amount
+                          const amountGroups: { [key: string]: any[] } = {};
+                          sortedDonations.forEach(donation => {
+                            const amount = Math.round(donation.amount * 100) / 100;
+                            const amountKey = amount.toFixed(2);
+                            if (!amountGroups[amountKey]) {
+                              amountGroups[amountKey] = [];
+                            }
+                            amountGroups[amountKey].push({...donation, amount});
+                          });
+                          
+                          // Get the top 3 unique amounts
+                          const topAmounts = Object.keys(amountGroups)
+                            .map(key => parseFloat(key))
+                            .sort((a, b) => b - a)
+                            .slice(0, 3);
+                          
+                          const trophyIcons = ['🥇', '🥈', '🥉'];
+                          const trophyColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
+                          const nameTextSizes = ['text-2xl', 'text-xl', 'text-lg']; // Desktop sizes
+                          const amountTextSizes = ['text-xl', 'text-lg', 'text-base']; // Desktop sizes
+                          const paddingSizes = ['p-4', 'p-3.5', 'p-3']; 
+                          const cardThemes = [
+                            'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30', // Gold
+                            'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',       // Silver
+                            'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30'    // Bronze
+                          ];
+                          
+                          return topAmounts.map((amount, rankIndex) => {
+                            const supporters = amountGroups[amount.toFixed(2)];
+                            const isMultiple = supporters.length > 1;
+                            
+                            if (isMultiple) {
+                              return (
+                                <div key={`desktop-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                                    <div className="text-9xl">{trophyIcons[rankIndex]}</div>
+                                  </div>
+                                  <div className="relative z-10">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div className="flex-1">
+                                        <div className="grid grid-cols-1 gap-1">
+                                          {supporters.map((supporter, idx) => {
+                                            const displayName = supporter.customerName || 'Anonymous Supporter';
+                                            return (
+                                              <div key={`desktop-supporter-${idx}`} className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+                                                {displayName}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
+                                        ${amount.toFixed(2)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              const supporter = supporters[0];
+                              const displayName = supporter.customerName || 'Anonymous Supporter';
+                              return (
+                                <div key={`desktop-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                                    <div className="text-9xl">{trophyIcons[rankIndex]}</div>
+                                  </div>
+                                  <div className="relative z-10 flex items-center justify-between">
+                                    <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+                                      {displayName}
+                                    </div>
+                                    <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
+                                      ${supporter.amount.toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          });
+                        })()
+                      ) : (
+                        <div className="text-center py-6">
+                          <div className="text-2xl mb-2">🏆</div>
+                          <div className="text-gray-500 text-sm">No top supporters yet</div>
+                          <div className="text-gray-600 text-xs mt-1">Be the first to support us!</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recent Supporters - Right Side (1/3 width) */}
+                  <div className="col-span-1">
+                    <h3 className="text-sm font-bold text-white mb-3 text-center">Recent</h3>
+                    <div className="space-y-1.5">
+                      {recentDonations.length > 0 ? (
+                        <>
+                          {recentDonations.slice(0, 6).map((donation, index) => {
+                            const displayName = donation.customerName || 'Anonymous Supporter';
+                            const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+                            const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
+                            const avatarColor = colors[index % colors.length];
+                            
+                            return (
+                              <div key={`desktop-recent-${index}`} className="flex items-center gap-1.5 p-1.5 bg-gray-700/30 rounded">
+                                <div className={`w-4 h-4 ${avatarColor} rounded-full flex items-center justify-center text-white font-bold text-xs`}>
+                                  {initials}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-white font-medium text-xs truncate">{displayName}</div>
+                                  <div className="text-gray-400 text-xs">
+                                    ${donation.amount.toFixed(2)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <div className="text-center py-4">
+                          <div className="text-lg mb-1">🤗</div>
+                          <div className="text-gray-500 text-xs">Be our first!</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
