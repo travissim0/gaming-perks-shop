@@ -169,7 +169,11 @@ export default function Navbar({ user }: { user: any }) {
       setPendingJoinRequests(updatedRequests);
       setPendingJoinRequestCount(updatedRequests.length);
 
-      // Show success message (you can replace with toast if available)
+      // Trigger a custom event to notify squad pages to refresh
+      window.dispatchEvent(new CustomEvent('squadMembershipChanged', {
+        detail: { squadId, action: 'approved', playerId }
+      }));
+
       console.log('Join request approved successfully!');
     } catch (error) {
       console.error('Error approving join request:', error);
@@ -192,6 +196,11 @@ export default function Navbar({ user }: { user: any }) {
       const updatedRequests = pendingJoinRequests.filter(req => req.id !== requestId);
       setPendingJoinRequests(updatedRequests);
       setPendingJoinRequestCount(updatedRequests.length);
+
+      // Trigger a custom event to notify squad pages to refresh
+      window.dispatchEvent(new CustomEvent('squadMembershipChanged', {
+        detail: { action: 'denied', requestId }
+      }));
 
       console.log('Join request denied');
     } catch (error) {
@@ -305,7 +314,11 @@ export default function Navbar({ user }: { user: any }) {
 
                 {/* Notifications Dropdown */}
                 {showNotificationsDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
+                  <div className="absolute top-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50
+                                  w-80 max-w-[calc(100vw-1rem)] 
+                                  right-0 
+                                  sm:right-0 
+                                  max-sm:right-0 max-sm:translate-x-0">
                     <div className="p-4">
                       <h3 className="text-sm font-medium text-gray-300 mb-3">Notifications</h3>
                       

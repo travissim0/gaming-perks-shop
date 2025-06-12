@@ -144,6 +144,24 @@ export default function SquadsPage() {
     };
   }, []);
 
+  // Listen for squad membership changes from navbar approvals
+  useEffect(() => {
+    const handleSquadMembershipChange = (event: any) => {
+      console.log('Squad membership changed, refreshing squads data:', event.detail);
+      // Refresh relevant data when membership changes
+      if (user && !loading) {
+        loadUserSquad();
+        loadAllSquads();
+        loadJoinRequestsForSquad();
+      }
+    };
+
+    window.addEventListener('squadMembershipChanged', handleSquadMembershipChange);
+    return () => {
+      window.removeEventListener('squadMembershipChanged', handleSquadMembershipChange);
+    };
+  }, [user, loading]);
+
   const loadInitialData = async () => {
     if (!isMountedRef.current) return;
     

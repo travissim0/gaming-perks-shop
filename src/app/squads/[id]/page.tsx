@@ -80,6 +80,20 @@ export default function SquadDetailPage() {
     }
   }, [squadId, user, loading]);
 
+  // Listen for squad membership changes from navbar approvals
+  useEffect(() => {
+    const handleSquadMembershipChange = (event: any) => {
+      console.log('Squad membership changed, refreshing data:', event.detail);
+      // Refresh all squad data when membership changes
+      loadSquadDetails();
+    };
+
+    window.addEventListener('squadMembershipChanged', handleSquadMembershipChange);
+    return () => {
+      window.removeEventListener('squadMembershipChanged', handleSquadMembershipChange);
+    };
+  }, []);
+
   const loadAllData = async () => {
     try {
       setPageLoading(true);
