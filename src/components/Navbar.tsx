@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 
@@ -16,8 +16,11 @@ export default function Navbar({ user }: { user: any }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState<any[]>([]);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkUserData = async () => {
@@ -69,17 +72,40 @@ export default function Navbar({ user }: { user: any }) {
         // Check for pending join requests to those squads
         const { data: requests } = await supabase
           .from('squad_invites')
-          .select('id, invited_by, invited_player_id, squad_id')
+          .select(`
+            id, 
+            invited_by, 
+            invited_player_id, 
+            squad_id, 
+            created_at,
+            profiles!squad_invites_invited_player_id_fkey(in_game_alias),
+            squads!inner(name, tag)
+          `)
           .in('squad_id', squadIds)
           .eq('status', 'pending')
-          .gt('expires_at', new Date().toISOString());
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false });
 
         if (requests) {
           // Filter for self-requests (join requests) where invited_by = invited_player_id
           const joinRequests = requests.filter(req => req.invited_by === req.invited_player_id);
+          
+          // Format the requests for display
+          const formattedRequests = joinRequests.map((req: any) => ({
+            id: req.id,
+            player_id: req.invited_player_id,
+            player_name: req.profiles?.in_game_alias || 'Unknown',
+            squad_name: req.squads?.name || 'Unknown Squad',
+            squad_tag: req.squads?.tag || '',
+            squad_id: req.squad_id,
+            created_at: req.created_at
+          }));
+
           setPendingJoinRequestCount(joinRequests.length);
+          setPendingJoinRequests(formattedRequests);
         } else {
           setPendingJoinRequestCount(0);
+          setPendingJoinRequests([]);
         }
       } catch (error) {
         console.error('Error checking pending join requests:', error);
@@ -95,6 +121,83 @@ export default function Navbar({ user }: { user: any }) {
     
     return () => clearInterval(interval);
   }, [user]);
+
+  // Handle clicking outside notifications dropdown to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setShowNotificationsDropdown(false);
+      }
+    };
+
+    if (showNotificationsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotificationsDropdown]);
+
+  const handleApproveJoinRequest = async (requestId: string, playerId: string, squadId: string) => {
+    try {
+      // Update request status to accepted
+      const { error: updateError } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'accepted',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (updateError) throw updateError;
+
+      // Add player to squad_members
+      const { error: memberError } = await supabase
+        .from('squad_members')
+        .insert({
+          squad_id: squadId,
+          player_id: playerId,
+          role: 'player',
+          status: 'active'
+        });
+
+      if (memberError) throw memberError;
+
+      // Refresh join requests
+      const updatedRequests = pendingJoinRequests.filter(req => req.id !== requestId);
+      setPendingJoinRequests(updatedRequests);
+      setPendingJoinRequestCount(updatedRequests.length);
+
+      // Show success message (you can replace with toast if available)
+      console.log('Join request approved successfully!');
+    } catch (error) {
+      console.error('Error approving join request:', error);
+    }
+  };
+
+  const handleDenyJoinRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('squad_invites')
+        .update({ 
+          status: 'declined',
+          responded_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      // Refresh join requests
+      const updatedRequests = pendingJoinRequests.filter(req => req.id !== requestId);
+      setPendingJoinRequests(updatedRequests);
+      setPendingJoinRequestCount(updatedRequests.length);
+
+      console.log('Join request denied');
+    } catch (error) {
+      console.error('Error denying join request:', error);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -175,29 +278,114 @@ export default function Navbar({ user }: { user: any }) {
             {/* Right - Utilities */}
             <div className="flex items-center space-x-3">
               {/* Notifications */}
-              <Link 
-                href={pendingJoinRequestCount > 0 ? "/squads" : "/messages"}
-                className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
-                title={
-                  pendingJoinRequestCount > 0 
-                    ? `${pendingJoinRequestCount} pending join request${pendingJoinRequestCount > 1 ? 's' : ''}`
-                    : unreadMessageCount > 0 
-                    ? `${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`
-                    : 'Notifications'
-                }
-              >
-                <Bell className={`w-5 h-5 ${(unreadMessageCount > 0 || pendingJoinRequestCount > 0) ? 'text-cyan-400' : ''}`} />
-                {(unreadMessageCount > 0 || pendingJoinRequestCount > 0) && (
-                  <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ${
-                    pendingJoinRequestCount > 0 ? 'bg-orange-500' : 'bg-red-500'
-                  }`}>
-                    {pendingJoinRequestCount > 0 
-                      ? (pendingJoinRequestCount > 9 ? '9+' : pendingJoinRequestCount)
-                      : (unreadMessageCount > 9 ? '9+' : unreadMessageCount)
-                    }
-                  </span>
+              <div className="relative" ref={notificationsRef}>
+                <button
+                  onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
+                  className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                  title={
+                    pendingJoinRequestCount > 0 
+                      ? `${pendingJoinRequestCount} pending join request${pendingJoinRequestCount > 1 ? 's' : ''}`
+                      : unreadMessageCount > 0 
+                      ? `${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`
+                      : 'Notifications'
+                  }
+                >
+                  <Bell className={`w-5 h-5 ${(unreadMessageCount > 0 || pendingJoinRequestCount > 0) ? 'text-cyan-400' : ''}`} />
+                  {(unreadMessageCount > 0 || pendingJoinRequestCount > 0) && (
+                    <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ${
+                      pendingJoinRequestCount > 0 ? 'bg-orange-500' : 'bg-red-500'
+                    }`}>
+                      {pendingJoinRequestCount > 0 
+                        ? (pendingJoinRequestCount > 9 ? '9+' : pendingJoinRequestCount)
+                        : (unreadMessageCount > 9 ? '9+' : unreadMessageCount)
+                      }
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotificationsDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
+                    <div className="p-4">
+                      <h3 className="text-sm font-medium text-gray-300 mb-3">Notifications</h3>
+                      
+                      {/* Join Requests */}
+                      {pendingJoinRequests.length > 0 && (
+                        <div className="space-y-3 mb-4">
+                          <h4 className="text-xs font-medium text-orange-400 uppercase">Squad Join Requests</h4>
+                          {pendingJoinRequests.map((request) => (
+                            <div key={request.id} className="bg-gray-700 rounded p-3">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-white">
+                                    {request.player_name}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    wants to join [{request.squad_tag}] {request.squad_name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {new Date(request.created_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => handleApproveJoinRequest(request.id, request.player_id, request.squad_id)}
+                                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs py-1 px-2 rounded transition-colors"
+                                >
+                                  ✓ Approve
+                                </button>
+                                <button
+                                  onClick={() => handleDenyJoinRequest(request.id)}
+                                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-1 px-2 rounded transition-colors"
+                                >
+                                  ✗ Deny
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Messages */}
+                      {unreadMessageCount > 0 && (
+                        <div className="border-t border-gray-600 pt-3">
+                          <Link 
+                            href="/messages"
+                            onClick={() => setShowNotificationsDropdown(false)}
+                            className="flex items-center justify-between p-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                          >
+                            <span className="text-sm">
+                              {unreadMessageCount} unread message{unreadMessageCount > 1 ? 's' : ''}
+                            </span>
+                            <span className="text-xs">View →</span>
+                          </Link>
+                        </div>
+                      )}
+
+                      {/* Empty State */}
+                      {pendingJoinRequestCount === 0 && unreadMessageCount === 0 && (
+                        <div className="text-center py-4">
+                          <p className="text-sm text-gray-400">No new notifications</p>
+                        </div>
+                      )}
+
+                      {/* View All Link */}
+                      {(pendingJoinRequestCount > 0 || unreadMessageCount > 0) && (
+                        <div className="border-t border-gray-600 pt-3 mt-3">
+                          <Link 
+                            href="/squads"
+                            onClick={() => setShowNotificationsDropdown(false)}
+                            className="block text-center text-xs text-gray-400 hover:text-cyan-400 transition-colors"
+                          >
+                            View all in squads page →
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </Link>
+              </div>
 
               {/* Donate Button */}
               <Link 

@@ -863,6 +863,41 @@ export default function SquadsPage() {
     }
   };
 
+  const requestToJoinSquad = async (squadId: string) => {
+    if (!user) {
+      toast.error('You must be logged in to request to join a squad');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('squad_invites')
+        .insert({
+          squad_id: squadId,
+          invited_player_id: user.id,
+          invited_by: user.id, // Self-request
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+        });
+
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          toast.error('You already have a pending request to this squad');
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      toast.success('Join request sent successfully!');
+      
+      // Refresh data
+      await loadSentJoinRequests();
+    } catch (error) {
+      console.error('Error sending join request:', error);
+      toast.error('Failed to send join request');
+    }
+  };
+
   const invitePlayer = async () => {
     if (!selectedInvitee || !userSquad) return;
 
@@ -1607,52 +1642,70 @@ export default function SquadsPage() {
           ) : (
             <div className="grid gap-4">
               {allSquads.map((squad) => (
-                <Link key={squad.id} href={`/squads/${squad.id}`}>
-                  <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
-                    <div className="p-4">
-                      <div className="flex gap-4">
-                        {/* Squad Picture */}
-                        {squad.banner_url && (
-                          <div className="w-24 h-24 flex-shrink-0">
-                            <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                              <img 
-                                src={squad.banner_url} 
-                                alt={`${squad.name} picture`}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.parentElement!.style.display = 'none';
-                                }}
-                              />
-                            </div>
+                <div key={squad.id} className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors">
+                  <div className="p-4">
+                    <div className="flex gap-4">
+                      {/* Squad Picture */}
+                      {squad.banner_url && (
+                        <div className="w-24 h-24 flex-shrink-0">
+                          <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
+                            <img 
+                              src={squad.banner_url} 
+                              alt={`${squad.name} picture`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.parentElement!.style.display = 'none';
+                              }}
+                            />
                           </div>
-                        )}
-                        
-                        {/* Squad Info */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate">
+                        </div>
+                      )}
+                      
+                      {/* Squad Info */}
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/squads/${squad.id}`}>
+                          <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate cursor-pointer">
                             [{squad.tag}] {squad.name}
                           </h3>
-                          
-                          <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
-                          
-                          <div className="flex justify-between items-center">
-                            <div className="flex gap-4 text-sm text-gray-400">
-                              <span className="flex items-center gap-1">
-                                👥 {squad.member_count} members
-                              </span>
-                              <span className="flex items-center gap-1">
-                                👑 {squad.captain_alias}
-                              </span>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(squad.created_at).toLocaleDateString()}
-                            </div>
+                        </Link>
+                        
+                        <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
+                        
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="flex gap-4 text-sm text-gray-400">
+                            <span className="flex items-center gap-1">
+                              👥 {squad.member_count} members
+                            </span>
+                            <span className="flex items-center gap-1">
+                              👑 {squad.captain_alias}
+                            </span>
                           </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(squad.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <Link href={`/squads/${squad.id}`}>
+                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors">
+                              View Details
+                            </button>
+                          </Link>
+                          
+                          {user && !userSquad && squad.captain_id !== user.id && (
+                            <button 
+                              onClick={() => requestToJoinSquad(squad.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                            >
+                              📤 Request to Join
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
-                </Link>
+                </div>
               ))}
               {!dataLoading && allSquads.length === 0 && (
                 <div className="text-center py-8 text-gray-400">
