@@ -9,6 +9,7 @@ import { Product } from '@/types';
 import PhraseInputModal from '@/components/PhraseInputModal';
 import PhraseEditModal from '@/components/PhraseEditModal';
 import { createClient } from '@supabase/supabase-js';
+import { handleKofiRedirect } from '@/utils/deviceDetection';
 
 const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -182,8 +183,10 @@ export default function PerksPage() {
       );
     }
 
-    // Open Ko-fi in a new tab
-    window.open(kofiUrl, '_blank');
+    // Use mobile-friendly Ko-Fi redirect handler
+    handleKofiRedirect(kofiUrl, {
+      mobileToastMessage: '📱 Redirecting to Ko-fi for purchase...'
+    });
   };
 
   const handlePhraseConfirm = (phrase: string) => {
@@ -230,8 +233,10 @@ export default function PerksPage() {
       );
     }
 
-    // Open Ko-fi in a new tab
-    window.open(kofiUrl, '_blank');
+    // Use mobile-friendly Ko-Fi redirect handler
+    handleKofiRedirect(kofiUrl, {
+      mobileToastMessage: '📱 Redirecting to Ko-fi for purchase...'
+    });
 
     setShowPhraseModal(false);
     setSelectedProduct(null);
@@ -370,7 +375,10 @@ export default function PerksPage() {
       );
     }
     
-    window.open(kofiUrl, '_blank');
+    // Use mobile-friendly Ko-Fi redirect handler
+    handleKofiRedirect(kofiUrl, {
+      mobileToastMessage: '📱 Redirecting to Ko-fi for purchase...'
+    });
   };
 
   if (loading) {

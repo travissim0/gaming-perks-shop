@@ -220,6 +220,96 @@ export default function PlayerStatsPage() {
           </p>
         </motion.div>
 
+        {/* Player Statistics Quick Access Widget */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-b from-gray-800 to-gray-900 border border-indigo-500/30 rounded-lg shadow-2xl overflow-hidden mb-8"
+        >
+          <div className="bg-gray-700/50 px-4 py-3 border-b border-indigo-500/30">
+            <h3 className="text-indigo-400 font-bold text-lg tracking-wider">📊 QUICK STATS ACCESS</h3>
+            <p className="text-gray-400 text-sm mt-1">Jump to popular leaderboards</p>
+          </div>
+          
+          <div className="p-4 bg-gray-900">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <button 
+                onClick={() => {
+                  setGameMode('all');
+                  setSortBy('total_kills');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-red-400 text-lg mb-1">🎯</div>
+                  <div className="text-xs text-gray-400 group-hover:text-indigo-300">Top Killers</div>
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameMode('all');
+                  setSortBy('win_rate');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-green-400 text-lg mb-1">🏆</div>
+                  <div className="text-xs text-gray-400 group-hover:text-indigo-300">Win Rate</div>
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameMode('CTF');
+                  setSortBy('total_captures');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-blue-400 text-lg mb-1">🚩</div>
+                  <div className="text-xs text-gray-400 group-hover:text-indigo-300">Flag Caps</div>
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setGameMode('all');
+                  setSortBy('total_games');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-purple-400 text-lg mb-1">🎮</div>
+                  <div className="text-xs text-gray-400 group-hover:text-indigo-300">Most Active</div>
+                </div>
+              </button>
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-gray-700">
+              <div className="text-xs text-gray-500 text-center">
+                Track performance across all game modes
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

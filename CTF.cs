@@ -10215,7 +10215,7 @@ private Player FindPlayerByAlias(string alias)
         }
 
         // Arena boolean if ?energizer command is useable or not, starts disabled
-        private bool _energizerCommandEnabled = false;
+        private bool _energizerCommandEnabled = true;
 
         /// <summary>
         /// Called when a player sends a chat command

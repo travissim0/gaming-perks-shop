@@ -923,8 +923,59 @@ export default function Home() {
             opacity: scrollY < 400 ? Math.max(0.85, 1 - (scrollY - 200) / 300) : 1
           }}
         >
-          {/* Left Sidebar - Simplified Server Status */}
+          {/* Left Sidebar - Online Users and Server Status */}
           <div className="xl:col-span-2 space-y-6">
+            {/* Online Users (moved from right sidebar) */}
+            {onlineUsers.length > 0 && (
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
+                  <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
+                    👥 ONLINE NOW
+                    <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
+                      {onlineUsers.length}
+                    </span>
+                  </h3>
+                </div>
+                
+                <div className="p-3 bg-gray-900 max-h-72 overflow-y-auto">
+                  <div className="space-y-2">
+                    {onlineUsers.slice(0, 8).map((user) => (
+                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-2">
+                        <div className="flex items-center space-x-3">
+                          <UserAvatar 
+                            user={{
+                              avatar_url: user.avatar_url,
+                              in_game_alias: user.in_game_alias,
+                              email: null
+                            }} 
+                            size="sm" 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-green-400 font-mono text-sm font-bold truncate">
+                                {user.in_game_alias}
+                              </span>
+                              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(user.last_seen).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {onlineUsers.length > 8 && (
+                    <div className="text-center mt-3">
+                      <span className="text-gray-500 text-xs">
+                        +{onlineUsers.length - 8} more online
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
             {/* Simplified Server Status */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-green-500/20 hover:border-green-500/50">
               <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
@@ -1419,178 +1470,54 @@ export default function Home() {
             </section>
           </div>
 
-          {/* Right Sidebar - Matches, Squads, Online Users (Dynamic) */}
+          {/* Right Sidebar - Donations, Matches, Squads (Dynamic) */}
           <div className="xl:col-span-3 space-y-6">
-            {/* Player Statistics Quick Access */}
-            {user && (
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-indigo-500/30 rounded-lg shadow-2xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-indigo-500/30">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-indigo-400 font-bold text-sm tracking-wider">📊 PLAYER STATS</h3>
-                    <Link 
-                      href="/stats" 
-                      className="text-indigo-400 hover:text-indigo-300 text-xs border border-indigo-500/50 hover:border-indigo-400 px-2 py-1 rounded transition-all duration-300"
-                    >
-                      VIEW ALL
-                    </Link>
-                  </div>
+            {/* Recent Donations - moved to top */}
+            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden">
+              <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-yellow-400 font-bold text-sm tracking-wider">💰 SUPPORT</h3>
+                  <Link 
+                    href="/donate" 
+                    className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
+                  >
+                    DONATE
+                  </Link>
                 </div>
-                
-                <div className="p-4 bg-gray-900">
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <Link 
-                      href="/stats?gameMode=all&sortBy=total_kills" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-red-400 text-lg mb-1">🎯</div>
-                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Top Killers</div>
-                      </div>
-                    </Link>
-                    
-                    <Link 
-                      href="/stats?gameMode=all&sortBy=win_percentage" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-green-400 text-lg mb-1">🏆</div>
-                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Win Rate</div>
-                      </div>
-                    </Link>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <Link 
-                      href="/stats?gameMode=CTF&sortBy=flag_captures" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-blue-400 text-lg mb-1">🚩</div>
-                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Flag Caps</div>
-                      </div>
-                    </Link>
-                    
-                    <Link 
-                      href="/stats?gameMode=all&sortBy=total_games" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-indigo-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-purple-400 text-lg mb-1">🎮</div>
-                        <div className="text-xs text-gray-400 group-hover:text-indigo-300">Most Active</div>
-                      </div>
-                    </Link>
-                  </div>
-                  
-                  <div className="mt-4 pt-3 border-t border-gray-700">
-                    <div className="text-xs text-gray-500 text-center">
-                      Track performance across all game modes
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Dueling Arena Quick Access */}
-            {user && (
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg shadow-2xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-orange-500/30">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-orange-400 font-bold text-sm tracking-wider">⚔️ DUELING ARENA</h3>
-                    <Link 
-                      href="/dueling/stats" 
-                      className="text-orange-400 hover:text-orange-300 text-xs border border-orange-500/50 hover:border-orange-400 px-2 py-1 rounded transition-all duration-300"
-                    >
-                      RANKINGS
-                    </Link>
-                  </div>
-                </div>
-                
-                <div className="p-4 bg-gray-900">
-                  <div className="grid grid-cols-1 gap-3">
-                    <Link 
-                      href="/dueling" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-orange-400 text-lg mb-1">🏆</div>
-                        <div className="text-xs text-gray-400 group-hover:text-orange-300">Tournament Brackets</div>
-                        <div className="text-xs text-gray-500 mt-1">Simulate & Create Tournaments</div>
-                      </div>
-                    </Link>
-                    
-                    <Link 
-                      href="/dueling/stats" 
-                      className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
-                    >
-                      <div className="text-center">
-                        <div className="text-yellow-400 text-lg mb-1">📊</div>
-                        <div className="text-xs text-gray-400 group-hover:text-orange-300">Player Rankings</div>
-                        <div className="text-xs text-gray-500 mt-1">View Duel Statistics</div>
-                      </div>
-                    </Link>
-                  </div>
-                  
-                  <div className="mt-4 pt-3 border-t border-gray-700">
-                    <div className="text-xs text-gray-500 text-center">
-                      1v1 competitive dueling system
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-            
-            {/* Dynamic content based on data availability - prioritize most important */}
-            
-            {/* Online Users (always show if there are users) */}
-            {onlineUsers.length > 0 && (
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
-                  <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                    👥 ONLINE NOW
-                    <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
-                      {onlineUsers.length}
-                    </span>
-                  </h3>
-                </div>
-                
-                <div className="p-3 bg-gray-900 max-h-72 overflow-y-auto">
+              </div>
+              
+              <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
+                {recentDonations.length > 0 ? (
                   <div className="space-y-2">
-                    {onlineUsers.slice(0, 8).map((user) => (
-                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-2">
-                        <div className="flex items-center space-x-3">
-                          <UserAvatar 
-                            user={{
-                              avatar_url: user.avatar_url,
-                              in_game_alias: user.in_game_alias,
-                              email: null
-                            }} 
-                            size="sm" 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className="text-green-400 font-mono text-sm font-bold truncate">
-                                {user.in_game_alias}
-                              </span>
-                              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(user.last_seen).toLocaleTimeString()}
-                            </div>
-                          </div>
+                    {recentDonations.slice(0, 5).map((donation, index) => (
+                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-yellow-400 font-bold text-sm">
+                            ${donation.amount.toFixed(2)}
+                          </span>
+                          <span className="text-gray-500 text-xs">
+                            {new Date(donation.date).toLocaleDateString()}
+                          </span>
                         </div>
+                        <div className="text-cyan-400 font-mono text-xs truncate">
+                          {donation.customerName}
+                        </div>
+                        {donation.message && (
+                          <div className="text-gray-300 text-xs italic truncate mt-1" title={donation.message}>
+                            "{donation.message}"
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                  {onlineUsers.length > 8 && (
-                    <div className="text-center mt-3">
-                      <span className="text-gray-500 text-xs">
-                        +{onlineUsers.length - 8} more online
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="text-gray-500 text-sm">No recent donations</div>
+                    <div className="text-gray-600 text-xs mt-1">Be the first to support!</div>
+                  </div>
+                )}
+              </div>
+            </section>
 
             {/* Upcoming Matches */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-2xl overflow-hidden">
@@ -1708,52 +1635,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Recent Donations */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-yellow-400 font-bold text-sm tracking-wider">💰 SUPPORT</h3>
-                  <Link 
-                    href="/donate" 
-                    className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
-                  >
-                    DONATE
-                  </Link>
-                </div>
-              </div>
-              
-              <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                {recentDonations.length > 0 ? (
-                  <div className="space-y-2">
-                    {recentDonations.slice(0, 5).map((donation, index) => (
-                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-yellow-400 font-bold text-sm">
-                            ${donation.amount.toFixed(2)}
-                          </span>
-                          <span className="text-gray-500 text-xs">
-                            {new Date(donation.date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="text-cyan-400 font-mono text-xs truncate">
-                          {donation.customerName}
-                        </div>
-                        {donation.message && (
-                          <div className="text-gray-300 text-xs italic truncate mt-1" title={donation.message}>
-                            "{donation.message}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <div className="text-gray-500 text-sm">No recent donations</div>
-                    <div className="text-gray-600 text-xs mt-1">Be the first to support!</div>
-                  </div>
-                )}
-              </div>
-            </section>
+
           </div>
         </div>
       </main>

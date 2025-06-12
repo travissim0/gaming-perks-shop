@@ -57,6 +57,11 @@ export default function SquadDetailPage() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [hasExistingRequest, setHasExistingRequest] = useState(false);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  
+  // Banner management states
+  const [showBannerForm, setShowBannerForm] = useState(false);
+  const [bannerUrl, setBannerUrl] = useState('');
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
 
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
@@ -123,6 +128,10 @@ export default function SquadDetailPage() {
         joined_at: member.joined_at
       })) || []
     };
+
+    // Debug logging for banner URL
+    console.log('Squad data:', squadData);
+    console.log('Banner URL:', squadData.banner_url);
 
     setSquad(formattedSquad);
   };
@@ -297,6 +306,117 @@ export default function SquadDetailPage() {
     return user && !userSquad && !hasExistingRequest && squad && squad.captain_id !== user.id;
   };
 
+  // Banner management functions
+  const updateSquadBanner = async () => {
+    if (!squad || !user || !isUserCaptainOrCoCaptain()) return;
+
+    try {
+      let finalBannerUrl = bannerUrl.trim();
+
+      // If there's a file to upload, upload it first
+      if (bannerFile) {
+        try {
+          const fileExt = bannerFile.name.split('.').pop();
+          const fileName = `squad-${squad.id}-${Date.now()}.${fileExt}`;
+          const filePath = `squad-banners/${fileName}`;
+          
+          const { error: uploadError, data } = await supabase.storage
+            .from('avatars') // Using existing avatars bucket
+            .upload(filePath, bannerFile, {
+              upsert: true
+            });
+            
+          if (uploadError) {
+            if (uploadError.message?.includes('Bucket not found')) {
+              toast.error('Image storage not set up yet. Please use a URL instead.');
+              return;
+            } else {
+              throw uploadError;
+            }
+          }
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+            
+          finalBannerUrl = publicUrl;
+        } catch (uploadError: any) {
+          console.error('Error uploading banner:', uploadError);
+          toast.error('Failed to upload image. Please try a URL instead.');
+          return;
+        }
+      } else if (bannerUrl.trim() && !isValidImageUrl(bannerUrl.trim())) {
+        toast.error('Please enter a valid image URL (jpg, png, gif, webp)');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('squads')
+        .update({ 
+          banner_url: finalBannerUrl || null 
+        })
+        .eq('id', squad.id);
+
+      if (error) throw error;
+
+      toast.success(finalBannerUrl ? 'Squad picture updated!' : 'Squad picture removed!');
+      setShowBannerForm(false);
+      setBannerUrl('');
+      setBannerFile(null);
+      
+      // Refresh squad data
+      loadSquadDetails();
+    } catch (error) {
+      console.error('Error updating squad banner:', error);
+      toast.error('Failed to update squad picture');
+    }
+  };
+
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      if (!validTypes.includes(file.type)) {
+        toast.error('Invalid file type. Please upload a JPEG, PNG, GIF, or WebP image.');
+        return;
+      }
+      
+      if (file.size > maxSize) {
+        toast.error('File is too large. Maximum size is 5MB.');
+        return;
+      }
+      
+      setBannerFile(file);
+      setBannerUrl(''); // Clear URL if file is selected
+      
+      // Create a preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setBannerUrl(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const isValidImageUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const pathname = urlObj.pathname.toLowerCase();
+      return validExtensions.some(ext => pathname.endsWith(ext)) || 
+             url.includes('imgur.com') || 
+             url.includes('discord.com') ||
+             url.includes('cdn.') ||
+             url.includes('i.redd.it');
+    } catch {
+      return false;
+    }
+  };
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'captain': return '👑';
@@ -449,6 +569,16 @@ export default function SquadDetailPage() {
                       </button>
                     )}
                     
+                    {/* Banner Management Button for Captains/Co-Captains */}
+                    {isUserCaptainOrCoCaptain() && (
+                      <button
+                        onClick={() => setShowBannerForm(true)}
+                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300"
+                      >
+                        🖼️ {squad.banner_url ? 'Update Picture' : 'Add Picture'}
+                      </button>
+                    )}
+                    
                     {hasExistingRequest && (
                       <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
                         ⏳ Request Pending
@@ -562,6 +692,153 @@ export default function SquadDetailPage() {
           </Link>
         </div>
       </main>
+
+      {/* Squad Banner Management Modal */}
+      {showBannerForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">
+              {squad.banner_url ? 'Update Squad Picture' : 'Add Squad Picture'}
+            </h3>
+            
+            {/* Current Banner Preview */}
+            {squad.banner_url && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Current Picture</label>
+                <div className="w-full max-w-xs mx-auto bg-gray-700 rounded-lg overflow-hidden">
+                  <img 
+                    src={squad.banner_url} 
+                    alt="Current picture"
+                    className="w-full h-auto object-contain max-h-40"
+                    onError={(e) => {
+                      e.currentTarget.src = '';
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={(e) => { e.preventDefault(); updateSquadBanner(); }}>
+              {/* File Upload Option */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Upload Image File</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleBannerFileChange}
+                  className="hidden"
+                  id="banner-upload"
+                />
+                <label
+                  htmlFor="banner-upload"
+                  className="inline-block bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 px-4 py-2 rounded cursor-pointer text-white font-medium transition-all duration-300 text-center w-full"
+                >
+                  Choose Image File
+                </label>
+                {bannerFile && (
+                  <p className="mt-2 text-sm text-green-400">
+                    📁 {bannerFile.name}
+                  </p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Max 5MB. Supports: JPG, PNG, GIF, WebP
+                </p>
+              </div>
+
+              {/* OR Divider */}
+              <div className="mb-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-600" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-gray-800 text-gray-400">OR</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Squad Picture URL</label>
+                <input
+                  type="url"
+                  value={bannerFile ? '' : bannerUrl}
+                  onChange={(e) => {
+                    setBannerUrl(e.target.value);
+                    setBannerFile(null); // Clear file if URL is entered
+                  }}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                  placeholder="https://example.com/image.jpg"
+                  disabled={!!bannerFile}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Square or portrait images work best (1:1 to 3:4 ratio).
+                </p>
+              </div>
+
+              {/* Live Preview */}
+              {(bannerUrl && (bannerFile || isValidImageUrl(bannerUrl))) && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Preview</label>
+                  <div className="w-full max-w-xs mx-auto bg-gray-700 rounded-lg overflow-hidden">
+                    <img 
+                      src={bannerUrl} 
+                      alt="Picture preview"
+                      className="w-full h-auto object-contain max-h-40"
+                      onError={(e) => {
+                        e.currentTarget.src = '';
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-4">
+                <h4 className="text-blue-400 font-medium text-sm mb-2">📋 Image Guidelines:</h4>
+                <ul className="text-xs text-gray-300 space-y-1">
+                  <li>• <strong>Size:</strong> Square (1:1) or portrait (3:4) ratios work best</li>
+                  <li>• <strong>Content:</strong> Squad logos, team photos, or artwork</li>
+                  <li>• <strong>Hosting:</strong> Imgur, Discord, or direct image links</li>
+                  <li>• <strong>Quality:</strong> Clear images at least 200x200px</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded"
+                >
+                  {squad.banner_url ? 'Update Picture' : 'Add Picture'}
+                </button>
+                {squad.banner_url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBannerUrl('');
+                      updateSquadBanner();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                  >
+                    Remove
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBannerForm(false);
+                    setBannerUrl('');
+                    setBannerFile(null);
+                  }}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

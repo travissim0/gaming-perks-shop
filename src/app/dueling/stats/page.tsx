@@ -258,6 +258,46 @@ export default function DuelingStatsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dueling Arena Quick Access Widget */}
+        <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg shadow-2xl overflow-hidden mb-8">
+          <div className="bg-gray-700/50 px-4 py-3 border-b border-orange-500/30">
+            <h3 className="text-orange-400 font-bold text-lg tracking-wider">⚔️ DUELING ARENA</h3>
+            <p className="text-gray-400 text-sm mt-1">Quick access to dueling features</p>
+          </div>
+          
+          <div className="p-4 bg-gray-900">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Link 
+                href="/dueling" 
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-orange-400 text-lg mb-1">🏆</div>
+                  <div className="text-xs text-gray-400 group-hover:text-orange-300">Tournament Brackets</div>
+                  <div className="text-xs text-gray-500 mt-1">Simulate & Create Tournaments</div>
+                </div>
+              </Link>
+              
+              <button 
+                onClick={() => setActiveTab('rankings')}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-yellow-400 text-lg mb-1">📊</div>
+                  <div className="text-xs text-gray-400 group-hover:text-orange-300">Player Rankings</div>
+                  <div className="text-xs text-gray-500 mt-1">View Top Duelists</div>
+                </div>
+              </button>
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-gray-700">
+              <div className="text-xs text-gray-500 text-center">
+                1v1 competitive dueling system
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Navigation Tabs */}
         <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6 mb-8">
           <div className="flex flex-wrap gap-4 mb-6">

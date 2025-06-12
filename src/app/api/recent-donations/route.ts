@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
         `)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(100);
       
       donations = result.data;
       donationsError = result.error;
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
         `)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(100);
       
       donations = result.data;
       donationsError = result.error;

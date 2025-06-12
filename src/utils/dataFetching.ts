@@ -221,7 +221,7 @@ export const queries = {
       async () => {
         const query = getCachedSupabase()
           .from('squads')
-          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at')
+          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, banner_url')
           .eq('id', squadId)
           .eq('is_active', true)
           .single();
