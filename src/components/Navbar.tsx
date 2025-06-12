@@ -15,6 +15,7 @@ export default function Navbar({ user }: { user: any }) {
   const [isMediaManager, setIsMediaManager] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [pendingJoinRequestCount, setPendingJoinRequestCount] = useState(0);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
@@ -38,7 +39,61 @@ export default function Navbar({ user }: { user: any }) {
       }
     };
 
+    const checkPendingJoinRequests = async () => {
+      if (!user) {
+        setPendingJoinRequestCount(0);
+        return;
+      }
+      
+      try {
+        // First, check if user is a captain or co-captain of any squad
+        const { data: squads } = await supabase
+          .from('squad_members')
+          .select(`
+            squad_id,
+            role,
+            squads!inner(id, name)
+          `)
+          .eq('player_id', user.id)
+          .eq('status', 'active')
+          .in('role', ['captain', 'co_captain']);
+
+        if (!squads || squads.length === 0) {
+          setPendingJoinRequestCount(0);
+          return;
+        }
+
+        // Get squad IDs where user is captain/co-captain
+        const squadIds = squads.map(s => s.squad_id);
+
+        // Check for pending join requests to those squads
+        const { data: requests } = await supabase
+          .from('squad_invites')
+          .select('id, invited_by, invited_player_id, squad_id')
+          .in('squad_id', squadIds)
+          .eq('status', 'pending')
+          .gt('expires_at', new Date().toISOString());
+
+        if (requests) {
+          // Filter for self-requests (join requests) where invited_by = invited_player_id
+          const joinRequests = requests.filter(req => req.invited_by === req.invited_player_id);
+          setPendingJoinRequestCount(joinRequests.length);
+        } else {
+          setPendingJoinRequestCount(0);
+        }
+      } catch (error) {
+        console.error('Error checking pending join requests:', error);
+        setPendingJoinRequestCount(0);
+      }
+    };
+
     checkUserData();
+    checkPendingJoinRequests();
+
+    // Set up periodic checking for join requests (every 30 seconds)
+    const interval = setInterval(checkPendingJoinRequests, 30000);
+    
+    return () => clearInterval(interval);
   }, [user]);
 
   const handleSignOut = async () => {
@@ -121,13 +176,25 @@ export default function Navbar({ user }: { user: any }) {
             <div className="flex items-center space-x-3">
               {/* Notifications */}
               <Link 
-                href="/messages"
+                href={pendingJoinRequestCount > 0 ? "/squads" : "/messages"}
                 className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                title={
+                  pendingJoinRequestCount > 0 
+                    ? `${pendingJoinRequestCount} pending join request${pendingJoinRequestCount > 1 ? 's' : ''}`
+                    : unreadMessageCount > 0 
+                    ? `${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`
+                    : 'Notifications'
+                }
               >
-                <Bell className="w-5 h-5" />
-                {unreadMessageCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                <Bell className={`w-5 h-5 ${(unreadMessageCount > 0 || pendingJoinRequestCount > 0) ? 'text-cyan-400' : ''}`} />
+                {(unreadMessageCount > 0 || pendingJoinRequestCount > 0) && (
+                  <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ${
+                    pendingJoinRequestCount > 0 ? 'bg-orange-500' : 'bg-red-500'
+                  }`}>
+                    {pendingJoinRequestCount > 0 
+                      ? (pendingJoinRequestCount > 9 ? '9+' : pendingJoinRequestCount)
+                      : (unreadMessageCount > 9 ? '9+' : unreadMessageCount)
+                    }
                   </span>
                 )}
               </Link>

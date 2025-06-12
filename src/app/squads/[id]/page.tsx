@@ -179,6 +179,7 @@ export default function SquadDetailPage() {
 
     const { data, success } = await robustFetch(
       async () => {
+        // First get all pending invites for this squad
         const result = await supabase
           .from('squad_invites')
           .select(`
@@ -191,12 +192,17 @@ export default function SquadDetailPage() {
           `)
           .eq('squad_id', squad.id)
           .eq('status', 'pending')
-          .eq('invited_by', 'invited_player_id') // Self-requests only
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false });
 
         if (result.error) throw new Error(result.error.message);
-        return result.data;
+        
+        // Filter for self-requests (join requests) where invited_by = invited_player_id
+        const joinRequests = result.data?.filter(invite => 
+          invite.invited_by === invite.invited_player_id
+        ) || [];
+        
+        return joinRequests;
       },
       { showErrorToast: false } // Don't show toast for this optional data
     );
@@ -212,6 +218,8 @@ export default function SquadDetailPage() {
       }));
 
       setPendingRequests(formattedRequests);
+    } else {
+      setPendingRequests([]);
     }
   };
 
