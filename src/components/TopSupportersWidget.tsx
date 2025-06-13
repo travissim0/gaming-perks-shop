@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import supportersCache from '@/lib/supporters-cache.json';
 
 interface Supporter {
   id: string;
@@ -31,10 +30,49 @@ export default function TopSupportersWidget({
   const [supporters, setSupporters] = useState<Supporter[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingSupporterId, setEditingSupporterId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const getMedalForRank = (rank: number): string => {
+    switch (rank) {
+      case 1: return '🥇';
+      case 2: return '🥈';
+      case 3: return '🥉';
+      default: return '🏅';
+    }
+  };
 
   useEffect(() => {
-    // Load cached supporters data
-    setSupporters(supportersCache.topSupporters.slice(0, maxSupporters));
+    const fetchSupporters = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/supporters');
+        const data = await response.json();
+        
+        if (data.topSupporters) {
+          // Map API response to component format
+          const formattedSupporters = data.topSupporters.slice(0, maxSupporters).map((supporter: any, index: number) => ({
+            id: supporter.latestContribution?.id || `supporter-${index}`,
+            rank: index + 1,
+            name: supporter.name,
+            amount: supporter.totalAmount,
+            currency: 'usd',
+            medal: getMedalForRank(index + 1),
+            message: supporter.latestContribution?.message || '',
+            date: supporter.latestContribution?.created_at || new Date().toISOString(),
+            isHighlighted: false
+          }));
+          setSupporters(formattedSupporters);
+        }
+      } catch (error) {
+        console.error('Failed to fetch supporters:', error);
+        // Fallback to empty array on error
+        setSupporters([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSupporters();
   }, [maxSupporters]);
 
   const isAdmin = user?.role === 'admin';
@@ -77,15 +115,6 @@ export default function TopSupportersWidget({
         supporter.medal = getMedalForRank(i + 1);
       });
       setSupporters(newSupporters);
-    }
-  };
-
-  const getMedalForRank = (rank: number): string => {
-    switch (rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return '🏅';
     }
   };
 
@@ -142,7 +171,16 @@ export default function TopSupportersWidget({
 
       <div className="p-6 bg-gradient-to-b from-gray-900/50 to-black/50">
         <div className="space-y-2">
-          {supporters.map((supporter, index) => (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-gray-400">Loading supporters...</div>
+            </div>
+          ) : supporters.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-gray-400">No supporters found</div>
+            </div>
+          ) : (
+            supporters.map((supporter, index) => (
             <SupporterRow
               key={supporter.id}
               supporter={supporter}
@@ -157,7 +195,8 @@ export default function TopSupportersWidget({
               onMoveDown={() => handleMoveDown(index)}
               formatAmount={formatAmount}
             />
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
