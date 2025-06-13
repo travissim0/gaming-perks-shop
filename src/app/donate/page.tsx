@@ -18,8 +18,8 @@ export default function DonatePage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [donationPurpose, setDonationPurpose] = useState<string>('general');
   
-  // Use the donation mode hook
-  const { donations: recentDonations, isUsingCache } = useDonationMode('recent-donations', 9);
+  // Use the donation mode hook - using 'supporters' to match the supporters page
+  const { donations: recentDonations, isUsingCache } = useDonationMode('supporters', 9);
 
   const predefinedAmounts = [5, 10, 25, 50, 100];
   

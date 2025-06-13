@@ -180,6 +180,11 @@ export function useDonationMode(
     setModeState(newMode);
   }, [mode]);
 
+  // Reset rate limiting when endpoint changes
+  useEffect(() => {
+    lastFetchRef.current = 0; // Reset rate limiting when endpoint changes
+  }, [endpoint]);
+
   // Initial load with proper dependency array
   useEffect(() => {
     let mounted = true;
@@ -199,7 +204,7 @@ export function useDonationMode(
     return () => {
       mounted = false;
     };
-  }, [mode]); // Only depend on mode, not refreshData to prevent loops
+  }, [mode, endpoint]); // Depend on both mode and endpoint to refresh when either changes
 
   return {
     donations,

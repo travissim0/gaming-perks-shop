@@ -34,6 +34,7 @@ export default function SupportersPage() {
   const [supporters, setSupporters] = useState<Supporter[]>([]);
   const [topSupporters, setTopSupporters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalAmount: 0,
     totalSupporters: 0,
@@ -42,63 +43,95 @@ export default function SupportersPage() {
   });
 
   useEffect(() => {
-    // Use static data temporarily while API is being fixed
-    const staticSupporters = [
-      { id: "1", type: "donation" as const, amount: 121, currency: "usd", customer_name: "Zmn", message: "ez dila", created_at: "2025-06-12T04:25:29.442+00:00", payment_method: "kofi" },
-      { id: "2", type: "donation" as const, amount: 120, currency: "usd", customer_name: "Kurrupter", message: "", created_at: "2025-06-12T01:25:29.442+00:00", payment_method: "kofi" },
-      { id: "3", type: "donation" as const, amount: 110, currency: "usd", customer_name: "Worth", message: "Thanks for all your hard work.", created_at: "2025-06-10T00:07:06.896+00:00", payment_method: "kofi" },
-      { id: "4", type: "donation" as const, amount: 100, currency: "usd", customer_name: "Fausto", message: "Thank you Axidus", created_at: "2025-06-09T04:25:54.693+00:00", payment_method: "kofi" },
-      { id: "5", type: "donation" as const, amount: 50, currency: "usd", customer_name: "mbx", message: "thanks for all that you are doing", created_at: "2025-06-08T18:41:05.698+00:00", payment_method: "kofi" },
-      { id: "6", type: "donation" as const, amount: 50, currency: "usd", customer_name: "victim", message: "", created_at: "2025-06-08T18:10:24.944+00:00", payment_method: "kofi" },
-      { id: "7", type: "donation" as const, amount: 50, currency: "usd", customer_name: "Trouble (MG)", message: "", created_at: "2025-05-31T18:00:40.476+00:00", payment_method: "kofi" },
-      { id: "8", type: "donation" as const, amount: 40, currency: "usd", customer_name: "CT", message: "CT donate from MVP prize pool", created_at: "2025-06-09T04:21:54.847+00:00", payment_method: "kofi" },
-      { id: "9", type: "donation" as const, amount: 25, currency: "usd", customer_name: "Decker", message: "", created_at: "2025-06-01T05:19:14.426+00:00", payment_method: "kofi" },
-      { id: "10", type: "donation" as const, amount: 15, currency: "usd", customer_name: "Keyser", message: "", created_at: "2025-06-09T13:20:18.375+00:00", payment_method: "kofi" },
-      { id: "11", type: "donation" as const, amount: 10, currency: "usd", customer_name: "Thiz", message: "", created_at: "2025-06-01T22:53:55.524+00:00", payment_method: "kofi" },
-      { id: "12", type: "donation" as const, amount: 5, currency: "usd", customer_name: "kal", message: "", created_at: "2025-06-09T23:49:56.912+00:00", payment_method: "kofi" },
-      { id: "13", type: "donation" as const, amount: 5, currency: "usd", customer_name: "Travis Lyons", message: "", created_at: "2025-06-09T21:32:05.306+00:00", payment_method: "kofi" },
-      { id: "14", type: "donation" as const, amount: 5, currency: "usd", customer_name: "SgtKetchup", message: "", created_at: "2025-06-09T18:22:12.001+00:00", payment_method: "kofi" },
-      { id: "15", type: "donation" as const, amount: 5, currency: "usd", customer_name: "JACKIE", message: "FOR MY KILL MACRO", created_at: "2025-06-01T04:55:41.093+00:00", payment_method: "kofi" },
-      { id: "16", type: "donation" as const, amount: 5, currency: "usd", customer_name: "MIKE", message: "Got rice?", created_at: "2025-05-31T18:08:32.662+00:00", payment_method: "kofi" }
-    ];
+    const fetchSupporters = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch('/api/supporters');
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.supporters && data.stats && data.topSupporters) {
+          setSupporters(data.supporters);
+          setTopSupporters(data.topSupporters);
+          
+          // Stats are already in dollars from the API
+          setStats({
+            totalAmount: data.stats.totalAmount,
+            totalSupporters: data.stats.totalSupporters,
+            thisMonthAmount: data.stats.thisMonthAmount,
+            largestContribution: data.stats.largestContribution ? {
+              amount: data.stats.largestContribution.amount,
+              supporterName: data.stats.largestContribution.supporterName,
+              type: data.stats.largestContribution.type,
+              productName: data.stats.largestContribution.productName
+            } : null
+          });
+        } else {
+          throw new Error('Invalid API response structure');
+        }
+      } catch (error) {
+        console.error('Error fetching supporters:', error);
+        setError(`Unable to load live supporter data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        
+        // Fallback to static data if API fails
+        const staticSupporters = [
+          { id: "1", type: "donation" as const, amount: 121, currency: "usd", customer_name: "Zmn", message: "ez dila", created_at: "2025-06-12T04:25:29.442+00:00", payment_method: "kofi" },
+          { id: "2", type: "donation" as const, amount: 120, currency: "usd", customer_name: "Kurrupter", message: "", created_at: "2025-06-12T01:25:29.442+00:00", payment_method: "kofi" },
+          { id: "3", type: "donation" as const, amount: 110, currency: "usd", customer_name: "Worth", message: "Thanks for all your hard work.", created_at: "2025-06-10T00:07:06.896+00:00", payment_method: "kofi" },
+          { id: "4", type: "donation" as const, amount: 100, currency: "usd", customer_name: "Fausto", message: "Thank you Axidus", created_at: "2025-06-09T04:25:54.693+00:00", payment_method: "kofi" },
+          { id: "5", type: "donation" as const, amount: 50, currency: "usd", customer_name: "mbx", message: "thanks for all that you are doing", created_at: "2025-06-08T18:41:05.698+00:00", payment_method: "kofi" }
+        ];
+        
+        const totalAmount = staticSupporters.reduce((sum, supporter) => sum + supporter.amount, 0);
+        
+        const supporterTotals = staticSupporters.reduce((acc, supporter) => {
+          if (!acc[supporter.customer_name]) {
+            acc[supporter.customer_name] = { totalAmount: 0, contributionCount: 0, name: supporter.customer_name };
+          }
+          acc[supporter.customer_name].totalAmount += supporter.amount;
+          acc[supporter.customer_name].contributionCount += 1;
+          return acc;
+        }, {} as Record<string, { totalAmount: number; contributionCount: number; name: string }>);
 
-    const totalAmount = staticSupporters.reduce((sum, supporter) => sum + supporter.amount, 0);
-    const totalSupporters = staticSupporters.length;
-    
-    // Calculate top supporters
-    const supporterTotals = staticSupporters.reduce((acc, supporter) => {
-      if (!acc[supporter.customer_name]) {
-        acc[supporter.customer_name] = { totalAmount: 0, contributionCount: 0, name: supporter.customer_name };
+        const topSupportersArray = Object.values(supporterTotals)
+          .sort((a, b) => b.totalAmount - a.totalAmount)
+          .slice(0, 3);
+
+        setSupporters(staticSupporters);
+        setTopSupporters(topSupportersArray);
+        setStats({
+          totalAmount: totalAmount,
+          totalSupporters: staticSupporters.length,
+          thisMonthAmount: totalAmount,
+          largestContribution: staticSupporters.length > 0 ? {
+            amount: Math.max(...staticSupporters.map(s => s.amount)),
+            supporterName: staticSupporters.find(s => s.amount === Math.max(...staticSupporters.map(sup => sup.amount)))?.customer_name || "Unknown",
+            type: "donation" as const
+          } : null
+        });
+      } finally {
+        setLoading(false);
       }
-      acc[supporter.customer_name].totalAmount += supporter.amount;
-      acc[supporter.customer_name].contributionCount += 1;
-      return acc;
-    }, {} as Record<string, { totalAmount: number; contributionCount: number; name: string }>);
+    };
 
-    const topSupportersArray = Object.values(supporterTotals)
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 3);
-
-    setSupporters(staticSupporters);
-    setTopSupporters(topSupportersArray);
-    setStats({
-      totalAmount: totalAmount,
-      totalSupporters: totalSupporters,
-      thisMonthAmount: totalAmount, // For now, showing all as this month
-      largestContribution: staticSupporters.length > 0 ? {
-        amount: Math.max(...staticSupporters.map(s => s.amount)),
-        supporterName: staticSupporters.find(s => s.amount === Math.max(...staticSupporters.map(sup => sup.amount)))?.customer_name || "Unknown",
-        type: "donation" as const
-      } : null
-    });
-    setLoading(false);
+    fetchSupporters();
+    
+    // Auto-refresh every 30 seconds to pick up new donations from webhook
+    const interval = setInterval(fetchSupporters, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  const formatCurrency = (cents: number) => {
+  const formatCurrency = (dollars: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-    }).format(cents / 100);
+    }).format(dollars);
   };
 
   const formatDate = (dateString: string) => {
@@ -179,6 +212,17 @@ export default function SupportersPage() {
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-orange-900/20 border border-orange-500/50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-orange-400">⚠️</span>
+                <span className="text-orange-300 text-sm">{error}</span>
+                <span className="text-orange-400 text-xs ml-auto">Showing cached data</span>
+              </div>
+            </div>
+          )}
+
           {supporters.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">🤗</div>
@@ -254,7 +298,7 @@ export default function SupportersPage() {
                     {/* Amount */}
                     <div className="text-right">
                       <div className="text-2xl font-bold text-green-400">
-                        {formatCurrency(supporter.amount * 100)}
+                        {formatCurrency(supporter.amount)}
                       </div>
                       <div className="text-gray-400 text-sm">
                         {supporter.currency.toUpperCase()}
@@ -311,7 +355,7 @@ export default function SupportersPage() {
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-bold text-white truncate">{supporter.name}</h3>
                       <div className="text-sm font-bold text-green-400">
-                        {formatCurrency(supporter.totalAmount * 100)}
+                        {formatCurrency(supporter.totalAmount)}
                       </div>
                       <div className="text-xs text-gray-400">
                         {supporter.contributionCount} contribution{supporter.contributionCount !== 1 ? 's' : ''}

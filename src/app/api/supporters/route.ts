@@ -183,11 +183,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       supporters: supporters.slice(0, 50), // Recent 50 supporters
       stats: {
-        totalAmount: Math.round(totalAmount * 100), // Convert to cents
+        totalAmount: Math.round(totalAmount * 100) / 100, // Keep in dollars, just round to 2 decimals
         totalSupporters: totalCount,
-        thisMonthAmount: Math.round(thisMonthAmount * 100), // Convert to cents
+        thisMonthAmount: Math.round(thisMonthAmount * 100) / 100, // Keep in dollars, just round to 2 decimals
         largestContribution: largestSupporter ? {
-          amount: Math.round(largestSupporter.amount * 100),
+          amount: Math.round(largestSupporter.amount * 100) / 100, // Keep in dollars, just round to 2 decimals
           supporterName: largestSupporter.customer_name,
           type: largestSupporter.type,
           productName: largestSupporter.product_name
