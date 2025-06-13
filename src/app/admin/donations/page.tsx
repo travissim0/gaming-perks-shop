@@ -69,6 +69,15 @@ export default function AdminDonations() {
         }
 
         const data = await response.json();
+        
+        // Handle fallback response when database is down
+        if (data.fallback) {
+          setDonations([]);
+          setError(`Database temporarily unavailable. ${data.message || 'Using cached supporters data on main pages.'}`);
+          setIsAdmin(true); // User passed admin check to get this far
+          return;
+        }
+        
         setDonations(data);
         setIsAdmin(true);
       } catch (err) {

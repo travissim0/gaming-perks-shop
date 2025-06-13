@@ -116,16 +116,26 @@ export default function DonatePage() {
 
   const loadCachedSupporters = () => {
     try {
-      // Convert cached data to format expected by donate page
-      const cachedSupporters = supportersCache.recentSupporters.map(supporter => ({
+      // Use top supporters for the main display (sorted by amount)
+      const topSupporters = supportersCache.topSupporters.slice(0, 3).map(supporter => ({
         amount: supporter.amount,
         customerName: supporter.name,
         message: supporter.message,
         date: supporter.date,
         currency: supporter.currency || 'usd'
       }));
-      
-      setRecentDonations(cachedSupporters);
+
+      // Add additional supporters (ranks 4-10) for "recent" section to avoid duplication
+      const additionalSupporters = supportersCache.topSupporters.slice(3, 9).map(supporter => ({
+        amount: supporter.amount,
+        customerName: supporter.name,
+        message: supporter.message,
+        date: supporter.date,
+        currency: supporter.currency || 'usd'
+      }));
+
+      // Combine for the complete list, with top 3 first, then additional
+      setRecentDonations([...topSupporters, ...additionalSupporters]);
     } catch (error) {
       console.error('Error loading cached supporters:', error);
       // Fallback to empty array if cache fails
@@ -378,9 +388,9 @@ export default function DonatePage() {
                 <div className="border-t border-gray-700/50 pt-4">
                   <h3 className="text-sm font-bold text-white mb-3 text-center">Recent Supporters</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {recentDonations.length > 0 ? (
+                    {recentDonations.length > 3 ? (
                       <>
-                        {recentDonations.slice(0, 6).map((donation, index) => {
+                        {recentDonations.slice(3, 9).map((donation, index) => {
                           const displayName = donation.customerName || 'Anonymous Supporter';
                           const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                           const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
@@ -404,7 +414,7 @@ export default function DonatePage() {
                     ) : (
                       <div className="col-span-2 text-center py-4">
                         <div className="text-lg mb-1">🤗</div>
-                        <div className="text-gray-500 text-xs">Be our first!</div>
+                        <div className="text-gray-500 text-xs">More supporters coming soon!</div>
                       </div>
                     )}
                   </div>
@@ -519,9 +529,9 @@ export default function DonatePage() {
                   <div className="col-span-1">
                     <h3 className="text-sm font-bold text-white mb-3 text-center">Recent</h3>
                     <div className="space-y-1.5">
-                      {recentDonations.length > 0 ? (
+                      {recentDonations.length > 3 ? (
                         <>
-                          {recentDonations.slice(0, 6).map((donation, index) => {
+                          {recentDonations.slice(3, 9).map((donation, index) => {
                             const displayName = donation.customerName || 'Anonymous Supporter';
                             const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                             const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
@@ -545,7 +555,7 @@ export default function DonatePage() {
                       ) : (
                         <div className="text-center py-4">
                           <div className="text-lg mb-1">🤗</div>
-                          <div className="text-gray-500 text-xs">Be our first!</div>
+                          <div className="text-gray-500 text-xs">More supporters coming soon!</div>
                         </div>
                       )}
                     </div>
