@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
+import TopSupportersWidget from '@/components/TopSupportersWidget';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -1470,54 +1471,14 @@ export default function Home() {
             </section>
           </div>
 
-          {/* Right Sidebar - Donations, Matches, Squads (Dynamic) */}
+          {/* Right Sidebar - Matches, Squads, Top Supporters */}
           <div className="xl:col-span-3 space-y-6">
-            {/* Recent Donations - moved to top */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-yellow-400 font-bold text-sm tracking-wider">💰 SUPPORT</h3>
-                  <Link 
-                    href="/donate" 
-                    className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-500/50 hover:border-yellow-400 px-2 py-1 rounded transition-all duration-300"
-                  >
-                    DONATE
-                  </Link>
-                </div>
-              </div>
-              
-              <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                {recentDonations.length > 0 ? (
-                  <div className="space-y-2">
-                    {recentDonations.slice(0, 5).map((donation, index) => (
-                      <div key={index} className="bg-gray-800/50 border border-yellow-500/20 rounded-lg p-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-yellow-400 font-bold text-sm">
-                            ${donation.amount.toFixed(2)}
-                          </span>
-                          <span className="text-gray-500 text-xs">
-                            {new Date(donation.date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="text-cyan-400 font-mono text-xs truncate">
-                          {donation.customerName}
-                        </div>
-                        {donation.message && (
-                          <div className="text-gray-300 text-xs italic truncate mt-1" title={donation.message}>
-                            "{donation.message}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <div className="text-gray-500 text-sm">No recent donations</div>
-                    <div className="text-gray-600 text-xs mt-1">Be the first to support!</div>
-                  </div>
-                )}
-              </div>
-            </section>
+            {/* Top Supporters Widget - Moved to top */}
+            <TopSupportersWidget 
+              showAdminControls={true}
+              maxSupporters={8}
+              className="transform transition-all duration-300 hover:scale-105"
+            />
 
             {/* Upcoming Matches */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-2xl overflow-hidden">
@@ -1634,8 +1595,6 @@ export default function Home() {
                 )}
               </div>
             </section>
-
-
           </div>
         </div>
       </main>
