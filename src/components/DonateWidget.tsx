@@ -1,17 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useDonationMode } from '@/hooks/useDonationMode';
 import supportersCache from '@/lib/supporters-cache.json';
-
-interface RecentSupporter {
-  id: string;
-  name: string;
-  amount: number;
-  currency: string;
-  message: string;
-  date: string;
-}
 
 interface DonateWidgetProps {
   className?: string;
@@ -24,13 +16,12 @@ export default function DonateWidget({
   showRecentSupporters = true,
   maxRecentSupporters = 3
 }: DonateWidgetProps) {
-  const [recentSupporters, setRecentSupporters] = useState<RecentSupporter[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
-
-  useEffect(() => {
-    // Load cached recent supporters data
-    setRecentSupporters(supportersCache.recentSupporters.slice(0, maxRecentSupporters));
-  }, [maxRecentSupporters]);
+  
+  const { donations: recentSupporters, isUsingCache } = useDonationMode(
+    'recent-donations',
+    maxRecentSupporters
+  );
 
   const formatAmount = (amount: number, currency: string) => {
     return new Intl.NumberFormat('en-US', {
@@ -140,7 +131,7 @@ export default function DonateWidget({
                       <span className="text-sm">🌟</span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-cyan-300 truncate">
-                          {supporter.name}
+                          {supporter.customerName}
                         </p>
                         {supporter.message && (
                           <p className="text-xs text-gray-400 truncate">

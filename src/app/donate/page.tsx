@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { handleKofiRedirect } from '@/utils/deviceDetection';
 import MobilePaymentInfo from '@/components/MobilePaymentInfo';
+import { useDonationMode } from '@/hooks/useDonationMode';
 import supportersCache from '@/lib/supporters-cache.json';
 
 export default function DonatePage() {
@@ -16,7 +17,9 @@ export default function DonatePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [donationPurpose, setDonationPurpose] = useState<string>('general');
-  const [recentDonations, setRecentDonations] = useState<any[]>([]);
+  
+  // Use the donation mode hook
+  const { donations: recentDonations, isUsingCache } = useDonationMode('recent-donations', 9);
 
   const predefinedAmounts = [5, 10, 25, 50, 100];
   
@@ -95,7 +98,7 @@ export default function DonatePage() {
     }, 1000);
   };
 
-  // Check for returning donation and load cached supporters data
+  // Check for returning donation
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const returnFromKofi = urlParams.get('return');
@@ -109,39 +112,7 @@ export default function DonatePage() {
         });
       }
     }
-
-    // Load cached supporters data instead of API call
-    loadCachedSupporters();
   }, []);
-
-  const loadCachedSupporters = () => {
-    try {
-      // Use top supporters for the main display (sorted by amount)
-      const topSupporters = supportersCache.topSupporters.slice(0, 3).map(supporter => ({
-        amount: supporter.amount,
-        customerName: supporter.name,
-        message: supporter.message,
-        date: supporter.date,
-        currency: supporter.currency || 'usd'
-      }));
-
-      // Add additional supporters (ranks 4-10) for "recent" section to avoid duplication
-      const additionalSupporters = supportersCache.topSupporters.slice(3, 9).map(supporter => ({
-        amount: supporter.amount,
-        customerName: supporter.name,
-        message: supporter.message,
-        date: supporter.date,
-        currency: supporter.currency || 'usd'
-      }));
-
-      // Combine for the complete list, with top 3 first, then additional
-      setRecentDonations([...topSupporters, ...additionalSupporters]);
-    } catch (error) {
-      console.error('Error loading cached supporters:', error);
-      // Fallback to empty array if cache fails
-      setRecentDonations([]);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">

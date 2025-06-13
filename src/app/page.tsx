@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
+import { useDonationMode } from '@/hooks/useDonationMode';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -104,7 +105,7 @@ export default function Home() {
     players: [],
     lastUpdated: null
   });
-  const [recentDonations, setRecentDonations] = useState<any[]>([]);
+  const { donations: recentDonations } = useDonationMode('recent-donations', 5);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [topSquads, setTopSquads] = useState<Squad[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
@@ -302,18 +303,7 @@ export default function Home() {
       }
     };
 
-    // Fetch recent donations
-    const fetchRecentDonations = async () => {
-      try {
-        const response = await fetch('/api/recent-donations');
-        if (response.ok) {
-          const data = await response.json();
-          setRecentDonations(data.donations || data);
-        }
-      } catch (error) {
-        console.error('Error fetching recent donations:', error);
-      }
-    };
+
 
     // Fetch featured videos for homepage center
     const fetchFeaturedVideos = async () => {
@@ -537,7 +527,6 @@ export default function Home() {
     
     fetchServerData();
     fetchGameData();
-    fetchRecentDonations();
     fetchFeaturedVideos();
     fetchOnlineUsers();
     fetchTopSquads();
@@ -547,7 +536,6 @@ export default function Home() {
     // Set up intervals to refresh data
     const serverInterval = setInterval(fetchServerData, 300000); // Poll every 5 minutes instead of 1 minute
     const gameInterval = setInterval(fetchGameData, 5000);
-    const donationsInterval = setInterval(fetchRecentDonations, 30000);
     const videosInterval = setInterval(fetchFeaturedVideos, 300000); // Refresh every 5 minutes
     const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
     const squadsInterval = setInterval(fetchTopSquads, 60000);
@@ -566,7 +554,6 @@ export default function Home() {
     return () => {
       clearInterval(serverInterval);
       clearInterval(gameInterval);
-      clearInterval(donationsInterval);
       clearInterval(videosInterval);
       clearInterval(usersInterval);
       clearInterval(squadsInterval);

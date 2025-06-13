@@ -2,80 +2,67 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export async function GET(req: NextRequest) {
+  console.log('🔍 Recent donations API called');
+  
   try {
-    // Create Supabase service client for public data access
+    // Create service client - we know this works from debug script
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Try both table names for compatibility
-    let donations, donationsError;
+    console.log('📊 Querying donation_transactions...');
     
-    try {
-      // First try donation_transactions table
-      const result = await supabase
-        .from('donation_transactions')
-        .select(`
-          amount_cents,
-          currency,
-          donation_message,
-          customer_name,
-          created_at
-        `)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      
-      donations = result.data;
-      donationsError = result.error;
-    } catch (error) {
-      console.log('donation_transactions table not found, trying donations table...');
-      
-      // Fallback to donations table
-      const result = await supabase
-        .from('donations')
-        .select(`
-          amount,
-          message,
-          donor_name,
-          created_at
-        `)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      
-      donations = result.data;
-      donationsError = result.error;
+    // This exact query worked in the debug script
+    const { data: donations, error } = await supabase
+      .from('donation_transactions')
+      .select(`
+        amount_cents,
+        currency,
+        donation_message,
+        customer_name,
+        kofi_from_name,
+        created_at,
+        payment_method,
+        status
+      `)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('❌ Database query failed:', error);
+      return NextResponse.json({
+        error: 'Database query failed',
+        details: error.message
+      }, { status: 500 });
     }
 
-    if (donationsError) {
-      console.error('Error fetching donations:', donationsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch recent donations' },
-        { status: 500 }
-      );
-    }
+    console.log(`✅ Query successful - found ${donations?.length || 0} donations`);
 
-    // Format the donations for display
-    const formattedDonations = donations?.map((donation: any) => ({
-      amount: ((donation as any).amount_cents || (donation as any).amount || 0) / 100,
-      currency: (donation as any).currency || 'usd',
-      message: (donation as any).donation_message || (donation as any).message,
-      customerName: (donation as any).customer_name || (donation as any).donor_name || 'Anonymous Supporter',
+    // Format the response
+    const formattedDonations = donations?.map(donation => ({
+      amount: Math.round(donation.amount_cents / 100),
+      currency: donation.currency || 'usd',
+      customerName: donation.kofi_from_name || donation.customer_name || 'Anonymous',
+      message: donation.donation_message || '',
       date: donation.created_at,
+      paymentMethod: donation.payment_method || 'kofi'
     })) || [];
+
+    console.log(`✅ Returning ${formattedDonations.length} formatted donations`);
 
     return NextResponse.json({
       donations: formattedDonations,
       count: formattedDonations.length,
+      status: 'success'
     });
 
   } catch (error: any) {
-    console.error('Recent donations API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('❌ API Error:', error);
+    return NextResponse.json({
+      error: 'Internal server error',
+      details: error.message
+    }, { status: 500 });
   }
 } 
