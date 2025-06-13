@@ -255,12 +255,14 @@ export default function Navbar({ user }: { user: any }) {
                 </button>
 
                 {showNotificationDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none">
+                  <div 
+                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none"
+                    onClick={e => e.stopPropagation()}
+                  >
                     <div className="py-2">
                       <div className="px-4 py-2 border-b border-gray-600/50">
                         <h3 className="text-sm font-medium text-white">Notifications</h3>
                       </div>
-                      
                       {/* Squad Requests */}
                       {squadRequests.length > 0 && (
                         <div className="border-b border-gray-600/30">
