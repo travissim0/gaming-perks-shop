@@ -235,7 +235,9 @@ export default function GameStatsPage() {
                       <td className="px-3 py-2 text-right text-xs">{player.kills}</td>
                       <td className="px-3 py-2 text-right text-xs">{player.deaths}</td>
                       <td className="px-3 py-2 text-right text-xs">
-                        {player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : player.kills.toFixed(2)}
+                        {typeof player.deaths === 'number' && player.deaths > 0
+                          ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
+                          : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
                       </td>
                       <td className="px-3 py-2 text-right text-xs">{player.flag_captures}</td>
                       <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
@@ -244,8 +246,8 @@ export default function GameStatsPage() {
                       <td className="px-3 py-2 text-right text-xs">{player.eb_hits}</td>
                       <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
                       <td className="px-3 py-2 text-right text-xs">{formatPercentage(player.accuracy)}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.resource_unused_per_death.toFixed(1)}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.explosive_unused_per_death.toFixed(1)}</td>
+                      <td className="px-3 py-2 text-right text-xs">{typeof player.resource_unused_per_death === 'number' ? player.resource_unused_per_death.toFixed(1) : 'N/A'}</td>
+                      <td className="px-3 py-2 text-right text-xs">{typeof player.explosive_unused_per_death === 'number' ? player.explosive_unused_per_death.toFixed(1) : 'N/A'}</td>
                     </motion.tr>
                   ))}
               </tbody>
