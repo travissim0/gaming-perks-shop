@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 
@@ -15,8 +15,62 @@ export default function Navbar({ user }: { user: any }) {
   const [isMediaManager, setIsMediaManager] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [pendingSquadRequests, setPendingSquadRequests] = useState(0);
+  const [squadRequests, setSquadRequests] = useState<any[]>([]);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Function to check pending squad requests for captain/co-captain
+  const checkPendingSquadRequests = async () => {
+    if (!user) return;
+
+    try {
+      // First, get squads where user is captain or co-captain
+      const { data: userSquads, error: squadsError } = await supabase
+        .from('squad_members')
+        .select(`
+          squad_id,
+          role,
+          squads!inner(id, name)
+        `)
+        .eq('player_id', user.id)
+        .in('role', ['captain', 'co_captain'])
+        .eq('status', 'active');
+
+      if (squadsError || !userSquads || userSquads.length === 0) {
+        setPendingSquadRequests(0);
+        return;
+      }
+
+      const squadIds = userSquads.map(sq => sq.squad_id);
+
+      // Get pending join requests TO these squads (self-requests where someone wants to join)
+      const { data: allRequests, error: requestsError } = await supabase
+        .from('squad_invites')
+        .select('id, invited_by, invited_player_id, squad_id, profiles!squad_invites_invited_player_id_fkey(in_game_alias)')
+        .in('squad_id', squadIds)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString());
+
+      if (requestsError) throw requestsError;
+
+      // Filter to only self-requests (where invited_by = invited_player_id)
+      const requests = allRequests?.filter(request => 
+        request.invited_by === request.invited_player_id
+      ) || [];
+
+      if (!requestsError && requests) {
+        setPendingSquadRequests(requests.length);
+        setSquadRequests(requests);
+      }
+    } catch (error) {
+      console.error('Error checking pending squad requests:', error);
+    }
+  };
 
   useEffect(() => {
     const checkUserData = async () => {
@@ -33,17 +87,84 @@ export default function Navbar({ user }: { user: any }) {
         setIsCtfAdmin(profile?.is_admin || profile?.ctf_role === 'ctf_admin');
         setIsMediaManager(profile?.is_media_manager || false);
         setUserAvatar(profile?.avatar_url || null);
+
+        // Also check for pending squad requests
+        await checkPendingSquadRequests();
       } catch (error) {
         console.error('Error checking user data:', error);
       }
     };
 
     checkUserData();
+
+    // Set up interval to check for new squad requests every 30 seconds
+    const interval = setInterval(checkPendingSquadRequests, 30000);
+    
+    return () => clearInterval(interval);
   }, [user]);
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotificationDropdown(false);
+      }
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
+  };
+
+  const handleRequestAction = async (requestId: string, action: 'approve' | 'deny') => {
+    setProcessingRequest(requestId);
+    
+    try {
+      if (action === 'approve') {
+        // Get the request details first
+        const { data: request, error: fetchError } = await supabase
+          .from('squad_invites')
+          .select('invited_player_id, squad_id')
+          .eq('id', requestId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Add member to squad
+        const { error: memberError } = await supabase
+          .from('squad_members')
+          .insert({
+            squad_id: request.squad_id,
+            player_id: request.invited_player_id,
+            role: 'player'
+          });
+
+        if (memberError) throw memberError;
+      }
+
+      // Update invite status
+      const { error: updateError } = await supabase
+        .from('squad_invites')
+        .update({ status: action === 'approve' ? 'accepted' : 'declined' })
+        .eq('id', requestId);
+
+      if (updateError) throw updateError;
+      
+      // Refresh the squad requests
+      await checkPendingSquadRequests();
+      
+    } catch (error) {
+      console.error(`Error ${action}ing request:`, error);
+    } finally {
+      setProcessingRequest(null);
+    }
   };
 
   // Navigation groups
@@ -120,17 +241,103 @@ export default function Navbar({ user }: { user: any }) {
             {/* Right - Utilities */}
             <div className="flex items-center space-x-3">
               {/* Notifications */}
-              <Link 
-                href="/messages"
-                className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadMessageCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
-                  </span>
+              <div className="relative" ref={notificationRef}>
+                <button
+                  onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                  className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                >
+                  <Bell className="w-5 h-5" />
+                  {(unreadMessageCount + pendingSquadRequests) > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {(unreadMessageCount + pendingSquadRequests) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests)}
+                    </span>
+                  )}
+                </button>
+
+                {showNotificationDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none">
+                    <div className="py-2">
+                      <div className="px-4 py-2 border-b border-gray-600/50">
+                        <h3 className="text-sm font-medium text-white">Notifications</h3>
+                      </div>
+                      
+                      {/* Squad Requests */}
+                      {squadRequests.length > 0 && (
+                        <div className="border-b border-gray-600/30">
+                          <div className="px-4 py-2 bg-gray-700/50">
+                            <p className="text-sm font-medium text-yellow-400">🛡️ Squad Join Requests</p>
+                          </div>
+                          {squadRequests.map((request) => (
+                            <div key={request.id} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <p className="text-sm font-medium text-white">
+                                    {request.profiles?.in_game_alias || 'Unknown Player'}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    Wants to join squad
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleRequestAction(request.id, 'approve')}
+                                  disabled={processingRequest === request.id}
+                                  className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
+                                >
+                                  {processingRequest === request.id ? '⏳' : '✅'} Approve
+                                </button>
+                                <button
+                                  onClick={() => handleRequestAction(request.id, 'deny')}
+                                  disabled={processingRequest === request.id}
+                                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
+                                >
+                                  {processingRequest === request.id ? '⏳' : '❌'} Deny
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Messages */}
+                      <Link 
+                        href="/messages"
+                        className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                        onClick={() => setShowNotificationDropdown(false)}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center">
+                            <span className="text-lg mr-3">💬</span>
+                            <div>
+                              <p className="text-sm font-medium">Messages</p>
+                              <p className="text-xs text-gray-400">
+                                {unreadMessageCount > 0 
+                                  ? `${unreadMessageCount} unread message${unreadMessageCount !== 1 ? 's' : ''}`
+                                  : 'No new messages'
+                                }
+                              </p>
+                            </div>
+                          </div>
+                          {unreadMessageCount > 0 && (
+                            <span className="bg-cyan-500 text-black text-xs font-bold px-2 py-1 rounded-full">
+                              {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+
+                      {/* Empty State */}
+                      {(unreadMessageCount + pendingSquadRequests) === 0 && (
+                        <div className="px-4 py-6 text-center text-gray-400">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No new notifications</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </Link>
+              </div>
 
               {/* Donate Button */}
               <Link 
@@ -171,7 +378,7 @@ export default function Navbar({ user }: { user: any }) {
               )}
 
               {/* User Menu */}
-              <div className="relative">
+              <div className="relative" ref={userDropdownRef}>
                 <button
                   onClick={() => setShowUserDropdown(!showUserDropdown)}
                   className="flex items-center space-x-2 p-1.5 hover:bg-gray-800/50 rounded-lg transition-colors"
@@ -188,7 +395,7 @@ export default function Navbar({ user }: { user: any }) {
                 </button>
 
                 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none">
                     <div className="py-2">
                       <Link 
                         href="/dashboard" 

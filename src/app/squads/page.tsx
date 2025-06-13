@@ -557,7 +557,6 @@ export default function SquadsPage() {
           `)
           .eq('squad_id', userSquad.id)
           .eq('status', 'pending')
-          .eq('invited_by', 'invited_player_id') // Self-requests only
           .gt('expires_at', new Date().toISOString());
 
         if (result.error) throw new Error(result.error.message);
@@ -569,9 +568,15 @@ export default function SquadsPage() {
     if (!isMountedRef.current) return;
 
     if (success && data) {
-      const formattedRequests = data.map((request: any) => ({
+      // Filter to only self-requests (where invited_by = invited_player_id)
+      const selfRequests = data.filter((request: any) => 
+        request.invited_by === request.invited_player_id
+      );
+      
+      const formattedRequests = selfRequests.map((request: any) => ({
         ...request,
-        requester_alias: request.profiles?.in_game_alias
+        requester_alias: request.profiles?.in_game_alias,
+        invited_alias: request.profiles?.in_game_alias // Add this for consistency
       }));
 
       setJoinRequests(formattedRequests);
@@ -798,7 +803,8 @@ export default function SquadsPage() {
       // Refresh data
       await Promise.all([
         loadUserSquad(),
-        loadFreeAgents()
+        loadFreeAgents(),
+        loadJoinRequestsForSquad()
       ]);
 
       toast.success('Join request approved!');
@@ -820,8 +826,11 @@ export default function SquadsPage() {
 
       if (error) throw error;
 
-      // Refresh join requests
-      await loadJoinRequestsForSquad();
+      // Refresh join requests and related data
+      await Promise.all([
+        loadJoinRequestsForSquad(),
+        loadFreeAgents()
+      ]);
       
       toast.success('Join request denied');
     } catch (error) {
@@ -1224,6 +1233,72 @@ export default function SquadsPage() {
           <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">🛡️ Squad Management</h1>
           <p className="text-gray-400 text-lg">Form teams, compete together, dominate the battlefield</p>
         </div>
+
+        {/* Prominent Join Requests Notification for Captains/Co-Captains */}
+        {!dataLoading && userSquad && canManageSquad && joinRequests.length > 0 && (
+          <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/50 rounded-xl p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-500 text-black p-2 rounded-full">
+                  <span className="text-xl">🛡️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-yellow-400">
+                    {joinRequests.length} Pending Join Request{joinRequests.length !== 1 ? 's' : ''}
+                  </h3>
+                  <p className="text-yellow-300/80 text-sm">
+                    Players want to join your squad [{userSquad.tag}] {userSquad.name}
+                  </p>
+                </div>
+              </div>
+              <span className="bg-yellow-500 text-black font-bold px-3 py-1 rounded-full text-sm">
+                {joinRequests.length}
+              </span>
+            </div>
+            
+            <div className="space-y-3">
+              {joinRequests.map((request) => (
+                <div key={request.id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-bold text-white text-lg">{request.invited_alias}</span>
+                        <span className="bg-green-600/20 text-green-400 px-2 py-1 rounded text-xs font-medium">
+                          WANTS TO JOIN
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-400 mb-2">
+                        Requested {new Date(request.created_at).toLocaleDateString()} • 
+                        Expires {new Date(request.expires_at).toLocaleDateString()}
+                      </div>
+                      {request.message && (
+                        <div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded mb-3 border-l-4 border-yellow-500">
+                          <span className="font-medium text-yellow-400">Message:</span> "{request.message}"
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 sm:flex-shrink-0">
+                      <button
+                        onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
+                        className="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                      >
+                        <span>✅</span>
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => denyJoinRequest(request.id)}
+                        className="flex-1 sm:flex-none bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                      >
+                        <span>❌</span>
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* User's Squad Section */}
         {dataLoading ? (

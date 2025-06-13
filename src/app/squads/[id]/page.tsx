@@ -80,31 +80,31 @@ export default function SquadDetailPage() {
     }
   }, [squadId, user, loading]);
 
+  // Load pending requests when squad data becomes available and user is captain/co-captain
+  useEffect(() => {
+    if (squad && user && !pageLoading) {
+      const userMember = squad.members?.find(m => m.player_id === user.id);
+      if (userMember && ['captain', 'co_captain'].includes(userMember.role)) {
+        loadPendingRequests();
+      }
+    }
+  }, [squad, user, pageLoading]);
+
   const loadAllData = async () => {
+    if (!user) return;
+    
     try {
       setPageLoading(true);
       
-      // Load all data concurrently with robust error handling
-      const results = await Promise.allSettled([
+      // Load basic squad and user data
+      await Promise.allSettled([
         loadSquadDetails(),
         loadUserSquad(),
         checkExistingRequest()
       ]);
-
-      // Check if any critical operations failed
-      const failures = results.filter(result => result.status === 'rejected');
-      if (failures.length > 0) {
-        console.warn('Some operations failed:', failures);
-      }
-
-      // Load pending requests if user is captain/co-captain (after squad loads)
-      if (squad && isUserCaptainOrCoCaptain()) {
-        await loadPendingRequests();
-      }
-
+      
     } catch (error) {
-      console.error('Error in loadAllData:', error);
-      toast.error('Failed to load page data');
+      console.error('Error loading squad data:', error);
     } finally {
       setPageLoading(false);
     }
@@ -191,7 +191,6 @@ export default function SquadDetailPage() {
           `)
           .eq('squad_id', squad.id)
           .eq('status', 'pending')
-          .eq('invited_by', 'invited_player_id') // Self-requests only
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false });
 
@@ -202,7 +201,12 @@ export default function SquadDetailPage() {
     );
 
     if (success && data) {
-      const formattedRequests: PendingRequest[] = data.map((request: any) => ({
+      // Filter to only show self-requests (where invited_by = invited_player_id)
+      const selfRequests = data.filter((request: any) => 
+        request.invited_by === request.invited_player_id
+      );
+      
+      const formattedRequests: PendingRequest[] = selfRequests.map((request: any) => ({
         id: request.id,
         invited_player_id: request.invited_player_id,
         invited_by: request.invited_by,
@@ -286,10 +290,11 @@ export default function SquadDetailPage() {
     if (success) {
       toast.success(`Request ${action === 'approve' ? 'approved' : 'denied'} successfully!`);
       
-      // Refresh data
+      // Refresh all relevant data
       await Promise.allSettled([
         loadSquadDetails(),
-        loadPendingRequests()
+        loadPendingRequests(),
+        loadUserSquad()
       ]);
     }
 
