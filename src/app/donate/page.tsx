@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { handleKofiRedirect } from '@/utils/deviceDetection';
 import MobilePaymentInfo from '@/components/MobilePaymentInfo';
+import supportersCache from '@/lib/supporters-cache.json';
 
 export default function DonatePage() {
   const { user } = useAuth();
@@ -94,7 +95,7 @@ export default function DonatePage() {
     }, 1000);
   };
 
-  // Check for returning donation and fetch recent donations
+  // Check for returning donation and load cached supporters data
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const returnFromKofi = urlParams.get('return');
@@ -109,19 +110,26 @@ export default function DonatePage() {
       }
     }
 
-    // Fetch recent donations for display
-    fetchRecentDonations();
+    // Load cached supporters data instead of API call
+    loadCachedSupporters();
   }, []);
 
-  const fetchRecentDonations = async () => {
+  const loadCachedSupporters = () => {
     try {
-      const response = await fetch('/api/recent-donations');
-      if (response.ok) {
-        const data = await response.json();
-        setRecentDonations(data.donations || []);
-      }
+      // Convert cached data to format expected by donate page
+      const cachedSupporters = supportersCache.recentSupporters.map(supporter => ({
+        amount: supporter.amount,
+        customerName: supporter.name,
+        message: supporter.message,
+        date: supporter.date,
+        currency: supporter.currency || 'usd'
+      }));
+      
+      setRecentDonations(cachedSupporters);
     } catch (error) {
-      console.error('Error fetching recent donations:', error);
+      console.error('Error loading cached supporters:', error);
+      // Fallback to empty array if cache fails
+      setRecentDonations([]);
     }
   };
 
