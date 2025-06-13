@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
-import supportersCache from '@/app/supporters-cache.json';
+import supportersCache from '@/lib/supporters-cache.json';
 
 interface Supporter {
   id: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import supportersCache from '@/app/supporters-cache.json';
+import supportersCache from '@/lib/supporters-cache.json';
 
 interface Supporter {
   id: string;
