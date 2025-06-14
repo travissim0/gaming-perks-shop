@@ -1,4 +1,5 @@
-import twilio from 'twilio';
+// TWILIO TEMPORARILY DISABLED FOR BUILD
+// import twilio from 'twilio';
 
 // Your SMS notification settings
 const NOTIFICATION_PHONE = '7024725616'; // Your phone number
@@ -6,14 +7,17 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
 
-let twilioClient: twilio.Twilio | null = null;
+// TWILIO TEMPORARILY DISABLED FOR BUILD
+// let twilioClient: twilio.Twilio | null = null;
 
-// Initialize Twilio client
+// TWILIO TEMPORARILY DISABLED FOR BUILD - Initialize Twilio client
 function getTwilioClient() {
-  if (!twilioClient && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-    twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-  }
-  return twilioClient;
+  console.log('⚠️ SMS notifications are currently disabled');
+  return null;
+  // if (!twilioClient && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+  //   twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  // }
+  // return twilioClient;
 }
 
 interface DonationData {
@@ -26,6 +30,18 @@ interface DonationData {
 }
 
 export async function sendDonationSMS(donationData: DonationData): Promise<boolean> {
+  // TWILIO TEMPORARILY DISABLED FOR BUILD
+  console.log('⚠️ SMS notifications are currently disabled');
+  console.log('📧 Would have sent SMS for donation:', {
+    amount: donationData.amount,
+    currency: donationData.currency,
+    from_name: donationData.from_name,
+    type: donationData.type
+  });
+  return false;
+
+  // ORIGINAL CODE COMMENTED OUT FOR BUILD:
+  /*
   try {
     const client = getTwilioClient();
     
@@ -84,10 +100,17 @@ export async function sendDonationSMS(donationData: DonationData): Promise<boole
     
     return false;
   }
+  */
 }
 
 // Test function to verify SMS setup
 export async function testSMSNotification(): Promise<boolean> {
+  // TWILIO TEMPORARILY DISABLED FOR BUILD
+  console.log('⚠️ SMS notifications are currently disabled');
+  return false;
+
+  // ORIGINAL CODE COMMENTED OUT FOR BUILD:
+  /*
   const testData: DonationData = {
     amount: 5.00,
     currency: 'USD',
@@ -98,4 +121,5 @@ export async function testSMSNotification(): Promise<boolean> {
   };
 
   return await sendDonationSMS(testData);
+  */
 } 

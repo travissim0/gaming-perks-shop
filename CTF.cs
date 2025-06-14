@@ -4429,7 +4429,8 @@ private void ResetPlayerScores()
                     // Change the player's skill to "Dueler"
                     ChangePlayerSkill(player, "Dueler");
 
-                    // Iterate through teams to find an empty one (teams 2 to 33)
+                    // Find all empty teams (teams 2 to 33)
+                    List<int> emptyTeams = new List<int>();
                     for (int i = 2; i <= 33; i++)
                     {
                         string teamName = CFG.teams[i].name;
@@ -4438,13 +4439,23 @@ private void ResetPlayerScores()
                         // Check if the team exists and is empty
                         if (team != null && team.ActivePlayerCount == 0)
                         {
-                            // Assign the player to the empty team
-                            AssignPlayerToTeam(player, "Dueler", teamName, false, true);
-                            
-                            // Warp the player to the exact coordinates (756, 533) scaled by 16
-                            WarpPlayerToExactLocation(player, 756, 533);
-                            return; // Exit after assigning and warping the player
+                            emptyTeams.Add(i);
                         }
+                    }
+
+                    // If we found empty teams, pick one randomly
+                    if (emptyTeams.Count > 0)
+                    {
+                        Random random = new Random();
+                        int randomTeamIndex = emptyTeams[random.Next(emptyTeams.Count)];
+                        string randomTeamName = CFG.teams[randomTeamIndex].name;
+                        
+                        // Assign the player to the random empty team
+                        AssignPlayerToTeam(player, "Dueler", randomTeamName, false, true);
+                        
+                        // Warp the player to the exact coordinates (756, 533) scaled by 16
+                        WarpPlayerToExactLocation(player, 756, 533);
+                        return; // Exit after assigning and warping the player
                     }
 
                     // If no empty team was found, notify the player
@@ -10337,7 +10348,27 @@ private Player FindPlayerByAlias(string alias)
                     BuildTurret(player, "Plasma Turret");
                     break;
                 case "duel":
-                    Duel(player);
+                    // Check if this is a new dueling system command with parameters
+                    if (!string.IsNullOrEmpty(payload))
+                    {
+                        // Handle new dueling system commands (challenge, accept, decline, etc.)
+                        // Use fire-and-forget to avoid blocking the event handler
+                        Task.Run(async () => {
+                            try
+                            {
+                                await CTFGameType.DuelingSystem.HandleDuelCommand(player, command, payload);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine(String.Format("Error handling duel command: {0}", ex.Message));
+                            }
+                        });
+                    }
+                    else
+                    {
+                        // Handle legacy duel command (just "?duel" with no parameters)
+                        Duel(player);
+                    }
                     break;
                 case "mix":
                     if (isMixActive)
@@ -11840,6 +11871,27 @@ private Player FindPlayerByAlias(string alias)
                 } else {
                     string victimMessage = string.Format("You were killed by {0}, who has {1} HP remaining.", killer._alias, killerHP);
                     victim.sendMessage(0, victimMessage);
+                }
+            }
+
+            // Track dueling system deaths for unranked dueling (when players have "Dueler" skill)
+            if (killer != null && victimSkill.Equals("Dueler", StringComparison.OrdinalIgnoreCase))
+            {
+                string killerSkill = GetPrimarySkillName(killer);
+                if (killerSkill.Equals("Dueler", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Both players are duelers, track this as unranked dueling
+                    // Use fire-and-forget to avoid blocking the event handler
+                    Task.Run(async () => {
+                        try
+                        {
+                            await CTFGameType.DuelingSystem.HandlePlayerDeath(victim, killer, arena);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(String.Format("Error tracking dueling death: {0}", ex.Message));
+                        }
+                    });
                 }
             }
             

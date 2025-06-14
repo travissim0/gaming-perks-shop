@@ -666,7 +666,7 @@ namespace CTFGameType
                 }
                 else
                 {
-                    json.AppendFormat("\"weapon\":\"{0}\"", EscapeJsonString(player.weapon));
+                    json.AppendFormat("\"weapon\":\"{0}\"", WebIntegration.EscapeJsonString(player.weapon));
                 }
                 
                 json.Append("}");
@@ -683,7 +683,7 @@ namespace CTFGameType
             return json.ToString();
         }
         
-        private static string EscapeJsonString(string input)
+        public static string EscapeJsonString(string input)
         {
             if (string.IsNullOrEmpty(input))
                 return "";
@@ -791,7 +791,7 @@ namespace CTFGameType
                 }
                 else
                 {
-                    json.AppendFormat("\"weapon\":\"{0}\"", player.weapon);
+                    json.AppendFormat("\"weapon\":\"{0}\"", WebIntegration.EscapeJsonString(player.weapon));
                 }
                 
                 json.Append("}");
@@ -824,6 +824,784 @@ namespace CTFGameType
         public string @class { get; set; }
         public bool isOffense { get; set; }
         public string weapon { get; set; }
+    }
+
+    // =============================================================================
+    // DUELING SYSTEM CLASSES
+    // =============================================================================
+
+    public enum DuelType
+    {
+        Unranked,
+        RankedBo3,
+        RankedBo5
+    }
+
+    public enum DuelStatus
+    {
+        Challenged,
+        InProgress,
+        Completed,
+        Abandoned
+    }
+
+    public class DuelMatch
+    {
+        public int MatchId { get; set; }
+        public DuelType MatchType { get; set; }
+        public string Player1Name { get; set; }
+        public string Player2Name { get; set; }
+        public string WinnerName { get; set; }
+        public int Player1RoundsWon { get; set; }
+        public int Player2RoundsWon { get; set; }
+        public int TotalRounds { get; set; }
+        public DuelStatus Status { get; set; }
+        public string ArenaName { get; set; }
+        public DateTime StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public List<DuelRound> Rounds { get; set; }
+
+        public DuelMatch()
+        {
+            Rounds = new List<DuelRound>();
+        }
+    }
+
+    public class DuelRound
+    {
+        public int RoundNumber { get; set; }
+        public string WinnerName { get; set; }
+        public string LoserName { get; set; }
+        public int WinnerHpLeft { get; set; }
+        public int LoserHpLeft { get; set; }
+        public int DurationSeconds { get; set; }
+        public DateTime StartedAt { get; set; }
+        public DateTime CompletedAt { get; set; }
+        public List<DuelKill> Kills { get; set; }
+
+        public DuelRound()
+        {
+            Kills = new List<DuelKill>();
+        }
+    }
+
+    public class DuelKill
+    {
+        public string KillerName { get; set; }
+        public string VictimName { get; set; }
+        public string WeaponUsed { get; set; }
+        public int DamageDealt { get; set; }
+        public int VictimHpBefore { get; set; }
+        public int VictimHpAfter { get; set; }
+        public int ShotsFired { get; set; }
+        public int ShotsHit { get; set; }
+        public bool IsDoubleHit { get; set; }
+        public bool IsTripleHit { get; set; }
+        public DateTime KillTimestamp { get; set; }
+    }
+
+    public class DuelChallenge
+    {
+        public string ChallengerName { get; set; }
+        public string ChallengeName { get; set; }
+        public DuelType DuelType { get; set; }
+        public DateTime ChallengeTime { get; set; }
+        public bool IsActive { get { return DateTime.Now.Subtract(ChallengeTime).TotalMinutes < 2; } } // 2 minute timeout
+    }
+
+    public static class DuelingSystem
+    {
+        private static readonly HttpClient httpClient = new HttpClient();
+        private const string DUELING_API_ENDPOINT = "https://freeinf.org/api/dueling/stats";
+
+        // Thread-safe collections and locks
+        private static readonly ConcurrentDictionary<string, DuelMatch> activeDuels = new ConcurrentDictionary<string, DuelMatch>();
+        private static readonly List<DuelChallenge> activeChallenges = new List<DuelChallenge>();
+        private static readonly ConcurrentDictionary<string, DateTime> lastDamageTime = new ConcurrentDictionary<string, DateTime>();
+        private static readonly ConcurrentDictionary<string, List<DateTime>> recentDamageHits = new ConcurrentDictionary<string, List<DateTime>>();
+        
+        // Locks for critical sections
+        private static readonly object challengeLock = new object();
+        private static readonly object duelLock = new object();
+
+        // Dueling tiles coordinates (to be updated based on your map)
+        private static readonly Dictionary<string, Tuple<short, short>> DUELING_TILES = new Dictionary<string, Tuple<short, short>>
+        {
+            { "ranked_bo3", new Tuple<short, short>(512, 512) },   // Replace with actual coordinates
+            { "ranked_bo5", new Tuple<short, short>(256, 256) }    // Replace with actual coordinates
+        };
+
+        public static async Task HandleDuelCommand(Player player, string command, string payload)
+        {
+            try
+            {
+                string[] parts = payload.Split(' ');
+                string subCommand = parts.Length > 0 ? parts[0].ToLower() : "help";
+
+                switch (subCommand)
+                {
+                    case "challenge":
+                        if (parts.Length < 2)
+                        {
+                            player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
+                            return;
+                        }
+                        string targetName = parts[1];
+                        string duelTypeStr = parts.Length > 2 ? parts[2] : "unranked";
+                        DuelType duelType = ParseDuelType(duelTypeStr);
+                        await ChallengeToDuel(player, targetName, duelType);
+                        break;
+
+                    case "accept":
+                        await AcceptDuelChallenge(player);
+                        break;
+
+                    case "decline":
+                        DeclineDuelChallenge(player);
+                        break;
+
+                    case "forfeit":
+                        await ForfeitDuel(player);
+                        break;
+
+                    case "stats":
+                        string statsTarget = parts.Length > 1 ? parts[1] : player._alias;
+                        await ShowPlayerDuelStats(player, statsTarget);
+                        break;
+
+                    case "help":
+                    default:
+                        ShowDuelHelp(player);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in HandleDuelCommand: {0}", ex.Message));
+                player.sendMessage(-1, "An error occurred processing your duel command.");
+            }
+        }
+
+        private static void ShowDuelHelp(Player player)
+        {
+            player.sendMessage(-1, "=== DUELING SYSTEM ===");
+            player.sendMessage(-1, "?duel challenge <player> [type] - Challenge a player to duel");
+            player.sendMessage(-1, "?duel accept - Accept a duel challenge");
+            player.sendMessage(-1, "?duel decline - Decline a duel challenge");
+            player.sendMessage(-1, "?duel forfeit - Forfeit current duel");
+            player.sendMessage(-1, "?duel stats [player] - View dueling statistics");
+            player.sendMessage(-1, "");
+            player.sendMessage(-1, "Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
+            player.sendMessage(-1, "Walk on ranked tiles to start ranked matches!");
+        }
+
+        private static DuelType ParseDuelType(string type)
+        {
+            string lowerType = type.ToLower();
+            if (lowerType == "bo3" || lowerType == "ranked_bo3")
+                return DuelType.RankedBo3;
+            else if (lowerType == "bo5" || lowerType == "ranked_bo5")
+                return DuelType.RankedBo5;
+            else
+                return DuelType.Unranked;
+        }
+
+        private static async Task ChallengeToDuel(Player challenger, string targetName, DuelType duelType)
+        {
+            // Find target player
+            Player target = challenger._arena.Players.FirstOrDefault(p => 
+                p._alias.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+
+            if (target == null)
+            {
+                challenger.sendMessage(-1, String.Format("Player '{0}' not found in arena.", targetName));
+                return;
+            }
+
+            if (target == challenger)
+            {
+                challenger.sendMessage(-1, "You cannot challenge yourself to a duel.");
+                return;
+            }
+
+            // Thread-safe challenge processing
+            lock (challengeLock)
+            {
+                // Check if players are already in a duel
+                if (IsPlayerInDuel(challenger._alias) || IsPlayerInDuel(target._alias))
+                {
+                    challenger.sendMessage(-1, "One of the players is already in a duel.");
+                    return;
+                }
+
+                // Remove old challenges
+                RemoveExpiredChallenges();
+
+                // Check if there's already an active challenge between these players
+                var existingChallenge = activeChallenges.FirstOrDefault(c => 
+                    c.IsActive && (
+                        (c.ChallengerName == challenger._alias && c.ChallengeName == target._alias) ||
+                        (c.ChallengerName == target._alias && c.ChallengeName == challenger._alias)
+                    ));
+
+                if (existingChallenge != null)
+                {
+                    challenger.sendMessage(-1, "There's already an active challenge between you and this player.");
+                    return;
+                }
+
+                // Create new challenge
+                var challenge = new DuelChallenge
+                {
+                    ChallengerName = challenger._alias,
+                    ChallengeName = target._alias,
+                    DuelType = duelType,
+                    ChallengeTime = DateTime.Now
+                };
+
+                activeChallenges.Add(challenge);
+
+                // Notify both players with colors
+                string duelTypeStr = GetDuelTypeString(duelType);
+
+                challenger.sendMessage(-1, String.Format("@Challenge sent to {0} for {1} duel!", target._alias, duelTypeStr));
+                target.sendMessage(-1, String.Format("!{0} challenges you to a {1} duel!", challenger._alias, duelTypeStr));
+                target.sendMessage(-1, "Type ?duel accept to accept or ?duel decline to decline");
+                target.sendMessage(-1, "Challenge expires in 2 minutes");
+            }
+        }
+
+        private static async Task AcceptDuelChallenge(Player player)
+        {
+            DuelChallenge challengeToAccept = null;
+            Player challenger = null;
+
+            // Thread-safe challenge acceptance
+            lock (challengeLock)
+            {
+                challengeToAccept = activeChallenges.FirstOrDefault(c => 
+                    c.ChallengeName == player._alias && c.IsActive);
+
+                if (challengeToAccept == null)
+                {
+                    player.sendMessage(-1, "No active challenge found.");
+                    return;
+                }
+
+                challenger = player._arena.Players.FirstOrDefault(p => 
+                    p._alias.Equals(challengeToAccept.ChallengerName, StringComparison.OrdinalIgnoreCase));
+
+                if (challenger == null)
+                {
+                    player.sendMessage(-1, "Challenger is no longer in the arena.");
+                    // Mark challenge as processed by creating a new list without it
+                    var newChallenges = activeChallenges.Where(c => c != challengeToAccept).ToList();
+                    activeChallenges.Clear();
+                    foreach (var c in newChallenges) activeChallenges.Add(c);
+                    return;
+                }
+
+                // Check if either player is now in a duel (double-check for race conditions)
+                if (IsPlayerInDuel(challenger._alias) || IsPlayerInDuel(player._alias))
+                {
+                    player.sendMessage(-1, "One of the players is already in a duel.");
+                    return;
+                }
+            }
+
+            // Start the duel outside the lock (async operation)
+            await StartDuel(challenger, player, challengeToAccept.DuelType);
+
+            // Remove the challenge after duel starts
+            lock (challengeLock)
+            {
+                var newChallenges = activeChallenges.Where(c => c != challengeToAccept).ToList();
+                activeChallenges.Clear();
+                foreach (var c in newChallenges) activeChallenges.Add(c);
+            }
+        }
+
+        private static void DeclineDuelChallenge(Player player)
+        {
+            DuelChallenge challengeToDecline = null;
+            Player challenger = null;
+
+            // Thread-safe challenge decline
+            lock (challengeLock)
+            {
+                challengeToDecline = activeChallenges.FirstOrDefault(c => 
+                    c.ChallengeName == player._alias && c.IsActive);
+
+                if (challengeToDecline == null)
+                {
+                    player.sendMessage(-1, "No active challenge found.");
+                    return;
+                }
+
+                // Find the challenger to notify them
+                challenger = player._arena.Players.FirstOrDefault(p => 
+                    p._alias.Equals(challengeToDecline.ChallengerName, StringComparison.OrdinalIgnoreCase));
+
+                // Remove the challenge
+                var newChallenges = activeChallenges.Where(c => c != challengeToDecline).ToList();
+                activeChallenges.Clear();
+                foreach (var c in newChallenges) activeChallenges.Add(c);
+            }
+
+            player.sendMessage(-1, "Challenge declined.");
+            
+            if (challenger != null)
+            {
+                challenger.sendMessage(-1, String.Format("{0} declined your duel challenge.", player._alias));
+            }
+        }
+
+        private static async Task StartDuel(Player player1, Player player2, DuelType duelType)
+        {
+            string matchKey = String.Format("{0}_{1}", player1._alias, player2._alias);
+
+            // Thread-safe duel creation
+            lock (duelLock)
+            {
+                // Double-check that neither player is in a duel
+                if (IsPlayerInDuel(player1._alias) || IsPlayerInDuel(player2._alias))
+                {
+                    player1.sendMessage(-1, "One of the players is already in a duel.");
+                    player2.sendMessage(-1, "One of the players is already in a duel.");
+                    return;
+                }
+
+                var duelMatch = new DuelMatch
+                {
+                    MatchType = duelType,
+                    Player1Name = player1._alias,
+                    Player2Name = player2._alias,
+                    Status = DuelStatus.InProgress,
+                    ArenaName = player1._arena._name,
+                    StartedAt = DateTime.Now
+                };
+
+                activeDuels.TryAdd(matchKey, duelMatch);
+
+                // Announce duel start
+                string duelTypeStr = GetDuelTypeString(duelType);
+
+                // Send message to all players in arena with colors
+                foreach (Player p in player1._arena.Players)
+                {
+                    p.sendMessage(-1, String.Format("!DUEL STARTED: {0} vs {1}! ({2})", player1._alias, player2._alias, duelTypeStr));
+                }
+                
+                // Start first round
+                StartDuelRound(duelMatch, 1);
+            }
+        }
+
+        private static void StartDuelRound(DuelMatch match, int roundNumber)
+        {
+            var round = new DuelRound
+            {
+                RoundNumber = roundNumber,
+                StartedAt = DateTime.Now
+            };
+
+            match.Rounds.Add(round);
+            Console.WriteLine(String.Format("Started round {0} for duel: {1} vs {2}", roundNumber, match.Player1Name, match.Player2Name));
+        }
+
+        public static async Task HandlePlayerDeath(Player victim, Player killer, Arena arena)
+        {
+            try
+            {
+                // Check if this death is part of a duel
+                string matchKey1 = String.Format("{0}_{1}", victim._alias, killer._alias);
+                string matchKey2 = String.Format("{0}_{1}", killer._alias, victim._alias);
+
+                DuelMatch duel = null;
+                if (activeDuels.TryGetValue(matchKey1, out duel) || activeDuels.TryGetValue(matchKey2, out duel))
+                {
+                    if (duel.Status == DuelStatus.InProgress)
+                    {
+                        // Get current round
+                        var currentRound = duel.Rounds.LastOrDefault();
+                        if (currentRound != null)
+                        {
+                            // Record the kill
+                            var kill = new DuelKill
+                            {
+                                KillerName = killer._alias,
+                                VictimName = victim._alias,
+                                WeaponUsed = GetPlayerWeapon(killer),
+                                DamageDealt = 100, // Assuming full damage for death
+                                VictimHpBefore = GetPlayerHealth(victim),
+                                VictimHpAfter = 0,
+                                ShotsFired = GetShotsFired(killer),
+                                ShotsHit = GetShotsHit(killer),
+                                IsDoubleHit = CheckForDoubleHit(killer._alias),
+                                IsTripleHit = CheckForTripleHit(killer._alias),
+                                KillTimestamp = DateTime.Now
+                            };
+
+                            currentRound.Kills.Add(kill);
+
+                            // Complete the round
+                            await CompleteRound(duel, currentRound, killer._alias, victim._alias, 
+                                GetPlayerHealth(killer), 0, arena);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in HandlePlayerDeath: {0}", ex.Message));
+            }
+        }
+
+        private static async Task CompleteRound(DuelMatch match, DuelRound round, 
+            string winnerName, string loserName, int winnerHp, int loserHp, Arena arena)
+        {
+            round.WinnerName = winnerName;
+            round.LoserName = loserName;
+            round.WinnerHpLeft = winnerHp;
+            round.LoserHpLeft = loserHp;
+            round.CompletedAt = DateTime.Now;
+            round.DurationSeconds = (int)(round.CompletedAt - round.StartedAt).TotalSeconds;
+
+            // Update match scores
+            if (winnerName == match.Player1Name)
+                match.Player1RoundsWon++;
+            else
+                match.Player2RoundsWon++;
+
+            // Announce round result with colors and current score
+            string currentScore = String.Format("({0}-{1})", match.Player1RoundsWon, match.Player2RoundsWon);
+            foreach (Player p in arena.Players)
+            {
+                p.sendMessage(-1, String.Format("@Round {0}: {1} defeats {2} ({3}HP left)", 
+                    round.RoundNumber, winnerName, loserName, winnerHp));
+                p.sendMessage(-1, String.Format("Current Score: {0} {1}", currentScore, GetDuelTypeString(match.MatchType)));
+            }
+
+            // Check if match is complete
+            int roundsToWin = GetRoundsToWin(match.MatchType);
+            if (match.Player1RoundsWon >= roundsToWin || match.Player2RoundsWon >= roundsToWin)
+            {
+                match.WinnerName = match.Player1RoundsWon >= roundsToWin ? match.Player1Name : match.Player2Name;
+                await CompleteDuel(match, arena);
+            }
+            else
+            {
+                // Start next round
+                StartDuelRound(match, match.Rounds.Count + 1);
+            }
+        }
+
+        private static int GetRoundsToWin(DuelType duelType)
+        {
+            if (duelType == DuelType.RankedBo3)
+                return 2; // Best of 3
+            else if (duelType == DuelType.RankedBo5)
+                return 3; // Best of 5 (first to 3)
+            else
+                return 1; // Unranked (single round)
+        }
+
+        private static async Task CompleteDuel(DuelMatch match, Arena arena)
+        {
+            // Thread-safe duel completion
+            lock (duelLock)
+            {
+                match.Status = DuelStatus.Completed;
+                match.CompletedAt = DateTime.Now;
+
+                // Announce match result with special victory formatting
+                string loserName = match.WinnerName == match.Player1Name ? match.Player2Name : match.Player1Name;
+                string finalScore = String.Format("({0}-{1})", match.Player1RoundsWon, match.Player2RoundsWon);
+                
+                foreach (Player p in arena.Players)
+                {
+                    p.sendMessage(-1, String.Format("● {0} WINS the {1} duel against {2}! {3}", 
+                        match.WinnerName, GetDuelTypeString(match.MatchType), loserName, finalScore));
+                    p.sendMessage(-1, String.Format("!{0} has drawn first blood.", match.WinnerName));
+                }
+
+                // Remove from active duels
+                string matchKey = String.Format("{0}_{1}", match.Player1Name, match.Player2Name);
+                DuelMatch removedMatch;
+                activeDuels.TryRemove(matchKey, out removedMatch);
+            }
+
+            // Send match data to website (outside lock for async operation)
+            await SendDuelMatchToWebsite(match);
+        }
+
+        private static async Task ForfeitDuel(Player player)
+        {
+            string playerName = player._alias;
+            DuelMatch duel = null;
+
+            // Find the player's active duel
+            foreach (var kvp in activeDuels)
+            {
+                if ((kvp.Value.Player1Name == playerName || kvp.Value.Player2Name == playerName) && 
+                    kvp.Value.Status == DuelStatus.InProgress)
+                {
+                    duel = kvp.Value;
+                    break;
+                }
+            }
+
+            if (duel == null)
+            {
+                player.sendMessage(-1, "You are not currently in a duel.");
+                return;
+            }
+
+            string opponentName = duel.Player1Name == playerName ? duel.Player2Name : duel.Player1Name;
+            
+            duel.WinnerName = opponentName;
+            duel.Status = DuelStatus.Abandoned;
+            duel.CompletedAt = DateTime.Now;
+
+            foreach (Player p in player._arena.Players)
+            {
+                p.sendMessage(-1, String.Format("{0} forfeits the duel. {1} wins by forfeit!", playerName, opponentName));
+            }
+
+            // Send match data to website (as abandoned)
+            await SendDuelMatchToWebsite(duel);
+
+            // Remove from active duels
+            string matchKey = String.Format("{0}_{1}", duel.Player1Name, duel.Player2Name);
+            DuelMatch removedMatch;
+            activeDuels.TryRemove(matchKey, out removedMatch);
+        }
+
+        public static async Task HandleTileStep(Player player, short x, short y)
+        {
+            try
+            {
+                // Check if player stepped on a ranked dueling tile
+                foreach (var tile in DUELING_TILES)
+                {
+                    if (tile.Value.Item1 == x && tile.Value.Item2 == y)
+                    {
+                        DuelType duelType = tile.Key == "ranked_bo3" ? DuelType.RankedBo3 : DuelType.RankedBo5;
+                        await HandleRankedTileStep(player, duelType);
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in HandleTileStep: {0}", ex.Message));
+            }
+        }
+
+        private static async Task HandleRankedTileStep(Player player, DuelType duelType)
+        {
+            // Check if player is already in a duel
+            if (IsPlayerInDuel(player._alias))
+            {
+                player.sendMessage(-1, "You are already in a duel.");
+                return;
+            }
+
+            // TODO: Implement matchmaking logic
+            // For now, just notify the player
+            string duelTypeStr = GetDuelTypeString(duelType);
+            player.sendMessage(-1, String.Format("Waiting for opponent for {0}...", duelTypeStr));
+            player.sendMessage(-1, "Step off the tile to cancel.");
+        }
+
+        private static bool IsPlayerInDuel(string playerName)
+        {
+            foreach (var duel in activeDuels.Values)
+            {
+                if ((duel.Player1Name == playerName || duel.Player2Name == playerName) && 
+                    duel.Status == DuelStatus.InProgress)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsOnRankedTile(Player player)
+        {
+            // TODO: Implement tile position checking
+            return false;
+        }
+
+        private static string GetDuelTypeString(DuelType duelType)
+        {
+            if (duelType == DuelType.RankedBo3)
+                return "Ranked Bo3";
+            else if (duelType == DuelType.RankedBo5)
+                return "Ranked Bo5";
+            else
+                return "Unranked";
+        }
+
+        private static string GetPlayerWeapon(Player player)
+        {
+            // TODO: Get actual weapon from player
+            return "Unknown";
+        }
+
+        private static int GetShotsFired(Player player)
+        {
+            // TODO: Get actual shots fired from player stats
+            return 0;
+        }
+
+        private static int GetShotsHit(Player player)
+        {
+            // TODO: Get actual shots hit from player stats
+            return 0;
+        }
+
+        private static int GetPlayerHealth(Player player)
+        {
+            // Convert from internal health (0-1000) to display health (0-100)
+            // But cap at 60 since that's the actual max HP in dueling
+            int displayHealth = player._state.health / 10;
+            return Math.Min(displayHealth, 60);
+        }
+
+        private static bool CheckForDoubleHit(string playerName)
+        {
+            List<DateTime> hits;
+            if (!recentDamageHits.TryGetValue(playerName, out hits))
+                return false;
+
+            var now = DateTime.Now;
+            
+            // Get recent hits (within 2 seconds)
+            var recentHits = hits.Where(hit => now.Subtract(hit).TotalSeconds <= 2).ToList();
+            
+            // Check for rapid successive hits (within 500ms)
+            if (recentHits.Count >= 2)
+            {
+                var lastTwoHits = recentHits.Skip(Math.Max(0, recentHits.Count - 2)).ToList();
+                return lastTwoHits.All(hit => now.Subtract(hit).TotalMilliseconds <= 500);
+            }
+            return false;
+        }
+
+        private static bool CheckForTripleHit(string playerName)
+        {
+            List<DateTime> hits;
+            if (!recentDamageHits.TryGetValue(playerName, out hits))
+                return false;
+
+            var now = DateTime.Now;
+            
+            // Get recent hits (within 2 seconds)
+            var recentHits = hits.Where(hit => now.Subtract(hit).TotalSeconds <= 2).ToList();
+            
+            // Check for rapid successive hits (within 750ms)
+            if (recentHits.Count >= 3)
+            {
+                var lastThreeHits = recentHits.Skip(Math.Max(0, recentHits.Count - 3)).ToList();
+                return lastThreeHits.All(hit => now.Subtract(hit).TotalMilliseconds <= 750);
+            }
+            return false;
+        }
+
+        public static void TrackDamageHit(string playerName)
+        {
+            // Thread-safe damage hit tracking
+            recentDamageHits.AddOrUpdate(
+                playerName,
+                new List<DateTime> { DateTime.Now },
+                (key, existingList) => 
+                {
+                    existingList.Add(DateTime.Now);
+                    return existingList;
+                }
+            );
+        }
+
+        private static void RemoveExpiredChallenges()
+        {
+            // Note: This should be called within challengeLock
+            var validChallenges = activeChallenges.Where(c => c.IsActive).ToList();
+            
+            activeChallenges.Clear();
+            foreach (var challenge in validChallenges)
+            {
+                activeChallenges.Add(challenge);
+            }
+        }
+
+        private static async Task ShowPlayerDuelStats(Player requestingPlayer, string targetName)
+        {
+            // TODO: Fetch stats from website API
+            requestingPlayer.sendMessage(-1, String.Format("Fetching duel stats for {0}...", targetName));
+            requestingPlayer.sendMessage(-1, "Visit https://freeinf.org/dueling for detailed statistics!");
+        }
+
+        private static async Task SendDuelMatchToWebsite(DuelMatch match)
+        {
+            try
+            {
+                var matchData = new
+                {
+                    matchType = match.MatchType.ToString().ToLower().Replace("ranked", "ranked_"),
+                    player1Name = match.Player1Name,
+                    player2Name = match.Player2Name,
+                    winnerName = match.WinnerName,
+                    arenaName = match.ArenaName,
+                    rounds = match.Rounds.Select(r => new
+                    {
+                        winnerName = r.WinnerName,
+                        loserName = r.LoserName,
+                        winnerHpLeft = r.WinnerHpLeft,
+                        loserHpLeft = r.LoserHpLeft,
+                        durationSeconds = r.DurationSeconds,
+                        kills = r.Kills.Select(k => new
+                        {
+                            killerName = k.KillerName,
+                            victimName = k.VictimName,
+                            weaponUsed = k.WeaponUsed,
+                            damageDealt = k.DamageDealt,
+                            victimHpBefore = k.VictimHpBefore,
+                            victimHpAfter = k.VictimHpAfter,
+                            shotsFired = k.ShotsFired,
+                            shotsHit = k.ShotsHit,
+                            isDoubleHit = k.IsDoubleHit,
+                            isTripleHit = k.IsTripleHit
+                        })
+                    })
+                };
+
+                string jsonString = BuildMatchJsonString(matchData);
+
+                var content = new StringContent(jsonString, System.Text.Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(DUELING_API_ENDPOINT, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine(String.Format("Duel match data sent successfully for {0} vs {1}", match.Player1Name, match.Player2Name));
+                }
+                else
+                {
+                    Console.WriteLine(String.Format("Failed to send duel match data: {0}", response.StatusCode));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error sending duel match data: {0}", ex.Message));
+            }
+        }
+
+        private static string BuildMatchJsonString(object matchData)
+        {
+            // Simple JSON serialization for older C# versions
+            // This is a basic implementation - you might want to use a proper JSON library
+            return "{}"; // Placeholder - implement proper JSON serialization
+        }
     }
 
     public class InGameRegistration

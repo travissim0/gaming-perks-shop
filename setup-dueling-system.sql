@@ -1,376 +1,567 @@
--- Dueling System Database Schema
--- This script creates tables for tracking duels and tournaments
+-- =============================================================================
+-- DUELING SYSTEM DATABASE SETUP
+-- =============================================================================
 
--- Create dueling_stats table for individual duel records
-CREATE TABLE IF NOT EXISTS dueling_stats (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    duel_id VARCHAR(255) NOT NULL, -- Unique identifier for the duel
-    
-    -- Participants
-    player1_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    player1_alias VARCHAR(255) NOT NULL,
-    player2_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    player2_alias VARCHAR(255) NOT NULL,
-    
-    -- Duel details
-    winner_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    winner_alias VARCHAR(255) NOT NULL,
-    loser_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    loser_alias VARCHAR(255) NOT NULL,
-    
-    -- Game details
-    arena_name VARCHAR(255) DEFAULT 'Unknown',
-    game_mode VARCHAR(50) DEFAULT 'Duel',
-    duel_type VARCHAR(50) DEFAULT 'pickup', -- 'pickup' or 'tournament'
-    
-    -- Round/Match info for tournaments
-    tournament_id UUID,
-    round_name VARCHAR(100), -- 'Round 1', 'Quarterfinals', 'Semifinals', 'Finals', etc.
-    bracket_type VARCHAR(50) DEFAULT 'main', -- 'main' (winners) or 'losers'
-    
-    -- Stats
-    player1_score INTEGER DEFAULT 0,
-    player2_score INTEGER DEFAULT 0,
-    total_rounds INTEGER DEFAULT 1,
-    duel_length_minutes DECIMAL(6,2) DEFAULT 0.00,
-    
-    -- Timestamps
-    duel_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    -- Constraints
-    CONSTRAINT valid_duel_type CHECK (duel_type IN ('pickup', 'tournament')),
-    CONSTRAINT valid_bracket_type CHECK (bracket_type IN ('main', 'losers')),
-    CONSTRAINT different_players CHECK (player1_id != player2_id)
-);
-
--- Create tournaments table
-CREATE TABLE IF NOT EXISTS tournaments (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    
-    -- Tournament settings
-    tournament_type VARCHAR(50) DEFAULT 'single_elimination', -- 'single_elimination', 'double_elimination'
-    max_participants INTEGER DEFAULT 16,
-    entry_fee INTEGER DEFAULT 0, -- in cents
-    prize_pool INTEGER DEFAULT 0, -- in cents
-    
-    -- Status and timing
-    status VARCHAR(50) DEFAULT 'registration', -- 'registration', 'in_progress', 'completed', 'cancelled'
-    registration_deadline TIMESTAMP WITH TIME ZONE,
-    start_time TIMESTAMP WITH TIME ZONE,
-    end_time TIMESTAMP WITH TIME ZONE,
-    
-    -- Results
-    winner_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    runner_up_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    third_place_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    
-    -- Admin
-    created_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    CONSTRAINT valid_tournament_type CHECK (tournament_type IN ('single_elimination', 'double_elimination')),
-    CONSTRAINT valid_status CHECK (status IN ('registration', 'in_progress', 'completed', 'cancelled'))
-);
-
--- Create tournament_participants table
-CREATE TABLE IF NOT EXISTS tournament_participants (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    tournament_id UUID NOT NULL,
-    player_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    player_alias VARCHAR(255) NOT NULL,
-    
-    -- Registration info
-    registration_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    seed_position INTEGER, -- For bracket seeding
-    
-    -- Tournament progress
-    current_status VARCHAR(50) DEFAULT 'active', -- 'active', 'eliminated', 'winner', 'runner_up'
-    elimination_round VARCHAR(100), -- Which round they were eliminated in
-    final_placement INTEGER, -- Final ranking in tournament
-    
-    -- Constraints
-    UNIQUE(tournament_id, player_id),
-    CONSTRAINT valid_participant_status CHECK (current_status IN ('active', 'eliminated', 'winner', 'runner_up'))
-);
-
--- Add foreign key constraint after tournaments table is created
-ALTER TABLE tournament_participants 
-ADD CONSTRAINT fk_tournament_participants_tournament 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
-
--- Add foreign key constraint for dueling_stats
-ALTER TABLE dueling_stats 
-ADD CONSTRAINT fk_dueling_stats_tournament 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
-
--- Create tournament_matches table for bracket structure
-CREATE TABLE IF NOT EXISTS tournament_matches (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    tournament_id UUID NOT NULL,
-    
-    -- Match details
-    round_name VARCHAR(100) NOT NULL, -- 'Round 1', 'Quarterfinals', etc.
-    match_number INTEGER NOT NULL, -- Position within the round
-    bracket_type VARCHAR(50) DEFAULT 'main', -- 'main' (winners) or 'losers'
-    
-    -- Participants
-    player1_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    player1_alias VARCHAR(255),
-    player2_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    player2_alias VARCHAR(255),
-    
-    -- Results
-    winner_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    winner_alias VARCHAR(255),
-    loser_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-    loser_alias VARCHAR(255),
-    
-    -- Game reference
-    duel_id UUID,
-    
-    -- Status
-    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'ready', 'in_progress', 'completed'
-    scheduled_time TIMESTAMP WITH TIME ZONE,
+-- Create dueling_matches table to track individual duels
+CREATE TABLE IF NOT EXISTS dueling_matches (
+    id BIGSERIAL PRIMARY KEY,
+    match_type VARCHAR(20) NOT NULL CHECK (match_type IN ('unranked', 'ranked_bo3', 'ranked_bo6')),
+    player1_name VARCHAR(50) NOT NULL,
+    player2_name VARCHAR(50) NOT NULL,
+    winner_name VARCHAR(50),
+    player1_rounds_won INTEGER DEFAULT 0,
+    player2_rounds_won INTEGER DEFAULT 0,
+    total_rounds INTEGER DEFAULT 0,
+    match_status VARCHAR(20) DEFAULT 'in_progress' CHECK (match_status IN ('in_progress', 'completed', 'abandoned')),
+    arena_name VARCHAR(100),
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     completed_at TIMESTAMP WITH TIME ZONE,
-    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
-    CONSTRAINT valid_match_bracket_type CHECK (bracket_type IN ('main', 'losers')),
-    CONSTRAINT valid_match_status CHECK (status IN ('pending', 'ready', 'in_progress', 'completed'))
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add foreign key constraints after tables are created
-ALTER TABLE tournament_matches 
-ADD CONSTRAINT fk_tournament_matches_tournament 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
+-- Create dueling_rounds table to track individual rounds within matches
+CREATE TABLE IF NOT EXISTS dueling_rounds (
+    id BIGSERIAL PRIMARY KEY,
+    match_id BIGINT REFERENCES dueling_matches(id) ON DELETE CASCADE,
+    round_number INTEGER NOT NULL,
+    winner_name VARCHAR(50) NOT NULL,
+    loser_name VARCHAR(50) NOT NULL,
+    winner_hp_left INTEGER DEFAULT 0,
+    loser_hp_left INTEGER DEFAULT 0,
+    round_duration_seconds INTEGER,
+    kills_in_round INTEGER DEFAULT 0,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-ALTER TABLE tournament_matches 
-ADD CONSTRAINT fk_tournament_matches_duel 
-FOREIGN KEY (duel_id) REFERENCES dueling_stats(id) ON DELETE SET NULL;
+-- Create dueling_kills table to track individual kills within duels
+CREATE TABLE IF NOT EXISTS dueling_kills (
+    id BIGSERIAL PRIMARY KEY,
+    match_id BIGINT REFERENCES dueling_matches(id) ON DELETE CASCADE,
+    round_id BIGINT REFERENCES dueling_rounds(id) ON DELETE CASCADE,
+    killer_name VARCHAR(50) NOT NULL,
+    victim_name VARCHAR(50) NOT NULL,
+    weapon_used VARCHAR(50),
+    damage_dealt INTEGER,
+    victim_hp_before INTEGER,
+    victim_hp_after INTEGER DEFAULT 0,
+    shots_fired INTEGER DEFAULT 0,
+    shots_hit INTEGER DEFAULT 0,
+    accuracy DECIMAL(5,4) DEFAULT 0,
+    is_double_hit BOOLEAN DEFAULT FALSE,
+    is_triple_hit BOOLEAN DEFAULT FALSE,
+    kill_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- Create dueling_aggregate_stats table for player statistics
-CREATE TABLE IF NOT EXISTS dueling_aggregate_stats (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    player_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    player_alias VARCHAR(255) NOT NULL,
+-- Create dueling_player_stats table for aggregated player statistics
+CREATE TABLE IF NOT EXISTS dueling_player_stats (
+    id BIGSERIAL PRIMARY KEY,
+    player_name VARCHAR(50) NOT NULL,
+    match_type VARCHAR(20) NOT NULL CHECK (match_type IN ('unranked', 'ranked_bo3', 'ranked_bo6', 'overall')),
     
-    -- Overall stats
-    total_duels INTEGER DEFAULT 0,
-    total_wins INTEGER DEFAULT 0,
-    total_losses INTEGER DEFAULT 0,
-    win_rate DECIMAL(5,3) DEFAULT 0.000,
+    -- Match Statistics
+    total_matches INTEGER DEFAULT 0,
+    matches_won INTEGER DEFAULT 0,
+    matches_lost INTEGER DEFAULT 0,
+    win_rate DECIMAL(5,4) DEFAULT 0,
     
-    -- Pickup vs Tournament stats
-    pickup_duels INTEGER DEFAULT 0,
-    pickup_wins INTEGER DEFAULT 0,
-    pickup_losses INTEGER DEFAULT 0,
-    pickup_win_rate DECIMAL(5,3) DEFAULT 0.000,
+    -- Round Statistics
+    total_rounds INTEGER DEFAULT 0,
+    rounds_won INTEGER DEFAULT 0,
+    rounds_lost INTEGER DEFAULT 0,
+    round_win_rate DECIMAL(5,4) DEFAULT 0,
     
-    tournament_duels INTEGER DEFAULT 0,
-    tournament_wins INTEGER DEFAULT 0,
-    tournament_losses INTEGER DEFAULT 0,
-    tournament_win_rate DECIMAL(5,3) DEFAULT 0.000,
+    -- Combat Statistics
+    total_kills INTEGER DEFAULT 0,
+    total_deaths INTEGER DEFAULT 0,
+    kill_death_ratio DECIMAL(6,3) DEFAULT 0,
+    total_damage_dealt INTEGER DEFAULT 0,
+    total_damage_taken INTEGER DEFAULT 0,
     
-    -- Tournament achievements
-    tournaments_entered INTEGER DEFAULT 0,
-    tournaments_won INTEGER DEFAULT 0,
-    tournaments_runner_up INTEGER DEFAULT 0,
-    tournaments_top_3 INTEGER DEFAULT 0,
+    -- Accuracy Statistics
+    total_shots_fired INTEGER DEFAULT 0,
+    total_shots_hit INTEGER DEFAULT 0,
+    overall_accuracy DECIMAL(5,4) DEFAULT 0,
+    avg_accuracy_per_kill DECIMAL(5,4) DEFAULT 0,
     
-    -- Streaks and records
-    current_win_streak INTEGER DEFAULT 0,
-    longest_win_streak INTEGER DEFAULT 0,
-    current_loss_streak INTEGER DEFAULT 0,
-    longest_loss_streak INTEGER DEFAULT 0,
+    -- HP Statistics
+    avg_hp_left_when_winning DECIMAL(5,2) DEFAULT 0,
+    avg_hp_left_when_losing DECIMAL(5,2) DEFAULT 0,
+    total_hp_left_wins INTEGER DEFAULT 0,
+    total_hp_left_losses INTEGER DEFAULT 0,
+    
+    -- Burst Damage Statistics
+    double_hits INTEGER DEFAULT 0,
+    triple_hits INTEGER DEFAULT 0,
+    burst_damage_ratio DECIMAL(5,4) DEFAULT 0,
+    
+    -- Ranking System (for ranked matches)
+    current_elo INTEGER DEFAULT 1200,
+    peak_elo INTEGER DEFAULT 1200,
+    elo_games_played INTEGER DEFAULT 0,
     
     -- Timestamps
-    first_duel_date TIMESTAMP WITH TIME ZONE,
-    last_duel_date TIMESTAMP WITH TIME ZONE,
+    first_match_date TIMESTAMP WITH TIME ZONE,
+    last_match_date TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Unique constraint
-    UNIQUE(player_id)
+    -- Ensure unique combination of player and match type
+    UNIQUE(player_name, match_type)
 );
 
 -- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_duel_id ON dueling_stats(duel_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_player1 ON dueling_stats(player1_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_player2 ON dueling_stats(player2_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_winner ON dueling_stats(winner_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_tournament ON dueling_stats(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_date ON dueling_stats(duel_date);
-CREATE INDEX IF NOT EXISTS idx_dueling_stats_type ON dueling_stats(duel_type);
+CREATE INDEX IF NOT EXISTS idx_dueling_matches_players ON dueling_matches(player1_name, player2_name);
+CREATE INDEX IF NOT EXISTS idx_dueling_matches_type ON dueling_matches(match_type);
+CREATE INDEX IF NOT EXISTS idx_dueling_matches_status ON dueling_matches(match_status);
+CREATE INDEX IF NOT EXISTS idx_dueling_matches_completed ON dueling_matches(completed_at);
 
-CREATE INDEX IF NOT EXISTS idx_tournaments_status ON tournaments(status);
-CREATE INDEX IF NOT EXISTS idx_tournaments_creator ON tournaments(created_by);
-CREATE INDEX IF NOT EXISTS idx_tournaments_dates ON tournaments(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_dueling_rounds_match ON dueling_rounds(match_id);
+CREATE INDEX IF NOT EXISTS idx_dueling_rounds_winner ON dueling_rounds(winner_name);
 
-CREATE INDEX IF NOT EXISTS idx_tournament_participants_tournament ON tournament_participants(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_participants_player ON tournament_participants(player_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_participants_status ON tournament_participants(current_status);
+CREATE INDEX IF NOT EXISTS idx_dueling_kills_match ON dueling_kills(match_id);
+CREATE INDEX IF NOT EXISTS idx_dueling_kills_round ON dueling_kills(round_id);
+CREATE INDEX IF NOT EXISTS idx_dueling_kills_killer ON dueling_kills(killer_name);
+CREATE INDEX IF NOT EXISTS idx_dueling_kills_timestamp ON dueling_kills(kill_timestamp);
 
-CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament ON tournament_matches(tournament_id);
-CREATE INDEX IF NOT EXISTS idx_tournament_matches_round ON tournament_matches(tournament_id, round_name);
-CREATE INDEX IF NOT EXISTS idx_tournament_matches_status ON tournament_matches(status);
+CREATE INDEX IF NOT EXISTS idx_dueling_stats_player ON dueling_player_stats(player_name);
+CREATE INDEX IF NOT EXISTS idx_dueling_stats_type ON dueling_player_stats(match_type);
+CREATE INDEX IF NOT EXISTS idx_dueling_stats_elo ON dueling_player_stats(current_elo);
+CREATE INDEX IF NOT EXISTS idx_dueling_stats_winrate ON dueling_player_stats(win_rate);
 
-CREATE INDEX IF NOT EXISTS idx_dueling_aggregate_player ON dueling_aggregate_stats(player_id);
-CREATE INDEX IF NOT EXISTS idx_dueling_aggregate_win_rate ON dueling_aggregate_stats(win_rate);
+-- =============================================================================
+-- VIEWS FOR EASY DATA ACCESS
+-- =============================================================================
 
--- Add comments for documentation
-COMMENT ON TABLE dueling_stats IS 'Individual duel records for both pickup games and tournament matches';
-COMMENT ON TABLE tournaments IS 'Tournament events with brackets and prizes';
-COMMENT ON TABLE tournament_participants IS 'Players registered for tournaments';
-COMMENT ON TABLE tournament_matches IS 'Individual matches within tournament brackets';
-COMMENT ON TABLE dueling_aggregate_stats IS 'Aggregated statistics for each player across all duels';
+-- View for current dueling leaderboards
+CREATE OR REPLACE VIEW dueling_leaderboard AS
+SELECT 
+    player_name,
+    match_type,
+    total_matches,
+    matches_won,
+    matches_lost,
+    win_rate,
+    total_kills,
+    total_deaths,
+    kill_death_ratio,
+    overall_accuracy,
+    double_hits,
+    triple_hits,
+    current_elo,
+    peak_elo,
+    ROW_NUMBER() OVER (PARTITION BY match_type ORDER BY 
+        CASE 
+            WHEN match_type LIKE 'ranked%' THEN current_elo 
+            ELSE win_rate 
+        END DESC) as rank
+FROM dueling_player_stats
+WHERE total_matches >= 3 -- Minimum matches to appear on leaderboard
+ORDER BY match_type, rank;
 
--- Create functions for updating aggregate stats
-CREATE OR REPLACE FUNCTION update_dueling_aggregate_stats()
-RETURNS TRIGGER AS $$
+-- View for recent dueling matches
+CREATE OR REPLACE VIEW recent_dueling_matches AS
+SELECT 
+    dm.id,
+    dm.match_type,
+    dm.player1_name,
+    dm.player2_name,
+    dm.winner_name,
+    dm.player1_rounds_won,
+    dm.player2_rounds_won,
+    dm.total_rounds,
+    dm.match_status,
+    dm.arena_name,
+    dm.started_at,
+    dm.completed_at,
+    -- Calculate match duration
+    EXTRACT(EPOCH FROM (dm.completed_at - dm.started_at))::INTEGER as duration_seconds,
+    -- Get round details
+    COALESCE(
+        (SELECT JSON_AGG(
+            JSON_BUILD_OBJECT(
+                'round_number', dr.round_number,
+                'winner', dr.winner_name,
+                'winner_hp', dr.winner_hp_left,
+                'loser_hp', dr.loser_hp_left,
+                'duration', dr.round_duration_seconds
+            ) ORDER BY dr.round_number
+        ) FROM dueling_rounds dr WHERE dr.match_id = dm.id),
+        '[]'::json
+    ) as rounds_data
+FROM dueling_matches dm
+ORDER BY dm.completed_at DESC NULLS LAST, dm.started_at DESC;
+
+-- =============================================================================
+-- FUNCTIONS FOR DUELING SYSTEM
+-- =============================================================================
+
+-- Function to start a new dueling match
+CREATE OR REPLACE FUNCTION start_dueling_match(
+    p_match_type VARCHAR(20),
+    p_player1_name VARCHAR(50),
+    p_player2_name VARCHAR(50),
+    p_arena_name VARCHAR(100) DEFAULT NULL
+) RETURNS BIGINT AS $$
+DECLARE
+    match_id BIGINT;
 BEGIN
-    -- Update aggregate stats for both players when a new duel is added
-    IF TG_OP = 'INSERT' THEN
-        -- Update winner stats
-        INSERT INTO dueling_aggregate_stats (
-            player_id, player_alias, total_duels, total_wins,
-            pickup_duels, pickup_wins, tournament_duels, tournament_wins,
-            tournaments_entered, first_duel_date, last_duel_date
-        )
-        VALUES (
-            NEW.winner_id, NEW.winner_alias, 1, 1,
-            CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            NEW.duel_date, NEW.duel_date
-        )
-        ON CONFLICT (player_id) DO UPDATE SET
-            total_duels = dueling_aggregate_stats.total_duels + 1,
-            total_wins = dueling_aggregate_stats.total_wins + 1,
-            pickup_duels = dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            pickup_wins = dueling_aggregate_stats.pickup_wins + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            tournament_duels = dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            tournament_wins = dueling_aggregate_stats.tournament_wins + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            tournaments_entered = dueling_aggregate_stats.tournaments_entered + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            last_duel_date = NEW.duel_date,
-            win_rate = ROUND((dueling_aggregate_stats.total_wins + 1)::DECIMAL / (dueling_aggregate_stats.total_duels + 1), 3),
-            pickup_win_rate = CASE 
-                WHEN dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END > 0 
-                THEN ROUND((dueling_aggregate_stats.pickup_wins + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END)::DECIMAL / (dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END), 3)
-                ELSE 0 
-            END,
-            tournament_win_rate = CASE 
-                WHEN dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END > 0 
-                THEN ROUND((dueling_aggregate_stats.tournament_wins + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END)::DECIMAL / (dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END), 3)
-                ELSE 0 
-            END,
-            updated_at = NOW();
-
-        -- Update loser stats
-        INSERT INTO dueling_aggregate_stats (
-            player_id, player_alias, total_duels, total_losses,
-            pickup_duels, pickup_losses, tournament_duels, tournament_losses,
-            tournaments_entered, first_duel_date, last_duel_date
-        )
-        VALUES (
-            NEW.loser_id, NEW.loser_alias, 1, 1,
-            CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            NEW.duel_date, NEW.duel_date
-        )
-        ON CONFLICT (player_id) DO UPDATE SET
-            total_duels = dueling_aggregate_stats.total_duels + 1,
-            total_losses = dueling_aggregate_stats.total_losses + 1,
-            pickup_duels = dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            pickup_losses = dueling_aggregate_stats.pickup_losses + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END,
-            tournament_duels = dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            tournament_losses = dueling_aggregate_stats.tournament_losses + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            tournaments_entered = dueling_aggregate_stats.tournaments_entered + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END,
-            last_duel_date = NEW.duel_date,
-            win_rate = ROUND((dueling_aggregate_stats.total_wins)::DECIMAL / (dueling_aggregate_stats.total_duels + 1), 3),
-            pickup_win_rate = CASE 
-                WHEN dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END > 0 
-                THEN ROUND((dueling_aggregate_stats.pickup_wins)::DECIMAL / (dueling_aggregate_stats.pickup_duels + CASE WHEN NEW.duel_type = 'pickup' THEN 1 ELSE 0 END), 3)
-                ELSE 0 
-            END,
-            tournament_win_rate = CASE 
-                WHEN dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END > 0 
-                THEN ROUND((dueling_aggregate_stats.tournament_wins)::DECIMAL / (dueling_aggregate_stats.tournament_duels + CASE WHEN NEW.duel_type = 'tournament' THEN 1 ELSE 0 END), 3)
-                ELSE 0 
-            END,
-            updated_at = NOW();
-    END IF;
-
-    RETURN COALESCE(NEW, OLD);
+    INSERT INTO dueling_matches (
+        match_type,
+        player1_name,
+        player2_name,
+        arena_name,
+        match_status
+    ) VALUES (
+        p_match_type,
+        p_player1_name,
+        p_player2_name,
+        p_arena_name,
+        'in_progress'
+    ) RETURNING id INTO match_id;
+    
+    RETURN match_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for automatic stats updates
-CREATE TRIGGER trigger_update_dueling_aggregate_stats
-    AFTER INSERT ON dueling_stats
-    FOR EACH ROW
-    EXECUTE FUNCTION update_dueling_aggregate_stats();
-
--- Create function to generate bracket for tournament
-CREATE OR REPLACE FUNCTION generate_tournament_bracket(tournament_uuid UUID)
-RETURNS TEXT AS $$
+-- Function to record a dueling kill
+CREATE OR REPLACE FUNCTION record_dueling_kill(
+    p_match_id BIGINT,
+    p_round_id BIGINT,
+    p_killer_name VARCHAR(50),
+    p_victim_name VARCHAR(50),
+    p_weapon_used VARCHAR(50) DEFAULT NULL,
+    p_damage_dealt INTEGER DEFAULT 0,
+    p_victim_hp_before INTEGER DEFAULT 100,
+    p_victim_hp_after INTEGER DEFAULT 0,
+    p_shots_fired INTEGER DEFAULT 0,
+    p_shots_hit INTEGER DEFAULT 0,
+    p_is_double_hit BOOLEAN DEFAULT FALSE,
+    p_is_triple_hit BOOLEAN DEFAULT FALSE
+) RETURNS BIGINT AS $$
 DECLARE
-    participant_count INTEGER;
-    round_name TEXT;
-    match_number INTEGER := 1;
-    players_cursor CURSOR FOR 
-        SELECT player_id, player_alias, seed_position 
-        FROM tournament_participants 
-        WHERE tournament_id = tournament_uuid 
-        ORDER BY COALESCE(seed_position, 999), registration_date;
-    player_record RECORD;
-    players_array UUID[];
-    aliases_array TEXT[];
-    i INTEGER;
+    kill_id BIGINT;
+    calculated_accuracy DECIMAL(5,4);
 BEGIN
-    -- Get participant count
-    SELECT COUNT(*) INTO participant_count
-    FROM tournament_participants
-    WHERE tournament_id = tournament_uuid;
+    -- Calculate accuracy
+    calculated_accuracy := CASE 
+        WHEN p_shots_fired > 0 THEN (p_shots_hit::DECIMAL / p_shots_fired::DECIMAL)
+        ELSE 0
+    END;
     
-    IF participant_count < 2 THEN
-        RETURN 'Error: Need at least 2 participants';
+    INSERT INTO dueling_kills (
+        match_id,
+        round_id,
+        killer_name,
+        victim_name,
+        weapon_used,
+        damage_dealt,
+        victim_hp_before,
+        victim_hp_after,
+        shots_fired,
+        shots_hit,
+        accuracy,
+        is_double_hit,
+        is_triple_hit
+    ) VALUES (
+        p_match_id,
+        p_round_id,
+        p_killer_name,
+        p_victim_name,
+        p_weapon_used,
+        p_damage_dealt,
+        p_victim_hp_before,
+        p_victim_hp_after,
+        p_shots_fired,
+        p_shots_hit,
+        calculated_accuracy,
+        p_is_double_hit,
+        p_is_triple_hit
+    ) RETURNING id INTO kill_id;
+    
+    RETURN kill_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to complete a dueling round
+CREATE OR REPLACE FUNCTION complete_dueling_round(
+    p_match_id BIGINT,
+    p_round_number INTEGER,
+    p_winner_name VARCHAR(50),
+    p_loser_name VARCHAR(50),
+    p_winner_hp_left INTEGER DEFAULT 0,
+    p_loser_hp_left INTEGER DEFAULT 0,
+    p_round_duration_seconds INTEGER DEFAULT NULL
+) RETURNS BIGINT AS $$
+DECLARE
+    round_id BIGINT;
+BEGIN
+    INSERT INTO dueling_rounds (
+        match_id,
+        round_number,
+        winner_name,
+        loser_name,
+        winner_hp_left,
+        loser_hp_left,
+        round_duration_seconds,
+        kills_in_round
+    ) VALUES (
+        p_match_id,
+        p_round_number,
+        p_winner_name,
+        p_loser_name,
+        p_winner_hp_left,
+        p_loser_hp_left,
+        p_round_duration_seconds,
+        (SELECT COUNT(*) FROM dueling_kills WHERE match_id = p_match_id AND round_id IS NULL)
+    ) RETURNING id INTO round_id;
+    
+    -- Update any kills that were recorded during this round
+    UPDATE dueling_kills 
+    SET round_id = round_id 
+    WHERE match_id = p_match_id AND round_id IS NULL;
+    
+    RETURN round_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to complete a dueling match and update player stats
+CREATE OR REPLACE FUNCTION complete_dueling_match(
+    p_match_id BIGINT,
+    p_winner_name VARCHAR(50)
+) RETURNS BOOLEAN AS $$
+DECLARE
+    match_record dueling_matches%ROWTYPE;
+    player1_rounds INTEGER;
+    player2_rounds INTEGER;
+BEGIN
+    -- Get the match record
+    SELECT * INTO match_record FROM dueling_matches WHERE id = p_match_id;
+    
+    IF NOT FOUND THEN
+        RETURN FALSE;
     END IF;
     
-    -- Collect all players
-    FOR player_record IN players_cursor LOOP
-        players_array := array_append(players_array, player_record.player_id);
-        aliases_array := array_append(aliases_array, player_record.player_alias);
-    END LOOP;
+    -- Count rounds won by each player
+    SELECT 
+        COUNT(*) FILTER (WHERE winner_name = match_record.player1_name),
+        COUNT(*) FILTER (WHERE winner_name = match_record.player2_name)
+    INTO player1_rounds, player2_rounds
+    FROM dueling_rounds 
+    WHERE match_id = p_match_id;
     
-    -- Generate first round matches
-    round_name := 'Round 1';
-    match_number := 1;
+    -- Update the match record
+    UPDATE dueling_matches SET
+        winner_name = p_winner_name,
+        player1_rounds_won = player1_rounds,
+        player2_rounds_won = player2_rounds,
+        total_rounds = player1_rounds + player2_rounds,
+        match_status = 'completed',
+        completed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = p_match_id;
     
-    -- Create matches by pairing players
-    FOR i IN 1..array_length(players_array, 1) BY 2 LOOP
-        IF i + 1 <= array_length(players_array, 1) THEN
-            INSERT INTO tournament_matches (
-                tournament_id, round_name, match_number, bracket_type,
-                player1_id, player1_alias, player2_id, player2_alias,
-                status
-            ) VALUES (
-                tournament_uuid, round_name, match_number, 'main',
-                players_array[i], aliases_array[i], 
-                players_array[i + 1], aliases_array[i + 1],
-                'ready'
-            );
-            match_number := match_number + 1;
-        END IF;
-    END LOOP;
+    -- Update player statistics
+    PERFORM update_dueling_player_stats(match_record.player1_name, match_record.match_type);
+    PERFORM update_dueling_player_stats(match_record.player2_name, match_record.match_type);
     
-    RETURN format('Generated bracket with %s matches for %s participants', match_number - 1, participant_count);
+    RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql; 
+$$ LANGUAGE plpgsql;
+
+-- Function to update player dueling statistics
+CREATE OR REPLACE FUNCTION update_dueling_player_stats(
+    p_player_name VARCHAR(50),
+    p_match_type VARCHAR(20)
+) RETURNS BOOLEAN AS $$
+DECLARE
+    stats_record RECORD;
+BEGIN
+    -- Calculate stats from matches
+    SELECT 
+        COUNT(*) as total_matches,
+        COUNT(*) FILTER (WHERE winner_name = p_player_name) as matches_won,
+        COUNT(*) FILTER (WHERE winner_name != p_player_name AND winner_name IS NOT NULL) as matches_lost,
+        
+        -- Round statistics
+        COALESCE(SUM(
+            CASE WHEN player1_name = p_player_name THEN player1_rounds_won 
+                 WHEN player2_name = p_player_name THEN player2_rounds_won 
+                 ELSE 0 END
+        ), 0) as rounds_won,
+        COALESCE(SUM(
+            CASE WHEN player1_name = p_player_name THEN player2_rounds_won 
+                 WHEN player2_name = p_player_name THEN player1_rounds_won 
+                 ELSE 0 END
+        ), 0) as rounds_lost,
+        
+        MIN(started_at) as first_match_date,
+        MAX(COALESCE(completed_at, started_at)) as last_match_date
+        
+    INTO stats_record
+    FROM dueling_matches 
+    WHERE (player1_name = p_player_name OR player2_name = p_player_name)
+      AND match_type = p_match_type
+      AND match_status = 'completed';
+    
+    -- Insert or update player stats
+    INSERT INTO dueling_player_stats (
+        player_name,
+        match_type,
+        total_matches,
+        matches_won,
+        matches_lost,
+        win_rate,
+        total_rounds,
+        rounds_won,
+        rounds_lost,
+        round_win_rate,
+        first_match_date,
+        last_match_date,
+        updated_at
+    ) VALUES (
+        p_player_name,
+        p_match_type,
+        COALESCE(stats_record.total_matches, 0),
+        COALESCE(stats_record.matches_won, 0),
+        COALESCE(stats_record.matches_lost, 0),
+        CASE WHEN COALESCE(stats_record.total_matches, 0) > 0 
+             THEN COALESCE(stats_record.matches_won, 0)::DECIMAL / stats_record.total_matches 
+             ELSE 0 END,
+        COALESCE(stats_record.rounds_won + stats_record.rounds_lost, 0),
+        COALESCE(stats_record.rounds_won, 0),
+        COALESCE(stats_record.rounds_lost, 0),
+        CASE WHEN COALESCE(stats_record.rounds_won + stats_record.rounds_lost, 0) > 0 
+             THEN COALESCE(stats_record.rounds_won, 0)::DECIMAL / (stats_record.rounds_won + stats_record.rounds_lost) 
+             ELSE 0 END,
+        stats_record.first_match_date,
+        stats_record.last_match_date,
+        NOW()
+    )
+    ON CONFLICT (player_name, match_type) 
+    DO UPDATE SET
+        total_matches = EXCLUDED.total_matches,
+        matches_won = EXCLUDED.matches_won,
+        matches_lost = EXCLUDED.matches_lost,
+        win_rate = EXCLUDED.win_rate,
+        total_rounds = EXCLUDED.total_rounds,
+        rounds_won = EXCLUDED.rounds_won,
+        rounds_lost = EXCLUDED.rounds_lost,
+        round_win_rate = EXCLUDED.round_win_rate,
+        first_match_date = EXCLUDED.first_match_date,
+        last_match_date = EXCLUDED.last_match_date,
+        updated_at = NOW();
+    
+    -- Update combat and accuracy stats from kills
+    UPDATE dueling_player_stats SET
+        total_kills = (
+            SELECT COUNT(*) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.killer_name = p_player_name AND dm.match_type = p_match_type
+        ),
+        total_deaths = (
+            SELECT COUNT(*) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.victim_name = p_player_name AND dm.match_type = p_match_type
+        ),
+        total_shots_fired = (
+            SELECT COALESCE(SUM(shots_fired), 0) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.killer_name = p_player_name AND dm.match_type = p_match_type
+        ),
+        total_shots_hit = (
+            SELECT COALESCE(SUM(shots_hit), 0) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.killer_name = p_player_name AND dm.match_type = p_match_type
+        ),
+        double_hits = (
+            SELECT COUNT(*) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.killer_name = p_player_name AND dm.match_type = p_match_type AND dk.is_double_hit = TRUE
+        ),
+        triple_hits = (
+            SELECT COUNT(*) FROM dueling_kills dk
+            JOIN dueling_matches dm ON dk.match_id = dm.id
+            WHERE dk.killer_name = p_player_name AND dm.match_type = p_match_type AND dk.is_triple_hit = TRUE
+        )
+    WHERE player_name = p_player_name AND match_type = p_match_type;
+    
+    -- Update calculated fields
+    UPDATE dueling_player_stats SET
+        kill_death_ratio = CASE WHEN total_deaths > 0 THEN total_kills::DECIMAL / total_deaths ELSE total_kills::DECIMAL END,
+        overall_accuracy = CASE WHEN total_shots_fired > 0 THEN total_shots_hit::DECIMAL / total_shots_fired ELSE 0 END,
+        burst_damage_ratio = CASE WHEN total_kills > 0 THEN (double_hits + triple_hits)::DECIMAL / total_kills ELSE 0 END,
+        updated_at = NOW()
+    WHERE player_name = p_player_name AND match_type = p_match_type;
+    
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- =============================================================================
+
+-- Enable RLS on all tables
+ALTER TABLE dueling_matches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dueling_rounds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dueling_kills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dueling_player_stats ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to all dueling data (for leaderboards, etc.)
+CREATE POLICY "Public read access" ON dueling_matches FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON dueling_rounds FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON dueling_kills FOR SELECT USING (true);
+CREATE POLICY "Public read access" ON dueling_player_stats FOR SELECT USING (true);
+
+-- Allow service role to do everything
+CREATE POLICY "Service role full access" ON dueling_matches FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+CREATE POLICY "Service role full access" ON dueling_rounds FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+CREATE POLICY "Service role full access" ON dueling_kills FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+CREATE POLICY "Service role full access" ON dueling_player_stats FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
+
+-- Allow authenticated users to insert their own match data
+CREATE POLICY "Users can insert dueling data" ON dueling_matches FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can insert dueling data" ON dueling_rounds FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can insert dueling data" ON dueling_kills FOR INSERT WITH CHECK (true);
+CREATE POLICY "Users can insert dueling data" ON dueling_player_stats FOR INSERT WITH CHECK (true);
+
+-- =============================================================================
+-- GRANT PERMISSIONS
+-- =============================================================================
+
+-- Grant permissions to anon and authenticated users
+GRANT SELECT ON dueling_matches TO anon, authenticated;
+GRANT SELECT ON dueling_rounds TO anon, authenticated;
+GRANT SELECT ON dueling_kills TO anon, authenticated;
+GRANT SELECT ON dueling_player_stats TO anon, authenticated;
+GRANT SELECT ON dueling_leaderboard TO anon, authenticated;
+GRANT SELECT ON recent_dueling_matches TO anon, authenticated;
+
+-- Grant insert permissions to authenticated users
+GRANT INSERT ON dueling_matches TO authenticated;
+GRANT INSERT ON dueling_rounds TO authenticated;
+GRANT INSERT ON dueling_kills TO authenticated;
+GRANT INSERT ON dueling_player_stats TO authenticated;
+
+-- Grant function execution permissions
+GRANT EXECUTE ON FUNCTION start_dueling_match TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION record_dueling_kill TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION complete_dueling_round TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION complete_dueling_match TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION update_dueling_player_stats TO anon, authenticated;
+
+-- =============================================================================
+-- SAMPLE DATA FOR TESTING
+-- =============================================================================
+
+-- Insert some sample data for testing
+-- INSERT INTO dueling_matches (match_type, player1_name, player2_name, winner_name, match_status, arena_name, completed_at)
+-- VALUES 
+--     ('unranked', 'TestPlayer1', 'TestPlayer2', 'TestPlayer1', 'completed', 'Duel Arena', NOW() - INTERVAL '1 hour'),
+--     ('ranked_bo3', 'RankedPlayer1', 'RankedPlayer2', 'RankedPlayer2', 'completed', 'Ranked Arena', NOW() - INTERVAL '30 minutes');
+
+COMMIT; 
