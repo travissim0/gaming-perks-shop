@@ -84,6 +84,18 @@ interface DuelingMatch {
   duration_seconds: number;
   formatted_duration: string;
   rounds_data: any[];
+  match_stats?: {
+    player1_accuracy?: number;
+    player1_shots_fired?: number;
+    player1_shots_hit?: number;
+    player1_double_hits?: number;
+    player1_triple_hits?: number;
+    player2_accuracy?: number;
+    player2_shots_fired?: number;
+    player2_shots_hit?: number;
+    player2_double_hits?: number;
+    player2_triple_hits?: number;
+  };
 }
 
 interface DuelingResponse {
@@ -144,7 +156,7 @@ export default function DuelingPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [winnersCollapsed, setWinnersCollapsed] = useState(false);
   const [losersCollapsed, setLosersCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'leaderboard' | 'matches'>('leaderboard');
+  const [activeTab, setActiveTab] = useState<'leaderboard' | 'matches'>('matches');
   const [duelingPlayers, setDuelingPlayers] = useState<DuelingPlayer[]>([]);
   const [duelingMatches, setDuelingMatches] = useState<DuelingMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -157,6 +169,10 @@ export default function DuelingPage() {
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
   
+  // Match sorting
+  const [matchSortBy, setMatchSortBy] = useState('completed_at');
+  const [matchSortOrder, setMatchSortOrder] = useState<'asc' | 'desc'>('desc');
+  
   // Pagination
   const [pagination, setPagination] = useState({
     total: 0,
@@ -168,6 +184,7 @@ export default function DuelingPage() {
   useEffect(() => {
     fetchPlayers();
     checkAdminStatus();
+    fetchRecentMatches(); // Fetch matches on component load
   }, [user]);
 
   useEffect(() => {
@@ -1099,6 +1116,40 @@ export default function DuelingPage() {
     }
   };
 
+  const handleMatchSort = (column: string) => {
+    if (matchSortBy === column) {
+      setMatchSortOrder(matchSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setMatchSortBy(column);
+      setMatchSortOrder('desc');
+    }
+  };
+
+  const sortedMatches = [...duelingMatches].sort((a, b) => {
+    let aValue: any = a[matchSortBy as keyof DuelingMatch];
+    let bValue: any = b[matchSortBy as keyof DuelingMatch];
+    
+    // Handle date sorting
+    if (matchSortBy === 'completed_at') {
+      aValue = new Date(a.completed_at).getTime();
+      bValue = new Date(b.completed_at).getTime();
+    }
+    
+    // Handle numeric sorting
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return matchSortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+    }
+    
+    // Handle string sorting
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return matchSortOrder === 'asc' 
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    }
+    
+    return 0;
+  });
+
   const getEloTier = (elo: number) => {
     if (elo >= 2400) return { name: 'Legend', color: 'text-yellow-400' };
     if (elo >= 2200) return { name: 'Grandmaster', color: 'text-purple-400' };
@@ -1336,11 +1387,11 @@ export default function DuelingPage() {
             )}
           </motion.div>
         ) : (
-          /* Recent Matches */
+          /* Recent Matches - Compact Table Format */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
+            className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20"
           >
             {matchesLoading ? (
               <div className="text-center py-8">
@@ -1348,60 +1399,156 @@ export default function DuelingPage() {
                 <p>Loading recent matches...</p>
               </div>
             ) : duelingMatches.length === 0 ? (
-              <div className="bg-white/10 backdrop-blur-lg rounded-xl p-8 text-center border border-white/20">
+              <div className="p-8 text-center">
                 <p className="text-blue-200">No matches found</p>
               </div>
             ) : (
-              duelingMatches.map((match) => (
-                <div key={match.id} className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-4">
-                      <span className="px-3 py-1 bg-blue-600/50 rounded text-sm">
-                        {match.match_type.replace('_', ' ').toUpperCase()}
-                      </span>
-                      <span className="text-blue-300">{match.arena_name}</span>
-                      <span className="text-blue-300">{match.formatted_duration}</span>
-                    </div>
-                    <div className="text-sm text-blue-300">
-                      {formatDate(match.completed_at)}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 text-center">
-                      <div className={`text-lg font-bold ${match.winner_name === match.player1_name ? 'text-green-400' : 'text-red-400'}`}>
-                        {match.player1_name}
-                      </div>
-                      <div className="text-2xl font-bold text-white">{match.player1_rounds_won}</div>
-                    </div>
-                    
-                    <div className="px-4 text-center">
-                      <div className="text-blue-300">VS</div>
-                    </div>
-                    
-                    <div className="flex-1 text-center">
-                      <div className={`text-lg font-bold ${match.winner_name === match.player2_name ? 'text-green-400' : 'text-red-400'}`}>
-                        {match.player2_name}
-                      </div>
-                      <div className="text-2xl font-bold text-white">{match.player2_rounds_won}</div>
-                    </div>
-                  </div>
-                  
-                  {/* Round Details */}
-                  {match.rounds_data && match.rounds_data.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-white/10">
-                      <div className="text-sm text-blue-300 mb-2">Round Details:</div>
-                      <div className="flex flex-wrap gap-2">
-                        {match.rounds_data.map((round: any, index: number) => (
-                          <div key={index} className="bg-white/5 rounded px-2 py-1 text-xs">
-                            R{round.round_number}: {round.winner} ({round.winner_hp}HP)
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/10">
+                      <th 
+                        className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
+                        onClick={() => handleMatchSort('completed_at')}
+                      >
+                        Date {matchSortBy === 'completed_at' && (matchSortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th 
+                        className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
+                        onClick={() => handleMatchSort('match_type')}
+                      >
+                        Type {matchSortBy === 'match_type' && (matchSortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-blue-200 uppercase">Players</th>
+                      <th 
+                        className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
+                        onClick={() => handleMatchSort('total_rounds')}
+                      >
+                        Score {matchSortBy === 'total_rounds' && (matchSortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th 
+                        className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
+                        onClick={() => handleMatchSort('duration_seconds')}
+                      >
+                        Duration {matchSortBy === 'duration_seconds' && (matchSortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th 
+                        className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
+                        onClick={() => handleMatchSort('arena_name')}
+                      >
+                        Arena {matchSortBy === 'arena_name' && (matchSortOrder === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Player 1 Stats</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Player 2 Stats</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Rounds</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedMatches.map((match) => (
+                      <tr key={match.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3 text-sm text-blue-300">
+                          {new Date(match.completed_at).toLocaleDateString()}
+                          <div className="text-xs text-blue-400">
+                            {new Date(match.completed_at).toLocaleTimeString()}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 bg-blue-600/50 rounded text-xs">
+                            {match.match_type.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-1">
+                            <div className={`text-sm font-medium ${match.winner_name === match.player1_name ? 'text-green-400' : 'text-red-400'}`}>
+                              {match.player1_name} {match.winner_name === match.player1_name ? '👑' : ''}
+                            </div>
+                            <div className="text-xs text-blue-300">vs</div>
+                            <div className={`text-sm font-medium ${match.winner_name === match.player2_name ? 'text-green-400' : 'text-red-400'}`}>
+                              {match.player2_name} {match.winner_name === match.player2_name ? '👑' : ''}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="text-lg font-bold text-white">
+                            {match.player1_rounds_won} - {match.player2_rounds_won}
+                          </div>
+                          <div className="text-xs text-blue-300">
+                            {match.total_rounds} rounds
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-blue-300">
+                          {match.formatted_duration}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm text-blue-300">
+                          {match.arena_name}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="text-xs space-y-1">
+                            {match.match_stats?.player1_accuracy !== undefined && (
+                              <div className="text-green-400">
+                                {(match.match_stats.player1_accuracy * 100).toFixed(1)}% acc
+                              </div>
+                            )}
+                            {match.match_stats?.player1_shots_fired !== undefined && (
+                              <div className="text-blue-300">
+                                {match.match_stats.player1_shots_hit || 0}/{match.match_stats.player1_shots_fired || 0}
+                              </div>
+                            )}
+                            {match.match_stats && (match.match_stats.player1_double_hits || 0) > 0 && (
+                              <div className="text-yellow-400">
+                                {match.match_stats.player1_double_hits}x2
+                              </div>
+                            )}
+                            {match.match_stats && (match.match_stats.player1_triple_hits || 0) > 0 && (
+                              <div className="text-red-400">
+                                {match.match_stats.player1_triple_hits}x3
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="text-xs space-y-1">
+                            {match.match_stats?.player2_accuracy !== undefined && (
+                              <div className="text-green-400">
+                                {(match.match_stats.player2_accuracy * 100).toFixed(1)}% acc
+                              </div>
+                            )}
+                            {match.match_stats?.player2_shots_fired !== undefined && (
+                              <div className="text-blue-300">
+                                {match.match_stats.player2_shots_hit || 0}/{match.match_stats.player2_shots_fired || 0}
+                              </div>
+                            )}
+                            {match.match_stats && (match.match_stats.player2_double_hits || 0) > 0 && (
+                              <div className="text-yellow-400">
+                                {match.match_stats.player2_double_hits}x2
+                              </div>
+                            )}
+                            {match.match_stats && (match.match_stats.player2_triple_hits || 0) > 0 && (
+                              <div className="text-red-400">
+                                {match.match_stats.player2_triple_hits}x3
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {match.rounds_data && match.rounds_data.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {match.rounds_data.map((round: any, index: number) => (
+                                <div key={index} className="bg-white/10 rounded px-1 py-0.5 text-xs">
+                                  R{round.round_number}: {round.winner_name === match.player1_name ? 'P1' : 'P2'}
+                                  <div className="text-xs text-blue-400">({round.winner_hp}HP)</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">No details</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </motion.div>
         )}

@@ -916,12 +916,54 @@ namespace CTFGameType
         public bool IsActive { get { return DateTime.Now.Subtract(ChallengeTime).TotalMinutes < 2; } } // 2 minute timeout
     }
 
+    public class TileWaitingPlayer
+    {
+        public string PlayerName { get; set; }
+        public DuelType DuelType { get; set; }
+        public DateTime WaitStartTime { get; set; }
+        public bool IsActive { get { return DateTime.Now.Subtract(WaitStartTime).TotalSeconds < 30; } } // 30 second timeout
+    }
+
+    public class DuelSideAssignment
+    {
+        public string Player1Name { get; set; }
+        public string Player2Name { get; set; }
+        public string Player1Side { get; set; } // "player1" or "player2"
+        public string Player2Side { get; set; } // "player1" or "player2"
+        public int RoundNumber { get; set; }
+    }
+
+    public class PlayerShotStats
+    {
+        public string PlayerName { get; set; }
+        public int ShotsFired { get; set; }
+        public int ShotsHit { get; set; }
+        public DateTime LastReset { get; set; }
+        public int MatchId { get; set; }
+
+        public PlayerShotStats()
+        {
+            ShotsFired = 0;
+            ShotsHit = 0;
+            LastReset = DateTime.Now;
+        }
+
+        public double Accuracy
+        {
+            get
+            {
+                if (ShotsFired == 0) return 0.0;
+                return (double)ShotsHit / ShotsFired * 100.0;
+            }
+        }
+    }
+
     public static class DuelingSystem
     {
         private static readonly HttpClient httpClient = new HttpClient();
         
         // API Configuration - Change USE_LOCAL_API to switch between local and production
-        private const bool USE_LOCAL_API = false; // Set to false for production
+        private const bool USE_LOCAL_API = true; // Set to false for production
         private const string LOCAL_DUELING_API_ENDPOINT = "http://localhost:3000/api/dueling/stats";
         private const string PRODUCTION_DUELING_API_ENDPOINT = "https://freeinf.org/api/dueling/stats";
         private static string DUELING_API_ENDPOINT
@@ -945,9 +987,25 @@ namespace CTFGameType
         // Dueling tiles coordinates (to be updated based on your map)
         private static readonly Dictionary<string, Tuple<short, short>> DUELING_TILES = new Dictionary<string, Tuple<short, short>>
         {
-            { "ranked_bo3", new Tuple<short, short>(512, 512) },   // Replace with actual coordinates
-            { "ranked_bo5", new Tuple<short, short>(256, 256) }    // Replace with actual coordinates
+            { "ranked_bo3", new Tuple<short, short>(775, 517) },   // Bo3 tile location
+            { "ranked_bo5", new Tuple<short, short>(784, 517) }    // Bo5 tile location
         };
+
+        // Dueling spawn positions (scaled to 16x16 pixels)
+        private static readonly Dictionary<string, Tuple<short, short, byte>> DUEL_SPAWN_POSITIONS = new Dictionary<string, Tuple<short, short, byte>>
+        {
+            { "player1", new Tuple<short, short, byte>(763, 534, 0) },   // Player 1 facing down (yaw 0)
+            { "player2", new Tuple<short, short, byte>(795, 534, 128) }  // Player 2 facing up (yaw 128)
+        };
+
+        // Track players waiting on tiles
+        private static readonly ConcurrentDictionary<string, TileWaitingPlayer> playersOnTiles = new ConcurrentDictionary<string, TileWaitingPlayer>();
+
+        // Track current side assignments for active duels (for side swapping)
+        private static readonly ConcurrentDictionary<string, DuelSideAssignment> duelSideAssignments = new ConcurrentDictionary<string, DuelSideAssignment>();
+
+        // Track shot statistics for dueling players
+        private static readonly ConcurrentDictionary<string, PlayerShotStats> playerShotStats = new ConcurrentDictionary<string, PlayerShotStats>();
 
         public static async Task HandleDuelCommand(Player player, string command, string payload)
         {
@@ -1010,7 +1068,9 @@ namespace CTFGameType
             player.sendMessage(-1, "@?duel stats [player] - View dueling statistics");
             player.sendMessage(-1, "");
             player.sendMessage(-1, "!Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
-            player.sendMessage(-1, "@Walk on ranked tiles to start ranked matches!");
+            player.sendMessage(-1, "@RANKED TILES: Step on Bo3 (775,517) or Bo5 (784,517) tiles!");
+            player.sendMessage(-1, "!Auto-match when 2 players step on same tile type!");
+            player.sendMessage(-1, "@Players swap sides after each round in tile duels!");
         }
 
         private static DuelType ParseDuelType(string type)
@@ -1212,6 +1272,101 @@ namespace CTFGameType
                 {
                     p.sendMessage(-1, String.Format("!DUEL STARTED: {0} vs {1}! ({2})", player1._alias, player2._alias, duelTypeStr));
                 }
+
+                // Reset shot stats for both players
+                ResetPlayerShotStats(player1);
+                ResetPlayerShotStats(player2);
+
+                // Reset player states and start countdown with positioning
+                ResetSinglePlayerDeathState(player1);
+                ResetSinglePlayerDeathState(player2);
+                
+                // Start countdown and positioning sequence immediately (async)
+                Task.Run(async () => {
+                    try
+                    {
+                        await StartDuelCountdown(player1, player2, player1._arena);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(String.Format("Error during duel start countdown: {0}", ex.Message));
+                    }
+                });
+                
+                // Start first round
+                StartDuelRound(duelMatch, 1);
+            }
+        }
+
+        private static async Task StartTileBasedDuel(Player player1, Player player2, DuelType duelType)
+        {
+            string matchKey = String.Format("{0}_{1}", player1._alias, player2._alias);
+
+            // Thread-safe duel creation
+            lock (duelLock)
+            {
+                // Double-check that neither player is in a duel
+                if (IsPlayerInDuel(player1._alias) || IsPlayerInDuel(player2._alias))
+                {
+                    player1.sendMessage(-1, "One of the players is already in a duel.");
+                    player2.sendMessage(-1, "One of the players is already in a duel.");
+                    return;
+                }
+
+                var duelMatch = new DuelMatch
+                {
+                    MatchType = duelType,
+                    Player1Name = player1._alias,
+                    Player2Name = player2._alias,
+                    Status = DuelStatus.InProgress,
+                    ArenaName = player1._arena._name,
+                    StartedAt = DateTime.Now
+                };
+
+                // Initialize player IDs (will be resolved by the API)
+                PopulatePlayerIds(duelMatch);
+
+                activeDuels.TryAdd(matchKey, duelMatch);
+
+                // Set up initial side assignments
+                var sideAssignment = new DuelSideAssignment
+                {
+                    Player1Name = player1._alias,
+                    Player2Name = player2._alias,
+                    Player1Side = "player1", // player1 starts on left side
+                    Player2Side = "player2", // player2 starts on right side
+                    RoundNumber = 1
+                };
+                duelSideAssignments.TryAdd(matchKey, sideAssignment);
+
+                // Announce duel start
+                string duelTypeStr = GetDuelTypeString(duelType);
+
+                // Send message to all players in arena with colors
+                foreach (Player p in player1._arena.Players)
+                {
+                    p.sendMessage(-1, String.Format("!TILE DUEL STARTED: {0} vs {1}! ({2})", player1._alias, player2._alias, duelTypeStr));
+                }
+
+                // Reset shot stats for both players
+                ResetPlayerShotStats(player1);
+                ResetPlayerShotStats(player2);
+
+                // Reset player states and start countdown with positioning
+                ResetSinglePlayerDeathState(player1);
+                ResetSinglePlayerDeathState(player2);
+                
+                // Start countdown and positioning sequence (async)
+                Task.Run(async () => {
+                    try
+                    {
+                        await StartDuelCountdown(player1, player2, player1._arena);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(String.Format("Error during match start countdown: {0}", ex.Message));
+                    }
+                });
                 
                 // Start first round
                 StartDuelRound(duelMatch, 1);
@@ -1223,11 +1378,94 @@ namespace CTFGameType
             var round = new DuelRound
             {
                 RoundNumber = roundNumber,
-                StartedAt = DateTime.Now
+                StartedAt = DateTime.Now.AddSeconds(4) // Will be updated when countdown finishes
             };
 
             match.Rounds.Add(round);
-            Console.WriteLine(String.Format("Started round {0} for duel: {1} vs {2}", roundNumber, match.Player1Name, match.Player2Name));
+            Console.WriteLine(String.Format("Created round {0} for duel: {1} vs {2}", roundNumber, match.Player1Name, match.Player2Name));
+        }
+
+        private static void WarpPlayersToStartingPositions(Player player1, Player player2, DuelSideAssignment sideAssignment)
+        {
+            try
+            {
+                // Get spawn positions based on side assignments
+                var player1Spawn = DUEL_SPAWN_POSITIONS[sideAssignment.Player1Side];
+                var player2Spawn = DUEL_SPAWN_POSITIONS[sideAssignment.Player2Side];
+
+                // Warp player 1 with exact positioning using Helpers.ObjectState
+                WarpPlayerToExactPosition(player1, player1Spawn.Item1, player1Spawn.Item2, player1Spawn.Item3);
+                
+                // Warp player 2 with exact positioning using Helpers.ObjectState
+                WarpPlayerToExactPosition(player2, player2Spawn.Item1, player2Spawn.Item2, player2Spawn.Item3);
+
+                Console.WriteLine(String.Format("Warped {0} to side {1} at ({2},{3}) facing {4}", 
+                    player1._alias, sideAssignment.Player1Side, player1Spawn.Item1, player1Spawn.Item2, player1Spawn.Item3));
+                Console.WriteLine(String.Format("Warped {0} to side {1} at ({2},{3}) facing {4}", 
+                    player2._alias, sideAssignment.Player2Side, player2Spawn.Item1, player2Spawn.Item2, player2Spawn.Item3));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error warping players: {0}", ex.Message));
+            }
+        }
+
+        private static void WarpPlayerToExactPosition(Player p, short posX, short posY, byte yaw)
+        {
+            try
+            {
+                // Use the same approach as CTF.cs for proper yaw direction
+                Helpers.ObjectState newState = new Helpers.ObjectState
+                {
+                    positionX = (short)(posX * 16),
+                    positionY = (short)(posY * 16),
+                    positionZ = (short)0,
+                    yaw = yaw,
+                    velocityX = 0,
+                    velocityY = 0,
+                    energy = p._state.energy,
+                    health = p._state.health,
+                    direction = (Helpers.ObjectState.Direction)yaw
+                };
+
+                // Reset warp and state first (like CTF.cs example)
+                p.resetWarp();
+                p.resetState(false, false, false);
+
+                // Warp the player to restore position and state with proper yaw
+                p.warp(Helpers.ResetFlags.ResetAll, newState, p._state.health, p._state.energy, yaw);
+                
+                // Reset death timer to ensure immediate respawn
+                p._deathTime = 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error warping player {0} to exact position: {1}", p._alias, ex.Message));
+            }
+        }
+
+        private static void SwapSidesAndWarp(DuelMatch match, Player player1, Player player2, int newRoundNumber)
+        {
+            string matchKey = String.Format("{0}_{1}", match.Player1Name, match.Player2Name);
+            
+            DuelSideAssignment sideAssignment;
+            if (duelSideAssignments.TryGetValue(matchKey, out sideAssignment))
+            {
+                // Swap the sides
+                string tempSide = sideAssignment.Player1Side;
+                sideAssignment.Player1Side = sideAssignment.Player2Side;
+                sideAssignment.Player2Side = tempSide;
+                sideAssignment.RoundNumber = newRoundNumber;
+
+                // Announce side swap
+                foreach (Player p in player1._arena.Players)
+                {
+                    p.sendMessage(-1, String.Format("@Round {0}: Players switching sides!", newRoundNumber));
+                }
+
+                // Warp players to their new positions
+                WarpPlayersToStartingPositions(player1, player2, sideAssignment);
+            }
         }
 
         public static async Task HandlePlayerDeath(Player victim, Player killer, Arena arena)
@@ -1247,13 +1485,13 @@ namespace CTFGameType
                         var currentRound = duel.Rounds.LastOrDefault();
                         if (currentRound != null)
                         {
-                            // Record the kill
+                            // Record the kill with proper HP tracking
                             var kill = new DuelKill
                             {
                                 KillerName = killer._alias,
                                 VictimName = victim._alias,
                                 WeaponUsed = GetPlayerWeapon(killer),
-                                DamageDealt = 100, // Assuming full damage for death
+                                DamageDealt = 60, // Assuming full damage for death
                                 VictimHpBefore = GetPlayerHealth(victim),
                                 VictimHpAfter = 0,
                                 ShotsFired = GetShotsFired(killer),
@@ -1265,16 +1503,233 @@ namespace CTFGameType
 
                             currentRound.Kills.Add(kill);
 
-                            // Complete the round
+                            // Complete the round with killer's current HP
                             await CompleteRound(duel, currentRound, killer._alias, victim._alias, 
                                 GetPlayerHealth(killer), 0, arena);
                         }
+
+                        // Reset death state for victim only (no countdown here)
+                        ResetSinglePlayerDeathState(victim);
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine(String.Format("Error in HandlePlayerDeath: {0}", ex.Message));
+            }
+        }
+
+
+
+        private static void ResetSinglePlayerDeathState(Player player)
+        {
+            try
+            {
+                // Immediately reset the player's death state to prevent double-warp issues
+                // This follows the same pattern as Gladiator mode for immediate respawn
+                player.resetWarp();
+                
+                // Complete state reset like Gladiator mode does
+                player.resetState(true, true, true);  // Reset all states completely
+                
+                // Reset health and energy to full for next round
+                player._state.health = 60;  // Dueling max health
+                player._state.energy = 600;
+                
+                // Reset death timer to 0 for immediate respawn (like Gladiator mode)
+                player._deathTime = 0;
+                
+                // Force state synchronization to ensure client updates
+                player.syncState();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error resetting single player death state for {0}: {1}", player._alias, ex.Message));
+            }
+        }
+
+        private static async Task StartDuelCountdown(Player player1, Player player2, Arena arena)
+        {
+            try
+            {
+                // Warp both players to their starting positions
+                var player1Pos = DUEL_SPAWN_POSITIONS["player1"];
+                var player2Pos = DUEL_SPAWN_POSITIONS["player2"];
+                
+                WarpPlayerToExactPosition(player1, player1Pos.Item1, player1Pos.Item2, player1Pos.Item3);
+                WarpPlayerToExactPosition(player2, player2Pos.Item1, player2Pos.Item2, player2Pos.Item3);
+                
+                // Calculate center position for countdown text (between the two players)
+                short centerX = (short)((player1Pos.Item1 + player2Pos.Item1) / 2);
+                short centerY = (short)((player1Pos.Item2 + player2Pos.Item2) / 2);
+                
+                // Countdown sequence: 3, 2, 1, Go!
+                string[] countdownTexts = { "3", "2", "1", "Go!" };
+                
+                for (int i = 0; i < countdownTexts.Length; i++)
+                {
+                    // Create countdown text explosion
+                    CreateDuelCountdownExplosion(arena, countdownTexts[i], centerX, centerY, 16, player1);
+                    
+                    // Send countdown message to both players
+                    if (countdownTexts[i] == "Go!")
+                    {
+                        player1.sendMessage(-1, String.Format("~{0}", countdownTexts[i]));
+                        player2.sendMessage(-1, String.Format("~{0}", countdownTexts[i]));
+                        
+                        // Update the round start time when "Go!" is called
+                        UpdateRoundStartTime(player1, player2);
+                    }
+                    else
+                    {
+                        player1.sendMessage(-1, String.Format("${0}", countdownTexts[i]));
+                        player2.sendMessage(-1, String.Format("${0}", countdownTexts[i]));
+                    }
+                    
+                    // Wait 1 second between countdown numbers
+                    if (i < countdownTexts.Length - 1)
+                    {
+                        await Task.Delay(1000);
+                    }
+                }
+                
+                Console.WriteLine(String.Format("Completed duel countdown for {0} vs {1}", player1._alias, player2._alias));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error during duel countdown: {0}", ex.Message));
+            }
+        }
+
+        private static void UpdateRoundStartTime(Player player1, Player player2)
+        {
+            try
+            {
+                // Find the active duel for these players
+                string matchKey1 = String.Format("{0}_{1}", player1._alias, player2._alias);
+                string matchKey2 = String.Format("{0}_{1}", player2._alias, player1._alias);
+
+                DuelMatch duel = null;
+                if (activeDuels.TryGetValue(matchKey1, out duel) || activeDuels.TryGetValue(matchKey2, out duel))
+                {
+                    if (duel.Status == DuelStatus.InProgress)
+                    {
+                        // Get the current round and update its start time
+                        var currentRound = duel.Rounds.LastOrDefault();
+                        if (currentRound != null)
+                        {
+                            currentRound.StartedAt = DateTime.Now;
+                            Console.WriteLine(String.Format("Updated round {0} start time for duel: {1} vs {2}", 
+                                currentRound.RoundNumber, duel.Player1Name, duel.Player2Name));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error updating round start time: {0}", ex.Message));
+            }
+        }
+
+        private static void CreateDuelCountdownExplosion(Arena arena, string text, short x, short y, short z, Player from)
+        {
+            try
+            {
+                // Create countdown text using the same method as CreateTextExplosion
+                // For numbers, get the spelled out projectile names
+                ItemInfo.Projectile countdownProjectile = null;
+                
+                // Handle countdown numbers
+                if (text == "3")
+                {
+                    countdownProjectile = AssetManager.Manager.getItemByName("three") as ItemInfo.Projectile;
+                }
+                else if (text == "2")
+                {
+                    countdownProjectile = AssetManager.Manager.getItemByName("two") as ItemInfo.Projectile;
+                }
+                else if (text == "1")
+                {
+                    countdownProjectile = AssetManager.Manager.getItemByName("one") as ItemInfo.Projectile;
+                }
+                else if (text == "Go!")
+                {
+                    // For "Go!" create letter explosions for G and O
+                    CreateLetterExplosion(arena, 'G', (short)(x - 20), y, z, from);
+                    CreateLetterExplosion(arena, 'o', (short)(x + 20), y, z, from);
+                    return;
+                }
+                
+                if (countdownProjectile != null)
+                {
+                    // Create the explosion projectile using SC_Projectile
+                    SC_Projectile countdownExplosion = new SC_Projectile
+                    {
+                        projectileID = (short)countdownProjectile.id,
+                        playerID = (ushort)from._id,
+                        posX = x,
+                        posY = y,
+                        posZ = z,
+                        yaw = from._state.yaw
+                    };
+                    
+                    // Send the explosion to all players
+                    foreach (Player p in arena.Players)
+                    {
+                        p._client.sendReliable(countdownExplosion);
+                    }
+                    
+                    Console.WriteLine(String.Format("Created countdown explosion: '{0}' at ({1}, {2})", text, x, y));
+                }
+                else
+                {
+                    Console.WriteLine(String.Format("Could not find projectile for countdown text: {0}", text));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error creating countdown explosion: {0}", ex.Message));
+            }
+        }
+
+        private static void CreateLetterExplosion(Arena arena, char letter, short x, short y, short z, Player from)
+        {
+            try
+            {
+                ItemInfo.Projectile letterWep = null;
+                
+                // Get letter projectile
+                if (letter == 'G' || letter == 'g')
+                {
+                    letterWep = AssetManager.Manager.getItemByName("G") as ItemInfo.Projectile;
+                }
+                else if (letter == 'O' || letter == 'o')
+                {
+                    letterWep = AssetManager.Manager.getItemByName("O") as ItemInfo.Projectile;
+                }
+                
+                if (letterWep != null)
+                {
+                    SC_Projectile letterExplosion = new SC_Projectile
+                    {
+                        projectileID = (short)letterWep.id,
+                        playerID = (ushort)from._id,
+                        posX = x,
+                        posY = y,
+                        posZ = z,
+                        yaw = from._state.yaw
+                    };
+                    
+                    // Send the explosion to all players
+                    foreach (Player p in arena.Players)
+                    {
+                        p._client.sendReliable(letterExplosion);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error creating letter explosion for '{0}': {1}", letter, ex.Message));
             }
         }
 
@@ -1312,6 +1767,38 @@ namespace CTFGameType
             }
             else
             {
+                // Get players for next round
+                Player player1 = arena.Players.FirstOrDefault(p => p._alias == match.Player1Name);
+                Player player2 = arena.Players.FirstOrDefault(p => p._alias == match.Player2Name);
+
+                if (player1 != null && player2 != null)
+                {
+                    // Reset both players' states for next round
+                    ResetSinglePlayerDeathState(player1);
+                    ResetSinglePlayerDeathState(player2);
+
+                    // Check if this is a tile-based duel (has side assignments)
+                    string matchKey = String.Format("{0}_{1}", match.Player1Name, match.Player2Name);
+                    if (duelSideAssignments.ContainsKey(matchKey))
+                    {
+                        // Swap sides for next round
+                        int nextRoundNumber = match.Rounds.Count + 1;
+                        SwapSidesAndWarp(match, player1, player2, nextRoundNumber);
+                    }
+
+                    // Start countdown for next round (async)
+                    Task.Run(async () => {
+                        try
+                        {
+                            await StartDuelCountdown(player1, player2, arena);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(String.Format("Error during next round countdown: {0}", ex.Message));
+                        }
+                    });
+                }
+
                 // Start next round
                 StartDuelRound(match, match.Rounds.Count + 1);
             }
@@ -1352,10 +1839,19 @@ namespace CTFGameType
                     p.sendMessage(-1, String.Format("!{0} has drawn first blood.", match.WinnerName));
                 }
 
-                // Remove from active duels
+                // Remove from active duels and clean up side assignments
                 string matchKey = String.Format("{0}_{1}", match.Player1Name, match.Player2Name);
                 DuelMatch removedMatch;
                 activeDuels.TryRemove(matchKey, out removedMatch);
+                
+                // Clean up side assignments for tile-based duels
+                DuelSideAssignment removedSideAssignment;
+                duelSideAssignments.TryRemove(matchKey, out removedSideAssignment);
+
+                // Clean up shot stats for both players
+                PlayerShotStats removedStats1, removedStats2;
+                playerShotStats.TryRemove(match.Player1Name, out removedStats1);
+                playerShotStats.TryRemove(match.Player2Name, out removedStats2);
             }
 
             // Send match data to website (outside lock for async operation)
@@ -1408,10 +1904,14 @@ namespace CTFGameType
         {
             try
             {
-                // Check if player stepped on a ranked dueling tile
+                // Check if player stepped on a ranked dueling tile (with radius detection)
                 foreach (var tile in DUELING_TILES)
                 {
-                    if (tile.Value.Item1 == x && tile.Value.Item2 == y)
+                    short tileX = tile.Value.Item1;
+                    short tileY = tile.Value.Item2;
+                    
+                    // Check if player is within 1 tile radius (forming a 3x3 grid around the center)
+                    if (Math.Abs(x - tileX) <= 1 && Math.Abs(y - tileY) <= 1)
                     {
                         DuelType duelType = tile.Key == "ranked_bo3" ? DuelType.RankedBo3 : DuelType.RankedBo5;
                         await HandleRankedTileStep(player, duelType);
@@ -1434,11 +1934,77 @@ namespace CTFGameType
                 return;
             }
 
-            // TODO: Implement matchmaking logic
-            // For now, just notify the player
+            string tileKey = duelType == DuelType.RankedBo3 ? "ranked_bo3" : "ranked_bo5";
             string duelTypeStr = GetDuelTypeString(duelType);
-            player.sendMessage(-1, String.Format("Waiting for opponent for {0}...", duelTypeStr));
-            player.sendMessage(-1, "Step off the tile to cancel.");
+
+            // Remove expired waiting players
+            CleanupExpiredTileWaiters();
+
+            // Check if there's already someone waiting on this tile type
+            var waitingPlayer = playersOnTiles.Values.FirstOrDefault(w => 
+                w.DuelType == duelType && w.IsActive && w.PlayerName != player._alias);
+
+            if (waitingPlayer != null)
+            {
+                // Found a match! Start the duel immediately
+                Player opponent = player._arena.Players.FirstOrDefault(p => 
+                    p._alias.Equals(waitingPlayer.PlayerName, StringComparison.OrdinalIgnoreCase));
+
+                if (opponent != null && !IsPlayerInDuel(opponent._alias))
+                {
+                    // Remove both players from waiting
+                    TileWaitingPlayer removedPlayer;
+                    playersOnTiles.TryRemove(waitingPlayer.PlayerName, out removedPlayer);
+                    playersOnTiles.TryRemove(player._alias, out removedPlayer);
+
+                    // Announce the match
+                    foreach (Player p in player._arena.Players)
+                    {
+                        p.sendMessage(-1, String.Format("!AUTO-MATCH: {0} vs {1} ({2})!", 
+                            player._alias, opponent._alias, duelTypeStr));
+                    }
+
+                    // Start the duel with proper warping
+                    await StartTileBasedDuel(player, opponent, duelType);
+                }
+                else
+                {
+                    // Opponent left, remove them and add current player to waiting
+                    TileWaitingPlayer removedPlayer;
+                    playersOnTiles.TryRemove(waitingPlayer.PlayerName, out removedPlayer);
+                    AddPlayerToTileWaiting(player, duelType, duelTypeStr);
+                }
+            }
+            else
+            {
+                // No one waiting, add this player to waiting list
+                AddPlayerToTileWaiting(player, duelType, duelTypeStr);
+            }
+        }
+
+        private static void AddPlayerToTileWaiting(Player player, DuelType duelType, string duelTypeStr)
+        {
+            var waitingPlayer = new TileWaitingPlayer
+            {
+                PlayerName = player._alias,
+                DuelType = duelType,
+                WaitStartTime = DateTime.Now
+            };
+
+            playersOnTiles.AddOrUpdate(player._alias, waitingPlayer, (key, existing) => waitingPlayer);
+
+            player.sendMessage(-1, String.Format("@Waiting for opponent for {0}...", duelTypeStr));
+            player.sendMessage(-1, "Step off the tile to cancel or wait for another player to join.");
+        }
+
+        private static void CleanupExpiredTileWaiters()
+        {
+            var expiredPlayers = playersOnTiles.Where(kvp => !kvp.Value.IsActive).Select(kvp => kvp.Key).ToList();
+            foreach (var playerName in expiredPlayers)
+            {
+                TileWaitingPlayer removedPlayer;
+                playersOnTiles.TryRemove(playerName, out removedPlayer);
+            }
         }
 
         private static bool IsPlayerInDuel(string playerName)
@@ -1454,9 +2020,63 @@ namespace CTFGameType
             return false;
         }
 
+        public static void HandleTileLeave(Player player, short x, short y)
+        {
+            try
+            {
+                // Check if player was waiting on a tile and is now leaving
+                TileWaitingPlayer waitingPlayer;
+                if (playersOnTiles.TryGetValue(player._alias, out waitingPlayer))
+                {
+                    // Check if they're moving away from their tile
+                    bool stillOnTile = false;
+                    foreach (var tile in DUELING_TILES)
+                    {
+                        if (waitingPlayer.DuelType == (tile.Key == "ranked_bo3" ? DuelType.RankedBo3 : DuelType.RankedBo5))
+                        {
+                            short tileX = tile.Value.Item1;
+                            short tileY = tile.Value.Item2;
+                            
+                            // Check if still within radius
+                            if (Math.Abs(x - tileX) <= 1 && Math.Abs(y - tileY) <= 1)
+                            {
+                                stillOnTile = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!stillOnTile)
+                    {
+                        // Player left the tile, remove them from waiting
+                        TileWaitingPlayer removedPlayer;
+                        playersOnTiles.TryRemove(player._alias, out removedPlayer);
+                        player.sendMessage(-1, "!Cancelled waiting for ranked duel.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in HandleTileLeave: {0}", ex.Message));
+            }
+        }
+
         private static bool IsOnRankedTile(Player player)
         {
-            // TODO: Implement tile position checking
+            // Check if player is currently on any ranked tile
+            short x = (short)(player._state.positionX / 16);
+            short y = (short)(player._state.positionY / 16);
+
+            foreach (var tile in DUELING_TILES)
+            {
+                short tileX = tile.Value.Item1;
+                short tileY = tile.Value.Item2;
+                
+                if (Math.Abs(x - tileX) <= 1 && Math.Abs(y - tileY) <= 1)
+                {
+                    return true;
+                }
+            }
             return false;
         }
 
@@ -1478,14 +2098,42 @@ namespace CTFGameType
 
         private static int GetShotsFired(Player player)
         {
-            // TODO: Get actual shots fired from player stats
-            return 0;
+            // Get shots fired from our custom tracking system
+            try
+            {
+                PlayerShotStats stats;
+                if (playerShotStats.TryGetValue(player._alias, out stats))
+                {
+                    return stats.ShotsFired;
+                }
+                
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error getting shots fired for {0}: {1}", player._alias, ex.Message));
+                return 0;
+            }
         }
 
         private static int GetShotsHit(Player player)
         {
-            // TODO: Get actual shots hit from player stats
-            return 0;
+            // Get shots hit from our custom tracking system
+            try
+            {
+                PlayerShotStats stats;
+                if (playerShotStats.TryGetValue(player._alias, out stats))
+                {
+                    return stats.ShotsHit;
+                }
+                
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error getting shots hit for {0}: {1}", player._alias, ex.Message));
+                return 0;
+            }
         }
 
         private static int GetPlayerHealth(Player player)
@@ -1546,6 +2194,65 @@ namespace CTFGameType
                     return existingList;
                 }
             );
+        }
+
+        public static void TrackShotFired(Player player)
+        {
+            // Track shots fired for dueling players
+            try
+            {
+                if (IsPlayerInDuel(player._alias))
+                {
+                    PlayerShotStats stats;
+                    if (!playerShotStats.TryGetValue(player._alias, out stats))
+                    {
+                        stats = new PlayerShotStats { PlayerName = player._alias };
+                        playerShotStats[player._alias] = stats;
+                    }
+                    stats.ShotsFired++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error tracking shot fired for {0}: {1}", player._alias, ex.Message));
+            }
+        }
+
+        public static void TrackShotHit(Player player)
+        {
+            // Track shots hit for dueling players
+            try
+            {
+                if (IsPlayerInDuel(player._alias))
+                {
+                    PlayerShotStats stats;
+                    if (!playerShotStats.TryGetValue(player._alias, out stats))
+                    {
+                        stats = new PlayerShotStats { PlayerName = player._alias };
+                        playerShotStats[player._alias] = stats;
+                    }
+                    stats.ShotsHit++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error tracking shot hit for {0}: {1}", player._alias, ex.Message));
+            }
+        }
+
+        public static void ResetPlayerShotStats(Player player)
+        {
+            // Reset shot stats for a player (called at start of duel)
+            try
+            {
+                var stats = new PlayerShotStats { PlayerName = player._alias };
+                playerShotStats[player._alias] = stats;
+                Console.WriteLine(String.Format("Reset shot stats for {0}", player._alias));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error resetting shot stats for {0}: {1}", player._alias, ex.Message));
+            }
         }
 
         private static void RemoveExpiredChallenges()
@@ -1647,6 +2354,10 @@ namespace CTFGameType
                 // Add rounds array
                 sb.Append("\"rounds\":[");
                 
+                // Track overall match stats for both players
+                int player1ShotsFired = 0, player1ShotsHit = 0, player1DoubleHits = 0, player1TripleHits = 0;
+                int player2ShotsFired = 0, player2ShotsHit = 0, player2DoubleHits = 0, player2TripleHits = 0;
+                
                 if (match.Rounds != null && match.Rounds.Count > 0)
                 {
                     for (int i = 0; i < match.Rounds.Count; i++)
@@ -1655,11 +2366,12 @@ namespace CTFGameType
                         
                         var round = match.Rounds[i];
                         sb.Append("{");
-                        sb.AppendFormat("\"winnerName\":\"{0}\",", EscapeJsonString(round.WinnerName ?? ""));
-                        sb.AppendFormat("\"loserName\":\"{0}\",", EscapeJsonString(round.LoserName ?? ""));
-                        sb.AppendFormat("\"winnerHpLeft\":{0},", round.WinnerHpLeft);
-                        sb.AppendFormat("\"loserHpLeft\":{0},", round.LoserHpLeft);
-                        sb.AppendFormat("\"durationSeconds\":{0},", round.DurationSeconds);
+                        sb.AppendFormat("\"round_number\":{0},", round.RoundNumber);
+                        sb.AppendFormat("\"winner_name\":\"{0}\",", EscapeJsonString(round.WinnerName ?? ""));
+                        sb.AppendFormat("\"loser_name\":\"{0}\",", EscapeJsonString(round.LoserName ?? ""));
+                        sb.AppendFormat("\"winner_hp\":{0},", round.WinnerHpLeft);
+                        sb.AppendFormat("\"loser_hp\":{0},", round.LoserHpLeft);
+                        sb.AppendFormat("\"duration_seconds\":{0},", round.DurationSeconds);
                         
                         // Add kills array
                         sb.Append("\"kills\":[");
@@ -1682,13 +2394,48 @@ namespace CTFGameType
                                 sb.AppendFormat("\"isDoubleHit\":{0},", kill.IsDoubleHit.ToString().ToLower());
                                 sb.AppendFormat("\"isTripleHit\":{0}", kill.IsTripleHit.ToString().ToLower());
                                 sb.Append("}");
+                                
+                                // Accumulate stats for overall match totals
+                                if (kill.KillerName == match.Player1Name)
+                                {
+                                    player1ShotsFired += kill.ShotsFired;
+                                    player1ShotsHit += kill.ShotsHit;
+                                    if (kill.IsDoubleHit) player1DoubleHits++;
+                                    if (kill.IsTripleHit) player1TripleHits++;
+                                }
+                                else if (kill.KillerName == match.Player2Name)
+                                {
+                                    player2ShotsFired += kill.ShotsFired;
+                                    player2ShotsHit += kill.ShotsHit;
+                                    if (kill.IsDoubleHit) player2DoubleHits++;
+                                    if (kill.IsTripleHit) player2TripleHits++;
+                                }
                             }
                         }
                         sb.Append("]}");
                     }
                 }
                 
-                sb.Append("]}");
+                sb.Append("],");
+                
+                // Add overall match statistics
+                sb.Append("\"match_stats\":{");
+                
+                double player1Accuracy = player1ShotsFired > 0 ? (double)player1ShotsHit / player1ShotsFired : 0.0;
+                double player2Accuracy = player2ShotsFired > 0 ? (double)player2ShotsHit / player2ShotsFired : 0.0;
+                
+                sb.AppendFormat("\"player1_accuracy\":{0},", player1Accuracy.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+                sb.AppendFormat("\"player1_shots_fired\":{0},", player1ShotsFired);
+                sb.AppendFormat("\"player1_shots_hit\":{0},", player1ShotsHit);
+                sb.AppendFormat("\"player1_double_hits\":{0},", player1DoubleHits);
+                sb.AppendFormat("\"player1_triple_hits\":{0},", player1TripleHits);
+                sb.AppendFormat("\"player2_accuracy\":{0},", player2Accuracy.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+                sb.AppendFormat("\"player2_shots_fired\":{0},", player2ShotsFired);
+                sb.AppendFormat("\"player2_shots_hit\":{0},", player2ShotsHit);
+                sb.AppendFormat("\"player2_double_hits\":{0},", player2DoubleHits);
+                sb.AppendFormat("\"player2_triple_hits\":{0}", player2TripleHits);
+                
+                sb.Append("}}");
                 
                 return sb.ToString();
             }

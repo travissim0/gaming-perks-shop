@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
     // If IDs are not provided, try to resolve them from in_game_alias
     if (!player1_id && matchData.player1Name) {
       const { data: user1 } = await supabaseAdmin
-        .from('users')
+        .from('profiles')
         .select('id')
         .eq('in_game_alias', matchData.player1Name)
         .single();
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
 
     if (!player2_id && matchData.player2Name) {
       const { data: user2 } = await supabaseAdmin
-        .from('users')
+        .from('profiles')
         .select('id')
         .eq('in_game_alias', matchData.player2Name)
         .single();
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
 
     if (!winner_id && matchData.winnerName) {
       const { data: winnerUser } = await supabaseAdmin
-        .from('users')
+        .from('profiles')
         .select('id')
         .eq('in_game_alias', matchData.winnerName)
         .single();

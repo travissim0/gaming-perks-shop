@@ -1294,7 +1294,7 @@ namespace InfServer.Script.GameType_CTF
         private int secondOvertimeTimer;
         private Dictionary<Player, bool> disallowClassChange = new Dictionary<Player, bool>();
         private Dictionary<Player, string> queuedClassSwap = new Dictionary<Player, string>();
-        private bool _playerStatsEnabled = false;
+        private bool _playerStatsEnabled = true;
         private Dictionary<Player, bool> autoBuyEnabled = new Dictionary<Player, bool>();
 
         // Dictionary to store vehicles players were in before entering a portal
@@ -6498,7 +6498,7 @@ private Player FindPlayerByAlias(string alias)
             }
             else
             {
-                _playerStatsEnabled = false;
+                //_playerStatsEnabled = false;
                 foreach (Arena.FlagState fs in arena._flags.Values)
                 {
                     if (fs.flag.FlagData.MinPlayerCount == 0)
@@ -10995,6 +10995,9 @@ private Player FindPlayerByAlias(string alias)
                         _projectileOwners[key] = from;
                         // arena.sendArenaMessage(string.Format("{0} fired weapon {1} (Total shots: {2})", 
                         //     from._alias, usedWep.name, stats.ShotsFired));
+                        
+                        // Track shots fired for dueling system
+                        CTFGameType.DuelingSystem.TrackShotFired(from);
                         break;
                 }
             }
@@ -11590,6 +11593,12 @@ private Player FindPlayerByAlias(string alias)
                     shooterStats.ShotsLanded++;
                     shooterStats.TotalHits++;
 
+                    // Track shots hit for dueling system
+                    CTFGameType.DuelingSystem.TrackShotHit(shooter);
+                    
+                    // Track damage hit for double/triple hit detection
+                    CTFGameType.DuelingSystem.TrackDamageHit(shooter._alias);
+
                     // Calculate distance from explosion to victim's vehicle
                     if (player._baseVehicle != null)
                     {
@@ -11892,6 +11901,9 @@ private Player FindPlayerByAlias(string alias)
                             Console.WriteLine(String.Format("Error tracking dueling death: {0}", ex.Message));
                         }
                     });
+                    
+                    // Return false to prevent default respawn handling for dueling deaths
+                    return false;
                 }
             }
             
