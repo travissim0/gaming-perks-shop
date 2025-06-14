@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { getClassColor, getClassColorStyle } from '@/utils/classColors';
 
 interface PlayerStats {
   id: number;
@@ -230,7 +231,9 @@ export default function GameStatsViewer({ matchId, matchTitle, matchStatus }: Ga
                                 </td>
                                 <td className="px-3 py-2 text-right">{player.captures}</td>
                                 <td className="px-3 py-2 text-right">{formatPercentage(player.accuracy)}</td>
-                                <td className="px-3 py-2 text-right text-gray-400">{player.main_class}</td>
+                                <td className="px-3 py-2 text-right" style={getClassColorStyle(player.main_class)}>
+                                  {player.main_class || 'Unknown'}
+                                </td>
                               </tr>
                             ))}
                         </tbody>
@@ -289,7 +292,13 @@ export default function GameStatsViewer({ matchId, matchTitle, matchStatus }: Ga
                           <td className="px-3 py-2">
                             <div className="font-medium">{player.player_name}</div>
                             <div className="text-xs text-gray-400">
-                              {player.main_class} • {player.side} • {player.result}
+                              <span style={getClassColorStyle(player.main_class)}>{player.main_class || 'Unknown'}</span> • 
+                              <span className={player.side === 'offense' ? 'text-red-400' : player.side === 'defense' ? 'text-blue-400' : 'text-gray-400'}>
+                                {player.side || 'N/A'}
+                              </span> • 
+                              <span className={`${
+                                player.result === 'Win' ? 'text-green-400' : 'text-red-400'
+                              }`}>{player.result}</span>
                             </div>
                           </td>
                           <td className="px-3 py-2 text-right font-medium">{player.kills}</td>

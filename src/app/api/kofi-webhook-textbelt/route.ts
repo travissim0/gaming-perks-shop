@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { sendDonationSMS } from '../../../utils/sms-notifications';
+import { sendDonationSMS } from '../../../utils/sms-notifications-textbelt';
 
 // Use service role client to bypass RLS for webhook operations
 const supabaseAdmin = createClient(
@@ -38,7 +38,7 @@ interface KofiWebhookData {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔔 Ko-fi webhook received');
+    console.log('🔔 Ko-fi webhook received (Textbelt version)');
 
     // Parse the form data from Ko-fi
     const formData = await request.formData();
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     // Verify the webhook (if verification token is set)
     if (KOFI_VERIFICATION_TOKEN && kofiData.verification_token !== KOFI_VERIFICATION_TOKEN) {
-      console.error('❌ Ko-fi webhook verification failed - Expected:', KOFI_VERIFICATION_TOKEN, 'Got:', kofiData.verification_token);
+      console.error('❌ Ko-fi webhook verification failed');
       return NextResponse.json({ error: 'Verification failed' }, { status: 401 });
     }
     
@@ -111,6 +111,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Donation already processed' });
     }
 
+    // Send SMS notification FIRST (before database insert)
+    try {
+      const smsSuccess = await sendDonationSMS({
+        amount: amountFloat,
+        currency: kofiData.currency,
+        from_name: kofiData.from_name,
+        message: kofiData.message,
+        type: kofiData.type,
+        email: kofiData.email
+      });
+
+      if (smsSuccess) {
+        console.log('📱 SMS notification sent successfully via Textbelt');
+      } else {
+        console.warn('⚠️ SMS notification failed to send via Textbelt');
+      }
+    } catch (smsError) {
+      console.error('❌ SMS notification error:', smsError);
+      // Don't fail the webhook if SMS fails
+    }
+
     // Insert the Ko-fi donation into the database using service role (bypasses RLS)
     const { data: donation, error: insertError } = await supabaseAdmin
       .from('donation_transactions')
@@ -145,27 +166,6 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Ko-fi donation saved successfully:', donation.id);
 
-    // Send SMS notification for the donation
-    try {
-      const smsSuccess = await sendDonationSMS({
-        amount: amountFloat,
-        currency: kofiData.currency,
-        from_name: kofiData.from_name,
-        message: kofiData.message,
-        type: kofiData.type,
-        email: kofiData.email
-      });
-
-      if (smsSuccess) {
-        console.log('📱 SMS notification sent successfully');
-      } else {
-        console.warn('⚠️ SMS notification failed to send');
-      }
-    } catch (smsError) {
-      console.error('❌ SMS notification error:', smsError);
-      // Don't fail the webhook if SMS fails
-    }
-
     // Process shop items if this is a shop order
     let processedItems = [];
     if (kofiData.type === 'Shop Order' && kofiData.shop_items && kofiData.shop_items.length > 0) {
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
       for (const item of kofiData.shop_items) {
         try {
-          // Find product by direct_link_code (we'll need to add this field to products table)
+          // Find product by direct_link_code
           const { data: product } = await supabaseAdmin
             .from('products')
             .select('*')
@@ -182,22 +182,16 @@ export async function POST(request: NextRequest) {
 
           if (product && userId) {
             // Create user_product entry automatically
-            // Clean and validate phrase
             let cleanPhrase = null;
             if (item.variation_name && item.variation_name.trim()) {
-              // Remove any characters not allowed by the constraint
               cleanPhrase = item.variation_name.trim().replace(/[^a-zA-Z0-9 !?._-]/g, '');
-              // Limit to 12 characters max
               if (cleanPhrase.length > 12) {
                 cleanPhrase = cleanPhrase.substring(0, 12);
               }
-              // If it becomes empty after cleaning, set to null
               if (cleanPhrase.length === 0) {
                 cleanPhrase = null;
               }
             }
-
-            console.log('🔤 Processing phrase:', item.variation_name, '→', cleanPhrase);
 
             const { data: userProduct, error: productError } = await supabaseAdmin
               .from('user_products')
@@ -214,12 +208,6 @@ export async function POST(request: NextRequest) {
 
             if (productError) {
               console.error('❌ Error creating user product:', productError);
-              console.error('Purchase creation error:', {
-                userId,
-                productId: product.id,
-                phrase: cleanPhrase,
-                variation_name: item.variation_name
-              });
             } else {
               console.log('✅ User product created:', userProduct.id);
               processedItems.push({
@@ -239,7 +227,7 @@ export async function POST(request: NextRequest) {
 
     // Return success response
     return NextResponse.json({ 
-      message: kofiData.type === 'Shop Order' ? 'Ko-fi shop order processed successfully' : 'Ko-fi donation processed successfully',
+      message: kofiData.type === 'Shop Order' ? 'Ko-fi shop order processed successfully (with SMS via Textbelt)' : 'Ko-fi donation processed successfully (with SMS via Textbelt)',
       donation_id: donation.id,
       amount: amountFloat,
       currency: kofiData.currency,

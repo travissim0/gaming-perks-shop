@@ -210,13 +210,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('✅ Sign up successful');
-      toast.success('Account created successfully!');
       
-      // Create profile in background (non-blocking)
+      // Create profile synchronously to ensure it exists before success
       if (data.user) {
-        createUserProfile(data.user, inGameAlias).catch(err => 
-          console.warn('Profile creation failed (non-blocking):', err)
-        );
+        try {
+          await createUserProfile(data.user, inGameAlias);
+          console.log('✅ Profile created successfully for:', data.user.email);
+          toast.success('Account created successfully!');
+        } catch (profileError: any) {
+          console.error('❌ Profile creation failed:', profileError);
+          toast.error('Account created but profile setup incomplete. Please try signing in.');
+        }
+      } else {
+        toast.success('Account created successfully!');
       }
 
       return data;
@@ -241,8 +247,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_seen: new Date().toISOString(),
         }]);
       
-      if (error && !error.message.includes('duplicate key')) {
-        console.warn('Profile creation error:', error.message);
+      if (error) {
+        // Handle duplicate key error gracefully
+        if (error.message.includes('duplicate key')) {
+          console.log('Profile already exists, updating instead...');
+          
+          // Try to update existing profile
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({
+              in_game_alias: inGameAlias,
+              email: user.email,
+              registration_status: 'completed',
+              last_seen: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
+          
+          if (updateError) {
+            console.error('Profile update failed:', updateError);
+            throw updateError;
+          }
+        } else {
+          console.error('Profile creation failed:', error);
+          throw error;
+        }
       }
     } catch (error) {
       console.warn('Profile creation failed:', error);

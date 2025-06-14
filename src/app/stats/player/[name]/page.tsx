@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { getClassColor, getClassColorStyle } from '@/utils/classColors';
 
 interface PlayerStat {
   id: number;
@@ -370,7 +371,9 @@ export default function PlayerPage() {
                           {game.result}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-blue-200">{game.main_class}</td>
+                      <td className="px-4 py-3 text-sm" style={getClassColorStyle(game.main_class)}>
+                        <span className="font-medium">{game.main_class}</span>
+                      </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-400">{game.kills}</td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-red-400">{game.deaths}</td>
                       <td className="px-4 py-3 text-right text-sm font-bold">
