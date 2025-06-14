@@ -98,12 +98,13 @@ export async function GET(request: NextRequest) {
 // POST - Submit match results from the game
 export async function POST(request: NextRequest) {
   try {
+    console.log('DUELING API HIT - Processing match data');
+    
     const matchData = await request.json();
-
     console.log('Received dueling match data:', matchData);
 
-    // Validate required fields
-    const requiredFields = ['matchType', 'player1Name', 'player2Name', 'winnerName'];
+    // Validate required fields - we need either player names OR player IDs
+    const requiredFields = ['matchType', 'winnerName'];
     for (const field of requiredFields) {
       if (!matchData[field]) {
         return NextResponse.json(
@@ -113,21 +114,74 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate match type
-    const validMatchTypes = ['unranked', 'ranked_bo3', 'ranked_bo6'];
-    if (!validMatchTypes.includes(matchData.matchType)) {
+    // Validate that we have player identification (either names or IDs)
+    if ((!matchData.player1Name && !matchData.player1_id) || 
+        (!matchData.player2Name && !matchData.player2_id)) {
       return NextResponse.json(
-        { error: `Invalid match type: ${matchData.matchType}` },
+        { error: 'Missing player identification: need either player names or player IDs' },
         { status: 400 }
       );
     }
+
+    // Validate match type
+    const validMatchTypes = ['unranked', 'ranked_bo3', 'ranked_bo5'];
+    if (!validMatchTypes.includes(matchData.matchType)) {
+      return NextResponse.json(
+        { error: `Invalid match type: ${matchData.matchType}. Valid types: ${validMatchTypes.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Resolve player IDs from aliases if not provided
+    let player1_id = matchData.player1_id;
+    let player2_id = matchData.player2_id;
+    let winner_id = matchData.winner_id;
+
+    // If IDs are not provided, try to resolve them from in_game_alias
+    if (!player1_id && matchData.player1Name) {
+      const { data: user1 } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('in_game_alias', matchData.player1Name)
+        .single();
+      player1_id = user1?.id || null;
+    }
+
+    if (!player2_id && matchData.player2Name) {
+      const { data: user2 } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('in_game_alias', matchData.player2Name)
+        .single();
+      player2_id = user2?.id || null;
+    }
+
+    if (!winner_id && matchData.winnerName) {
+      const { data: winnerUser } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('in_game_alias', matchData.winnerName)
+        .single();
+      winner_id = winnerUser?.id || null;
+    }
+
+    // Use names as fallback for player identification
+    const player1Name = matchData.player1Name || 'Unknown';
+    const player2Name = matchData.player2Name || 'Unknown';
+    const winnerName = matchData.winnerName;
+
+    console.log('Player ID resolution:', {
+      player1: { name: player1Name, id: player1_id },
+      player2: { name: player2Name, id: player2_id },
+      winner: { name: winnerName, id: winner_id }
+    });
 
     // Start a new dueling match
     const { data: matchResult, error: matchError } = await supabaseAdmin
       .rpc('start_dueling_match', {
         p_match_type: matchData.matchType,
-        p_player1_name: matchData.player1Name,
-        p_player2_name: matchData.player2Name,
+        p_player1_name: player1Name,
+        p_player2_name: player2Name,
         p_arena_name: matchData.arenaName || null
       });
 
@@ -195,7 +249,7 @@ export async function POST(request: NextRequest) {
     const { error: completeError } = await supabaseAdmin
       .rpc('complete_dueling_match', {
         p_match_id: matchId,
-        p_winner_name: matchData.winnerName
+        p_winner_name: winnerName
       });
 
     if (completeError) {
@@ -211,7 +265,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Dueling match recorded successfully',
-      matchId: matchId
+      matchId: matchId,
+      playerInfo: {
+        player1: { name: player1Name, id: player1_id, registered: !!player1_id },
+        player2: { name: player2Name, id: player2_id, registered: !!player2_id },
+        winner: { name: winnerName, id: winner_id, registered: !!winner_id }
+      }
     });
 
   } catch (error) {

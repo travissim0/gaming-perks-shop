@@ -851,7 +851,10 @@ namespace CTFGameType
         public DuelType MatchType { get; set; }
         public string Player1Name { get; set; }
         public string Player2Name { get; set; }
+        public string Player1Id { get; set; }  // Player 1 ID (null if unregistered)
+        public string Player2Id { get; set; }  // Player 2 ID (null if unregistered)
         public string WinnerName { get; set; }
+        public string WinnerId { get; set; }   // Winner ID (null if unregistered)
         public int Player1RoundsWon { get; set; }
         public int Player2RoundsWon { get; set; }
         public int TotalRounds { get; set; }
@@ -864,6 +867,10 @@ namespace CTFGameType
         public DuelMatch()
         {
             Rounds = new List<DuelRound>();
+            // Initialize IDs as null (will be populated if players are registered)
+            Player1Id = null;
+            Player2Id = null;
+            WinnerId = null;
         }
     }
 
@@ -912,7 +919,18 @@ namespace CTFGameType
     public static class DuelingSystem
     {
         private static readonly HttpClient httpClient = new HttpClient();
-        private const string DUELING_API_ENDPOINT = "https://freeinf.org/api/dueling/stats";
+        
+        // API Configuration - Change USE_LOCAL_API to switch between local and production
+        private const bool USE_LOCAL_API = false; // Set to false for production
+        private const string LOCAL_DUELING_API_ENDPOINT = "http://localhost:3000/api/dueling/stats";
+        private const string PRODUCTION_DUELING_API_ENDPOINT = "https://freeinf.org/api/dueling/stats";
+        private static string DUELING_API_ENDPOINT
+        {
+            get
+            {
+                return USE_LOCAL_API ? LOCAL_DUELING_API_ENDPOINT : PRODUCTION_DUELING_API_ENDPOINT;
+            }
+        }
 
         // Thread-safe collections and locks
         private static readonly ConcurrentDictionary<string, DuelMatch> activeDuels = new ConcurrentDictionary<string, DuelMatch>();
@@ -984,15 +1002,15 @@ namespace CTFGameType
 
         private static void ShowDuelHelp(Player player)
         {
-            player.sendMessage(-1, "=== DUELING SYSTEM ===");
-            player.sendMessage(-1, "?duel challenge <player> [type] - Challenge a player to duel");
+            player.sendMessage(-1, "!== DUELING SYSTEM ==");
+            player.sendMessage(-1, "@?duel challenge <player> [type] - Challenge a player to duel");
             player.sendMessage(-1, "?duel accept - Accept a duel challenge");
             player.sendMessage(-1, "?duel decline - Decline a duel challenge");
-            player.sendMessage(-1, "?duel forfeit - Forfeit current duel");
-            player.sendMessage(-1, "?duel stats [player] - View dueling statistics");
+            player.sendMessage(-1, "!?duel forfeit - Forfeit current duel");
+            player.sendMessage(-1, "@?duel stats [player] - View dueling statistics");
             player.sendMessage(-1, "");
-            player.sendMessage(-1, "Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
-            player.sendMessage(-1, "Walk on ranked tiles to start ranked matches!");
+            player.sendMessage(-1, "!Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
+            player.sendMessage(-1, "@Walk on ranked tiles to start ranked matches!");
         }
 
         private static DuelType ParseDuelType(string type)
@@ -1181,6 +1199,9 @@ namespace CTFGameType
                     StartedAt = DateTime.Now
                 };
 
+                // Initialize player IDs (will be resolved by the API)
+                PopulatePlayerIds(duelMatch);
+
                 activeDuels.TryAdd(matchKey, duelMatch);
 
                 // Announce duel start
@@ -1314,6 +1335,12 @@ namespace CTFGameType
                 match.Status = DuelStatus.Completed;
                 match.CompletedAt = DateTime.Now;
 
+                // Set winner ID based on winner name
+                if (match.WinnerName == match.Player1Name)
+                    match.WinnerId = match.Player1Id;
+                else if (match.WinnerName == match.Player2Name)
+                    match.WinnerId = match.Player2Id;
+
                 // Announce match result with special victory formatting
                 string loserName = match.WinnerName == match.Player1Name ? match.Player2Name : match.Player1Name;
                 string finalScore = String.Format("({0}-{1})", match.Player1RoundsWon, match.Player2RoundsWon);
@@ -1445,8 +1472,8 @@ namespace CTFGameType
 
         private static string GetPlayerWeapon(Player player)
         {
-            // TODO: Get actual weapon from player
-            return "Unknown";
+            // Dueling is always done with assault rifles
+            return "Assault Rifle";
         }
 
         private static int GetShotsFired(Player player)
@@ -1463,10 +1490,8 @@ namespace CTFGameType
 
         private static int GetPlayerHealth(Player player)
         {
-            // Convert from internal health (0-1000) to display health (0-100)
-            // But cap at 60 since that's the actual max HP in dueling
-            int displayHealth = player._state.health / 10;
-            return Math.Min(displayHealth, 60);
+            // Return actual player health, capped at 60 for dueling
+            return Math.Min((int)player._state.health, 60);
         }
 
         private static bool CheckForDoubleHit(string playerName)
@@ -1535,6 +1560,28 @@ namespace CTFGameType
             }
         }
 
+        private static void PopulatePlayerIds(DuelMatch match)
+        {
+            try
+            {
+                // For now, just set IDs to null - they will be resolved by the API
+                // This avoids async/await compatibility issues with older C# versions
+                match.Player1Id = null;
+                match.Player2Id = null;
+                match.WinnerId = null;
+
+                Console.WriteLine(String.Format("Player ID resolution: {0}(will be resolved by API) vs {1}(will be resolved by API)", 
+                    match.Player1Name ?? "unknown",
+                    match.Player2Name ?? "unknown"));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in PopulatePlayerIds: {0}", ex.Message));
+            }
+        }
+
+
+
         private static async Task ShowPlayerDuelStats(Player requestingPlayer, string targetName)
         {
             // TODO: Fetch stats from website API
@@ -1546,48 +1593,26 @@ namespace CTFGameType
         {
             try
             {
-                var matchData = new
-                {
-                    matchType = match.MatchType.ToString().ToLower().Replace("ranked", "ranked_"),
-                    player1Name = match.Player1Name,
-                    player2Name = match.Player2Name,
-                    winnerName = match.WinnerName,
-                    arenaName = match.ArenaName,
-                    rounds = match.Rounds.Select(r => new
-                    {
-                        winnerName = r.WinnerName,
-                        loserName = r.LoserName,
-                        winnerHpLeft = r.WinnerHpLeft,
-                        loserHpLeft = r.LoserHpLeft,
-                        durationSeconds = r.DurationSeconds,
-                        kills = r.Kills.Select(k => new
-                        {
-                            killerName = k.KillerName,
-                            victimName = k.VictimName,
-                            weaponUsed = k.WeaponUsed,
-                            damageDealt = k.DamageDealt,
-                            victimHpBefore = k.VictimHpBefore,
-                            victimHpAfter = k.VictimHpAfter,
-                            shotsFired = k.ShotsFired,
-                            shotsHit = k.ShotsHit,
-                            isDoubleHit = k.IsDoubleHit,
-                            isTripleHit = k.IsTripleHit
-                        })
-                    })
-                };
-
-                string jsonString = BuildMatchJsonString(matchData);
+                string jsonString = BuildMatchJsonString(match);
+                Console.WriteLine(String.Format("Sending duel match to {0} ({1})", 
+                    USE_LOCAL_API ? "LOCAL" : "PRODUCTION", DUELING_API_ENDPOINT));
+                Console.WriteLine(String.Format("JSON Length: {0}", jsonString.Length));
+                Console.WriteLine(String.Format("JSON: {0}", jsonString));
+                Console.WriteLine(String.Format("First 50 chars: {0}", jsonString.Length > 50 ? jsonString.Substring(0, 50) : jsonString));
 
                 var content = new StringContent(jsonString, System.Text.Encoding.UTF8, "application/json");
                 var response = await httpClient.PostAsync(DUELING_API_ENDPOINT, content);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine(String.Format("Duel match data sent successfully for {0} vs {1}", match.Player1Name, match.Player2Name));
+                    string responseText = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(String.Format("Duel match data sent successfully for {0} vs {1}: {2}", match.Player1Name, match.Player2Name, responseText));
                 }
                 else
                 {
-                    Console.WriteLine(String.Format("Failed to send duel match data: {0}", response.StatusCode));
+                    string errorText = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(String.Format("Failed to send duel match data ({0}): {1}", response.StatusCode, errorText));
+                    Console.WriteLine(String.Format("Request JSON was: {0}", jsonString));
                 }
             }
             catch (Exception ex)
@@ -1596,11 +1621,94 @@ namespace CTFGameType
             }
         }
 
-        private static string BuildMatchJsonString(object matchData)
+        private static string BuildMatchJsonString(DuelMatch match)
         {
-            // Simple JSON serialization for older C# versions
-            // This is a basic implementation - you might want to use a proper JSON library
-            return "{}"; // Placeholder - implement proper JSON serialization
+            // Manual JSON serialization for older C# versions
+            try
+            {
+                if (match == null) return "{}";
+                
+                var sb = new System.Text.StringBuilder();
+                sb.Append("{");
+                
+                // Add match type
+                string matchType = match.MatchType.ToString().ToLower().Replace("ranked", "ranked_");
+                sb.AppendFormat("\"matchType\":\"{0}\",", EscapeJsonString(matchType));
+                
+                // Add player names and IDs (IDs will be null for unregistered players)
+                sb.AppendFormat("\"player1Name\":\"{0}\",", EscapeJsonString(match.Player1Name ?? ""));
+                sb.AppendFormat("\"player2Name\":\"{0}\",", EscapeJsonString(match.Player2Name ?? ""));
+                sb.AppendFormat("\"player1_id\":{0},", match.Player1Id == null ? "null" : String.Format("\"{0}\"", EscapeJsonString(match.Player1Id)));
+                sb.AppendFormat("\"player2_id\":{0},", match.Player2Id == null ? "null" : String.Format("\"{0}\"", EscapeJsonString(match.Player2Id)));
+                sb.AppendFormat("\"winnerName\":\"{0}\",", EscapeJsonString(match.WinnerName ?? ""));
+                sb.AppendFormat("\"winner_id\":{0},", match.WinnerId == null ? "null" : String.Format("\"{0}\"", EscapeJsonString(match.WinnerId)));
+                sb.AppendFormat("\"arenaName\":\"{0}\",", EscapeJsonString(match.ArenaName ?? ""));
+                
+                // Add rounds array
+                sb.Append("\"rounds\":[");
+                
+                if (match.Rounds != null && match.Rounds.Count > 0)
+                {
+                    for (int i = 0; i < match.Rounds.Count; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        
+                        var round = match.Rounds[i];
+                        sb.Append("{");
+                        sb.AppendFormat("\"winnerName\":\"{0}\",", EscapeJsonString(round.WinnerName ?? ""));
+                        sb.AppendFormat("\"loserName\":\"{0}\",", EscapeJsonString(round.LoserName ?? ""));
+                        sb.AppendFormat("\"winnerHpLeft\":{0},", round.WinnerHpLeft);
+                        sb.AppendFormat("\"loserHpLeft\":{0},", round.LoserHpLeft);
+                        sb.AppendFormat("\"durationSeconds\":{0},", round.DurationSeconds);
+                        
+                        // Add kills array
+                        sb.Append("\"kills\":[");
+                        if (round.Kills != null && round.Kills.Count > 0)
+                        {
+                            for (int j = 0; j < round.Kills.Count; j++)
+                            {
+                                if (j > 0) sb.Append(",");
+                                
+                                var kill = round.Kills[j];
+                                sb.Append("{");
+                                sb.AppendFormat("\"killerName\":\"{0}\",", EscapeJsonString(kill.KillerName ?? ""));
+                                sb.AppendFormat("\"victimName\":\"{0}\",", EscapeJsonString(kill.VictimName ?? ""));
+                                sb.AppendFormat("\"weaponUsed\":\"{0}\",", EscapeJsonString(kill.WeaponUsed ?? ""));
+                                sb.AppendFormat("\"damageDealt\":{0},", kill.DamageDealt);
+                                sb.AppendFormat("\"victimHpBefore\":{0},", kill.VictimHpBefore);
+                                sb.AppendFormat("\"victimHpAfter\":{0},", kill.VictimHpAfter);
+                                sb.AppendFormat("\"shotsFired\":{0},", kill.ShotsFired);
+                                sb.AppendFormat("\"shotsHit\":{0},", kill.ShotsHit);
+                                sb.AppendFormat("\"isDoubleHit\":{0},", kill.IsDoubleHit.ToString().ToLower());
+                                sb.AppendFormat("\"isTripleHit\":{0}", kill.IsTripleHit.ToString().ToLower());
+                                sb.Append("}");
+                            }
+                        }
+                        sb.Append("]}");
+                    }
+                }
+                
+                sb.Append("]}");
+                
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error building match JSON: {0}", ex.Message));
+                return "{}";
+            }
+        }
+
+        private static string EscapeJsonString(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+
+            return input.Replace("\\", "\\\\")
+                       .Replace("\"", "\\\"")
+                       .Replace("\n", "\\n")
+                       .Replace("\r", "\\r")
+                       .Replace("\t", "\\t");
         }
     }
 
