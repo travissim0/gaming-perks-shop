@@ -52,6 +52,9 @@ interface LeaderboardResponse {
 }
 
 const SORT_OPTIONS = [
+  { value: 'weighted_elo', label: 'ELO Rating' },
+  { value: 'elo_rating', label: 'Raw ELO' },
+  { value: 'elo_peak', label: 'Peak ELO' },
   { value: 'total_kills', label: 'Total Kills' },
   { value: 'total_deaths', label: 'Total Deaths' },
   { value: 'kill_death_ratio', label: 'K/D Ratio' },
@@ -77,7 +80,7 @@ export default function PlayerStatsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState('all');
-  const [sortBy, setSortBy] = useState('total_kills');
+  const [sortBy, setSortBy] = useState('weighted_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFilter, setDateFilter] = useState('all');
   const [playerName, setPlayerName] = useState('');

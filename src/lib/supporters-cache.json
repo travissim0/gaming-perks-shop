@@ -1,0 +1,179 @@
+{
+  "lastUpdated": "2025-06-13T00:25:00.000Z",
+  "topSupporters": [
+    {
+      "id": "1",
+      "rank": 1,
+      "name": "Zmn",
+      "amount": 121,
+      "currency": "usd",
+      "medal": "🥇",
+      "message": "ez dila",
+      "date": "2025-06-12T04:25:29.442Z",
+      "isHighlighted": true
+    },
+    {
+      "id": "2", 
+      "rank": 2,
+      "name": "Kurrupter",
+      "amount": 120,
+      "currency": "usd", 
+      "medal": "🥈",
+      "message": "",
+      "date": "2025-06-12T01:25:29.442Z",
+      "isHighlighted": true
+    },
+    {
+      "id": "3",
+      "rank": 3,
+      "name": "Worth",
+      "amount": 110,
+      "currency": "usd",
+      "medal": "🥉",
+      "message": "Thanks for all your hard work.",
+      "date": "2025-06-10T00:07:06.896Z",
+      "isHighlighted": true
+    },
+    {
+      "id": "4",
+      "rank": 4,
+      "name": "Fausto",
+      "amount": 100,
+      "currency": "usd", 
+      "medal": "🏅",
+      "message": "Thank you Axidus",
+      "date": "2025-06-08T16:15:12.001Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "5",
+      "rank": 5,
+      "name": "mbx",
+      "amount": 50,
+      "currency": "usd",
+      "medal": "🏅", 
+      "message": "thanks for all that you are doing",
+      "date": "2025-06-08T14:22:12.001Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "6",
+      "rank": 6,
+      "name": "victim", 
+      "amount": 50,
+      "currency": "usd",
+      "medal": "🏅",
+      "message": "",
+      "date": "2025-06-08T12:32:05.306Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "7",
+      "rank": 7,
+      "name": "Trouble (MG)",
+      "amount": 50,
+      "currency": "usd",
+      "medal": "🏅",
+      "message": "",
+      "date": "2025-05-11T18:22:12.001Z", 
+      "isHighlighted": false
+    },
+    {
+      "id": "8",
+      "rank": 8,
+      "name": "CT",
+      "amount": 40,
+      "currency": "usd",
+      "medal": "🏅",
+      "message": "CT donates from M-1 Force pool",
+      "date": "2025-06-08T10:49:56.912Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "9",
+      "rank": 9,
+      "name": "Decker", 
+      "amount": 25,
+      "currency": "usd",
+      "medal": "🏅",
+      "message": "",
+      "date": "2025-05-11T14:22:12.001Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "10",
+      "rank": 10,
+      "name": "Keyser",
+      "amount": 15,
+      "currency": "usd",
+      "medal": "🏅", 
+      "message": "",
+      "date": "2025-06-09T15:32:05.306Z",
+      "isHighlighted": false
+    },
+    {
+      "id": "11",
+      "rank": 11,
+      "name": "ThiZ",
+      "amount": 10,
+      "currency": "usd",
+      "medal": "🏅", 
+      "message": "",
+      "date": "2025-06-01T12:15:12.001Z",
+      "isHighlighted": false
+    }
+  ],
+  "recentSupporters": [
+    {
+      "id": "recent-1",
+      "name": "Zmn", 
+      "amount": 121,
+      "currency": "usd",
+      "message": "ez dila",
+      "date": "2025-06-12T04:25:29.442Z"
+    },
+    {
+      "id": "recent-2",
+      "name": "Kurrupter",
+      "amount": 120, 
+      "currency": "usd",
+      "message": "",
+      "date": "2025-06-12T01:25:29.442Z"
+    },
+    {
+      "id": "recent-3",
+      "name": "Worth",
+      "amount": 110,
+      "currency": "usd", 
+      "message": "Thanks for all your hard work.",
+      "date": "2025-06-10T00:07:06.896Z"
+    },
+    {
+      "id": "recent-4",
+      "name": "Fausto",
+      "amount": 100,
+      "currency": "usd",
+      "message": "Thank you Avivist",
+      "date": "2025-06-08T16:15:12.001Z"
+    },
+    {
+      "id": "recent-5", 
+      "name": "mbx",
+      "amount": 50,
+      "currency": "usd",
+      "message": "thanks for all that you are doing",
+      "date": "2025-06-08T14:22:12.001Z"  
+    }
+  ],
+  "stats": {
+    "totalAmount": 691,
+    "totalSupporters": 11,
+    "thisMonthAmount": 351,
+    "averageDonation": 63,
+    "largestContribution": {
+      "name": "Zmn",
+      "amount": 121,
+      "message": "ez dila"
+    }
+  }
+} 

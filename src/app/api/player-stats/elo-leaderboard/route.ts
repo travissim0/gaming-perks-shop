@@ -1,0 +1,191 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    
+    // Parse query parameters
+    const gameMode = searchParams.get('gameMode') || 'all';
+    const sortBy = searchParams.get('sortBy') || 'weighted_elo';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const offset = parseInt(searchParams.get('offset') || '0');
+    const minGames = parseInt(searchParams.get('minGames') || '3');
+    const playerName = searchParams.get('playerName') || '';
+
+    console.log('ELO Leaderboard query:', {
+      gameMode,
+      sortBy,
+      sortOrder,
+      limit,
+      offset,
+      minGames,
+      playerName
+    });
+
+    // Build the query
+    let query = supabase
+      .from('elo_leaderboard')
+      .select('*');
+
+    // Apply filters
+    if (gameMode !== 'all') {
+      query = query.eq('game_mode', gameMode);
+    }
+
+    if (minGames > 0) {
+      query = query.gte('total_games', minGames);
+    }
+
+    if (playerName) {
+      query = query.ilike('player_name', `%${playerName}%`);
+    }
+
+    // Apply sorting
+    const validSortColumns = [
+      'weighted_elo', 'elo_rating', 'elo_confidence', 'elo_peak',
+      'total_games', 'win_rate', 'kill_death_ratio', 'last_game_date',
+      'elo_rank', 'overall_elo_rank'
+    ];
+
+    if (validSortColumns.includes(sortBy)) {
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+    } else {
+      // Default sort by weighted ELO
+      query = query.order('weighted_elo', { ascending: false });
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('ELO leaderboard query error:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch ELO leaderboard' },
+        { status: 500 }
+      );
+    }
+
+    // Get total count for pagination
+    let countQuery = supabase
+      .from('elo_leaderboard')
+      .select('*', { count: 'exact', head: true });
+
+    if (gameMode !== 'all') {
+      countQuery = countQuery.eq('game_mode', gameMode);
+    }
+    if (minGames > 0) {
+      countQuery = countQuery.gte('total_games', minGames);
+    }
+    if (playerName) {
+      countQuery = countQuery.ilike('player_name', `%${playerName}%`);
+    }
+
+    const { count } = await countQuery;
+
+    // Format the response data
+    const formattedData = data?.map((player, index) => ({
+      ...player,
+      // Add display rank based on current page
+      display_rank: offset + index + 1,
+      // Format ELO ratings
+      elo_rating: parseFloat(player.elo_rating || 0).toFixed(0),
+      weighted_elo: parseFloat(player.weighted_elo || 0).toFixed(0),
+      elo_peak: parseFloat(player.elo_peak || 0).toFixed(0),
+      elo_confidence: parseFloat(player.elo_confidence || 0).toFixed(3),
+      // Format other stats
+      win_rate: parseFloat(player.win_rate || 0).toFixed(3),
+      kill_death_ratio: parseFloat(player.kill_death_ratio || 0).toFixed(2),
+      // Add ELO tier
+      elo_tier: getEloTier(parseFloat(player.weighted_elo || 1200))
+    })) || [];
+
+    return NextResponse.json({
+      data: formattedData,
+      pagination: {
+        total: count || 0,
+        limit,
+        offset,
+        hasMore: (offset + limit) < (count || 0)
+      },
+      filters: {
+        gameMode,
+        sortBy,
+        sortOrder,
+        minGames,
+        playerName
+      }
+    });
+
+  } catch (error) {
+    console.error('ELO leaderboard API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Get ELO tier based on rating
+ */
+function getEloTier(elo: number): { name: string; color: string; min: number; max: number } {
+  const tiers = [
+    { name: 'Unranked', color: '#6B7280', min: 0, max: 999 },
+    { name: 'Bronze', color: '#CD7F32', min: 1000, max: 1199 },
+    { name: 'Silver', color: '#C0C0C0', min: 1200, max: 1399 },
+    { name: 'Gold', color: '#FFD700', min: 1400, max: 1599 },
+    { name: 'Platinum', color: '#E5E4E2', min: 1600, max: 1799 },
+    { name: 'Diamond', color: '#B9F2FF', min: 1800, max: 1999 },
+    { name: 'Master', color: '#FF6B6B', min: 2000, max: 2199 },
+    { name: 'Grandmaster', color: '#9B59B6', min: 2200, max: 2399 },
+    { name: 'Legend', color: '#F39C12', min: 2400, max: 2800 }
+  ];
+
+  return tiers.find(tier => elo >= tier.min && elo <= tier.max) || tiers[0];
+}
+
+// Also handle POST for ELO recalculation (admin only)
+export async function POST(request: NextRequest) {
+  try {
+    const { action } = await request.json();
+
+    if (action === 'recalculate') {
+      // Call the recalculation function
+      const { data, error } = await supabase.rpc('recalculate_all_elo_ratings');
+
+      if (error) {
+        console.error('ELO recalculation error:', error);
+        return NextResponse.json(
+          { error: 'Failed to recalculate ELO ratings' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: data || 'ELO ratings recalculated successfully'
+      });
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid action' },
+      { status: 400 }
+    );
+
+  } catch (error) {
+    console.error('ELO recalculation API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+} 

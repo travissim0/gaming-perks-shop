@@ -144,24 +144,6 @@ export default function SquadsPage() {
     };
   }, []);
 
-  // Listen for squad membership changes from navbar approvals
-  useEffect(() => {
-    const handleSquadMembershipChange = (event: any) => {
-      console.log('Squad membership changed, refreshing squads data:', event.detail);
-      // Refresh relevant data when membership changes
-      if (user && !loading) {
-        loadUserSquad();
-        loadAllSquads();
-        loadJoinRequestsForSquad();
-      }
-    };
-
-    window.addEventListener('squadMembershipChanged', handleSquadMembershipChange);
-    return () => {
-      window.removeEventListener('squadMembershipChanged', handleSquadMembershipChange);
-    };
-  }, [user, loading]);
-
   const loadInitialData = async () => {
     if (!isMountedRef.current) return;
     
@@ -558,29 +540,15 @@ export default function SquadsPage() {
   };
 
   const loadJoinRequestsForSquad = async () => {
-    if (!user || !userSquad || !isMountedRef.current) {
-      console.log('loadJoinRequestsForSquad: Early return -', { 
-        hasUser: !!user, 
-        hasUserSquad: !!userSquad, 
-        isMounted: isMountedRef.current 
-      });
-      return;
-    }
+    if (!user || !userSquad || !isMountedRef.current) return;
 
     const userMember = userSquad.members.find(m => m.player_id === user.id);
     if (!userMember || (userMember.role !== 'captain' && userMember.role !== 'co_captain')) {
-      console.log('loadJoinRequestsForSquad: User not authorized -', { 
-        userMember: userMember?.role || 'not found',
-        canManage: userMember && ['captain', 'co_captain'].includes(userMember.role)
-      });
       return;
     }
 
-    console.log('loadJoinRequestsForSquad: Loading requests for squad:', userSquad.id, 'by', userMember.role);
-
     const { data, success } = await robustFetch(
       async () => {
-        // First get all pending invites for this squad
         const result = await supabase
           .from('squad_invites')
           .select(`
@@ -591,24 +559,8 @@ export default function SquadsPage() {
           .eq('status', 'pending')
           .gt('expires_at', new Date().toISOString());
 
-        console.log('loadJoinRequestsForSquad: Raw query result -', { 
-          data: result.data?.length || 0, 
-          error: result.error 
-        });
-        
         if (result.error) throw new Error(result.error.message);
-        
-        // Filter for self-requests (join requests) where invited_by = invited_player_id
-        const joinRequests = result.data?.filter(invite => 
-          invite.invited_by === invite.invited_player_id
-        ) || [];
-        
-        console.log('loadJoinRequestsForSquad: Filtered join requests -', { 
-          total: result.data?.length || 0,
-          joinRequests: joinRequests.length 
-        });
-        
-        return joinRequests;
+        return result.data;
       },
       { showErrorToast: false }
     );
@@ -616,16 +568,18 @@ export default function SquadsPage() {
     if (!isMountedRef.current) return;
 
     if (success && data) {
-      const formattedRequests = data.map((request: any) => ({
+      // Filter to only self-requests (where invited_by = invited_player_id)
+      const selfRequests = data.filter((request: any) => 
+        request.invited_by === request.invited_player_id
+      );
+      
+      const formattedRequests = selfRequests.map((request: any) => ({
         ...request,
-        requester_alias: request.profiles?.in_game_alias || 'Unknown'
+        requester_alias: request.profiles?.in_game_alias,
+        invited_alias: request.profiles?.in_game_alias // Add this for consistency
       }));
 
-      console.log('loadJoinRequestsForSquad: Setting join requests -', formattedRequests.length);
       setJoinRequests(formattedRequests);
-    } else {
-      console.log('loadJoinRequestsForSquad: Failed or no data -', { success, hasData: !!data });
-      setJoinRequests([]);
     }
   };
 
@@ -849,7 +803,8 @@ export default function SquadsPage() {
       // Refresh data
       await Promise.all([
         loadUserSquad(),
-        loadFreeAgents()
+        loadFreeAgents(),
+        loadJoinRequestsForSquad()
       ]);
 
       toast.success('Join request approved!');
@@ -871,48 +826,16 @@ export default function SquadsPage() {
 
       if (error) throw error;
 
-      // Refresh join requests
-      await loadJoinRequestsForSquad();
+      // Refresh join requests and related data
+      await Promise.all([
+        loadJoinRequestsForSquad(),
+        loadFreeAgents()
+      ]);
       
       toast.success('Join request denied');
     } catch (error) {
       console.error('Error denying join request:', error);
       toast.error('Error denying join request');
-    }
-  };
-
-  const requestToJoinSquad = async (squadId: string) => {
-    if (!user) {
-      toast.error('You must be logged in to request to join a squad');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('squad_invites')
-        .insert({
-          squad_id: squadId,
-          invited_player_id: user.id,
-          invited_by: user.id, // Self-request
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-        });
-
-      if (error) {
-        if (error.code === '23505') { // Unique constraint violation
-          toast.error('You already have a pending request to this squad');
-        } else {
-          throw error;
-        }
-        return;
-      }
-
-      toast.success('Join request sent successfully!');
-      
-      // Refresh data
-      await loadSentJoinRequests();
-    } catch (error) {
-      console.error('Error sending join request:', error);
-      toast.error('Failed to send join request');
     }
   };
 
@@ -1311,6 +1234,72 @@ export default function SquadsPage() {
           <p className="text-gray-400 text-lg">Form teams, compete together, dominate the battlefield</p>
         </div>
 
+        {/* Prominent Join Requests Notification for Captains/Co-Captains */}
+        {!dataLoading && userSquad && canManageSquad && joinRequests.length > 0 && (
+          <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/50 rounded-xl p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-500 text-black p-2 rounded-full">
+                  <span className="text-xl">🛡️</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-yellow-400">
+                    {joinRequests.length} Pending Join Request{joinRequests.length !== 1 ? 's' : ''}
+                  </h3>
+                  <p className="text-yellow-300/80 text-sm">
+                    Players want to join your squad [{userSquad.tag}] {userSquad.name}
+                  </p>
+                </div>
+              </div>
+              <span className="bg-yellow-500 text-black font-bold px-3 py-1 rounded-full text-sm">
+                {joinRequests.length}
+              </span>
+            </div>
+            
+            <div className="space-y-3">
+              {joinRequests.map((request) => (
+                <div key={request.id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-bold text-white text-lg">{request.invited_alias}</span>
+                        <span className="bg-green-600/20 text-green-400 px-2 py-1 rounded text-xs font-medium">
+                          WANTS TO JOIN
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-400 mb-2">
+                        Requested {new Date(request.created_at).toLocaleDateString()} • 
+                        Expires {new Date(request.expires_at).toLocaleDateString()}
+                      </div>
+                      {request.message && (
+                        <div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded mb-3 border-l-4 border-yellow-500">
+                          <span className="font-medium text-yellow-400">Message:</span> "{request.message}"
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 sm:flex-shrink-0">
+                      <button
+                        onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
+                        className="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                      >
+                        <span>✅</span>
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => denyJoinRequest(request.id)}
+                        className="flex-1 sm:flex-none bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                      >
+                        <span>❌</span>
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* User's Squad Section */}
         {dataLoading ? (
           <div className="bg-gray-800 rounded-lg p-6 mb-8">
@@ -1487,56 +1476,42 @@ export default function SquadsPage() {
             )}
 
             {/* Join Requests to Squad */}
-            {canManageSquad && (
+            {canManageSquad && joinRequests.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  📥 Join Requests 
-                  {joinRequests.length > 0 && (
-                    <span className="bg-green-600 text-white px-2 py-1 rounded-full text-xs">
-                      {joinRequests.length}
-                    </span>
-                  )}
-                </h3>
-                {joinRequests.length > 0 ? (
-                  <div className="grid gap-3">
-                    {joinRequests.map((request) => (
-                      <div key={request.id} className="bg-gray-700 rounded p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <span className="font-semibold text-green-400">{request.invited_alias}</span>
-                            <div className="text-sm text-gray-400 mb-2">
-                              Requested to join {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
+                <h3 className="text-xl font-semibold mb-4">Join Requests</h3>
+                <div className="grid gap-3">
+                  {joinRequests.map((request) => (
+                    <div key={request.id} className="bg-gray-700 rounded p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <span className="font-semibold text-green-400">{request.invited_alias}</span>
+                          <div className="text-sm text-gray-400 mb-2">
+                            Requested to join {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
+                          </div>
+                          {request.message && (
+                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
+                              "{request.message}"
                             </div>
-                            {request.message && (
-                              <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
-                                "{request.message}"
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 ml-4">
-                            <button
-                              onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
-                              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => denyJoinRequest(request.id)}
-                              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                            >
-                              Deny
-                            </button>
-                          </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
+                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => denyJoinRequest(request.id)}
+                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                          >
+                            Deny
+                          </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-gray-700 rounded p-4 text-center text-gray-400">
-                    <p className="text-sm">No pending join requests</p>
-                    <p className="text-xs mt-1">Players can request to join your squad from the squad list</p>
-                  </div>
-                )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1660,70 +1635,52 @@ export default function SquadsPage() {
           ) : (
             <div className="grid gap-4">
               {allSquads.map((squad) => (
-                <div key={squad.id} className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors">
-                  <div className="p-4">
-                    <div className="flex gap-4">
-                      {/* Squad Picture */}
-                      {squad.banner_url && (
-                        <div className="w-24 h-24 flex-shrink-0">
-                          <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                            <img 
-                              src={squad.banner_url} 
-                              alt={`${squad.name} picture`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.parentElement!.style.display = 'none';
-                              }}
-                            />
+                <Link key={squad.id} href={`/squads/${squad.id}`}>
+                  <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
+                    <div className="p-4">
+                      <div className="flex gap-4">
+                        {/* Squad Picture */}
+                        {squad.banner_url && (
+                          <div className="w-24 h-24 flex-shrink-0">
+                            <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
+                              <img 
+                                src={squad.banner_url} 
+                                alt={`${squad.name} picture`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.parentElement!.style.display = 'none';
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      
-                      {/* Squad Info */}
-                      <div className="flex-1 min-w-0">
-                        <Link href={`/squads/${squad.id}`}>
-                          <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate cursor-pointer">
+                        )}
+                        
+                        {/* Squad Info */}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate">
                             [{squad.tag}] {squad.name}
                           </h3>
-                        </Link>
-                        
-                        <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
-                        
-                        <div className="flex justify-between items-center mb-3">
-                          <div className="flex gap-4 text-sm text-gray-400">
-                            <span className="flex items-center gap-1">
-                              👥 {squad.member_count} members
-                            </span>
-                            <span className="flex items-center gap-1">
-                              👑 {squad.captain_alias}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(squad.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
-                          <Link href={`/squads/${squad.id}`}>
-                            <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors">
-                              View Details
-                            </button>
-                          </Link>
                           
-                          {user && !userSquad && squad.captain_id !== user.id && (
-                            <button 
-                              onClick={() => requestToJoinSquad(squad.id)}
-                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
-                            >
-                              📤 Request to Join
-                            </button>
-                          )}
+                          <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
+                          
+                          <div className="flex justify-between items-center">
+                            <div className="flex gap-4 text-sm text-gray-400">
+                              <span className="flex items-center gap-1">
+                                👥 {squad.member_count} members
+                              </span>
+                              <span className="flex items-center gap-1">
+                                👑 {squad.captain_alias}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(squad.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
               {!dataLoading && allSquads.length === 0 && (
                 <div className="text-center py-8 text-gray-400">

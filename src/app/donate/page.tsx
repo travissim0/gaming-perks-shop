@@ -7,6 +7,8 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { handleKofiRedirect } from '@/utils/deviceDetection';
 import MobilePaymentInfo from '@/components/MobilePaymentInfo';
+import { useDonationMode } from '@/hooks/useDonationMode';
+import supportersCache from '@/lib/supporters-cache.json';
 
 export default function DonatePage() {
   const { user } = useAuth();
@@ -15,7 +17,9 @@ export default function DonatePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [donationPurpose, setDonationPurpose] = useState<string>('general');
-  const [recentDonations, setRecentDonations] = useState<any[]>([]);
+  
+  // Use the donation mode hook - using 'supporters' to match the supporters page
+  const { donations: recentDonations, isUsingCache } = useDonationMode('supporters', 9);
 
   const predefinedAmounts = [5, 10, 25, 50, 100];
   
@@ -94,7 +98,7 @@ export default function DonatePage() {
     }, 1000);
   };
 
-  // Check for returning donation and fetch recent donations
+  // Check for returning donation
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const returnFromKofi = urlParams.get('return');
@@ -108,22 +112,7 @@ export default function DonatePage() {
         });
       }
     }
-
-    // Fetch recent donations for display
-    fetchRecentDonations();
   }, []);
-
-  const fetchRecentDonations = async () => {
-    try {
-      const response = await fetch('/api/recent-donations');
-      if (response.ok) {
-        const data = await response.json();
-        setRecentDonations(data.donations || []);
-      }
-    } catch (error) {
-      console.error('Error fetching recent donations:', error);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
@@ -370,9 +359,9 @@ export default function DonatePage() {
                 <div className="border-t border-gray-700/50 pt-4">
                   <h3 className="text-sm font-bold text-white mb-3 text-center">Recent Supporters</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {recentDonations.length > 0 ? (
+                    {recentDonations.length > 3 ? (
                       <>
-                        {recentDonations.slice(0, 6).map((donation, index) => {
+                        {recentDonations.slice(3, 9).map((donation, index) => {
                           const displayName = donation.customerName || 'Anonymous Supporter';
                           const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                           const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
@@ -396,7 +385,7 @@ export default function DonatePage() {
                     ) : (
                       <div className="col-span-2 text-center py-4">
                         <div className="text-lg mb-1">🤗</div>
-                        <div className="text-gray-500 text-xs">Be our first!</div>
+                        <div className="text-gray-500 text-xs">More supporters coming soon!</div>
                       </div>
                     )}
                   </div>
@@ -511,9 +500,9 @@ export default function DonatePage() {
                   <div className="col-span-1">
                     <h3 className="text-sm font-bold text-white mb-3 text-center">Recent</h3>
                     <div className="space-y-1.5">
-                      {recentDonations.length > 0 ? (
+                      {recentDonations.length > 3 ? (
                         <>
-                          {recentDonations.slice(0, 6).map((donation, index) => {
+                          {recentDonations.slice(3, 9).map((donation, index) => {
                             const displayName = donation.customerName || 'Anonymous Supporter';
                             const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                             const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
@@ -537,7 +526,7 @@ export default function DonatePage() {
                       ) : (
                         <div className="text-center py-4">
                           <div className="text-lg mb-1">🤗</div>
-                          <div className="text-gray-500 text-xs">Be our first!</div>
+                          <div className="text-gray-500 text-xs">More supporters coming soon!</div>
                         </div>
                       )}
                     </div>

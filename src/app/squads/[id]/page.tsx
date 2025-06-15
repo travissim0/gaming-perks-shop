@@ -80,45 +80,31 @@ export default function SquadDetailPage() {
     }
   }, [squadId, user, loading]);
 
-  // Listen for squad membership changes from navbar approvals
+  // Load pending requests when squad data becomes available and user is captain/co-captain
   useEffect(() => {
-    const handleSquadMembershipChange = (event: any) => {
-      console.log('Squad membership changed, refreshing data:', event.detail);
-      // Refresh all squad data when membership changes
-      loadSquadDetails();
-    };
-
-    window.addEventListener('squadMembershipChanged', handleSquadMembershipChange);
-    return () => {
-      window.removeEventListener('squadMembershipChanged', handleSquadMembershipChange);
-    };
-  }, []);
+    if (squad && user && !pageLoading) {
+      const userMember = squad.members?.find(m => m.player_id === user.id);
+      if (userMember && ['captain', 'co_captain'].includes(userMember.role)) {
+        loadPendingRequests();
+      }
+    }
+  }, [squad, user, pageLoading]);
 
   const loadAllData = async () => {
+    if (!user) return;
+    
     try {
       setPageLoading(true);
       
-      // Load all data concurrently with robust error handling
-      const results = await Promise.allSettled([
+      // Load basic squad and user data
+      await Promise.allSettled([
         loadSquadDetails(),
         loadUserSquad(),
         checkExistingRequest()
       ]);
-
-      // Check if any critical operations failed
-      const failures = results.filter(result => result.status === 'rejected');
-      if (failures.length > 0) {
-        console.warn('Some operations failed:', failures);
-      }
-
-      // Load pending requests if user is captain/co-captain (after squad loads)
-      if (squad && isUserCaptainOrCoCaptain()) {
-        await loadPendingRequests();
-      }
-
+      
     } catch (error) {
-      console.error('Error in loadAllData:', error);
-      toast.error('Failed to load page data');
+      console.error('Error loading squad data:', error);
     } finally {
       setPageLoading(false);
     }
@@ -148,12 +134,6 @@ export default function SquadDetailPage() {
     console.log('Banner URL:', squadData.banner_url);
 
     setSquad(formattedSquad);
-    
-    // Load pending requests after squad data is available
-    if (user) {
-      console.log('loadSquadDetails: Squad loaded, now loading pending requests');
-      loadPendingRequestsForSquad(formattedSquad);
-    }
   };
 
   const loadUserSquad = async () => {
@@ -194,17 +174,11 @@ export default function SquadDetailPage() {
     }
   };
 
-  const loadPendingRequestsForSquad = async (squadData: Squad) => {
-    if (!user) {
-      console.log('loadPendingRequestsForSquad: Missing user');
-      return;
-    }
-
-    console.log('loadPendingRequestsForSquad: Starting for squad', squadData.id);
+  const loadPendingRequests = async () => {
+    if (!user || !squad) return;
 
     const { data, success } = await robustFetch(
       async () => {
-        // First get all pending invites for this squad
         const result = await supabase
           .from('squad_invites')
           .select(`
@@ -215,36 +189,24 @@ export default function SquadDetailPage() {
             expires_at,
             profiles!squad_invites_invited_player_id_fkey(in_game_alias)
           `)
-          .eq('squad_id', squadData.id)
+          .eq('squad_id', squad.id)
           .eq('status', 'pending')
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false });
 
-        console.log('loadPendingRequestsForSquad: Raw query result', { 
-          data: result.data?.length || 0, 
-          error: result.error 
-        });
-
         if (result.error) throw new Error(result.error.message);
-        
-        // Filter for self-requests (join requests) where invited_by = invited_player_id
-        const joinRequests = result.data?.filter(invite => 
-          invite.invited_by === invite.invited_player_id
-        ) || [];
-        
-        console.log('loadPendingRequestsForSquad: Filtered join requests', { 
-          total: result.data?.length || 0,
-          joinRequests: joinRequests.length,
-          requests: joinRequests
-        });
-        
-        return joinRequests;
+        return result.data;
       },
       { showErrorToast: false } // Don't show toast for this optional data
     );
 
     if (success && data) {
-      const formattedRequests: PendingRequest[] = data.map((request: any) => ({
+      // Filter to only show self-requests (where invited_by = invited_player_id)
+      const selfRequests = data.filter((request: any) => 
+        request.invited_by === request.invited_player_id
+      );
+      
+      const formattedRequests: PendingRequest[] = selfRequests.map((request: any) => ({
         id: request.id,
         invited_player_id: request.invited_player_id,
         invited_by: request.invited_by,
@@ -253,20 +215,8 @@ export default function SquadDetailPage() {
         requester_alias: request.profiles?.in_game_alias || 'Unknown'
       }));
 
-      console.log('loadPendingRequestsForSquad: Setting formatted requests', formattedRequests);
       setPendingRequests(formattedRequests);
-    } else {
-      console.log('loadPendingRequestsForSquad: Failed or no data', { success, hasData: !!data });
-      setPendingRequests([]);
     }
-  };
-
-  const loadPendingRequests = async () => {
-    if (!squad) {
-      console.log('loadPendingRequests: No squad data available');
-      return;
-    }
-    return loadPendingRequestsForSquad(squad);
   };
 
   const requestToJoin = async () => {
@@ -340,10 +290,11 @@ export default function SquadDetailPage() {
     if (success) {
       toast.success(`Request ${action === 'approve' ? 'approved' : 'denied'} successfully!`);
       
-      // Refresh data
+      // Refresh all relevant data
       await Promise.allSettled([
         loadSquadDetails(),
-        loadPendingRequests()
+        loadPendingRequests(),
+        loadUserSquad()
       ]);
     }
 
@@ -351,18 +302,9 @@ export default function SquadDetailPage() {
   };
 
   const isUserCaptainOrCoCaptain = () => {
-    if (!squad || !user) {
-      console.log('isUserCaptainOrCoCaptain: Missing data', { squad: !!squad, user: !!user });
-      return false;
-    }
+    if (!squad || !user) return false;
     const userMember = squad.members.find(m => m.player_id === user.id);
-    const hasPermission = userMember && (userMember.role === 'captain' || userMember.role === 'co_captain');
-    console.log('isUserCaptainOrCoCaptain: Permission check', { 
-      userId: user.id, 
-      userMember: userMember?.role, 
-      hasPermission 
-    });
-    return hasPermission;
+    return userMember && (userMember.role === 'captain' || userMember.role === 'co_captain');
   };
 
   const canRequestToJoin = () => {
@@ -695,11 +637,7 @@ export default function SquadDetailPage() {
           </div>
 
           {/* Pending Requests Section (Captain/Co-Captain Only) */}
-          {(() => {
-            const canManage = isUserCaptainOrCoCaptain();
-            console.log('Rendering join requests section', { canManage, pendingRequestsCount: pendingRequests.length });
-            return canManage;
-          })() && (
+          {isUserCaptainOrCoCaptain() && (
             <div>
               <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
                 <h3 className="text-xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
