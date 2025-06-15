@@ -372,9 +372,310 @@ public class PhraseExplosionManager
 }
 
 // Extension method to create custom explosion text
-public static class ExplosionHelper
-{
-    public static async Task CreateCustomExplosion(Arena arena, Player killerPlayer, short posX, short posY, short posZ)
+    public class ProductPurchaseManager
+    {
+        private static readonly HttpClient httpClient = new HttpClient();
+        private static Dictionary<string, List<string>> playerPurchases = new Dictionary<string, List<string>>();
+        private static DateTime lastCacheUpdate = DateTime.MinValue;
+        private static readonly TimeSpan cacheExpiryTime = TimeSpan.FromMinutes(10); // Cache for 10 minutes
+        
+        // Your Supabase configuration (same as phrase manager)
+        private const string SUPABASE_URL = "https://nkinpmqnbcjaftqduujf.supabase.co";
+        private const string SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5raW5wbXFuYmNqYWZ0cWR1dWpmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODEyMDQ3NiwiZXhwIjoyMDYzNjk2NDc2fQ.u8bPszZSVGJku44KFKyRszfL2lZVwv4-EBYc3dgezK4";
+        private const string PURCHASES_API_ENDPOINT = SUPABASE_URL + "/rest/v1/rpc/get_player_product_purchases";
+        
+        /// <summary>
+        /// Item alias mappings - maps short names to full item names
+        /// </summary>
+        private static readonly Dictionary<string, string> ITEM_ALIASES = new Dictionary<string, string>
+        {
+            { "caw", "Kuchler A6 CAW" },
+            { "ar", "Assault Rifle" },
+            { "rpg", "RPG" },
+            // Add more aliases as needed
+        };
+
+        /// <summary>
+        /// Product conversion mappings - add new products here
+        /// </summary>
+        private static readonly Dictionary<string, Dictionary<string, string>> PRODUCT_CONVERSIONS = new Dictionary<string, Dictionary<string, string>>
+        {
+            {
+                "rainbow_caw", new Dictionary<string, string>
+                {
+                    { "Kuchler A6 CAW", "Rainbow CAW" },
+                    { "kuchler a6 caw", "Rainbow CAW" },
+                    { "caw", "Rainbow CAW" }
+                }
+            }
+            // Add more products here as needed:
+            // {
+            //     "premium_rifle", new Dictionary<string, string>
+            //     {
+            //         { "Assault Rifle", "Premium AR" }
+            //     }
+            // }
+        };
+
+        public static async Task<List<string>> GetPlayerProducts(string playerAlias)
+        {
+            try
+            {
+                // Check if cache needs refreshing
+                if (DateTime.Now - lastCacheUpdate > cacheExpiryTime)
+                {
+                    await RefreshPurchasesCache();
+                }
+                
+                // Return products if found, otherwise return empty list
+                if (playerPurchases.ContainsKey(playerAlias.ToLower()))
+                {
+                    return playerPurchases[playerAlias.ToLower()];
+                }
+                
+                return new List<string>(); // No products found
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error getting player products for {0}: {1}", playerAlias, ex.Message));
+                return new List<string>(); // Return empty list on error
+            }
+        }
+
+        public static async Task<bool> HasPlayerPurchased(string playerAlias, string productName)
+        {
+            var products = await GetPlayerProducts(playerAlias);
+            return products.Any(p => p.Equals(productName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static async Task RefreshPurchasesCache()
+        {
+            try
+            {
+                using (var handler = new HttpClientHandler())
+                {
+                    handler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+                    handler.SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13;
+                    
+                    using (var client = new HttpClient(handler))
+                    {
+                        client.Timeout = TimeSpan.FromSeconds(30);
+                        
+                        client.DefaultRequestHeaders.Add("User-Agent", "CTF-Game/1.0");
+                        client.DefaultRequestHeaders.Add("apikey", SUPABASE_SERVICE_ROLE_KEY);
+                        client.DefaultRequestHeaders.Add("Authorization", string.Format("Bearer {0}", SUPABASE_SERVICE_ROLE_KEY));
+                        
+                        var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+                        
+                        Console.WriteLine(string.Format("Refreshing product purchases cache from: {0}", PURCHASES_API_ENDPOINT));
+                        
+                        var response = await client.PostAsync(PURCHASES_API_ENDPOINT, content);
+                        
+                        if (response.IsSuccessStatusCode)
+                        {
+                            string jsonResponse = await response.Content.ReadAsStringAsync();
+                            var purchases = ParsePurchasesJson(jsonResponse);
+                            
+                            // Update cache
+                            playerPurchases.Clear();
+                            foreach (var purchase in purchases)
+                            {
+                                if (!string.IsNullOrEmpty(purchase.PlayerAlias) && !string.IsNullOrEmpty(purchase.ProductName))
+                                {
+                                    string playerKey = purchase.PlayerAlias.ToLower();
+                                    if (!playerPurchases.ContainsKey(playerKey))
+                                        playerPurchases[playerKey] = new List<string>();
+                                    
+                                    playerPurchases[playerKey].Add(purchase.ProductName);
+                                }
+                            }
+                            
+                            lastCacheUpdate = DateTime.Now;
+                            Console.WriteLine(string.Format("Product purchases cache refreshed: {0} players with purchases", playerPurchases.Count));
+                        }
+                        else
+                        {
+                            string errorContent = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine(string.Format("HTTP Error {0}: {1}", response.StatusCode, errorContent));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error refreshing purchases cache: {0}", ex.Message));
+            }
+        }
+
+        private static List<ProductPurchase> ParsePurchasesJson(string json)
+        {
+            var purchases = new List<ProductPurchase>();
+            
+            try
+            {
+                // Simple JSON parsing similar to phrase manager
+                json = json.Trim();
+                if (json.StartsWith("[") && json.EndsWith("]"))
+                {
+                    json = json.Substring(1, json.Length - 2); // Remove array brackets
+                    
+                    var objects = SplitJsonObjects(json);
+                    foreach (var obj in objects)
+                    {
+                        var purchase = ParseSinglePurchase(obj);
+                        if (purchase != null)
+                            purchases.Add(purchase);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error parsing purchases JSON: {0}", ex.Message));
+            }
+            
+            return purchases;
+        }
+
+        private static List<string> SplitJsonObjects(string json)
+        {
+            var objects = new List<string>();
+            int depth = 0;
+            int startIndex = 0;
+            
+            for (int i = 0; i < json.Length; i++)
+            {
+                if (json[i] == '{')
+                    depth++;
+                else if (json[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        objects.Add(json.Substring(startIndex, i - startIndex + 1));
+                        // Skip comma and whitespace
+                        while (i + 1 < json.Length && (json[i + 1] == ',' || char.IsWhiteSpace(json[i + 1])))
+                            i++;
+                        startIndex = i + 1;
+                    }
+                }
+            }
+            
+            return objects;
+        }
+
+        private static ProductPurchase ParseSinglePurchase(string json)
+        {
+            try
+            {
+                var purchase = new ProductPurchase();
+                
+                // Extract player_alias
+                purchase.PlayerAlias = ExtractJsonValue(json, "player_alias");
+                if (string.IsNullOrEmpty(purchase.PlayerAlias))
+                    purchase.PlayerAlias = ExtractJsonValue(json, "in_game_alias");
+                
+                // Extract product_name
+                purchase.ProductName = ExtractJsonValue(json, "product_name");
+                if (string.IsNullOrEmpty(purchase.ProductName))
+                    purchase.ProductName = ExtractJsonValue(json, "product");
+                
+                return purchase;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error parsing single purchase: {0}", ex.Message));
+                return null;
+            }
+        }
+
+        private static string ExtractJsonValue(string json, string key)
+        {
+            try
+            {
+                string pattern = "\"" + key + "\"";
+                int keyIndex = json.IndexOf(pattern);
+                if (keyIndex == -1)
+                    return null;
+                
+                int colonIndex = json.IndexOf(':', keyIndex);
+                if (colonIndex == -1)
+                    return null;
+                
+                int valueStart = colonIndex + 1;
+                while (valueStart < json.Length && char.IsWhiteSpace(json[valueStart]))
+                    valueStart++;
+                
+                if (valueStart >= json.Length)
+                    return null;
+                
+                if (json[valueStart] == '"')
+                {
+                    // String value
+                    valueStart++;
+                    int valueEnd = valueStart;
+                    while (valueEnd < json.Length && json[valueEnd] != '"')
+                        valueEnd++;
+                    
+                    if (valueEnd < json.Length)
+                        return json.Substring(valueStart, valueEnd - valueStart);
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error extracting JSON value for key {0}: {1}", key, ex.Message));
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the converted item name if player has purchased the product
+        /// </summary>
+        public static async Task<string> GetConvertedItemName(string playerAlias, string originalItemName)
+        {
+            try
+            {
+                var playerProducts = await GetPlayerProducts(playerAlias);
+                
+                // Check each product the player has purchased
+                foreach (var product in playerProducts)
+                {
+                    if (PRODUCT_CONVERSIONS.ContainsKey(product.ToLower()))
+                    {
+                        var conversions = PRODUCT_CONVERSIONS[product.ToLower()];
+                        if (conversions.ContainsKey(originalItemName))
+                        {
+                            return conversions[originalItemName];
+                        }
+                    }
+                }
+                
+                return originalItemName; // No conversion found
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error getting converted item for {0}: {1}", playerAlias, ex.Message));
+                return originalItemName; // Return original on error
+            }
+        }
+
+        public static async Task ForceRefreshCache()
+        {
+            lastCacheUpdate = DateTime.MinValue;
+            await RefreshPurchasesCache();
+        }
+    }
+
+    public class ProductPurchase
+    {
+        public string PlayerAlias { get; set; }
+        public string ProductName { get; set; }
+    }
+
+    public static class ExplosionHelper
+    {
+        public static async Task CreateCustomExplosion(Arena arena, Player killerPlayer, short posX, short posY, short posZ)
     {
         try
         {
@@ -3262,6 +3563,47 @@ private void LoadState(string stateName)
         /// <summary>
         /// Converts specific mine types in a player's inventory to their alternate versions
         /// </summary>
+        /// <summary>
+        /// Converts items in player's inventory based on their product purchases
+        /// </summary>
+        private async Task ConvertProductPurchaseItems(Player player)
+        {
+            try
+            {
+                // Get a copy of the inventory to avoid modification during iteration
+                var inventoryItems = player._inventory.Values.ToList();
+                
+                foreach (var inventoryEntry in inventoryItems)
+                {
+                    string originalItemName = inventoryEntry.item.name;
+                    int quantity = inventoryEntry.quantity;
+                    
+                    // Check if this item can be converted
+                    string convertedItemName = await ProductPurchaseManager.GetConvertedItemName(player._alias, originalItemName);
+                    
+                    if (!convertedItemName.Equals(originalItemName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Item can be converted
+                        ItemInfo convertedItem = AssetManager.Manager.getItemByName(convertedItemName);
+                        if (convertedItem != null)
+                        {
+                            // Remove the original item
+                            player.inventoryModify(inventoryEntry.item, -quantity);
+                            
+                            // Add the converted item
+                            player.inventoryModify(convertedItem, quantity);
+                            
+                            player.sendMessage(0, string.Format("&Converted {0}x {1} to {2}! (Premium Product)", quantity, originalItemName, convertedItemName));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error in ConvertProductPurchaseItems for {0}: {1}", player._alias, ex.Message));
+            }
+        }
+
         private void ConvertChampItems(Player player)
         {
             // Check if the inventory is not empty
@@ -3384,12 +3726,10 @@ private void LoadState(string stateName)
         }
 
         /// <summary>
-        /// Triggered when a player fires a weapon, intercepts the update packet
+        /// Helper method for weapon conversion (moved from removed Player.Update handler)
         /// </summary>
-        [Scripts.Event("Player.Update")]
-        public bool handlePlayerUpdate(Player player, CS_PlayerUpdate update)
+        private bool HandleWeaponConversion(Player player, CS_PlayerUpdate update)
         {
-            player.sendMessage(0, "Update event triggered");
             // Check if the player is firing an item
             if (update.itemID != 0)
             {
@@ -6093,7 +6433,7 @@ private Player FindPlayerByAlias(string alias)
             /// <summary>
             /// Dictionary to store the key-value pairs for the short command
             /// </summary>
-            private Dictionary<string, string> shortCommands = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            public Dictionary<string, string> shortCommands = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Fuel Canister", "@fc" },
                 { "Gas Canister", "@gc" },
@@ -6811,7 +7151,7 @@ private Player FindPlayerByAlias(string alias)
                     // Dictionary to persist swing data between commands
             private Dictionary<string, string> swingDictionary = new Dictionary<string, string>();
 
-        private void HandleBuildCommand(Player player, string buildName, bool ignoreStoreCheck = false)
+        private async Task HandleBuildCommand(Player player, string buildName, bool ignoreStoreCheck = false)
         {
             // Can you buy from this location?
             if ((player._arena.getTerrain(player._state.positionX, player._state.positionY).storeEnabled) || (player._team.IsSpec && player._server._zoneConfig.arena.spectatorStore) || ignoreStoreCheck)
@@ -6974,6 +7314,28 @@ private Player FindPlayerByAlias(string alias)
                             ItemInfo prize = AssetManager.Manager.getItemByName(item.Item1);
                             if (prize != null)
                             {
+                                // Check for product conversions (like Rainbow CAW) in builds too
+                                try
+                                {
+                                    string convertedItemName = await ProductPurchaseManager.GetConvertedItemName(player._alias, prize.name);
+                                    
+                                    // If conversion happened, get the new item
+                                    if (!convertedItemName.Equals(prize.name, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        ItemInfo convertedItem = AssetManager.Manager.getItemByName(convertedItemName);
+                                        if (convertedItem != null)
+                                        {
+                                            prize = convertedItem;
+                                            player.sendMessage(0, string.Format("&Converted to {0}! (Premium Product)", convertedItemName));
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine(string.Format("Error checking product conversion in build for {0}: {1}", player._alias, ex.Message));
+                                    // Continue with original item if conversion fails
+                                }
+
                                 if (FiniteResourceItemIDs.Contains(prize.id))
                                 {
                                     continue;
@@ -7006,9 +7368,47 @@ private Player FindPlayerByAlias(string alias)
                     else
                     {
                         // Handle store item logic
+                        // First, try to find the item as-is (this handles Multi-Items like "caw")
                         ItemInfo storeItem = AssetManager.Manager.getItemByName(itemName);
+                        
+                        // If not found, try to convert short command to full item name
+                        if (storeItem == null)
+                        {
+                            var shortToFullMapping = commandHandler.shortCommands.FirstOrDefault(kvp => 
+                                kvp.Value.Equals(itemName, StringComparison.OrdinalIgnoreCase));
+                            
+                            if (!shortToFullMapping.Equals(default(KeyValuePair<string, string>)))
+                            {
+                                string fullItemName = shortToFullMapping.Key;
+                                storeItem = AssetManager.Manager.getItemByName(fullItemName);
+                            }
+                        }
                         if (storeItem != null)
-                        {                      
+                        {
+                            // Check for product conversions (like Rainbow CAW)
+                            string finalItemName = storeItem.name;
+                            try
+                            {
+                                // Get converted item name based on player's purchases
+                                finalItemName = await ProductPurchaseManager.GetConvertedItemName(player._alias, storeItem.name);
+                                
+                                // If conversion happened, get the new item
+                                if (!finalItemName.Equals(storeItem.name, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    ItemInfo convertedItem = AssetManager.Manager.getItemByName(finalItemName);
+                                    if (convertedItem != null)
+                                    {
+                                        storeItem = convertedItem;
+                                        player.sendMessage(0, string.Format("&Converted to {0}! (Premium Product)", finalItemName));
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine(string.Format("Error checking product conversion for {0}: {1}", player._alias, ex.Message));
+                                // Continue with original item if conversion fails
+                            }
+                                      
                             // Determine if the command specifies fixed quantity or additive quantity
                             bool isFixed = quantitySpecifier.StartsWith("#");
                             int quantity = int.Parse(quantitySpecifier.TrimStart('#'));
@@ -7037,12 +7437,8 @@ private Player FindPlayerByAlias(string alias)
                                 // Additive quantity logic: Just add the amount to inventory
                                 player.inventoryModify(storeItem, quantity);
                             }
-                        }
-                        else
-                        {
-                            player.sendMessage(-1, "Item '" + itemName + "' not found.");
-                        }
-                            // Check if this is a powercell purchase
+                            
+                            // Check if this is a powercell purchase and handle energy addition
                             bool isPowercell = itemName.Equals("cellh", StringComparison.OrdinalIgnoreCase) ||
                                              itemName.Equals("cellm", StringComparison.OrdinalIgnoreCase) ||
                                              itemName.Equals("celll", StringComparison.OrdinalIgnoreCase) ||
@@ -7077,6 +7473,11 @@ private Player FindPlayerByAlias(string alias)
                                     //player.sendMessage(0, string.Format("~{0} energy added to your energy.", energyToAdd));
                                 }
                             }
+                        }
+                        else
+                        {
+                            player.sendMessage(-1, "Item '" + itemName + "' not found.");
+                        }
                     }
                 }
                 Dictionary<string, int> conversions = GetChampionConversionsForPlayer(player);
@@ -7089,6 +7490,9 @@ private Player FindPlayerByAlias(string alias)
                         ConvertChampItems(player);
                     }
                 }
+                
+                // Also check for product purchase conversions (like Rainbow CAW)
+                await ConvertProductPurchaseItems(player);
                 
                 // Only set persistent build for custom builds, not for named builds or commands
                 if (!buildSets.ContainsKey(buildName))
@@ -7121,7 +7525,7 @@ private Player FindPlayerByAlias(string alias)
         private Dictionary<Player, string> lastUsedBuild = new Dictionary<Player, string>();
 
         // Wipes inventory, then buys the build
-        private void WipeAndBuy(Player player, string buildName, bool ignoreStoreCheck = false)
+        private async Task WipeAndBuy(Player player, string buildName, bool ignoreStoreCheck = false)
         {
             int terrainID = player._arena.getTerrainID(player._state.positionX, player._state.positionY);
             if (terrainID == 4 || terrainID == 3 || terrainID == 1 || terrainID == 2 || player.IsSpectator || ignoreStoreCheck){
@@ -7154,20 +7558,20 @@ private Player FindPlayerByAlias(string alias)
             // Handle the case where buildName is "random"
             if (string.IsNullOrWhiteSpace(buildName) || buildName.ToLower() == "random")
             {
-                HandleBuildCommand(player, "random");
+                await HandleBuildCommand(player, "random");
                 return;
             }
 
             if (ignoreStoreCheck){
-                HandleBuildCommand(player, buildName, true);
+                await HandleBuildCommand(player, buildName, true);
             } else {
-                HandleBuildCommand(player, buildName);
+                await HandleBuildCommand(player, buildName);
             }
             return;
         }
 
         // Wipes inventory, buys the build, and fills up all possible ammo types to their maximum
-        private void WipeBuyAndMaxAmmo(Player player, string buildName)
+        private async Task WipeBuyAndMaxAmmo(Player player, string buildName)
         {
             int terrainID = player._arena.getTerrainID(player._state.positionX, player._state.positionY);
             if (terrainID == 4 || terrainID == 3 || terrainID == 1 || terrainID == 2 || player.IsSpectator){
@@ -7205,13 +7609,13 @@ private Player FindPlayerByAlias(string alias)
             if (string.IsNullOrWhiteSpace(buildName) || buildName.ToLower() == "random")
             {
 
-                HandleBuildCommand(player, "random");
+                await HandleBuildCommand(player, "random");
                 MaxOutAmmo(player);
                 return;
             }
 
             // Buy the build
-            HandleBuildCommand(player, buildName);
+            await HandleBuildCommand(player, buildName);
 
             // Fill up all possible ammo types to their maximum
             MaxOutAmmo(player);
@@ -7624,6 +8028,52 @@ private Player FindPlayerByAlias(string alias)
             return;
         }
 
+        /// <summary>
+        /// Smart polling for dueling tiles - only checks when there are potential duelers
+        /// </summary>
+        public void pollDuelingTiles()
+        {
+            try
+            {
+                // Only check if there are at least 2 players who could potentially duel
+                var potentialDuelers = arena.PlayersIngame.Where(p => 
+                    !GetPrimarySkillName(p).Equals("Dueler", StringComparison.OrdinalIgnoreCase) || 
+                    GetPrimarySkillName(p).Equals("Dueler", StringComparison.OrdinalIgnoreCase)).ToList();
+                
+                if (potentialDuelers.Count < 2)
+                    return; // Not enough players to duel
+                
+                // Check each player's position for tile proximity
+                foreach (var player in potentialDuelers)
+                {
+                    if (player._state != null)
+                    {
+                        // Convert player position to tile coordinates
+                        short tileX = (short)(player._state.positionX / 16);
+                        short tileY = (short)(player._state.positionY / 16);
+                        
+                        // Use the existing dueling system's tile handling
+                        Task.Run(async () => {
+                            try
+                            {
+                                await CTFGameType.DuelingSystem.HandleTileStep(player, tileX, tileY);
+                                CTFGameType.DuelingSystem.HandleTileLeave(player, tileX, tileY);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine(string.Format("Error in pollDuelingTiles for player {0}: {1}", 
+                                    player._alias, ex.Message));
+                            }
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("Error in pollDuelingTiles: {0}", ex.Message));
+            }
+        }
+
         private DateTime lastPollCheckTime = DateTime.MinValue;
         private const double pollCheckInterval = 2.0; // Interval in seconds
 
@@ -7643,6 +8093,7 @@ private Player FindPlayerByAlias(string alias)
                 pollItemExpiration();
                 pollSkillCheck();
                 pollFlagBug();
+                pollDuelingTiles(); // Check for players on dueling tiles
                 lastPollCheckTime = DateTime.Now;
                 // Gladiator event polling
                 if (currentEventType == EventType.Gladiator)
@@ -10290,17 +10741,47 @@ private Player FindPlayerByAlias(string alias)
                     break;
                 case "build":
                 case "b": // Alias for build
-                    HandleBuildCommand(player, payload);
+                    // Use fire-and-forget to avoid blocking the event handler
+                    Task.Run(async () => {
+                        try
+                        {
+                            await HandleBuildCommand(player, payload);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(String.Format("Error handling build command: {0}", ex.Message));
+                        }
+                    });
                     break;
                 case "wipe":
                 case "w":  // Alias for wipe
                     WipeInventory(player, payload);
                     break;
                 case "bw":
-                    WipeAndBuy(player, payload, false);
+                    // Use fire-and-forget to avoid blocking the event handler
+                    Task.Run(async () => {
+                        try
+                        {
+                            await WipeAndBuy(player, payload, false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(String.Format("Error handling bw command: {0}", ex.Message));
+                        }
+                    });
                     break;
                 case "bwd":
-                    WipeBuyAndMaxAmmo(player, payload);
+                    // Use fire-and-forget to avoid blocking the event handler
+                    Task.Run(async () => {
+                        try
+                        {
+                            await WipeBuyAndMaxAmmo(player, payload);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(String.Format("Error handling bwd command: {0}", ex.Message));
+                        }
+                    });
                     break;
                 case "d":
                     DropUnusedItems(player, payload);
