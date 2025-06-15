@@ -21,11 +21,11 @@ export async function GET(
 
     console.log('Player stats query:', { playerName, gameMode, dateFilter, limit });
 
-    // Get aggregate stats for the player
+    // Get aggregate stats for the player - using case-insensitive comparison
     let aggregateQuery = supabase
       .from('player_aggregate_stats')
       .select('*')
-      .eq('player_name', playerName);
+      .ilike('player_name', playerName);
 
     if (gameMode && gameMode !== 'all') {
       aggregateQuery = aggregateQuery.eq('game_mode', gameMode);
@@ -41,11 +41,11 @@ export async function GET(
       );
     }
 
-    // Get recent individual game stats
+    // Get recent individual game stats - using case-insensitive comparison
     let recentGamesQuery = supabase
       .from('player_stats')
       .select('*')
-      .eq('player_name', playerName)
+      .ilike('player_name', playerName)
       .order('game_date', { ascending: false })
       .limit(limit);
 
@@ -90,11 +90,11 @@ export async function GET(
       );
     }
 
-    // Get game mode breakdown
+    // Get game mode breakdown - using case-insensitive comparison
     const { data: gameModeStats, error: gameModeError } = await supabase
       .from('player_aggregate_stats')
       .select('*')
-      .eq('player_name', playerName);
+      .ilike('player_name', playerName);
 
     if (gameModeError) {
       console.error('Game mode stats error:', gameModeError);
