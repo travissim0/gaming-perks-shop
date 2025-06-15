@@ -284,3 +284,320 @@ Comprehensive error handling for:
 - Cache-friendly data structures
 
 This system provides a solid foundation for competitive dueling with room for extensive future enhancements! 
+
+# Dueling System Implementation Guide
+
+## Overview
+
+The Dueling System is a comprehensive 1v1 combat system that integrates with your CTF game and website. It tracks detailed statistics, supports both unranked and ranked matches, and provides a complete web interface for viewing leaderboards and match history.
+
+## Features
+
+### 🎯 Core Dueling Features
+- **Unranked Duels**: Quick 1v1 matches for practice
+- **Ranked Bo3**: Best of 3 ranked matches for competitive play
+- **Ranked Bo6**: Best of 6 ranked matches for extended competitive play
+- **Challenge System**: Players can challenge each other with `?duel` commands
+- **Tile-Based Ranked Matches**: Walk on special tiles to auto-match for ranked games
+
+### 📊 Advanced Statistics Tracking
+- **Kill/Death Ratios**: Track every kill and death in duels
+- **Accuracy Statistics**: Monitor shots fired vs shots hit
+- **HP Tracking**: Record remaining HP after each round
+- **Burst Damage Detection**: Track double hits and triple hits within rapid succession
+- **Match Duration**: Time each round and complete match
+- **Weapon Statistics**: Track which weapons are used for kills
+
+### 🏆 Ranking System
+- **ELO Rating**: Competitive ranking system for ranked matches
+- **Tier System**: Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster, Legend
+- **Peak ELO Tracking**: Remember your highest achieved rating
+- **Separate Rankings**: Different rankings for Bo3 and Bo6 matches
+
+### 🌐 Web Integration
+- **Real-time Leaderboards**: View top players by various metrics
+- **Match History**: Detailed view of recent matches with round-by-round breakdown
+- **Player Profiles**: Individual statistics for each player
+- **Multiple Sort Options**: Sort by win rate, ELO, accuracy, K/D ratio, etc.
+
+## Database Schema
+
+### Core Tables
+
+#### `dueling_matches`
+Tracks individual dueling matches:
+- Match type (unranked, ranked_bo3, ranked_bo6)
+- Player names and winner
+- Round scores and match status
+- Arena name and timestamps
+
+#### `dueling_rounds`
+Tracks individual rounds within matches:
+- Round number and participants
+- Winner/loser HP remaining
+- Round duration
+- Kill count per round
+
+#### `dueling_kills`
+Tracks individual kills within rounds:
+- Killer/victim information
+- Weapon used and damage dealt
+- Shot accuracy (fired vs hit)
+- Double/triple hit detection
+- Timestamps for analysis
+
+#### `dueling_player_stats`
+Aggregated player statistics:
+- Match and round win rates
+- Kill/death ratios
+- Accuracy statistics
+- ELO ratings for ranked play
+- Burst damage statistics
+
+### Views and Functions
+
+#### `dueling_leaderboard`
+Pre-calculated leaderboard view with rankings.
+
+#### `recent_dueling_matches`
+Recent matches with round details as JSON.
+
+#### Database Functions
+- `start_dueling_match()`: Initialize a new match
+- `record_dueling_kill()`: Log individual kills
+- `complete_dueling_round()`: Finish a round
+- `complete_dueling_match()`: Finish a match and update stats
+- `update_dueling_player_stats()`: Recalculate player statistics
+
+## CTF Script Integration
+
+### Required Modifications
+
+#### 1. Chat Command Handler
+Add to your existing chat command processing:
+
+```csharp
+// In your chat command handler
+if (command.StartsWith("?duel"))
+{
+    string payload = command.Length > 5 ? command.Substring(6) : "";
+    await DuelingSystem.HandleDuelCommand(player, command, payload);
+    return;
+}
+```
+
+#### 2. Player Death Handler
+Add to your player death event:
+
+```csharp
+// In your player death event handler
+await DuelingSystem.HandlePlayerDeath(victim, killer, arena);
+```
+
+#### 3. Tile Step Handler (Optional)
+For ranked tile functionality:
+
+```csharp
+// In your player position/tile step handler
+await DuelingSystem.HandleTileStep(player, x, y);
+```
+
+#### 4. Damage Tracking (Optional)
+For burst damage detection:
+
+```csharp
+// When a player deals damage (not necessarily kills)
+DuelingSystem.TrackDamageHit(attacker.Name);
+```
+
+### Tile Coordinates Setup
+
+Update the `DUELING_TILES` dictionary in `CTFUtilities.cs` with your actual map coordinates:
+
+```csharp
+private static readonly Dictionary<string, (short x, short y)> DUELING_TILES = new Dictionary<string, (short x, short y)>
+{
+    ["ranked_bo3"] = (512, 512),   // Replace with your Bo3 tile coordinates
+    ["ranked_bo6"] = (256, 256)    // Replace with your Bo6 tile coordinates
+};
+```
+
+## Web Interface Setup
+
+### API Endpoints
+
+#### `/api/dueling/stats`
+- **GET**: Retrieve leaderboards with filtering and sorting
+- **POST**: Submit match results from the game
+
+#### `/api/dueling/matches`
+- **GET**: Retrieve recent matches with detailed information
+
+### Frontend Pages
+
+#### `/dueling`
+Main dueling page with:
+- Leaderboard tab showing player rankings
+- Recent matches tab showing match history
+- Filtering by match type, player name
+- Sorting by various statistics
+
+### Features
+- **Real-time Updates**: Statistics update immediately after matches
+- **Responsive Design**: Works on desktop and mobile
+- **Advanced Filtering**: Filter by match type, player name, date ranges
+- **Detailed Match Views**: Click on matches to see round-by-round breakdown
+
+## Commands Reference
+
+### Player Commands
+
+#### `?duel`
+Show help and available commands.
+
+#### `?duel challenge <player> [type]`
+Challenge another player to a duel.
+- `type`: `unranked` (default), `bo3`, or `bo6`
+- Example: `?duel challenge PlayerName bo3`
+
+#### `?duel accept`
+Accept an incoming duel challenge.
+
+#### `?duel decline`
+Decline an incoming duel challenge.
+
+#### `?duel forfeit`
+Forfeit the current duel (if in progress).
+
+#### `?duel stats [player]`
+View dueling statistics for yourself or another player.
+
+### Examples
+```
+?duel challenge TestPlayer
+?duel challenge Enemy bo3
+?duel accept
+?duel stats TopDueler
+```
+
+## Configuration
+
+### Environment Variables
+Ensure these are set in your environment:
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key for database operations
+
+### Database Setup
+1. Run the `setup-dueling-system.sql` script in your Supabase database
+2. Verify all tables, views, and functions are created
+3. Test with sample data if needed
+
+### CTF Script Setup
+1. Update `CTFUtilities.cs` with the dueling system code
+2. Update tile coordinates for your specific map
+3. Integrate the required event handlers
+4. Test dueling functionality in-game
+
+## Match Flow
+
+### Unranked Duel Flow
+1. Player A challenges Player B: `?duel challenge PlayerB`
+2. Player B accepts: `?duel accept`
+3. Single round duel begins
+4. First death ends the match
+5. Winner announced, statistics updated
+
+### Ranked Duel Flow
+1. Player A challenges Player B: `?duel challenge PlayerB bo3`
+2. Player B accepts: `?duel accept`
+3. Best of 3 (or 6) begins
+4. Each death ends a round
+5. First to win majority of rounds wins match
+6. ELO ratings updated based on result
+
+### Tile-Based Ranked Flow
+1. Player walks onto ranked Bo3 or Bo6 tile
+2. System looks for another player on a ranked tile
+3. If found, automatically starts ranked match
+4. If not found, player waits for opponent
+5. Player can step off tile to cancel
+
+## Statistics Explained
+
+### Win Rate
+Percentage of matches won out of total matches played.
+
+### Kill/Death Ratio
+Average kills per death across all dueling matches.
+
+### Accuracy
+Percentage of shots that hit their target.
+
+### ELO Rating
+Competitive rating that increases/decreases based on wins/losses against similarly rated opponents.
+
+### Burst Damage Ratio
+Percentage of kills that were double hits or triple hits (rapid successive damage).
+
+### Double/Triple Hits
+- **Double Hit**: Two hits within 500ms
+- **Triple Hit**: Three hits within 750ms
+
+## Troubleshooting
+
+### Common Issues
+
+#### Duels Not Starting
+- Check that both players are in the same arena
+- Verify neither player is already in an active duel
+- Ensure the challenge hasn't expired (2-minute timeout)
+
+#### Statistics Not Updating
+- Verify API endpoint is accessible from the game server
+- Check Supabase service role key permissions
+- Review server logs for HTTP request errors
+
+#### Database Errors
+- Ensure all required tables and functions exist
+- Verify RLS policies allow the operations
+- Check that the service role key has proper permissions
+
+### Debugging Tips
+
+#### Enable Logging
+Add console logging to track duel events:
+```csharp
+Console.WriteLine($"Duel started: {player1.Name} vs {player2.Name}");
+```
+
+#### Test API Endpoints
+Use tools like Postman to test the API endpoints directly.
+
+#### Verify Database Functions
+Test database functions directly in Supabase SQL editor.
+
+## Future Enhancements
+
+### Possible Additions
+- **Tournament System**: Bracket-style tournaments
+- **Team Duels**: 2v2 or 3v3 team-based dueling
+- **Spectator Mode**: Allow other players to watch duels
+- **Replay System**: Save and replay duel matches
+- **Advanced Analytics**: Heat maps, weapon effectiveness charts
+- **Achievements**: Unlock achievements for various dueling milestones
+- **Betting System**: Allow players to bet on duel outcomes
+
+### Integration Opportunities
+- **Discord Bot**: Post duel results to Discord
+- **Twitch Integration**: Stream duel matches
+- **Mobile App**: Dedicated mobile app for viewing statistics
+
+## Support
+
+For issues or questions about the dueling system:
+1. Check the troubleshooting section above
+2. Review the database logs for errors
+3. Test individual components (database, API, game integration)
+4. Ensure all dependencies are properly installed
+
+Remember to backup your database before making any changes! 

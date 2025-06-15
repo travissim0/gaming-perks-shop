@@ -1,15 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { getClassColor, getClassColorStyle } from '@/utils/classColors';
 
 interface PlayerGameStats {
   id: number;
   game_id: string;
   player_name: string;
   squad_name: string;
+  team: string;
+  main_class: string;
+  side: string;
+  base_used: string;
   kills: number;
   deaths: number;
   flag_captures: number;
@@ -90,6 +95,80 @@ export default function GameStatsPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  // Class ordering functions
+  const getDefenseClassOrder = (className: string): number => {
+    const order = {
+      'Field Medic': 1,
+      'Combat Engineer': 2,
+      'Heavy Weapons': 3,
+      'Infantry': 4
+    };
+    return order[className as keyof typeof order] || 5;
+  };
+
+  const getOffenseClassOrder = (className: string): number => {
+    const order = {
+      'Squad Leader': 1,
+      'Jump Trooper': 2,
+      'Infiltrator': 3,
+      'Heavy Weapons': 4,
+      'Infantry': 5
+    };
+    return order[className as keyof typeof order] || 6;
+  };
+
+  // Team color function
+  const getTeamColor = (teamName: string): string => {
+    if (teamName.includes('C')) return '#ef4444'; // red for Collective
+    if (teamName.includes('T')) return '#22c55e'; // green for Titan
+    return '#9ca3af'; // default gray
+  };
+
+  // Group and sort players
+  const getGroupedPlayers = () => {
+    if (!gameData?.players) return {};
+    
+    // Group by team
+    const teamGroups = gameData.players.reduce((acc, player) => {
+      const team = player.team || 'Unknown';
+      if (!acc[team]) {
+        acc[team] = { defense: [], offense: [] };
+      }
+      
+      const side = player.side || 'N/A';
+      if (side === 'defense') {
+        acc[team].defense.push(player);
+      } else if (side === 'offense') {
+        acc[team].offense.push(player);
+      }
+      
+      return acc;
+    }, {} as Record<string, { defense: PlayerGameStats[], offense: PlayerGameStats[] }>);
+
+    // Sort within each team/side group
+    Object.keys(teamGroups).forEach(team => {
+      // Sort defense by class order
+      teamGroups[team].defense.sort((a, b) => {
+        const orderA = getDefenseClassOrder(a.main_class || '');
+        const orderB = getDefenseClassOrder(b.main_class || '');
+        if (orderA !== orderB) return orderA - orderB;
+        // If same class, sort by kills descending
+        return b.kills - a.kills;
+      });
+
+      // Sort offense by class order
+      teamGroups[team].offense.sort((a, b) => {
+        const orderA = getOffenseClassOrder(a.main_class || '');
+        const orderB = getOffenseClassOrder(b.main_class || '');
+        if (orderA !== orderB) return orderA - orderB;
+        // If same class, sort by kills descending
+        return b.kills - a.kills;
+      });
+    });
+
+    return teamGroups;
   };
 
   if (loading) {
@@ -193,63 +272,167 @@ export default function GameStatsPage() {
               <thead className="bg-white/20">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Squad</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Kills</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Deaths</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Side</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Base</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Captures</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Caps</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Carrier Kills</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Carry Time</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Class Swaps</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB Hits</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Turret DMG</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Accuracy</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Res/Death</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Exp/Death</th>
                 </tr>
               </thead>
               <tbody>
-                {gameData.players
-                  .sort((a, b) => b.kills - a.kills)
-                  .map((player, index) => (
-                    <motion.tr
-                      key={player.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="border-b border-white/10 hover:bg-white/5 transition-colors"
-                    >
-                      <td className="px-3 py-2">
-                        <Link 
-                          href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                          className="text-white hover:text-cyan-400 transition-colors font-medium"
-                        >
-                          {player.player_name}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                          {player.squad_name}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs">{player.kills}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.deaths}</td>
-                      <td className="px-3 py-2 text-right text-xs">
-                        {typeof player.deaths === 'number' && player.deaths > 0
-                          ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
-                          : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs">{player.flag_captures}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
-                      <td className="px-3 py-2 text-right text-xs">{formatTime(player.carry_time_seconds)}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.class_swaps}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.eb_hits}</td>
-                      <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
-                      <td className="px-3 py-2 text-right text-xs">{formatPercentage(player.accuracy)}</td>
-                      <td className="px-3 py-2 text-right text-xs">{typeof player.resource_unused_per_death === 'number' ? player.resource_unused_per_death.toFixed(1) : 'N/A'}</td>
-                      <td className="px-3 py-2 text-right text-xs">{typeof player.explosive_unused_per_death === 'number' ? player.explosive_unused_per_death.toFixed(1) : 'N/A'}</td>
-                    </motion.tr>
-                  ))}
+                                 {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => (
+                   <React.Fragment key={team}>
+                                         <tr className="bg-white/30">
+                       <td colSpan={14} className="px-3 py-2 text-center text-sm font-bold">
+                         <span 
+                           className="font-bold text-lg"
+                           style={{ color: getTeamColor(team) }}
+                         >
+                           {team}
+                         </span>
+                         <span className="text-xs text-blue-200 ml-2">
+                           ({defense.length + offense.length} players)
+                         </span>
+                                              </td>
+                     </tr>
+                     {defense.length > 0 && (
+                       <tr className="bg-blue-500/20">
+                         <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                           🛡️ DEFENSE ({defense.length})
+                         </td>
+                       </tr>
+                     )}
+                     {defense.map((player, index) => (
+                      <motion.tr
+                        key={player.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                      >
+                        <td className="px-3 py-2">
+                          <Link 
+                            href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                            className="transition-colors font-medium hover:text-cyan-300"
+                            style={getClassColorStyle(player.main_class || '')}
+                          >
+                            {player.player_name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span 
+                            className="font-medium text-xs"
+                            style={getClassColorStyle(player.main_class || '')}
+                          >
+                            {player.main_class || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            player.side === 'offense' 
+                              ? 'bg-red-500/20 text-red-300' 
+                              : player.side === 'defense' 
+                              ? 'bg-blue-500/20 text-blue-300'
+                              : 'bg-gray-500/20 text-gray-300'
+                          }`}>
+                            {player.side || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                            {player.base_used || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-red-400">{player.deaths}</td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-cyan-400">
+                          {typeof player.deaths === 'number' && player.deaths > 0
+                            ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
+                            : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-purple-400">{player.flag_captures}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
+                        <td className="px-3 py-2 text-right text-xs">{formatTime(player.carry_time_seconds)}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.class_swaps}</td>
+                        <td className="px-3 py-2 text-right text-xs text-yellow-400">{player.eb_hits}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
+                        <td className="px-3 py-2 text-right text-xs text-orange-400">{formatPercentage(player.accuracy)}</td>
+                                             </motion.tr>
+                     ))}
+                     {offense.length > 0 && (
+                       <tr className="bg-red-500/20">
+                         <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                           ⚔️ OFFENSE ({offense.length})
+                         </td>
+                       </tr>
+                     )}
+                     {offense.map((player, index) => (
+                      <motion.tr
+                        key={player.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                      >
+                        <td className="px-3 py-2">
+                          <Link 
+                            href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                            className="transition-colors font-medium hover:text-cyan-300"
+                            style={getClassColorStyle(player.main_class || '')}
+                          >
+                            {player.player_name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span 
+                            className="font-medium text-xs"
+                            style={getClassColorStyle(player.main_class || '')}
+                          >
+                            {player.main_class || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            player.side === 'offense' 
+                              ? 'bg-red-500/20 text-red-300' 
+                              : player.side === 'defense' 
+                              ? 'bg-blue-500/20 text-blue-300'
+                              : 'bg-gray-500/20 text-gray-300'
+                          }`}>
+                            {player.side || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                            {player.base_used || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-red-400">{player.deaths}</td>
+                        <td className="px-3 py-2 text-right text-xs font-bold text-cyan-400">
+                          {typeof player.deaths === 'number' && player.deaths > 0
+                            ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
+                            : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
+                        </td>
+                        <td className="px-3 py-2 text-right text-xs text-purple-400">{player.flag_captures}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
+                        <td className="px-3 py-2 text-right text-xs">{formatTime(player.carry_time_seconds)}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.class_swaps}</td>
+                        <td className="px-3 py-2 text-right text-xs text-yellow-400">{player.eb_hits}</td>
+                        <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
+                        <td className="px-3 py-2 text-right text-xs text-orange-400">{formatPercentage(player.accuracy)}</td>
+                                             </motion.tr>
+                     ))}
+                   </React.Fragment>
+                 ))}
               </tbody>
             </table>
           </div>

@@ -1034,7 +1034,7 @@ namespace CTFGameType
                         {
                             // Last part is a duel type, so player name is everything in between
                             duelTypeStr = lastPart;
-                            if (parts.Length == 2)
+                            if (parts.Length <= 2)
                             {
                                 // Only "challenge" and duel type, no player name
                                 player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
@@ -1042,12 +1042,30 @@ namespace CTFGameType
                                 return;
                             }
                             // Join all parts except first (challenge) and last (duel type)
-                            targetName = String.Join(" ", parts, 1, parts.Length - 2);
+                            // Make sure we have enough parts to join
+                            int namePartsCount = parts.Length - 2;
+                            if (namePartsCount > 0)
+                            {
+                                targetName = String.Join(" ", parts, 1, namePartsCount);
+                            }
+                            else
+                            {
+                                player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
+                                return;
+                            }
                         }
                         else
                         {
                             // No duel type specified, player name is everything after "challenge"
-                            targetName = String.Join(" ", parts, 1, parts.Length - 1);
+                            if (parts.Length > 1)
+                            {
+                                targetName = String.Join(" ", parts, 1, parts.Length - 1);
+                            }
+                            else
+                            {
+                                player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
+                                return;
+                            }
                         }
                         
                         // Trim any quotes that players might use
@@ -1065,7 +1083,7 @@ namespace CTFGameType
                         break;
 
                     case "test":
-                        // Test command for simulating duels against fake players
+                        // NEW: Test command for simulating duels against fake players
                         if (parts.Length < 2)
                         {
                             player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
@@ -1073,18 +1091,50 @@ namespace CTFGameType
                             return;
                         }
                         
-                        string fakePlayerName = parts.Length > 2 ? String.Join(" ", parts, 1, parts.Length - 2) : String.Join(" ", parts, 1, parts.Length - 1);
-                        string testDuelTypeStr = parts.Length > 2 && (parts[parts.Length - 1].ToLower() == "bo3" || parts[parts.Length - 1].ToLower() == "bo5" || parts[parts.Length - 1].ToLower() == "unranked") ? parts[parts.Length - 1] : "bo3";
+                        // Parse fake player name and duel type
+                        string fakePlayerName;
+                        string testDuelTypeStr = "unranked";
                         
-                        // If only one word after "test", it's the player name and default to bo3
-                        if (parts.Length == 2)
+                        // Check if the last part is a valid duel type
+                        string testLastPart = parts[parts.Length - 1].ToLower();
+                        if (testLastPart == "unranked" || testLastPart == "bo3" || testLastPart == "bo5" || 
+                            testLastPart == "ranked_bo3" || testLastPart == "ranked_bo5")
                         {
-                            fakePlayerName = parts[1];
-                            testDuelTypeStr = "bo3";
+                            testDuelTypeStr = testLastPart;
+                            if (parts.Length <= 2)
+                            {
+                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
+                                return;
+                            }
+                            // Make sure we have enough parts to join
+                            int namePartsCount = parts.Length - 2;
+                            if (namePartsCount > 0)
+                            {
+                                fakePlayerName = String.Join(" ", parts, 1, namePartsCount);
+                            }
+                            else
+                            {
+                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            if (parts.Length > 1)
+                            {
+                                fakePlayerName = String.Join(" ", parts, 1, parts.Length - 1);
+                            }
+                            else
+                            {
+                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
+                                return;
+                            }
                         }
                         
+                        fakePlayerName = fakePlayerName.Trim('"', '\'');
                         DuelType testDuelType = ParseDuelType(testDuelTypeStr);
-                        await SimulateDuelMatch(player, fakePlayerName, testDuelType);
+                        
+                        await SimulateDuelAgainstFakePlayer(player, fakePlayerName, testDuelType);
                         break;
 
                     case "accept":
@@ -1135,7 +1185,7 @@ namespace CTFGameType
             player.sendMessage(-1, "?duel decline - Decline a duel challenge");
             player.sendMessage(-1, "!?duel forfeit - Forfeit current duel");
             player.sendMessage(-1, "@?duel stats [player] - View dueling statistics");
-            player.sendMessage(-1, "~?duel test <fake_player> [type] - Simulate duel for testing");
+            player.sendMessage(-1, "~?duel test <fake_name> [type] - Test duel vs fake player");
             player.sendMessage(-1, "");
             player.sendMessage(-1, "!Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
             player.sendMessage(-1, "@RANKED TILES: Step on Bo3 (775,517) or Bo5 (784,517) tiles!");
@@ -1146,7 +1196,7 @@ namespace CTFGameType
             player.sendMessage(-1, "?duel challenge Axidus bo3");
             player.sendMessage(-1, "?duel challenge Jeff Bezos bo5");
             player.sendMessage(-1, "?duel stats Jeff Bezos");
-            player.sendMessage(-1, "~?duel test TestBot bo3 - Test with fake player");
+            player.sendMessage(-1, "~?duel test TestBot bo3 (for testing)");
         }
 
         private static DuelType ParseDuelType(string type)
@@ -2907,166 +2957,162 @@ namespace CTFGameType
                        .Replace("\t", "\\t");
         }
 
-        private static async Task SimulateDuelMatch(Player realPlayer, string fakePlayerName, DuelType duelType)
+        private static async Task SimulateDuelAgainstFakePlayer(Player realPlayer, string fakePlayerName, DuelType duelType)
         {
             try
             {
-                realPlayer.sendMessage(-1, String.Format("🧪 SIMULATING DUEL: {0} vs {1} ({2})", realPlayer._alias, fakePlayerName, GetDuelTypeString(duelType)));
-                realPlayer.sendMessage(-1, "This is a test match with randomized stats!");
+                // Check if real player is already in a duel
+                if (IsPlayerInDuel(realPlayer._alias))
+                {
+                    realPlayer.sendMessage(-1, "You are already in a duel.");
+                    return;
+                }
+
+                string matchKey = String.Format("{0}_{1}", realPlayer._alias, fakePlayerName);
                 
                 // Create a simulated duel match
-                var simulatedMatch = new DuelMatch
+                var duelMatch = new DuelMatch
                 {
                     MatchType = duelType,
                     Player1Name = realPlayer._alias,
                     Player2Name = fakePlayerName,
-                    Status = DuelStatus.Completed,
+                    Status = DuelStatus.InProgress,
                     ArenaName = realPlayer._arena._name,
-                    StartedAt = DateTime.Now.AddMinutes(-5), // Simulate it started 5 minutes ago
-                    CompletedAt = DateTime.Now
+                    StartedAt = DateTime.Now
                 };
 
-                // Populate player IDs (real player gets null, fake player gets null)
-                simulatedMatch.Player1Id = null;
-                simulatedMatch.Player2Id = null;
+                // Initialize player IDs (will be resolved by the API)
+                PopulatePlayerIds(duelMatch);
 
-                // Determine how many rounds to simulate based on duel type
-                int roundsToWin = GetRoundsToWin(duelType);
-                int maxPossibleRounds = duelType == DuelType.RankedBo5 ? 5 : (duelType == DuelType.RankedBo3 ? 3 : 1);
-                
-                // Real player always wins, but make it somewhat competitive
-                Random rand = new Random();
-                int realPlayerWins = roundsToWin;
-                int fakePlayerWins = rand.Next(0, roundsToWin); // Fake player can win 0 to (roundsToWin-1) rounds
-                
-                simulatedMatch.Player1RoundsWon = realPlayerWins;
-                simulatedMatch.Player2RoundsWon = fakePlayerWins;
-                simulatedMatch.TotalRounds = realPlayerWins + fakePlayerWins;
-                simulatedMatch.WinnerName = realPlayer._alias;
-                simulatedMatch.WinnerId = null;
+                // Add to active duels temporarily
+                activeDuels.TryAdd(matchKey, duelMatch);
 
-                realPlayer.sendMessage(-1, String.Format("Simulating {0} rounds...", simulatedMatch.TotalRounds));
+                // Announce test duel start
+                string duelTypeStr = GetDuelTypeString(duelType);
+                realPlayer.sendMessage(-1, String.Format("!TEST DUEL STARTED: {0} vs {1} (FAKE)! ({2})", 
+                    realPlayer._alias, fakePlayerName, duelTypeStr));
+                realPlayer.sendMessage(-1, "@This is a simulated duel for testing purposes.");
 
-                // Generate rounds with randomized stats
-                for (int roundNum = 1; roundNum <= simulatedMatch.TotalRounds; roundNum++)
-                {
-                    var round = new DuelRound
-                    {
-                        RoundNumber = roundNum,
-                        StartedAt = DateTime.Now.AddMinutes(-5).AddSeconds(roundNum * 30),
-                        CompletedAt = DateTime.Now.AddMinutes(-5).AddSeconds(roundNum * 30 + rand.Next(5, 45)),
-                    };
-                    
-                    round.DurationSeconds = (int)(round.CompletedAt - round.StartedAt).TotalSeconds;
+                // Reset shot stats for real player
+                ResetPlayerShotStats(realPlayer);
 
-                    // Determine round winner (real player wins more often)
-                    bool realPlayerWinsRound;
-                    if (roundNum <= realPlayerWins)
-                    {
-                        // Real player needs to win this round
-                        realPlayerWinsRound = true;
-                    }
-                    else
-                    {
-                        // Fake player wins this round
-                        realPlayerWinsRound = false;
-                    }
+                // Simulate the duel rounds
+                await SimulateDuelRounds(duelMatch, realPlayer, fakePlayerName);
 
-                    if (realPlayerWinsRound)
-                    {
-                        round.WinnerName = realPlayer._alias;
-                        round.LoserName = fakePlayerName;
-                        round.WinnerHpLeft = rand.Next(10, 60); // Real player survives with some HP
-                        round.LoserHpLeft = 0;
-                    }
-                    else
-                    {
-                        round.WinnerName = fakePlayerName;
-                        round.LoserName = realPlayer._alias;
-                        round.WinnerHpLeft = rand.Next(5, 45); // Fake player survives with some HP
-                        round.LoserHpLeft = 0;
-                    }
+                // Complete the duel
+                await CompleteFakeDuel(duelMatch, realPlayer._arena);
 
-                    // Generate randomized kill data for this round - BOTH players fire shots during the round
-                    
-                    // First, generate shot stats for the loser (who fired shots but didn't get the kill)
-                    var loserShotsFired = rand.Next(6, 20);
-                    var loserAccuracy = rand.NextDouble() * 0.4 + 0.25; // 25% to 65% accuracy for loser
-                    var loserShotsHit = Math.Min(loserShotsFired, (int)(loserShotsFired * loserAccuracy));
-                    
-                    // Create a "miss" record for the loser (represents their shots that didn't result in a kill)
-                    var loserShots = new DuelKill
-                    {
-                        KillerName = round.LoserName,
-                        VictimName = round.WinnerName,
-                        WeaponUsed = "Assault Rifle",
-                        DamageDealt = loserShotsHit * rand.Next(8, 15), // Damage dealt but not fatal
-                        VictimHpBefore = round.WinnerHpLeft + (loserShotsHit * rand.Next(8, 15)),
-                        VictimHpAfter = round.WinnerHpLeft,
-                        ShotsFired = loserShotsFired,
-                        ShotsHit = loserShotsHit,
-                        IsDoubleHit = rand.Next(0, 100) < 10, // 10% chance for loser
-                        IsTripleHit = rand.Next(0, 100) < 3,  // 3% chance for loser
-                        KillTimestamp = round.CompletedAt.AddSeconds(-rand.Next(1, 10)) // Slightly before the final kill
-                    };
-                    
-                    round.Kills.Add(loserShots);
+                // Remove from active duels
+                DuelMatch removedMatch;
+                activeDuels.TryRemove(matchKey, out removedMatch);
 
-                    // Now generate the final kill shot for the winner
-                    var kill = new DuelKill
-                    {
-                        KillerName = round.WinnerName,
-                        VictimName = round.LoserName,
-                        WeaponUsed = "Assault Rifle",
-                        DamageDealt = 60, // Death blow
-                        VictimHpBefore = rand.Next(20, 60),
-                        VictimHpAfter = 0,
-                        ShotsFired = rand.Next(8, 25),
-                        ShotsHit = 0, // Will be calculated below
-                        IsDoubleHit = rand.Next(0, 100) < 15, // 15% chance
-                        IsTripleHit = rand.Next(0, 100) < 5,  // 5% chance
-                        KillTimestamp = round.CompletedAt
-                    };
-
-                    // Calculate realistic shots hit based on accuracy for the winner
-                    double winnerAccuracy = rand.NextDouble() * 0.4 + 0.3; // 30% to 70% accuracy
-                    kill.ShotsHit = Math.Min(kill.ShotsFired, (int)(kill.ShotsFired * winnerAccuracy));
-                    
-                    // Ensure at least 1 hit for the kill
-                    if (kill.ShotsHit == 0) kill.ShotsHit = 1;
-
-                    round.Kills.Add(kill);
-                    simulatedMatch.Rounds.Add(round);
-
-                    // Announce round result with both players' accuracy
-                    realPlayer.sendMessage(-1, String.Format("Round {0}: {1} defeats {2} ({3}HP left)", 
-                        roundNum, round.WinnerName, round.LoserName, round.WinnerHpLeft));
-                    realPlayer.sendMessage(-1, String.Format("  {0}: {1:F1}% accuracy ({2}/{3}), {4}: {5:F1}% accuracy ({6}/{7})", 
-                        round.WinnerName, 
-                        kill.ShotsFired > 0 ? (double)kill.ShotsHit / kill.ShotsFired * 100 : 0,
-                        kill.ShotsHit, kill.ShotsFired,
-                        round.LoserName,
-                        loserShotsFired > 0 ? (double)loserShotsHit / loserShotsFired * 100 : 0,
-                        loserShotsHit, loserShotsFired));
-                }
-
-                // Announce final result
-                realPlayer.sendMessage(-1, String.Format("🏆 SIMULATION COMPLETE: {0} wins {1}-{2}!", 
-                    simulatedMatch.WinnerName, simulatedMatch.Player1RoundsWon, simulatedMatch.Player2RoundsWon));
-
-                // Send the simulated match to the website API
-                realPlayer.sendMessage(-1, "📡 Sending test data to API...");
-                await SendDuelMatchToWebsite(simulatedMatch);
-                realPlayer.sendMessage(-1, "✅ Test data sent! Check the dueling dashboard to see the results.");
-                
-                Console.WriteLine(String.Format("SIMULATION: Generated test duel {0} vs {1} with {2} rounds", 
-                    realPlayer._alias, fakePlayerName, simulatedMatch.TotalRounds));
+                realPlayer.sendMessage(-1, "!Test duel completed! Check the dashboard to see the results.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine(String.Format("Error in SimulateDuelMatch: {0}", ex.Message));
-                realPlayer.sendMessage(-1, "Error occurred during duel simulation.");
+                Console.WriteLine(String.Format("Error in SimulateDuelAgainstFakePlayer: {0}", ex.Message));
+                realPlayer.sendMessage(-1, "An error occurred during the test duel.");
             }
+        }
+
+        private static async Task SimulateDuelRounds(DuelMatch match, Player realPlayer, string fakePlayerName)
+        {
+            Random rand = new Random();
+            int roundsToWin = GetRoundsToWin(match.MatchType);
+            int roundNumber = 1;
+
+            while (match.Player1RoundsWon < roundsToWin && match.Player2RoundsWon < roundsToWin)
+            {
+                realPlayer.sendMessage(-1, String.Format("@=== ROUND {0} ===", roundNumber));
+                
+                // Create round
+                var round = new DuelRound
+                {
+                    RoundNumber = roundNumber,
+                    StartedAt = DateTime.Now
+                };
+
+                // Simulate round duration (5-30 seconds)
+                int roundDurationSeconds = rand.Next(5, 31);
+                await Task.Delay(1000); // Brief delay for realism
+                
+                round.CompletedAt = round.StartedAt.AddSeconds(roundDurationSeconds);
+                round.DurationSeconds = roundDurationSeconds;
+
+                // Real player always wins (for testing purposes)
+                round.WinnerName = realPlayer._alias;
+                round.LoserName = fakePlayerName;
+                
+                // Randomize HP values
+                round.WinnerHpLeft = rand.Next(10, 60); // Real player survives with some HP
+                round.LoserHpLeft = 0; // Fake player dies
+
+                // Generate randomized kill data
+                var kill = new DuelKill
+                {
+                    KillerName = realPlayer._alias,
+                    VictimName = fakePlayerName,
+                    WeaponUsed = "Assault Rifle",
+                    DamageDealt = 60,
+                    VictimHpBefore = rand.Next(20, 60),
+                    VictimHpAfter = 0,
+                    ShotsFired = rand.Next(8, 25),
+                    ShotsHit = 0, // Will be calculated below
+                    IsDoubleHit = rand.Next(0, 100) < 15, // 15% chance
+                    IsTripleHit = rand.Next(0, 100) < 5,  // 5% chance
+                    KillTimestamp = round.CompletedAt
+                };
+
+                // Calculate realistic shots hit (60-95% accuracy)
+                double accuracy = 0.6 + (rand.NextDouble() * 0.35); // 60-95%
+                kill.ShotsHit = Math.Min(kill.ShotsFired, (int)Math.Ceiling(kill.ShotsFired * accuracy));
+
+                round.Kills.Add(kill);
+                match.Rounds.Add(round);
+
+                // Update match scores
+                match.Player1RoundsWon++;
+                match.TotalRounds++;
+
+                // Announce round result
+                realPlayer.sendMessage(-1, String.Format("@Round {0}: {1} defeats {2} ({3}HP left)", 
+                    roundNumber, round.WinnerName, round.LoserName, round.WinnerHpLeft));
+                realPlayer.sendMessage(-1, String.Format("Shot Stats: {0}/{1} ({2:F1}% accuracy)", 
+                    kill.ShotsHit, kill.ShotsFired, accuracy * 100));
+
+                roundNumber++;
+                
+                // Brief delay between rounds
+                if (match.Player1RoundsWon < roundsToWin)
+                {
+                    await Task.Delay(500);
+                }
+            }
+
+            // Set winner
+            match.WinnerName = realPlayer._alias;
+            match.WinnerId = match.Player1Id;
+        }
+
+        private static async Task CompleteFakeDuel(DuelMatch match, Arena arena)
+        {
+            match.Status = DuelStatus.Completed;
+            match.CompletedAt = DateTime.Now;
+
+            // Announce match result
+            string finalScore = String.Format("({0}-{1})", match.Player1RoundsWon, match.Player2RoundsWon);
+            
+            foreach (Player p in arena.Players)
+            {
+                p.sendMessage(-1, String.Format("● {0} WINS the TEST {1} duel against {2}! {3}", 
+                    match.WinnerName, GetDuelTypeString(match.MatchType), match.Player2Name, finalScore));
+            }
+
+            Console.WriteLine(String.Format("Fake duel completed: {0} vs {1} - Final Score: {2}", 
+                match.Player1Name, match.Player2Name, finalScore));
+
+            // Send match data to website
+            await SendDuelMatchToWebsite(match);
         }
     }
 

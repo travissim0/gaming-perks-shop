@@ -16,6 +16,12 @@ export default function Register() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent double-clicking/multiple submissions
+    if (loading) {
+      return;
+    }
+    
     setLoading(true);
 
     try {
