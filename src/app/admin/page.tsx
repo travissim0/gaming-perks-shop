@@ -16,7 +16,9 @@ export default function AdminDashboard() {
     totalUsers: 0,
     totalProducts: 0,
     totalSales: 0,
+    totalDonations: 0,
     recentSales: [] as any[],
+    recentDonations: [] as any[],
   });
   const [loadingStats, setLoadingStats] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,23 +88,53 @@ export default function AdminDashboard() {
         .select('*')
         .limit(100);
 
+      // Fetch donations data
+      console.log('🎁 Fetching recent donations...');
+      const donationsDataPromise = supabase
+        .from('donation_transactions')
+        .select(`
+          id,
+          amount_cents,
+          currency,
+          donation_message,
+          customer_name,
+          kofi_from_name,
+          created_at,
+          payment_method,
+          status
+        `)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      console.log('💸 Fetching all donations for total...');
+      const allDonationsPromise = supabase
+        .from('donation_transactions')
+        .select('amount_cents')
+        .eq('status', 'completed')
+        .limit(100);
+
       // Race all promises against timeout
       const results = await Promise.allSettled([
         Promise.race([userCountPromise, timeout]),
         Promise.race([productCountPromise, timeout]),
         Promise.race([salesDataPromise, timeout]),
-        Promise.race([allSalesPromise, timeout])
+        Promise.race([allSalesPromise, timeout]),
+        Promise.race([donationsDataPromise, timeout]),
+        Promise.race([allDonationsPromise, timeout])
       ]);
 
       console.log('✅ Query results:', results);
 
       // Handle results with detailed error checking
-      const [userResult, productResult, salesResult, allSalesResult] = results;
+      const [userResult, productResult, salesResult, allSalesResult, donationsResult, allDonationsResult] = results;
 
       let userCount = 0;
       let productCount = 0;
       let salesData: any[] = [];
       let allSales: any[] = [];
+      let donationsData: any[] = [];
+      let allDonations: any[] = [];
 
       // Process user count
       if (userResult.status === 'fulfilled') {
@@ -161,6 +193,30 @@ export default function AdminDashboard() {
         console.error('❌ All sales promise rejected:', allSalesResult.reason);
       }
 
+      // Process donations data
+      if (donationsResult.status === 'fulfilled') {
+        const { data, error } = donationsResult.value as any;
+        if (error) {
+          console.error('❌ Donations data error:', error);
+        } else {
+          donationsData = data || [];
+        }
+      } else {
+        console.error('❌ Donations data promise rejected:', donationsResult.reason);
+      }
+
+      // Process all donations for total calculation
+      if (allDonationsResult.status === 'fulfilled') {
+        const { data, error } = allDonationsResult.value as any;
+        if (error) {
+          console.error('❌ All donations error:', error);
+        } else {
+          allDonations = data || [];
+        }
+      } else {
+        console.error('❌ All donations promise rejected:', allDonationsResult.reason);
+      }
+
       // Calculate total sales with product prices
       let totalSalesAmount = 0;
       if (allSales.length > 0) {
@@ -176,6 +232,11 @@ export default function AdminDashboard() {
           }, 0);
         }
       }
+
+      // Calculate total donations
+      const totalDonationsAmount = allDonations.reduce((sum: number, donation: any) => {
+        return sum + (donation.amount_cents || 0);
+      }, 0);
 
       // Enhanced recent sales processing with proper data fetching
       let enhancedRecentSales: any[] = [];
@@ -239,18 +300,33 @@ export default function AdminDashboard() {
         console.log('✅ Recent sales enhanced successfully:', enhancedRecentSales.length);
       }
 
+      // Format donations data
+      const formattedDonations = donationsData.map(donation => ({
+        id: donation.id,
+        amount: donation.amount_cents / 100,
+        currency: donation.currency || 'usd',
+        customerName: donation.kofi_from_name || donation.customer_name || 'Anonymous',
+        message: donation.donation_message || '',
+        date: donation.created_at,
+        paymentMethod: donation.payment_method || 'kofi'
+      }));
+
       console.log('📈 Calculated stats:', {
         userCount,
         productCount,
         totalSalesAmount,
-        enhancedRecentSalesLength: enhancedRecentSales.length
+        totalDonationsAmount,
+        enhancedRecentSalesLength: enhancedRecentSales.length,
+        formattedDonationsLength: formattedDonations.length
       });
 
       setStats({
         totalUsers: userCount,
         totalProducts: productCount,
         totalSales: totalSalesAmount / 100, // Convert from cents to dollars
+        totalDonations: totalDonationsAmount / 100, // Convert from cents to dollars
         recentSales: enhancedRecentSales,
+        recentDonations: formattedDonations,
       });
 
       console.log('✅ Stats loaded successfully');
@@ -274,7 +350,9 @@ export default function AdminDashboard() {
         totalUsers: 0,
         totalProducts: 0,
         totalSales: 0,
+        totalDonations: 0,
         recentSales: [],
+        recentDonations: [],
       });
     } finally {
       setLoadingStats(false);
@@ -368,7 +446,7 @@ export default function AdminDashboard() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
             <h2 className="text-lg text-gray-300 mb-2">Total Users</h2>
             <p className="text-3xl font-bold text-white">
@@ -381,18 +459,18 @@ export default function AdminDashboard() {
           </div>
           
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
-            <h2 className="text-lg text-gray-300 mb-2">Total Products</h2>
-            <p className="text-3xl font-bold text-white">
+            <h2 className="text-lg text-gray-300 mb-2">Total Donations</h2>
+            <p className="text-3xl font-bold text-yellow-400">
               {loadingStats ? (
                 <span className="animate-pulse">...</span>
               ) : (
-                stats.totalProducts.toLocaleString()
+                `$${stats.totalDonations.toFixed(2)}`
               )}
             </p>
           </div>
           
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
-            <h2 className="text-lg text-gray-300 mb-2">Total Sales</h2>
+            <h2 className="text-lg text-gray-300 mb-2">Total Orders</h2>
             <p className="text-3xl font-bold text-green-400">
               {loadingStats ? (
                 <span className="animate-pulse">...</span>
@@ -401,69 +479,109 @@ export default function AdminDashboard() {
               )}
             </p>
           </div>
+
+          <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl p-6">
+            <h2 className="text-lg text-gray-300 mb-2">Combined Total</h2>
+            <p className="text-3xl font-bold text-blue-400">
+              {loadingStats ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                `$${(stats.totalDonations + stats.totalSales).toFixed(2)}`
+              )}
+            </p>
+          </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-700">
-                <h2 className="text-lg font-semibold text-white">Recent Purchases</h2>
-              </div>
-              
-              {loadingStats ? (
-                <div className="p-6">
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-10 bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-700 rounded"></div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Donations - Left Side */}
+              <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-700">
+                  <h2 className="text-lg font-semibold text-white">Recent Donations</h2>
+                </div>
+                
+                {loadingStats ? (
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                    </div>
                   </div>
+                ) : stats.recentDonations.length > 0 ? (
+                  <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+                    {stats.recentDonations.map((donation: any, index: number) => (
+                      <div key={donation.id || index} className="bg-gray-700/30 rounded-lg p-3 border border-gray-600">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-medium text-white text-sm truncate pr-2">
+                            {donation.customerName}
+                          </div>
+                          <div className="text-yellow-400 font-bold text-sm flex-shrink-0">
+                            ${donation.amount.toFixed(2)}
+                          </div>
+                        </div>
+                        {donation.message && (
+                          <div className="text-gray-300 text-xs mb-2 italic line-clamp-2">
+                            "{donation.message}"
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-xs text-gray-400">
+                          <span className="truncate pr-2">{donation.paymentMethod}</span>
+                          <span className="flex-shrink-0">{new Date(donation.date).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-gray-400">
+                    No donations found.
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Orders - Right Side */}
+              <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-700">
+                  <h2 className="text-lg font-semibold text-white">Recent Orders</h2>
                 </div>
-              ) : stats.recentSales.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-700">
-                    <thead className="bg-gray-900/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          User
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Product
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Date
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-gray-800/30 divide-y divide-gray-700">
-                      {stats.recentSales.map((sale: any) => (
-                        <tr key={sale.id} className="hover:bg-gray-700/30">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-medium text-white">
-                              {sale.profiles?.in_game_alias || 'Unknown'}
-                            </div>
-                            <div className="text-sm text-gray-400">{sale.profiles?.email}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-white">{sale.products?.name}</div>
-                            {sale.products?.price && (
-                              <div className="text-sm text-green-400">
-                                ${(sale.products.price / 100).toFixed(2)}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                            {new Date(sale.created_at).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-6 text-center text-gray-400">
-                  No sales data found.
-                </div>
-              )}
+                
+                {loadingStats ? (
+                  <div className="p-6">
+                    <div className="animate-pulse space-y-4">
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                      <div className="h-10 bg-gray-700 rounded"></div>
+                    </div>
+                  </div>
+                ) : stats.recentSales.length > 0 ? (
+                  <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+                    {stats.recentSales.map((sale: any) => (
+                      <div key={sale.id} className="bg-gray-700/30 rounded-lg p-3 border border-gray-600">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-medium text-white text-sm truncate pr-2">
+                            {sale.profiles?.in_game_alias || 'Unknown'}
+                          </div>
+                          <div className="text-green-400 font-bold text-sm flex-shrink-0">
+                            ${(sale.products?.price / 100).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="text-gray-300 text-xs mb-2 truncate">
+                          {sale.products?.name}
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-400">
+                          <span className="truncate pr-2">{sale.profiles?.email}</span>
+                          <span className="flex-shrink-0">{new Date(sale.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-gray-400">
+                    No orders found.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
@@ -528,6 +646,17 @@ export default function AdminDashboard() {
                   <div className="text-xs text-cyan-400">Featured content</div>
                 </div>
               </Link>
+
+              <Link
+                href="/admin/squads"
+                className="flex items-center gap-4 px-4 py-3 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/20"
+              >
+                <span className="text-3xl">⚔️</span>
+                <div>
+                  <div className="font-semibold">Manage Squads</div>
+                  <div className="text-xs text-indigo-400">Squad status & settings</div>
+                </div>
+              </Link>
             </div>
             
             <div className="mt-6">
@@ -543,14 +672,6 @@ export default function AdminDashboard() {
                 >
                   <span className="text-xl">➕</span>
                   Add New Perk
-                </button>
-                
-                <button
-                  onClick={() => window.open('https://dashboard.stripe.com', '_blank')}
-                  className="flex items-center gap-3 w-full px-4 py-2 bg-gray-700/50 hover:bg-gray-600/50 border border-gray-600 text-gray-300 rounded-lg transition-colors text-left"
-                >
-                  <span className="text-xl">💳</span>
-                  Open Stripe Dashboard
                 </button>
 
                 <button

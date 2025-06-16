@@ -76,6 +76,7 @@ interface Squad {
   member_count: number;
   captain_alias: string;
   banner_url?: string;
+  is_active?: boolean;
 }
 
 interface Match {
@@ -435,19 +436,32 @@ export default function Home() {
       }
     };
 
-    // Fetch top squads
+    // Fetch top squads - Only active squads
     const fetchTopSquads = async () => {
       try {
-        // Use the optimized function instead of individual queries
-        const { data, error } = await supabase.rpc('get_all_squads_optimized');
+        // Use direct query to ensure we filter by is_active
+        const { data, error } = await supabase
+          .from('squads')
+          .select(`
+            id,
+            name,
+            tag,
+            banner_url,
+            captain_id,
+            profiles!squads_captain_id_fkey(in_game_alias),
+            squad_members!inner(id)
+          `)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(6);
 
         if (!error && data) {
-          const squads: Squad[] = data.slice(0, 6).map((squad: any) => ({
-            id: squad.squad_id,
-            name: squad.squad_name,
-            tag: squad.squad_tag,
-            member_count: Number(squad.member_count),
-            captain_alias: squad.captain_alias,
+          const squads: Squad[] = data.map((squad: any) => ({
+            id: squad.id,
+            name: squad.name,
+            tag: squad.tag,
+            member_count: squad.squad_members?.length || 0,
+            captain_alias: squad.profiles?.in_game_alias || 'Unknown',
             banner_url: squad.banner_url
           }));
           
@@ -914,91 +928,86 @@ export default function Home() {
           {/* Left Sidebar - Online Users and Server Status */}
           <div className="xl:col-span-2 space-y-6">
             {/* Online Users (moved from right sidebar) */}
-            {onlineUsers.length > 0 && (
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
-                  <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                    👥 ONLINE NOW
-                    <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
-                      {onlineUsers.length}
-                    </span>
-                  </h3>
-                </div>
-                
-                <div className="p-3 bg-gray-900 max-h-72 overflow-y-auto">
-                  <div className="space-y-2">
-                    {onlineUsers.slice(0, 8).map((user) => (
-                      <div key={user.id} className="bg-gray-800/50 border border-green-500/20 rounded-lg p-2">
-                        <div className="flex items-center space-x-3">
-                          <UserAvatar 
-                            user={{
-                              avatar_url: user.avatar_url,
-                              in_game_alias: user.in_game_alias,
-                              email: null
-                            }} 
-                            size="sm" 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className="text-green-400 font-mono text-sm font-bold truncate">
-                                {user.in_game_alias}
-                              </span>
-                              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(user.last_seen).toLocaleTimeString()}
+            {/* Online Users & Server Status - Mobile responsive side by side */}
+            <div className="space-y-4 md:space-y-4 portrait:space-y-0 portrait:grid portrait:grid-cols-2 portrait:gap-4">
+              {/* Online Users - Condensed */}
+              {onlineUsers.length > 0 && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
+                  <div className="bg-gray-700/50 px-3 py-2 border-b border-green-500/30">
+                    <h3 className="text-green-400 font-bold text-xs tracking-wider flex items-center justify-between">
+                      👥 ONLINE
+                      <span className="text-green-300 text-xs font-mono bg-green-900/30 px-1 py-0.5 rounded">
+                        {onlineUsers.length}
+                      </span>
+                    </h3>
+                  </div>
+                  
+                  <div className="p-2 bg-gray-900 max-h-64 overflow-y-auto">
+                    <div className="space-y-1">
+                      {onlineUsers.slice(0, 8).map((user) => (
+                        <div key={user.id} className="bg-gray-800/30 border border-green-500/10 rounded p-1.5">
+                          <div className="flex items-center space-x-2">
+                            <UserAvatar 
+                              user={{
+                                avatar_url: user.avatar_url,
+                                in_game_alias: user.in_game_alias,
+                                email: null
+                              }} 
+                              size="sm" 
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-green-400 font-mono text-xs font-bold truncate">
+                                  {user.in_game_alias}
+                                </span>
+                                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                              </div>
                             </div>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                    {onlineUsers.length > 8 && (
+                      <div className="text-center mt-2">
+                        <span className="text-gray-500 text-xs">
+                          +{onlineUsers.length - 8} more
+                        </span>
                       </div>
-                    ))}
+                    )}
                   </div>
-                  {onlineUsers.length > 8 && (
-                    <div className="text-center mt-3">
-                      <span className="text-gray-500 text-xs">
-                        +{onlineUsers.length - 8} more online
-                      </span>
+                </section>
+              )}
+
+              {/* Server Status - Condensed */}
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-3 py-2 border-b border-green-500/30">
+                  <h3 className="text-green-400 font-bold text-xs tracking-wider">🌐 SERVER</h3>
+                  <p className="text-gray-400 text-xs font-mono">
+                    {serverData.stats.serverStatus === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
+                  </p>
+                </div>
+                
+                <div className="p-3">
+                  <div className="text-center mb-3">
+                    <div className="text-xl font-bold text-cyan-400 mb-1">
+                      {serverData.stats.totalPlayers}
+                    </div>
+                    <div className="text-xs text-gray-400">PLAYERS</div>
+                  </div>
+
+                  {serverData.zones.length > 0 && (
+                    <div className="space-y-1">
+                      {serverData.zones.slice(0, 3).map((zone, index) => (
+                        <div key={index} className="flex items-center justify-between text-xs bg-gray-800/30 rounded px-2 py-1">
+                          <span className="text-gray-300 truncate text-xs">{zone.title}</span>
+                          <span className="text-cyan-400 font-mono font-bold">{zone.playerCount}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
               </section>
-            )}
-
-            {/* Simplified Server Status */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-2xl overflow-hidden transform transition-all duration-300 hover:scale-105 hover:shadow-green-500/20 hover:border-green-500/50">
-              <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
-                <h3 className="text-green-400 font-bold text-sm tracking-wider">🌐 SERVER STATUS</h3>
-                <p className="text-gray-400 text-xs mt-1 font-mono">
-                  {serverData.stats.serverStatus === 'online' ? '🟢 ONLINE' : '🔴 OFFLINE'}
-                </p>
-              </div>
-              
-              <div className="p-4">
-                <div className="text-center mb-4">
-                  <div className="text-2xl font-bold text-cyan-400 mb-1">
-                    {serverData.stats.totalPlayers}
-                  </div>
-                  <div className="text-xs text-gray-400">TOTAL PLAYERS</div>
-                </div>
-
-                {serverData.zones.length > 0 && (
-                  <div className="space-y-2">
-                    {serverData.zones.map((zone, index) => (
-                      <div key={index} className="flex items-center justify-between text-xs bg-gray-800/30 rounded px-2 py-1">
-                        <span className="text-gray-300 truncate">{zone.title}</span>
-                        <span className="text-cyan-400 font-mono font-bold">{zone.playerCount}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {serverData.lastUpdated && (
-                  <p className="text-xs text-gray-500 mt-3 text-center font-mono">
-                    {new Date(serverData.lastUpdated).toLocaleTimeString()}
-                  </p>
-                )}
-              </div>
-            </section>
+            </div>
 
             {/* Recent Patch Notes (if available and user logged in) */}
             {user && recentPatchNotes && (
@@ -1286,33 +1295,21 @@ export default function Home() {
 
           {/* Center Content - Featured Videos */}
           <div className="xl:col-span-7 space-y-6">
-            {/* Featured Videos Section */}
+            {/* Featured Videos Section - Simplified */}
             <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-6 py-4 border-b border-red-500/30">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-3xl font-bold text-red-400 tracking-wider">🎥 FEATURED VIDEOS</h3>
-                  <span className="text-red-300 text-sm font-mono">
-                    Infantry Online Content
-                  </span>
-                </div>
-                <p className="text-gray-400 text-sm mt-2">
-                  Watch the latest matches, tutorials, and highlights from the Infantry community
-                </p>
+              <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
+                <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>
               </div>
               
-              <div className="p-6">
+              <div className="p-4">
                 {featuredVideos.length > 0 ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                     {featuredVideos.map((video, index) => {
                       const thumbnailUrl = video.thumbnail_url || 
                         (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
                       
                       return (
-                        <div key={video.id} className={`
-                          ${index === 0 ? 'lg:col-span-2' : ''} 
-                          group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden 
-                          hover:border-red-500/50 transition-all duration-300 transform hover:scale-[1.02]
-                        `}
+                        <div key={video.id} className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-red-500/50 transition-all duration-300"
                         onClick={() => {
                           // Default click action - prefer YouTube embed, fallback to external links
                           if (video.youtube_url) {
@@ -1322,8 +1319,8 @@ export default function Home() {
                             window.open(video.vod_url, '_blank');
                           }
                         }}>
-                          {/* Video Thumbnail */}
-                          <div className={`relative ${index === 0 ? 'aspect-video' : 'aspect-video'} overflow-hidden`}>
+                          {/* Video Thumbnail - Mobile Optimized */}
+                          <div className="relative aspect-video overflow-hidden">
                             {thumbnailUrl ? (
                               <>
                                 <img 
@@ -1353,93 +1350,26 @@ export default function Home() {
                             ) : (
                               <div className="w-full h-full bg-gray-700 flex items-center justify-center">
                                 <div className="text-gray-400 text-center">
-                                  <div className="text-4xl mb-2">🎬</div>
-                                  <div className="text-sm">Video Thumbnail</div>
-                                  {video.youtube_url && (
-                                    <div className="text-xs mt-1 text-red-400">
-                                      Missing thumbnail for: {getYouTubeVideoId(video.youtube_url) || 'Invalid URL'}
-                                    </div>
-                                  )}
+                                  <div className="text-lg">📹</div>
                                 </div>
                               </div>
                             )}
                             
-                            {/* Play Button Overlay */}
+                            {/* Simple Play Button Overlay */}
                             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                              <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                                <svg className="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                              <div className="w-8 h-8 md:w-12 md:h-12 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                                <svg className="w-3 h-3 md:w-4 md:h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                                   <path d="M8 5v14l11-7z"/>
                                 </svg>
                               </div>
                             </div>
-                            
-                            {/* Video Type Badge */}
-                            <div className="absolute top-3 left-3">
-                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                                {getVideoTypeIcon(video.video_type)} {video.video_type.toUpperCase()}
-                              </span>
-                            </div>
-                            
-                            {/* Date Badge - Top Right */}
-                            <div className="absolute top-3 right-3">
-                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                                📅 {new Date(video.published_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                        
-                            {/* View Count */}
-                            <div className="absolute bottom-3 right-3">
-                              <span className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                                👁️ {video.view_count}
-                              </span>
-                            </div>
                           </div>
                           
-                          {/* Video Info */}
-                          <div className="p-4">
-                            <h4 className={`font-bold mb-2 group-hover:text-red-300 transition-colors ${
-                              index === 0 ? 'text-lg' : 'text-base'
-                            }`}>
+                          {/* Simple Video Title */}
+                          <div className="p-2">
+                            <h4 className="font-medium text-sm text-white group-hover:text-red-300 transition-colors truncate">
                               {video.title}
                             </h4>
-                            
-                            <p className="text-gray-400 text-sm mb-3 line-clamp-2">
-                              {video.description}
-                            </p>
-                            
-                            {/* Match Title if available */}
-                            {video.match_title && (
-                              <div className="mb-3">
-                                <span className="text-blue-400 text-xs">
-                                  🎮 {video.match_title}
-                                </span>
-                              </div>
-                            )}
-                            
-                            {/* Action Buttons */}
-                            <div className="flex gap-2 mt-3">
-                              {video.vod_url && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    recordVideoView(video.id);
-                                    window.open(video.vod_url, '_blank');
-                                  }}
-                                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-xs py-2 px-3 rounded transition-colors"
-                                >
-                                  📺 Watch VOD
-                                </button>
-                              )}
-                              {video.match_id && (
-                                <Link 
-                                  href={`/matches/${video.match_id}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded transition-colors text-center"
-                                >
-                                  🎯 View Match
-                                </Link>
-                              )}
-                            </div>
                           </div>
                         </div>
                       );
