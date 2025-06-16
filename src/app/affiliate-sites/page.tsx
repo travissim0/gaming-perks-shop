@@ -2,6 +2,8 @@
 
 import Image from 'next/image';
 import { ExternalLink } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import Navbar from '@/components/Navbar';
 
 const affiliateSites = [
   {
@@ -28,8 +30,12 @@ const affiliateSites = [
 ];
 
 export default function AffiliateSitesPage() {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      <Navbar user={user} />
+      
       <div className="container mx-auto px-6 py-12">
         {/* Header */}
         <div className="text-center mb-12">

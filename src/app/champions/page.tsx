@@ -1,8 +1,19 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Trophy, Crown, Star, Sword, Shield } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import Navbar from '@/components/Navbar';
 
 const ChampionArchives = () => {
+  const { user } = useAuth();
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+  
   const championSquads = [
     {
       id: 'bds',
@@ -17,22 +28,42 @@ const ChampionArchives = () => {
     }
   ];
 
+  // Generate consistent stars positions
+  const generateStars = () => {
+    const stars = [];
+    for (let i = 0; i < 50; i++) {
+      stars.push({
+        id: i,
+        left: (i * 7.3) % 100, // Use a consistent formula instead of Math.random()
+        top: (i * 13.7) % 100,
+        delay: (i * 0.1) % 3,
+        duration: 2 + (i % 3),
+        size: 2 + (i % 3)
+      });
+    }
+    return stars;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-black relative overflow-hidden">
+      <div className="relative z-50">
+        <Navbar user={user} />
+      </div>
+      
       {/* Animated Background Stars */}
-      <div className="absolute inset-0">
-        {[...Array(50)].map((_, i) => (
+      <div className="absolute inset-0 z-0">
+        {isClient && generateStars().map((star) => (
           <div
-            key={i}
+            key={star.id}
             className="absolute animate-pulse"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animationDuration: `${2 + Math.random() * 3}s`
+              left: `${star.left}%`,
+              top: `${star.top}%`,
+              animationDelay: `${star.delay}s`,
+              animationDuration: `${star.duration}s`
             }}
           >
-            <Star className="text-blue-300 opacity-60" size={2 + Math.random() * 4} />
+            <Star className="text-blue-300 opacity-60" size={star.size} />
           </div>
         ))}
       </div>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { motion } from 'framer-motion';
+import Navbar from '@/components/Navbar';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1182,7 +1183,9 @@ export default function DuelingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 text-white">
+      <Navbar user={user} />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <motion.div

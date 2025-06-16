@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
+import Navbar from '@/components/Navbar';
 
 interface PlayerAggregateStats {
   id: number;
@@ -76,6 +78,7 @@ const DATE_FILTERS = [
 ];
 
 export default function PlayerStatsPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<PlayerAggregateStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -208,6 +211,8 @@ export default function PlayerStatsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+      <Navbar user={user} />
+      
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <motion.div

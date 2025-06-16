@@ -75,10 +75,10 @@ export default function SquadDetailPage() {
   });
 
   useEffect(() => {
-    if (squadId && user && !loading) {
+    if (squadId && !loading) {
       loadAllData();
     }
-  }, [squadId, user, loading]);
+  }, [squadId, loading]);
 
   // Load pending requests when squad data becomes available and user is captain/co-captain
   useEffect(() => {
@@ -91,17 +91,19 @@ export default function SquadDetailPage() {
   }, [squad, user, pageLoading]);
 
   const loadAllData = async () => {
-    if (!user) return;
-    
     try {
       setPageLoading(true);
       
-      // Load basic squad and user data
-      await Promise.allSettled([
-        loadSquadDetails(),
-        loadUserSquad(),
-        checkExistingRequest()
-      ]);
+      // Always load basic squad details (works for both authenticated and anonymous users)
+      await loadSquadDetails();
+      
+      // Only load user-specific data if user is authenticated
+      if (user) {
+        await Promise.allSettled([
+          loadUserSquad(),
+          checkExistingRequest()
+        ]);
+      }
       
     } catch (error) {
       console.error('Error loading squad data:', error);
