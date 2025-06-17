@@ -54,6 +54,24 @@ body {
       linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px);
     background-size: 20px 20px;
   }
+  
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
 }
 
 /* Custom styles for forum quotes */
@@ -85,18 +103,144 @@ body {
 
 /* Custom scrollbar for better forum experience */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #374151;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 4px;
+  background: #6b7280;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #9ca3af;
+}
+
+/* Import custom news styles */
+@import '../styles/news.css';
+
+/* Rich text editor styles */
+.ProseMirror {
+  outline: none;
+}
+
+.ProseMirror h1 {
+  font-size: 1.875rem;
+  font-weight: bold;
+  margin-bottom: 0.75rem;
+  color: #fbbf24;
+}
+
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 0.75rem;
+  color: #60a5fa;
+}
+
+.ProseMirror h3 {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-bottom: 0.75rem;
+  color: #34d399;
+}
+
+.ProseMirror p {
+  margin-bottom: 0.75rem;
+  line-height: 1.625;
+  color: #d1d5db;
+}
+
+.ProseMirror ul, .ProseMirror ol {
+  margin-bottom: 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.25rem;
+  color: #d1d5db;
+}
+
+.ProseMirror blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+  margin-bottom: 0.75rem;
+  font-style: italic;
+  color: #bfdbfe;
+  background-color: rgba(59, 130, 246, 0.1);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.ProseMirror pre {
+  background-color: #1f2937;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+}
+
+.ProseMirror code {
+  background-color: #374151;
+  color: #34d399;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.875rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 2px solid #4b5563;
+  margin: 1.5rem 0;
+}
+
+.ProseMirror u {
+  text-decoration: underline;
+}
+
+/* News section specific styles */
+.news-hero-layout {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.news-main-post {
+  flex: 1;
+}
+
+.news-sidebar-posts {
+  width: 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .news-hero-layout {
+    flex-direction: column;
+  }
+  
+  .news-sidebar-posts {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 1rem;
+  }
+  
+  .news-sidebar-posts > * {
+    min-width: 200px;
+  }
 }

@@ -1,4 +1,37 @@
-# Claude SQL Development Guidelines
+# Claude Development Guidelines
+
+## Development Environment
+**IMPORTANT**: User is on a Windows machine. Use Windows commands (CMD or PowerShell) for local operations:
+- Use `dir` or `Get-ChildItem` instead of `ls`
+- Use `copy` or `Copy-Item` instead of `cp` 
+- Use Windows command syntax for local file operations
+- Both CMD and PowerShell commands are acceptable for local tasks
+- Only use Linux commands when specifically working with the remote Linux server
+
+## SQL Workflow Instructions
+**IMPORTANT**: When working with SQL database changes:
+- **DO NOT** attempt to run SQL through Node.js scripts or command line tools
+- **DO NOT** create complex scripts to execute SQL
+- **INSTEAD**: Simply provide the SQL code and instruct the user to paste it into their SQL editor
+- Format the SQL clearly with proper syntax highlighting
+- Explain what the SQL will do before providing it
+- Keep SQL changes atomic and focused on a single task
+
+Example format:
+```
+Please copy and paste the following SQL into your SQL editor:
+
+```sql
+-- Brief comment explaining what this does
+CREATE OR REPLACE FUNCTION example_function()
+RETURNS void AS $$
+BEGIN
+    -- Function body
+END;
+$$ LANGUAGE plpgsql;
+```
+
+This SQL will [explanation of what it accomplishes].
 
 ## Avoiding Infinite Recursion in SQL/RLS Policies
 

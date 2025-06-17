@@ -162,8 +162,10 @@ export default function SquadDetailPage() {
           .from('squad_invites')
           .select('*')
           .eq('invited_player_id', user.id)
+          .eq('invited_by', user.id) // Only check for self-requests (join requests)
           .eq('squad_id', squadId)
           .eq('status', 'pending')
+          .gt('expires_at', new Date().toISOString()) // Also check expiration
           .maybeSingle();
         
         if (result.error) throw new Error(result.error.message);
@@ -227,7 +229,7 @@ export default function SquadDetailPage() {
 
     setIsRequesting(true);
     
-    const { success } = await robustFetch(
+    const { success, error } = await robustFetch(
       async () => {
         const result = await supabase
           .from('squad_invites')
@@ -247,6 +249,13 @@ export default function SquadDetailPage() {
     if (success) {
       toast.success('Join request sent successfully!');
       setHasExistingRequest(true);
+      // Refresh the existing request check to ensure UI stays in sync
+      await checkExistingRequest();
+    } else if (error && error.message.includes('duplicate') || error?.message.includes('already have a pending')) {
+      toast.error('You already have a pending join request for this squad');
+      setHasExistingRequest(true);
+      // Also refresh check in case of duplicate to ensure UI is correct
+      await checkExistingRequest();
     }
     
     setIsRequesting(false);
@@ -297,7 +306,8 @@ export default function SquadDetailPage() {
       await Promise.allSettled([
         loadSquadDetails(),
         loadPendingRequests(),
-        loadUserSquad()
+        loadUserSquad(),
+        checkExistingRequest()
       ]);
     }
 
@@ -311,21 +321,42 @@ export default function SquadDetailPage() {
   };
 
   const canRequestToJoin = () => {
-    if (!user || !squad || hasExistingRequest) return false;
+    console.log('🔍 canRequestToJoin check:', {
+      user: !!user,
+      squad: !!squad,
+      hasExistingRequest,
+      userSquad: userSquad?.id,
+      squadId: squad?.id,
+      isAlreadyMember: squad?.members.some(member => member.player_id === user?.id),
+      isActive: squad?.is_active
+    });
+    
+    if (!user || !squad || hasExistingRequest) {
+      console.log('❌ Failed basic checks');
+      return false;
+    }
     
     // Check if user is already a member of this squad
     const isAlreadyMember = squad.members.some(member => member.player_id === user.id);
-    if (isAlreadyMember) return false;
+    if (isAlreadyMember) {
+      console.log('❌ User is already a member');
+      return false;
+    }
     
     // Check if user is already in another squad (unless it's this squad)
-    if (userSquad && userSquad.id !== squad.id) return false;
+    if (userSquad && userSquad.id !== squad.id) {
+      console.log('❌ User is in another squad');
+      return false;
+    }
     
     // Can't request to join if user is the captain (shouldn't happen, but safety check)
-    if (squad.captain_id === user.id) return false;
+    if (squad.captain_id === user.id) {
+      console.log('❌ User is the captain');
+      return false;
+    }
     
-    // Squad must be active
-    if (!squad.is_active) return false;
-    
+    // Allow requests to both active AND inactive squads
+    console.log('✅ Can request to join');
     return true;
   };
 
@@ -530,6 +561,117 @@ export default function SquadDetailPage() {
     }
   };
 
+  // Squad management functions
+  const kickMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`Are you sure you want to kick ${memberName} from the squad?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('squad_members')
+        .delete()
+        .eq('id', memberId);
+
+      if (error) throw error;
+
+      toast.success('Member kicked successfully');
+      await Promise.allSettled([
+        loadSquadDetails(),
+        loadPendingRequests()
+      ]);
+    } catch (error) {
+      console.error('Error kicking member:', error);
+      toast.error('Failed to kick member');
+    }
+  };
+
+  const promoteMember = async (memberId: string, memberName: string, newRole: string) => {
+    const roleText = newRole === 'co_captain' ? 'Co-Captain' : 'Player';
+    if (!confirm(`Are you sure you want to ${newRole === 'co_captain' ? 'promote' : 'demote'} ${memberName} to ${roleText}?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('squad_members')
+        .update({ role: newRole })
+        .eq('id', memberId);
+
+      if (error) throw error;
+
+      toast.success(`Member ${newRole === 'co_captain' ? 'promoted' : 'demoted'} successfully`);
+      await loadSquadDetails();
+    } catch (error) {
+      console.error('Error updating member role:', error);
+      toast.error('Failed to update member role');
+    }
+  };
+
+  const disbandSquad = async () => {
+    if (!confirm('Are you sure you want to disband this squad? This action cannot be undone and will remove all members.')) return;
+
+    try {
+      // First delete all squad members
+      const { error: membersError } = await supabase
+        .from('squad_members')
+        .delete()
+        .eq('squad_id', squad?.id);
+
+      if (membersError) throw membersError;
+
+      // Then delete the squad
+      const { error: squadError } = await supabase
+        .from('squads')
+        .delete()
+        .eq('id', squad?.id);
+
+      if (squadError) throw squadError;
+
+      toast.success('Squad disbanded successfully');
+      // Navigate back to squads page
+      window.location.href = '/squads';
+    } catch (error) {
+      console.error('Error disbanding squad:', error);
+      toast.error('Error disbanding squad');
+    }
+  };
+
+  const transferOwnership = async (newCaptainId: string, newCaptainName: string) => {
+    if (!confirm(`Are you sure you want to transfer squad ownership to ${newCaptainName}? You will become a regular player.`)) return;
+
+    try {
+      const { data, error } = await supabase.rpc('transfer_squad_ownership', {
+        squad_id_param: squad?.id,
+        new_captain_id_param: newCaptainId
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        toast.success('Squad ownership transferred successfully!');
+        await Promise.allSettled([
+          loadSquadDetails(),
+          loadUserSquad()
+        ]);
+      } else {
+        throw new Error('Transfer function returned false');
+      }
+    } catch (error) {
+      console.error('Error transferring ownership:', error);
+      toast.error('Error transferring ownership: ' + (error as Error).message);
+    }
+  };
+
+  // Helper functions for squad management
+  const canManageSquad = () => {
+    if (!squad || !user) return false;
+    const userMember = squad.members.find(m => m.player_id === user.id);
+    return userMember && ['captain', 'co_captain'].includes(userMember.role);
+  };
+
+  const isCaptain = () => {
+    if (!squad || !user) return false;
+    const userMember = squad.members.find(m => m.player_id === user.id);
+    return userMember && userMember.role === 'captain';
+  };
+
   // Enhanced loading screen with timeout indicator
   if (loading || pageLoading) {
     return (
@@ -691,6 +833,16 @@ export default function SquadDetailPage() {
                       </button>
                     )}
                     
+                    {/* Disband Squad Button for Captains Only */}
+                    {isCaptain() && (
+                      <button
+                        onClick={disbandSquad}
+                        className="bg-gradient-to-r from-red-800 to-red-900 hover:from-red-700 hover:to-red-800 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300"
+                      >
+                        💥 Disband Squad
+                      </button>
+                    )}
+                    
                     {hasExistingRequest && (
                       <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
                         ⏳ Request Pending
@@ -740,8 +892,57 @@ export default function SquadDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right text-sm text-gray-400">
-                        Joined {new Date(member.joined_at).toLocaleDateString()}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right text-sm text-gray-400">
+                          Joined {new Date(member.joined_at).toLocaleDateString()}
+                        </div>
+                        
+                        {/* Squad Management Actions */}
+                        {canManageSquad() && member.player_id !== user?.id && (
+                          <div className="flex gap-1">
+                            {/* Promote/Demote buttons */}
+                            {isCaptain() && member.role === 'player' && (
+                              <button
+                                onClick={() => promoteMember(member.id, member.in_game_alias, 'co_captain')}
+                                className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                                title="Promote to Co-Captain"
+                              >
+                                ⬆️ Promote
+                              </button>
+                            )}
+                            {isCaptain() && member.role === 'co_captain' && (
+                              <button
+                                onClick={() => promoteMember(member.id, member.in_game_alias, 'player')}
+                                className="bg-orange-600 hover:bg-orange-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                                title="Demote to Player"
+                              >
+                                ⬇️ Demote
+                              </button>
+                            )}
+                            
+                            {/* Transfer ownership (captain only, to non-captains) */}
+                            {isCaptain() && member.role !== 'captain' && (
+                              <button
+                                onClick={() => transferOwnership(member.player_id, member.in_game_alias)}
+                                className="bg-yellow-600 hover:bg-yellow-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                                title="Transfer Ownership"
+                              >
+                                👑 Transfer
+                              </button>
+                            )}
+                            
+                            {/* Kick button */}
+                            {(isCaptain() || (canManageSquad() && member.role === 'player')) && (
+                              <button
+                                onClick={() => kickMember(member.id, member.in_game_alias)}
+                                className="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs transition-colors"
+                                title="Kick Member"
+                              >
+                                ❌ Kick
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

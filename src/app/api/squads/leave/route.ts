@@ -72,36 +72,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log the squad leave event
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('in_game_alias')
-        .eq('id', playerId)
-        .single();
-
-      const { data: squad } = await supabase
-        .from('squads')
-        .select('name')
-        .eq('id', squadId)
-        .single();
-
-      await supabase
-        .from('player_events')
-        .insert({
-          player_id: playerId,
-          event_type: 'squad_left',
-          description: `${profile?.in_game_alias || 'Player'} left squad ${squad?.name || 'Unknown'}`,
-          event_data: {
-            squad_id: squadId,
-            previous_role: memberCheck.role
-          },
-          squad_id: squadId
-        });
-    } catch (eventError) {
-      console.error('Error logging squad leave event:', eventError);
-      // Don't fail the whole operation for event logging
-    }
+    // Event logging is handled automatically by the database trigger
+    // No need to manually log here to avoid duplicates
 
     return NextResponse.json(
       { success: true, message: 'Successfully left squad' },

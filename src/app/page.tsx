@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
+import NewsSection from '@/components/NewsSection';
 import { useDonationMode } from '@/hooks/useDonationMode';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
@@ -239,32 +240,43 @@ export default function Home() {
       }
     };
 
-    // Simple user activity update with timeout
+    // Simple user activity update with timeout and throttling
     const updateUserActivity = async () => {
-      if (user) {
-        try {
-          const now = new Date().toISOString();
-          
-          await Promise.race([
-            supabase
-              .from('profiles')
-              .update({ last_seen: now })
-              .eq('id', user.id),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Activity update timeout')), 3000)
-            )
-          ]);
-        } catch (error) {
-          console.error('Error updating user activity:', error);
-          // Don't throw - just log and continue
-        }
+      if (!user) return;
+      
+      // Throttle activity updates to once per minute
+      const lastUpdate = localStorage.getItem('lastActivityUpdate');
+      const now = Date.now();
+      if (lastUpdate && (now - parseInt(lastUpdate)) < 60000) {
+        return; // Skip if updated less than 1 minute ago
+      }
+      
+      try {
+        const timestamp = new Date().toISOString();
+        
+        await Promise.race([
+          supabase
+            .from('profiles')
+            .update({ last_seen: timestamp })
+            .eq('id', user.id),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Activity update timeout')), 3000)
+          )
+        ]);
+        
+        localStorage.setItem('lastActivityUpdate', now.toString());
+      } catch (error) {
+        console.error('Error updating user activity:', error);
+        // Don't throw - just log and continue
       }
     };
 
-    // Run the simplified checks
-    fetchUserProfile();
-    updateUserActivity();
-    quickProfileCheck();
+    // Run the simplified checks only when user changes
+    if (user) {
+      fetchUserProfile();
+      updateUserActivity();
+      quickProfileCheck();
+    }
 
     // Scroll effect handler
     const handleScroll = () => {
@@ -554,7 +566,7 @@ export default function Home() {
     const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
     const squadsInterval = setInterval(fetchTopSquads, 60000);
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
-    const activityInterval = setInterval(updateUserActivity, 300000); // Update activity every 5 minutes (was 30 seconds)
+    const activityInterval = setInterval(updateUserActivity, 600000); // Update activity every 10 minutes
     
     // Keyboard event listener for modal
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -913,6 +925,11 @@ export default function Home() {
               />
             ))}
           </div>
+        </div>
+
+        {/* News Section - Hero Layout */}
+        <div className="mb-8">
+          <NewsSection limit={4} showReadState={true} heroLayout={true} />
         </div>
 
         {/* NEW Layout: Videos Front and Center */}
