@@ -361,18 +361,31 @@ export default function SquadDetailPage() {
     try {
       setIsRequesting(true);
       
-      const { error } = await supabase
-        .from('squad_members')
-        .delete()
-        .eq('squad_id', squad.id)
-        .eq('player_id', user.id);
+      // Use API route to ensure proper permissions and logging
+      const response = await fetch('/api/squads/leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          squadId: squad.id,
+          playerId: user.id,
+        }),
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to leave squad');
+      }
 
       toast.success('Successfully left the squad');
       
-      // Refresh data
-      await loadAllData();
+      // Clear user squad state immediately
+      setUserSquad(null);
+      
+      // Navigate away from squad page after successful leave
+      window.location.href = '/squads';
       
     } catch (error: any) {
       console.error('Error leaving squad:', error);

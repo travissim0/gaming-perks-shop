@@ -80,7 +80,9 @@ export default function CTFManagementPage() {
 
   // Check access permissions
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return; // Wait for auth to finish loading
+    
+    if (!user) {
       router.push('/auth/login');
       return;
     }
@@ -752,10 +754,6 @@ export default function CTFManagementPage() {
                     <h3 className="text-lg font-bold text-red-400 mb-3">{player.in_game_alias}</h3>
                     
                     <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="text-gray-400">Email:</span>
-                        <span className="ml-2 text-gray-300">{player.email}</span>
-                      </div>
                       
                       <div>
                         <span className="text-gray-400">Banned:</span>
@@ -1047,7 +1045,7 @@ function BanPlayerModal({
               <option value="">Choose a player...</option>
               {availablePlayers.map(player => (
                 <option key={player.id} value={player.id}>
-                  {player.in_game_alias} ({player.email})
+                  {player.in_game_alias}
                 </option>
               ))}
             </select>

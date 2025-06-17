@@ -39,8 +39,19 @@ export default function CTFAdminPanel() {
   // Check if current user has CTF admin permissions
   const hasPermission = (permission: string): boolean => {
     if (!currentUserProfile) return false;
-    // Only ctf_admin and site admins can manage roles
-    return currentUserProfile.ctf_role === 'ctf_admin' || currentUserProfile.is_admin || permission === 'view';
+    
+    // Site admins have all permissions
+    if (currentUserProfile.is_admin) return true;
+    
+    // CTF admins have all CTF permissions
+    if (currentUserProfile.ctf_role === 'ctf_admin') return true;
+    
+    // Everyone can view (this was causing the issue - 'view' should be restricted too)
+    if (permission === 'view') {
+      return currentUserProfile.ctf_role === 'ctf_admin' || currentUserProfile.is_admin;
+    }
+    
+    return false;
   };
 
   // Check if user can manage a specific target user
