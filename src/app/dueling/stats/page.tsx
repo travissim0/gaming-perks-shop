@@ -231,290 +231,290 @@ export default function DuelingStatsPage() {
       <Navbar user={user} />
       
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="bg-gray-800/50 border-b border-gray-700">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="py-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-4">
-                    <Link 
-                      href="/dueling"
-                      className="text-cyan-400 hover:text-cyan-300 transition-colors"
-                    >
-                      ← Back to Dueling
-                    </Link>
+      {/* Header */}
+      <div className="bg-gray-800/50 border-b border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-4">
+                  <Link 
+                    href="/dueling"
+                    className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    ← Back to Dueling
+                  </Link>
+                </div>
+                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mt-2">
+                  📊 Dueling Statistics
+                </h1>
+                <p className="text-gray-400 mt-2">Player rankings, records, and match history</p>
+              </div>
+              <div className="text-right">
+                {duelingStats.length === 0 && (
+                  <div className="bg-yellow-600/20 border border-yellow-500 rounded-lg p-3">
+                    <p className="text-yellow-300 text-sm font-bold">📋 Sample Data</p>
+                    <p className="text-yellow-400 text-xs">Showing demonstration data. Run setup-dueling-system.sql to enable real tracking.</p>
                   </div>
-                  <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mt-2">
-                    📊 Dueling Statistics
-                  </h1>
-                  <p className="text-gray-400 mt-2">Player rankings, records, and match history</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dueling Arena Quick Access Widget */}
+        <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg shadow-2xl overflow-hidden mb-8">
+          <div className="bg-gray-700/50 px-4 py-3 border-b border-orange-500/30">
+            <h3 className="text-orange-400 font-bold text-lg tracking-wider">⚔️ DUELING ARENA</h3>
+            <p className="text-gray-400 text-sm mt-1">Quick access to dueling features</p>
+          </div>
+          
+          <div className="p-4 bg-gray-900">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Link 
+                href="/dueling" 
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-orange-400 text-lg mb-1">🏆</div>
+                  <div className="text-xs text-gray-400 group-hover:text-orange-300">Tournament Brackets</div>
+                  <div className="text-xs text-gray-500 mt-1">Simulate & Create Tournaments</div>
                 </div>
-                <div className="text-right">
-                  {duelingStats.length === 0 && (
-                    <div className="bg-yellow-600/20 border border-yellow-500 rounded-lg p-3">
-                      <p className="text-yellow-300 text-sm font-bold">📋 Sample Data</p>
-                      <p className="text-yellow-400 text-xs">Showing demonstration data. Run setup-dueling-system.sql to enable real tracking.</p>
-                    </div>
-                  )}
+              </Link>
+              
+              <button 
+                onClick={() => setActiveTab('rankings')}
+                className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
+              >
+                <div className="text-center">
+                  <div className="text-yellow-400 text-lg mb-1">📊</div>
+                  <div className="text-xs text-gray-400 group-hover:text-orange-300">Player Rankings</div>
+                  <div className="text-xs text-gray-500 mt-1">View Top Duelists</div>
                 </div>
+              </button>
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-gray-700">
+              <div className="text-xs text-gray-500 text-center">
+                1v1 competitive dueling system
               </div>
             </div>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Dueling Arena Quick Access Widget */}
-          <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-orange-500/30 rounded-lg shadow-2xl overflow-hidden mb-8">
-            <div className="bg-gray-700/50 px-4 py-3 border-b border-orange-500/30">
-              <h3 className="text-orange-400 font-bold text-lg tracking-wider">⚔️ DUELING ARENA</h3>
-              <p className="text-gray-400 text-sm mt-1">Quick access to dueling features</p>
-            </div>
-            
-            <div className="p-4 bg-gray-900">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Link 
-                  href="/dueling" 
-                  className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
-                >
-                  <div className="text-center">
-                    <div className="text-orange-400 text-lg mb-1">🏆</div>
-                    <div className="text-xs text-gray-400 group-hover:text-orange-300">Tournament Brackets</div>
-                    <div className="text-xs text-gray-500 mt-1">Simulate & Create Tournaments</div>
-                  </div>
-                </Link>
-                
-                <button 
-                  onClick={() => setActiveTab('rankings')}
-                  className="bg-gray-700/50 border border-gray-600 rounded-lg p-3 hover:border-orange-500/50 transition-all duration-300 cursor-pointer group"
-                >
-                  <div className="text-center">
-                    <div className="text-yellow-400 text-lg mb-1">📊</div>
-                    <div className="text-xs text-gray-400 group-hover:text-orange-300">Player Rankings</div>
-                    <div className="text-xs text-gray-500 mt-1">View Top Duelists</div>
-                  </div>
-                </button>
-              </div>
-              
-              <div className="mt-4 pt-3 border-t border-gray-700">
-                <div className="text-xs text-gray-500 text-center">
-                  1v1 competitive dueling system
-                </div>
-              </div>
-            </div>
+        {/* Navigation Tabs */}
+        <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6 mb-8">
+          <div className="flex flex-wrap gap-4 mb-6">
+            {[
+              { id: 'rankings', label: '🏆 Rankings', icon: '🏆' },
+              { id: 'recent', label: '⚔️ Recent Duels', icon: '⚔️' },
+              { id: 'head-to-head', label: '🤝 Head-to-Head', icon: '🤝' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 ${
+                  activeTab === tab.id
+                    ? 'bg-gradient-to-r from-cyan-600 to-purple-600 text-white'
+                    : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6 mb-8">
-            <div className="flex flex-wrap gap-4 mb-6">
-              {[
-                { id: 'rankings', label: '🏆 Rankings', icon: '🏆' },
-                { id: 'recent', label: '⚔️ Recent Duels', icon: '⚔️' },
-                { id: 'head-to-head', label: '🤝 Head-to-Head', icon: '🤝' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`px-6 py-3 rounded-lg font-bold transition-all duration-300 ${
-                    activeTab === tab.id
-                      ? 'bg-gradient-to-r from-cyan-600 to-purple-600 text-white'
-                      : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filters */}
-            {activeTab === 'rankings' && (
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                    className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-                  >
-                    <option value="win_rate">Win Rate</option>
-                    <option value="total_duels">Total Duels</option>
-                    <option value="total_wins">Total Wins</option>
-                    <option value="tournaments_won">Tournament Wins</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Filter</label>
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value as any)}
-                    className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-                  >
-                    <option value="all">All Duels</option>
-                    <option value="pickup">Pickup Only</option>
-                    <option value="tournament">Tournament Only</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Tab Content */}
+          {/* Filters */}
           {activeTab === 'rankings' && (
-            <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
-              <h2 className="text-2xl font-bold text-cyan-400 mb-6">🏆 Player Rankings</h2>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 text-gray-400 font-bold">Rank</th>
-                      <th className="text-left py-3 text-gray-400 font-bold">Player</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Duels</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">W-L</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Win Rate</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Pickup W-L</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Tournament W-L</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Tournaments</th>
-                      <th className="text-center py-3 text-gray-400 font-bold">Streak</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayStats
-                      .sort((a, b) => {
-                        switch (sortBy) {
-                          case 'win_rate': return b.win_rate - a.win_rate;
-                          case 'total_duels': return b.total_duels - a.total_duels;
-                          case 'total_wins': return b.total_wins - a.total_wins;
-                          case 'tournaments_won': return b.tournaments_won - a.tournaments_won;
-                          default: return b.win_rate - a.win_rate;
-                        }
-                      })
-                      .map((stat, index) => (
-                      <tr key={stat.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
-                        <td className="py-3">
-                          <div className="flex items-center">
-                            {index < 3 && (
-                              <span className="mr-2">
-                                {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                              </span>
-                            )}
-                            <span className="font-bold text-cyan-400">#{index + 1}</span>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          <span className="font-mono font-bold text-white">{stat.player_alias}</span>
-                        </td>
-                        <td className="py-3 text-center text-gray-300">{stat.total_duels}</td>
-                        <td className="py-3 text-center">
-                          <span className="text-green-400">{stat.total_wins}</span>
-                          <span className="text-gray-500">-</span>
-                          <span className="text-red-400">{stat.total_losses}</span>
-                        </td>
-                        <td className="py-3 text-center">
-                          <span className={`font-bold ${
-                            stat.win_rate >= 0.6 ? 'text-green-400' :
-                            stat.win_rate >= 0.4 ? 'text-yellow-400' :
-                            'text-red-400'
-                          }`}>
-                            {(stat.win_rate * 100).toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="py-3 text-center text-gray-300">
-                          {stat.pickup_wins}-{stat.pickup_losses}
-                        </td>
-                        <td className="py-3 text-center text-gray-300">
-                          {stat.tournament_wins}-{stat.tournament_losses}
-                        </td>
-                        <td className="py-3 text-center">
-                          <div className="text-xs text-gray-400">
-                            <div>{stat.tournaments_won}🏆 {stat.tournaments_runner_up}🥈</div>
-                            <div>{stat.tournaments_entered} entered</div>
-                          </div>
-                        </td>
-                        <td className="py-3 text-center">
-                          {stat.current_win_streak > 0 ? (
-                            <span className="text-green-400 font-bold">W{stat.current_win_streak}</span>
-                          ) : stat.current_loss_streak > 0 ? (
-                            <span className="text-red-400 font-bold">L{stat.current_loss_streak}</span>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+                >
+                  <option value="win_rate">Win Rate</option>
+                  <option value="total_duels">Total Duels</option>
+                  <option value="total_wins">Total Wins</option>
+                  <option value="tournaments_won">Tournament Wins</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Filter</label>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value as any)}
+                  className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+                >
+                  <option value="all">All Duels</option>
+                  <option value="pickup">Pickup Only</option>
+                  <option value="tournament">Tournament Only</option>
+                </select>
               </div>
             </div>
           )}
+        </div>
 
-          {activeTab === 'recent' && (
-            <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
-              <h2 className="text-2xl font-bold text-purple-400 mb-6">⚔️ Recent Duels</h2>
-              
-              <div className="space-y-4">
-                {displayDuels.map((duel) => (
-                  <div key={duel.id} className="bg-gray-700/30 border border-gray-600 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="text-center">
-                          <div className={`font-mono font-bold ${
-                            duel.winner_alias === duel.player1_alias ? 'text-green-400' : 'text-gray-400'
-                          }`}>
-                            {duel.player1_alias}
-                          </div>
-                          <div className="text-xs text-gray-500">vs</div>
-                          <div className={`font-mono font-bold ${
-                            duel.winner_alias === duel.player2_alias ? 'text-green-400' : 'text-gray-400'
-                          }`}>
-                            {duel.player2_alias}
-                          </div>
+        {/* Tab Content */}
+        {activeTab === 'rankings' && (
+          <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
+            <h2 className="text-2xl font-bold text-cyan-400 mb-6">🏆 Player Rankings</h2>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="text-left py-3 text-gray-400 font-bold">Rank</th>
+                    <th className="text-left py-3 text-gray-400 font-bold">Player</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Duels</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">W-L</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Win Rate</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Pickup W-L</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Tournament W-L</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Tournaments</th>
+                    <th className="text-center py-3 text-gray-400 font-bold">Streak</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayStats
+                    .sort((a, b) => {
+                      switch (sortBy) {
+                        case 'win_rate': return b.win_rate - a.win_rate;
+                        case 'total_duels': return b.total_duels - a.total_duels;
+                        case 'total_wins': return b.total_wins - a.total_wins;
+                        case 'tournaments_won': return b.tournaments_won - a.tournaments_won;
+                        default: return b.win_rate - a.win_rate;
+                      }
+                    })
+                    .map((stat, index) => (
+                    <tr key={stat.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
+                      <td className="py-3">
+                        <div className="flex items-center">
+                          {index < 3 && (
+                            <span className="mr-2">
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                            </span>
+                          )}
+                          <span className="font-bold text-cyan-400">#{index + 1}</span>
                         </div>
-                        
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-white">
-                            {duel.player1_score} - {duel.player2_score}
-                          </div>
-                          <div className="text-xs text-green-400 font-bold">
-                            {duel.winner_alias} wins
-                          </div>
+                      </td>
+                      <td className="py-3">
+                        <span className="font-mono font-bold text-white">{stat.player_alias}</span>
+                      </td>
+                      <td className="py-3 text-center text-gray-300">{stat.total_duels}</td>
+                      <td className="py-3 text-center">
+                        <span className="text-green-400">{stat.total_wins}</span>
+                        <span className="text-gray-500">-</span>
+                        <span className="text-red-400">{stat.total_losses}</span>
+                      </td>
+                      <td className="py-3 text-center">
+                        <span className={`font-bold ${
+                          stat.win_rate >= 0.6 ? 'text-green-400' :
+                          stat.win_rate >= 0.4 ? 'text-yellow-400' :
+                          'text-red-400'
+                        }`}>
+                          {(stat.win_rate * 100).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="py-3 text-center text-gray-300">
+                        {stat.pickup_wins}-{stat.pickup_losses}
+                      </td>
+                      <td className="py-3 text-center text-gray-300">
+                        {stat.tournament_wins}-{stat.tournament_losses}
+                      </td>
+                      <td className="py-3 text-center">
+                        <div className="text-xs text-gray-400">
+                          <div>{stat.tournaments_won}🏆 {stat.tournaments_runner_up}🥈</div>
+                          <div>{stat.tournaments_entered} entered</div>
+                        </div>
+                      </td>
+                      <td className="py-3 text-center">
+                        {stat.current_win_streak > 0 ? (
+                          <span className="text-green-400 font-bold">W{stat.current_win_streak}</span>
+                        ) : stat.current_loss_streak > 0 ? (
+                          <span className="text-red-400 font-bold">L{stat.current_loss_streak}</span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'recent' && (
+          <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
+            <h2 className="text-2xl font-bold text-purple-400 mb-6">⚔️ Recent Duels</h2>
+            
+            <div className="space-y-4">
+              {displayDuels.map((duel) => (
+                <div key={duel.id} className="bg-gray-700/30 border border-gray-600 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <div className={`font-mono font-bold ${
+                          duel.winner_alias === duel.player1_alias ? 'text-green-400' : 'text-gray-400'
+                        }`}>
+                          {duel.player1_alias}
+                        </div>
+                        <div className="text-xs text-gray-500">vs</div>
+                        <div className={`font-mono font-bold ${
+                          duel.winner_alias === duel.player2_alias ? 'text-green-400' : 'text-gray-400'
+                        }`}>
+                          {duel.player2_alias}
                         </div>
                       </div>
                       
-                      <div className="text-right text-xs text-gray-400">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                            duel.duel_type === 'tournament' 
-                              ? 'bg-purple-600/20 text-purple-300' 
-                              : 'bg-blue-600/20 text-blue-300'
-                          }`}>
-                            {duel.duel_type.toUpperCase()}
-                          </span>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-white">
+                          {duel.player1_score} - {duel.player2_score}
                         </div>
-                        <div>{duel.arena_name}</div>
-                        <div>{new Date(duel.duel_date).toLocaleDateString()}</div>
-                        <div>{duel.duel_length_minutes.toFixed(1)} min</div>
+                        <div className="text-xs text-green-400 font-bold">
+                          {duel.winner_alias} wins
+                        </div>
                       </div>
                     </div>
+                    
+                    <div className="text-right text-xs text-gray-400">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                          duel.duel_type === 'tournament' 
+                            ? 'bg-purple-600/20 text-purple-300' 
+                            : 'bg-blue-600/20 text-blue-300'
+                        }`}>
+                          {duel.duel_type.toUpperCase()}
+                        </span>
+                      </div>
+                      <div>{duel.arena_name}</div>
+                      <div>{new Date(duel.duel_date).toLocaleDateString()}</div>
+                      <div>{duel.duel_length_minutes.toFixed(1)} min</div>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'head-to-head' && (
-            <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
-              <h2 className="text-2xl font-bold text-yellow-400 mb-6">🤝 Head-to-Head Records</h2>
-              
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-6xl mb-4">🔜</div>
-                <p className="text-lg">Head-to-head comparison tool coming soon!</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Select two players to see their complete match history and statistics against each other.
-                </p>
-              </div>
+        {activeTab === 'head-to-head' && (
+          <div className="bg-gray-800/30 border border-gray-700 rounded-xl p-6">
+            <h2 className="text-2xl font-bold text-yellow-400 mb-6">🤝 Head-to-Head Records</h2>
+            
+            <div className="text-center py-12 text-gray-500">
+              <div className="text-6xl mb-4">🔜</div>
+              <p className="text-lg">Head-to-head comparison tool coming soon!</p>
+              <p className="text-sm text-gray-400 mt-2">
+                Select two players to see their complete match history and statistics against each other.
+              </p>
             </div>
-          )}
+          </div>
+        )}
         </div>
       </div>
     </div>

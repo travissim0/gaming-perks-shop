@@ -352,7 +352,68 @@ export default function CTFAdminPage() {
 
               {/* CTF Admin Panel - 2/3 width */}
               <div className="lg:col-span-2">
+                <div className="space-y-6">
+                  {/* Quick Actions */}
+                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-6">
+                    <h3 className="text-lg font-semibold text-purple-400 mb-4">🚀 Quick Actions</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <a
+                        href="/admin/ctf-management"
+                        className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">🛡️</div>
+                          <div>
+                            <div className="font-semibold">Squad Management</div>
+                            <div className="text-sm text-purple-200">Manage squads & tournaments</div>
+                          </div>
+                        </div>
+                      </a>
+                      
+                      <a
+                        href="/admin/ctf-management?tab=free-agents"
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">🎯</div>
+                          <div>
+                            <div className="font-semibold">Admin Free Agents</div>
+                            <div className="text-sm text-blue-200">Manage available players</div>
+                          </div>
+                        </div>
+                      </a>
+
+                      <a
+                        href="/free-agents"
+                        className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">👀</div>
+                          <div>
+                            <div className="font-semibold">View Public Pool</div>
+                            <div className="text-sm text-green-200">See what players see</div>
+                          </div>
+                        </div>
+                      </a>
+
+                      <a
+                        href="/admin/ctf-management?tab=bans"
+                        className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">🚫</div>
+                          <div>
+                            <div className="font-semibold">League Bans</div>
+                            <div className="text-sm text-red-200">Manage banned players</div>
+                          </div>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* CTF Admin Panel */}
                 <CTFAdminPanel />
+                </div>
               </div>
             </div>
           </div>

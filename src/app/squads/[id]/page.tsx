@@ -28,6 +28,7 @@ interface Squad {
   captain_id: string;
   created_at: string;
   banner_url?: string;
+  is_active: boolean;
   members: SquadMember[];
 }
 
@@ -310,7 +311,75 @@ export default function SquadDetailPage() {
   };
 
   const canRequestToJoin = () => {
-    return user && !userSquad && !hasExistingRequest && squad && squad.captain_id !== user.id;
+    if (!user || !squad || hasExistingRequest) return false;
+    
+    // Check if user is already a member of this squad
+    const isAlreadyMember = squad.members.some(member => member.player_id === user.id);
+    if (isAlreadyMember) return false;
+    
+    // Check if user is already in another squad (unless it's this squad)
+    if (userSquad && userSquad.id !== squad.id) return false;
+    
+    // Can't request to join if user is the captain (shouldn't happen, but safety check)
+    if (squad.captain_id === user.id) return false;
+    
+    // Squad must be active
+    if (!squad.is_active) return false;
+    
+    return true;
+  };
+
+  const isCurrentMember = () => {
+    return user && userSquad && userSquad.id === squad?.id;
+  };
+
+  const canLeaveSquad = () => {
+    if (!isCurrentMember() || !user || !squad) return false;
+    
+    // Find user in squad members
+    const userMember = squad.members.find(m => m.player_id === user.id);
+    if (!userMember) return false;
+    
+    // Captains can only leave if there's another captain or co-captain to take over
+    if (userMember.role === 'captain') {
+      const otherLeaders = squad.members.filter(m => 
+        m.player_id !== user.id && ['captain', 'co_captain'].includes(m.role)
+      );
+      return otherLeaders.length > 0;
+    }
+    
+    // Co-captains and players can always leave
+    return true;
+  };
+
+  const leaveSquad = async () => {
+    if (!user || !squad || !canLeaveSquad()) return;
+
+    const confirmMessage = 'Are you sure you want to leave this squad? This action cannot be undone.';
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      setIsRequesting(true);
+      
+      const { error } = await supabase
+        .from('squad_members')
+        .delete()
+        .eq('squad_id', squad.id)
+        .eq('player_id', user.id);
+
+      if (error) throw error;
+
+      toast.success('Successfully left the squad');
+      
+      // Refresh data
+      await loadAllData();
+      
+    } catch (error: any) {
+      console.error('Error leaving squad:', error);
+      toast.error(error.message || 'Failed to leave squad');
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   // Banner management functions
@@ -519,6 +588,11 @@ export default function SquadDetailPage() {
                       <h1 className="text-4xl font-bold text-cyan-400">
                         [{squad.tag}] {squad.name}
                       </h1>
+                      {!squad.is_active && (
+                        <span className="bg-red-600/20 text-red-400 px-3 py-1 rounded-full text-sm font-medium border border-red-600/30">
+                          ⚠️ Inactive Squad
+                        </span>
+                      )}
                     </div>
                     
                     {squad.description && (
@@ -576,6 +650,24 @@ export default function SquadDetailPage() {
                       </button>
                     )}
                     
+                    {/* Leave Squad Button for Current Members */}
+                    {canLeaveSquad() && (
+                      <button
+                        onClick={leaveSquad}
+                        disabled={isRequesting}
+                        className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed"
+                      >
+                        {isRequesting ? (
+                          <span className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                            Leaving...
+                          </span>
+                        ) : (
+                          '🚪 Leave Squad'
+                        )}
+                      </button>
+                    )}
+                    
                     {/* Banner Management Button for Captains/Co-Captains */}
                     {isUserCaptainOrCoCaptain() && (
                       <button
@@ -595,6 +687,13 @@ export default function SquadDetailPage() {
                     {userSquad && userSquad.id !== squad.id && (
                       <div className="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-lg text-center border border-blue-600/30">
                         👥 Member of [{userSquad.tag}]
+                      </div>
+                    )}
+                    
+                    {/* Current member status for users who can't leave (captains without successors) */}
+                    {isCurrentMember() && !canLeaveSquad() && (
+                      <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
+                        👑 Captain - Promote another member to leave
                       </div>
                     )}
                   </div>

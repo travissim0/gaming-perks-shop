@@ -207,7 +207,8 @@ export default function ProfilePage() {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
+      // First try to find an active squad membership
+      const { data: activeData, error: activeError } = await supabase
         .from('squad_members')
         .select(`
           squads!inner(
@@ -219,15 +220,32 @@ export default function ProfilePage() {
         `)
         .eq('player_id', user.id)
         .eq('status', 'active')
+        .limit(1)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading user squad:', error);
+      if (activeData?.squads) {
+        setUserSquad(activeData.squads);
         return;
       }
 
-      if (data?.squads) {
-        setUserSquad(data.squads);
+      // If no active membership, try to find any membership (including inactive)
+      const { data: anyData, error: anyError } = await supabase
+        .from('squad_members')
+        .select(`
+          squads!inner(
+            id,
+            name,
+            tag,
+            description
+          )
+        `)
+        .eq('player_id', user.id)
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (anyData?.squads) {
+        setUserSquad(anyData.squads);
       }
     } catch (error) {
       console.error('Error loading user squad:', error);
@@ -397,7 +415,7 @@ export default function ProfilePage() {
                           [{userSquad.tag}] {userSquad.name}
                         </h3>
                         <Link
-                          href="/squads"
+                          href={`/squads/${userSquad.id}`}
                           className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded text-sm font-medium transition-colors duration-300"
                         >
                           Manage Squad

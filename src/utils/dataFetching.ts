@@ -221,10 +221,9 @@ export const queries = {
       async () => {
         const query = getCachedSupabase()
           .from('squads')
-          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, banner_url')
+          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, banner_url, is_active')
           .eq('id', squadId)
-          .eq('is_active', true)
-          .single();
+          .maybeSingle();
         return await query;
       },
       { 
@@ -245,6 +244,7 @@ export const queries = {
             player_id,
             role,
             joined_at,
+            status,
             profiles!squad_members_player_id_fkey(in_game_alias)
           `)
           .eq('squad_id', squadId)
@@ -264,7 +264,7 @@ export const queries = {
   getTopSquads: async (limit: number = 10) => {
     return supabaseQuery(
       async () => {
-        // Optimized query avoiding complex joins
+        // Optimized query avoiding complex joins - only active squads for home page
         const query = getCachedSupabase()
           .from('squads')
           .select(`
@@ -284,6 +284,34 @@ export const queries = {
         errorMessage: 'Failed to load top squads',
         useCache: true,
         cacheKey: `top_squads_${limit}`
+      }
+    );
+  },
+
+  getAllSquads: async () => {
+    return supabaseQuery(
+      async () => {
+        // Get all squads (active and inactive) for squads page
+        const query = getCachedSupabase()
+          .from('squads')
+          .select(`
+            id,
+            name,
+            tag,
+            description,
+            captain_id,
+            created_at,
+            is_active,
+            banner_url,
+            profiles!squads_captain_id_fkey(in_game_alias)
+          `)
+          .order('created_at', { ascending: false });
+        return await query;
+      },
+      { 
+        errorMessage: 'Failed to load squads',
+        useCache: true,
+        cacheKey: 'all_squads'
       }
     );
   },

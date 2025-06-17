@@ -168,22 +168,27 @@ export default function Navbar({ user }: { user: any }) {
   };
 
   // Navigation groups
-  const playNavItems = [
-    { href: '/matches', label: 'Matches', icon: '⚔️' },
+  const squadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/dueling', label: 'Dueling', icon: '🗡️' },
+    { href: '/free-agents', label: 'Free Agents', icon: '🎯' },
+    { href: '/matches', label: 'Match Log', icon: '⚔️' },
+    { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
   ];
 
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
-    { href: '/logs', label: 'Game Logs', icon: '📜' },
+    { href: '/event-log', label: 'Player Event Log', icon: '📋' },
   ];
 
   const communityNavItems = [
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
+  ];
+
+  const miscNavItems = [
     { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
+    { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
   ];
 
   if (!user) {
@@ -452,26 +457,26 @@ export default function Navbar({ user }: { user: any }) {
       <div className="hidden md:block">
         <div className="container mx-auto px-4">
           <div className="flex items-center space-x-8 py-3">
-            {/* Play Section */}
+            {/* Squads Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 transition-colors rounded-lg group-hover:bg-gray-800/30">
-                <Gamepad2 className="w-4 h-4" />
-                <span className="font-medium">Play</span>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-green-600/20 hover:to-emerald-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-green-500/30 group-hover:shadow-lg group-hover:shadow-green-500/20">
+                <Gamepad2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <span className="font-semibold">Squads</span>
+                <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
-                <div className="py-2">
-                  {playNavItems.map((item) => (
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-3">
+                  {squadsNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3">{item.icon}</span>
-                      {item.label}
+                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -480,24 +485,24 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Stats Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 transition-colors rounded-lg group-hover:bg-gray-800/30">
-                <BarChart3 className="w-4 h-4" />
-                <span className="font-medium">Stats</span>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-blue-600/20 hover:to-indigo-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-blue-500/30 group-hover:shadow-lg group-hover:shadow-blue-500/20">
+                <BarChart3 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <span className="font-semibold">Stats</span>
+                <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
-                <div className="py-2">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-3">
                   {statsNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3">{item.icon}</span>
-                      {item.label}
+                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -506,24 +511,50 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Community Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 transition-colors rounded-lg group-hover:bg-gray-800/30">
-                <Users className="w-4 h-4" />
-                <span className="font-medium">Community</span>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-purple-500/30 group-hover:shadow-lg group-hover:shadow-purple-500/20">
+                <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <span className="font-semibold">Community</span>
+                <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
-                <div className="py-2">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-3">
                   {communityNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3">{item.icon}</span>
-                      {item.label}
+                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Misc Section */}
+            <div className="group relative">
+              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-orange-500/30 group-hover:shadow-lg group-hover:shadow-orange-500/20">
+                <span className="text-lg">🔧</span>
+                <span className="font-semibold">Misc</span>
+                <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-3">
+                  {miscNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                    >
+                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -551,9 +582,9 @@ export default function Navbar({ user }: { user: any }) {
               {/* Navigation Sections */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Play</h4>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Squads</h4>
                   <div className="space-y-1">
-                    {playNavItems.map((item) => (
+                    {squadsNavItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
@@ -592,6 +623,23 @@ export default function Navbar({ user }: { user: any }) {
                         key={item.href}
                         href={item.href}
                         className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <span className="mr-3">{item.icon}</span>
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Misc</h4>
+                  <div className="space-y-1">
+                    {miscNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 rounded transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         <span className="mr-3">{item.icon}</span>

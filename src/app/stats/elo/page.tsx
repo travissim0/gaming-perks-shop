@@ -157,9 +157,9 @@ export default function EloLeaderboardPage() {
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-            <p className="text-xl">Loading ELO leaderboard...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <p className="text-xl">Loading ELO leaderboard...</p>
           </div>
         </div>
       </div>
@@ -171,15 +171,15 @@ export default function EloLeaderboardPage() {
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading ELO Leaderboard</h1>
-            <p className="text-blue-200 mb-4">{error}</p>
-            <button 
-              onClick={() => fetchEloLeaderboard(0)}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
-            >
-              Retry
-            </button>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading ELO Leaderboard</h1>
+          <p className="text-blue-200 mb-4">{error}</p>
+          <button 
+            onClick={() => fetchEloLeaderboard(0)}
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
+          >
+            Retry
+          </button>
           </div>
         </div>
       </div>
