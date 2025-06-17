@@ -927,14 +927,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* News Section - Hero Layout */}
-        <div className="mb-8">
-          <NewsSection limit={4} showReadState={true} heroLayout={true} />
-        </div>
-
-        {/* NEW Layout: Videos Front and Center */}
+        {/* Server Status Layout */}
         <div 
-          className="grid grid-cols-1 xl:grid-cols-12 gap-6"
+          className="mb-8"
           style={{
             // Limit transform effect to top 300px of scroll
             transform: scrollY < 300 ? `translateY(${Math.max(0, scrollY - 200) * -0.05}px)` : 'none',
@@ -942,8 +937,9 @@ export default function Home() {
             opacity: scrollY < 400 ? Math.max(0.85, 1 - (scrollY - 200) / 300) : 1
           }}
         >
-          {/* Left Sidebar - Online Users and Server Status */}
-          <div className="xl:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            {/* Left Sidebar - Online Users and Server Status */}
+            <div className="xl:col-span-3 space-y-6">
             {/* Online Users (moved from right sidebar) */}
             {/* Online Users & Server Status - Mobile responsive side by side */}
             <div className="space-y-4 md:space-y-4 portrait:space-y-0 portrait:grid portrait:grid-cols-2 portrait:gap-4">
@@ -1310,103 +1306,120 @@ export default function Home() {
             )}
           </div>
 
-          {/* Center Content - Featured Videos */}
-          <div className="xl:col-span-7 space-y-6">
-            {/* Featured Videos Section - Simplified */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-2xl overflow-hidden">
-              <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
-                <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>
-              </div>
-              
-              <div className="p-4">
-                {featuredVideos.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-                    {featuredVideos.map((video, index) => {
-                      const thumbnailUrl = video.thumbnail_url || 
-                        (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
-                      
-                      return (
-                        <div key={video.id} className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-red-500/50 transition-all duration-300"
-                        onClick={() => {
-                          // Default click action - prefer YouTube embed, fallback to external links
-                          if (video.youtube_url) {
-                            openVideoEmbed(video);
-                          } else if (video.vod_url) {
-                            recordVideoView(video.id);
-                            window.open(video.vod_url, '_blank');
-                          }
-                        }}>
-                          {/* Video Thumbnail - Mobile Optimized */}
-                          <div className="relative aspect-video overflow-hidden">
-                            {thumbnailUrl ? (
-                              <>
-                                <img 
-                                  src={thumbnailUrl}
-                                  alt={video.title}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  onLoad={() => console.log('✅ Thumbnail loaded:', thumbnailUrl)}
-                                  onError={(e) => {
-                                    console.warn('❌ Thumbnail failed to load:', thumbnailUrl);
-                                    
-                                    // Try fallback thumbnails for YouTube videos
-                                    if (video.youtube_url && thumbnailUrl.includes('hqdefault')) {
-                                      console.log('🔄 Trying mqdefault fallback...');
-                                      const videoId = getYouTubeVideoId(video.youtube_url);
-                                      e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
-                                    } else if (video.youtube_url && thumbnailUrl.includes('mqdefault')) {
-                                      console.log('🔄 Trying default fallback...');
-                                      const videoId = getYouTubeVideoId(video.youtube_url);
-                                      e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/default.jpg`;
-                                    } else {
-                                      // Use placeholder
-                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIyNSIgdmlld0JveD0iMCAwIDQwMCAyMjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjI1IiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTEyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzlDQTNBRiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmlkZW8gVGh1bWJuYWlsPC90ZXh0Pgo8L3N2Zz4K';
-                                    }
-                                  }}
-                                />
-                              </>
-                            ) : (
-                              <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                                <div className="text-gray-400 text-center">
-                                  <div className="text-lg">📹</div>
+                      {/* News Section - Desktop: Right of server status, Mobile: Full width */}
+            <div className="xl:col-span-9">
+              <NewsSection limit={4} showReadState={true} heroLayout={true} allowCollapse={true} />
+            </div>
+          </div>
+        </div>
+
+        {/* Videos Section - Centered like before */}
+        <div 
+          className="mb-8"
+          style={{
+            // Limit transform effect to top 300px of scroll
+            transform: scrollY < 300 ? `translateY(${Math.max(0, scrollY - 200) * -0.05}px)` : 'none',
+            // Limit opacity effect to first 400px and make it fade out quickly
+            opacity: scrollY < 400 ? Math.max(0.85, 1 - (scrollY - 200) / 300) : 1
+          }}
+        >
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            {/* Featured Videos Section - Centered */}
+            <div className="xl:col-span-8 xl:col-start-3 space-y-6">
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-2xl overflow-hidden">
+                <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
+                  <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>
+                </div>
+                
+                <div className="p-4">
+                  {featuredVideos.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                      {featuredVideos.map((video, index) => {
+                        const thumbnailUrl = video.thumbnail_url || 
+                          (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
+                        
+                        return (
+                          <div key={video.id} className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-red-500/50 transition-all duration-300"
+                          onClick={() => {
+                            // Default click action - prefer YouTube embed, fallback to external links
+                            if (video.youtube_url) {
+                              openVideoEmbed(video);
+                            } else if (video.vod_url) {
+                              recordVideoView(video.id);
+                              window.open(video.vod_url, '_blank');
+                            }
+                          }}>
+                            {/* Video Thumbnail - Mobile Optimized */}
+                            <div className="relative aspect-video overflow-hidden">
+                              {thumbnailUrl ? (
+                                <>
+                                  <img 
+                                    src={thumbnailUrl}
+                                    alt={video.title}
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                    onLoad={() => console.log('✅ Thumbnail loaded:', thumbnailUrl)}
+                                    onError={(e) => {
+                                      console.warn('❌ Thumbnail failed to load:', thumbnailUrl);
+                                      
+                                      // Try fallback thumbnails for YouTube videos
+                                      if (video.youtube_url && thumbnailUrl.includes('hqdefault')) {
+                                        console.log('🔄 Trying mqdefault fallback...');
+                                        const videoId = getYouTubeVideoId(video.youtube_url);
+                                        e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+                                      } else if (video.youtube_url && thumbnailUrl.includes('mqdefault')) {
+                                        console.log('🔄 Trying default fallback...');
+                                        const videoId = getYouTubeVideoId(video.youtube_url);
+                                        e.currentTarget.src = `https://i.ytimg.com/vi/${videoId}/default.jpg`;
+                                      } else {
+                                        // Use placeholder
+                                        e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIyNSIgdmlld0JveD0iMCAwIDQwMCAyMjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjI1IiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTEyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzlDQTNBRiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmlkZW8gVGh1bWJuYWlsPC90ZXh0Pgo8L3N2Zz4K';
+                                      }
+                                    }}
+                                  />
+                                </>
+                              ) : (
+                                <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-lg">📹</div>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Simple Play Button Overlay */}
+                              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
+                                <div className="w-8 h-8 md:w-12 md:h-12 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                                  <svg className="w-3 h-3 md:w-4 md:h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                  </svg>
                                 </div>
                               </div>
-                            )}
+                            </div>
                             
-                            {/* Simple Play Button Overlay */}
-                            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                              <div className="w-8 h-8 md:w-12 md:h-12 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                                <svg className="w-3 h-3 md:w-4 md:h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M8 5v14l11-7z"/>
-                                </svg>
-                              </div>
+                            {/* Simple Video Title */}
+                            <div className="p-2">
+                              <h4 className="font-medium text-sm text-white group-hover:text-red-300 transition-colors truncate">
+                                {video.title}
+                              </h4>
                             </div>
                           </div>
-                          
-                          {/* Simple Video Title */}
-                          <div className="p-2">
-                            <h4 className="font-medium text-sm text-white group-hover:text-red-300 transition-colors truncate">
-                              {video.title}
-                            </h4>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="text-6xl mb-4">🎬</div>
-                    <div className="text-gray-500 text-lg mb-2">No featured videos yet</div>
-                    <div className="text-gray-600 text-sm">
-                      Check back soon for the latest Infantry Online content!
+                        );
+                      })}
                     </div>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">🎬</div>
+                      <div className="text-gray-500 text-lg mb-2">No featured videos yet</div>
+                      <div className="text-gray-600 text-sm">
+                        Check back soon for the latest Infantry Online content!
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
 
-          {/* Right Sidebar - Matches, Squads, Top Supporters */}
-          <div className="xl:col-span-3 space-y-6">
+            {/* Right Sidebar - Matches, Squads, Top Supporters */}
+            <div className="xl:col-span-3 space-y-6">
             {/* Top Supporters Widget - Moved to top */}
             <TopSupportersWidget 
               showAdminControls={true}
@@ -1531,6 +1544,7 @@ export default function Home() {
             </section>
           </div>
         </div>
+      </div>
       </main>
       
       {/* YouTube Embed Modal */}

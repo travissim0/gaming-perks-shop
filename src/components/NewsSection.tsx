@@ -32,18 +32,23 @@ interface NewsSectionProps {
   className?: string;
   showReadState?: boolean;
   heroLayout?: boolean;
+  allowCollapse?: boolean;
+  collapsedPosition?: 'inline' | 'below-server';
 }
 
 const NewsSection = ({ 
   limit = 5, 
   className = '', 
   showReadState = true,
-  heroLayout = false
+  heroLayout = false,
+  allowCollapse = false,
+  collapsedPosition = 'inline'
 }: NewsSectionProps) => {
   const [posts, setPosts] = useState<NewsPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [reactionDetails, setReactionDetails] = useState<Record<string, Record<string, string[]>>>({});
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { user } = useAuth();
 
   const fetchPosts = async () => {
@@ -75,6 +80,12 @@ const NewsSection = ({
           }
         });
         setExpandedPosts(newExpandedPosts);
+        
+        // Auto-collapse if all posts are read and allowCollapse is enabled
+        if (allowCollapse && posts.length > 0) {
+          const allRead = posts.every((post: NewsPost) => post.is_read);
+          setIsCollapsed(allRead);
+        }
       } else {
         // If not showing read state, expand all posts by default
         const allPostIds = new Set<string>(posts.map((post: NewsPost) => post.id));
@@ -449,6 +460,38 @@ const NewsSection = ({
     );
   }
 
+  // Collapsed widget when all posts are read
+  if (isCollapsed && allowCollapse) {
+    return (
+      <div className={`w-full ${className}`}>
+        <div 
+          className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 border border-gray-600 hover:border-blue-500/50 transition-all duration-300 cursor-pointer"
+          onClick={() => setIsCollapsed(false)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold">News Posts</h3>
+                <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} • All read</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <span className="text-sm">Click to expand</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (posts.length === 0) {
     return (
       <div className={`text-center py-8 ${className}`}>
@@ -464,6 +507,21 @@ const NewsSection = ({
 
     return (
       <div className={`${className}`}>
+        {/* Collapse all button when allowCollapse is enabled */}
+        {allowCollapse && (
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-sm text-gray-300"
+              title="Collapse news section"
+            >
+              <span>Collapse All</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Featured Post */}
           <div className="lg:flex-1">
@@ -523,7 +581,7 @@ const NewsSection = ({
                     <img
                       src={featuredPost.featured_image_url}
                       alt={featuredPost.title}
-                      className="w-full h-48 object-cover rounded-lg mb-4"
+                      className="w-full max-h-64 object-contain rounded-lg mb-4 bg-gray-800"
                     />
                   )}
                   
@@ -768,7 +826,7 @@ const NewsSection = ({
                   <img
                     src={post.featured_image_url}
                     alt={post.title}
-                    className="w-full h-48 object-cover rounded-lg mb-4"
+                    className="w-full max-h-64 object-contain rounded-lg mb-4 bg-gray-800"
                   />
                 )}
 
@@ -835,6 +893,46 @@ const NewsSection = ({
           </article>
         );
       })}
+    </div>
+  );
+};
+
+// Collapsed News Widget Component - can be placed anywhere
+export const CollapsedNewsWidget = ({ 
+  onExpand, 
+  postCount = 0,
+  className = '' 
+}: { 
+  onExpand: () => void; 
+  postCount?: number; 
+  className?: string; 
+}) => {
+  return (
+    <div className={`${className}`}>
+      <div 
+        className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 border border-gray-600 hover:border-blue-500/50 transition-all duration-300 cursor-pointer"
+        onClick={onExpand}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">News Posts</h3>
+              <p className="text-gray-400 text-sm">{postCount} post{postCount !== 1 ? 's' : ''} • All read</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-gray-400">
+            <span className="text-sm">Click to expand</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -434,7 +434,7 @@ export default function NewsPostPage({ params }: { params: Promise<{ id: string 
               <img
                 src={post.featured_image_url}
                 alt={post.title}
-                className="w-full h-64 object-cover rounded-lg"
+                className="w-full max-h-96 object-contain rounded-lg bg-gray-800"
               />
             </div>
           )}
