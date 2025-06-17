@@ -60,6 +60,8 @@ export default function CTFManagementPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
+  const [accessChecked, setAccessChecked] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<'squads' | 'free-agents' | 'tournaments' | 'bans'>('squads');
   
   // Squad management state
@@ -78,55 +80,99 @@ export default function CTFManagementPage() {
   const [bannedPlayersLoading, setBannedPlayersLoading] = useState(true);
   const [showBanPlayer, setShowBanPlayer] = useState(false);
 
-  // Check access permissions
+  // Check access permissions with better error handling
   useEffect(() => {
-    if (loading) return; // Wait for auth to finish loading
+    let isMounted = true;
     
-    if (!user) {
-      router.push('/auth/login');
-      return;
-    }
-
     const checkAccess = async () => {
-      if (!user) return;
+      console.log('🔍 CTF Management access check - loading:', loading, 'user:', !!user);
+      
+      if (loading) {
+        console.log('⏳ Still loading auth, waiting...');
+        return;
+      }
+      
+      if (!user) {
+        console.log('❌ No user found, redirecting to login');
+        // Small delay to prevent race conditions
+        setTimeout(() => {
+          if (isMounted) {
+            router.push('/auth/login');
+          }
+        }, 100);
+        return;
+      }
 
       try {
+        console.log('👤 Checking access for user:', user.email);
+        
         const { data, error } = await supabase
           .from('profiles')
           .select('id, in_game_alias, email, ctf_role, is_admin')
           .eq('id', user.id)
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Profile fetch error:', error);
+          throw error;
+        }
+
+        if (!isMounted) return;
 
         setProfile(data);
+        console.log('📋 Profile loaded:', data.in_game_alias, 'Role:', data.ctf_role, 'Admin:', data.is_admin);
 
         // Allow access for CTF admins and site admins
         const access = data.is_admin || data.ctf_role === 'ctf_admin';
         
         if (!access) {
-          router.push('/dashboard');
-          toast.error('Access denied: CTF Admin privileges required');
+          console.log('🚫 Access denied for user:', data.in_game_alias);
+          setAccessChecked(true);
+          setTimeout(() => {
+            if (isMounted) {
+              router.push('/dashboard');
+              toast.error('Access denied: CTF Admin privileges required');
+            }
+          }, 100);
           return;
         }
 
+        console.log('✅ Access granted for user:', data.in_game_alias);
         setHasAccess(true);
+        setAccessChecked(true);
       } catch (error) {
-        console.error('Error checking access:', error);
-        router.push('/dashboard');
-        toast.error('Error checking permissions');
+        console.error('❌ Error checking access:', error);
+        if (isMounted) {
+          setAccessChecked(true);
+          setTimeout(() => {
+            if (isMounted) {
+              router.push('/dashboard');
+              toast.error('Error checking permissions');
+            }
+          }, 100);
+        }
       }
     };
 
     checkAccess();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [user, loading, router]);
 
-  // Handle URL tab parameter
+  // Handle mounting and URL tab parameter
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tabParam = urlParams.get('tab');
-    if (tabParam && ['squads', 'free-agents', 'tournaments'].includes(tabParam)) {
-      setActiveTab(tabParam as any);
+    setMounted(true);
+    // Only run on client side to prevent hydration mismatch
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam && ['squads', 'free-agents', 'tournaments', 'bans'].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+      
+
     }
   }, []);
 
@@ -412,10 +458,18 @@ export default function CTFManagementPage() {
     }
   });
 
-  if (loading) {
+  if (loading || !accessChecked || !mounted) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-purple-400 font-mono">
+            {loading ? 'Loading authentication...' : !mounted ? 'Initializing...' : 'Verifying CTF admin access...'}
+          </p>
+          <p className="text-gray-400 text-sm mt-2">
+            {!mounted ? 'Setting up page...' : !accessChecked ? 'Please wait...' : 'Almost ready...'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -445,6 +499,52 @@ export default function CTFManagementPage() {
           <div className="text-sm text-gray-500 mt-2">
             Logged in as: <span className="text-purple-400">{profile?.in_game_alias}</span> 
             ({profile?.ctf_role || 'admin'})
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-purple-400 mb-4">⚡ Quick Actions</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <button
+              onClick={() => setActiveTab('squads')}
+              className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-center transition-colors group"
+            >
+              <div className="text-2xl mb-2">🛡️</div>
+              <div className="font-bold">Squad Management</div>
+              <div className="text-sm opacity-75">Manage squads & tournaments</div>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('free-agents')}
+              className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center transition-colors group"
+            >
+              <div className="text-2xl mb-2">🎯</div>
+              <div className="font-bold">Admin Free Agents</div>
+              <div className="text-sm opacity-75">Manage available players</div>
+            </button>
+            
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.open('/free-agents', '_blank');
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-center transition-colors group"
+            >
+              <div className="text-2xl mb-2">👀</div>
+              <div className="font-bold">View Public Pool</div>
+              <div className="text-sm opacity-75">See what players see</div>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('bans')}
+              className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg text-center transition-colors group"
+            >
+              <div className="text-2xl mb-2">🚫</div>
+              <div className="font-bold">League Bans</div>
+              <div className="text-sm opacity-75">Manage banned players</div>
+            </button>
           </div>
         </div>
 
