@@ -507,21 +507,7 @@ const NewsSection = ({
 
     return (
       <div className={`${className}`}>
-        {/* Collapse all button when allowCollapse is enabled */}
-        {allowCollapse && (
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={() => setIsCollapsed(true)}
-              className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors text-sm text-gray-300"
-              title="Collapse news section"
-            >
-              <span>Collapse All</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-          </div>
-        )}
+
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Featured Post */}
           <div className="lg:flex-1">
