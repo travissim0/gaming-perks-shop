@@ -184,6 +184,9 @@ body {
 /* Import custom news styles */
 @import '../styles/news.css';
 
+/* Import image quality improvements */
+@import '../styles/image-quality.css';
+
 /* Rich text editor styles */
 .ProseMirror {
   outline: none;

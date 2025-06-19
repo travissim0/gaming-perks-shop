@@ -60,10 +60,10 @@ export async function GET(request: NextRequest) {
       rounds_data: typeof match.rounds_data === 'string' 
         ? JSON.parse(match.rounds_data) 
         : match.rounds_data,
-      // Add formatted duration
-      formatted_duration: match.duration_seconds 
-        ? formatDuration(match.duration_seconds)
-        : null
+      // Use formatted_duration from database view (which handles NULL completed_at properly)
+      formatted_duration: match.formatted_duration || (match.duration_seconds 
+        ? formatDuration(match.duration_seconds) 
+        : 'N/A')
     })) || [];
 
     return NextResponse.json({

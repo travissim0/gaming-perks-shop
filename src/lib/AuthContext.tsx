@@ -10,7 +10,7 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<any>;
-  signUp: (email: string, password: string, inGameAlias: string) => Promise<any>;
+  signUp: (email: string, password: string, inGameAlias: string, avatarUrl?: string) => Promise<any>;
   signOut: () => Promise<void>;
   retryAuth: () => Promise<void>;
 }
@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, inGameAlias: string) => {
+  const signUp = async (email: string, password: string, inGameAlias: string, avatarUrl?: string) => {
     setLoading(true);
     setError(null);
     
@@ -214,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Create profile synchronously to ensure it exists before success
       if (data.user) {
         try {
-          await createUserProfile(data.user, inGameAlias);
+          await createUserProfile(data.user, inGameAlias, avatarUrl);
           console.log('✅ Profile created successfully for:', data.user.email);
           toast.success('Account created successfully!');
         } catch (profileError: any) {
@@ -236,14 +236,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createUserProfile = async (user: User, inGameAlias: string) => {
+  const createUserProfile = async (user: User, inGameAlias: string, avatarUrl?: string) => {
     try {
+      // Import default avatar function
+      const { getDefaultAvatarUrl } = await import('@/utils/supabaseHelpers');
+      const finalAvatarUrl = avatarUrl || getDefaultAvatarUrl();
+      
       const { error } = await supabase
         .from('profiles')
         .insert([{
           id: user.id,
           email: user.email,
           in_game_alias: inGameAlias,
+          avatar_url: finalAvatarUrl,
           last_seen: new Date().toISOString(),
         }]);
       
@@ -258,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .update({
               in_game_alias: inGameAlias,
               email: user.email,
+              avatar_url: finalAvatarUrl,
               registration_status: 'completed',
               last_seen: new Date().toISOString(),
               updated_at: new Date().toISOString()

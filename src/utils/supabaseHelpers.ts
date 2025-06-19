@@ -190,6 +190,7 @@ export async function getAllSquads(): Promise<any[]> {
         website_link,
         captain_id,
         is_active,
+        is_legacy,
         tournament_eligible,
         banner_url,
         created_at,
@@ -266,6 +267,67 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     console.error('Supabase connection check failed:', error);
     return false;
   }
+}
+
+// Get all players for the players filter (shows everyone signed up)
+export async function getAllPlayers(): Promise<any[]> {
+  return withRetry(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        in_game_alias,
+        email,
+        registration_status,
+        created_at,
+        is_league_banned,
+        ctf_role
+      `)
+      .eq('registration_status', 'completed')
+      .not('in_game_alias', 'is', null)
+      .neq('in_game_alias', '')
+      .order('in_game_alias', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  }, 'getAllPlayers');
+}
+
+// Get all site avatars for user selection
+export async function getSiteAvatars(): Promise<string[]> {
+  return withRetry(async () => {
+    try {
+      // Use API route to fetch avatars (server-side with service role)
+      const response = await fetch('/api/avatars');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      console.log(`Found ${data.count || 0} site avatars`);
+      return data.avatars || [];
+    } catch (error) {
+      console.error('Error in getSiteAvatars:', error);
+      return [];
+    }
+  }, 'getSiteAvatars');
+}
+
+// Get default avatar URL
+export function getDefaultAvatarUrl(): string {
+  const { data: { publicUrl } } = supabase.storage
+    .from('avatars')
+    .getPublicUrl('site-avatars/a7inf2.png');
+  return publicUrl;
 }
 
 // Export utility functions

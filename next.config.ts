@@ -47,8 +47,21 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   reactStrictMode: true,
-  // Optimize bundle size for production builds only
+  // Optimize bundle size and suppress warnings
   webpack: (config, { isServer, dev }) => {
+    // Suppress Supabase realtime client warnings
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      {
+        module: /node_modules\/@supabase\/realtime-js/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+      {
+        module: /node_modules\/@supabase\/supabase-js/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
+
     // Skip webpack optimizations in development when using Turbopack
     if (dev) {
       return config;

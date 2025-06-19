@@ -1,0 +1,82 @@
+/* Improve image quality on desktop */
+img {
+  /* Prevent pixelation on scaled images */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  
+  /* Use high quality rendering for larger images */
+  @media (min-width: 768px) {
+    image-rendering: auto;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: optimize-contrast;
+    image-rendering: smooth;
+  }
+}
+
+/* Specific improvements for squad banners and profile images */
+.squad-banner img,
+.profile-image img,
+.banner-image img {
+  image-rendering: auto;
+  image-rendering: high-quality;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: optimize-contrast;
+  
+  /* Ensure proper scaling */
+  object-fit: cover;
+  object-position: center;
+  
+  /* Smooth transitions */
+  transition: all 0.3s ease;
+}
+
+/* Banner specific improvements */
+.squad-banner {
+  /* Ensure banners don't get pixelated */
+  min-height: 200px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Profile image improvements */
+.profile-image {
+  /* Ensure profile images are crisp */
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+/* High DPI display improvements */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  img {
+    image-rendering: auto;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: optimize-contrast;
+  }
+}
+
+/* Specific improvements for different image sizes */
+.image-small {
+  image-rendering: pixelated;
+}
+
+.image-medium {
+  image-rendering: auto;
+}
+
+.image-large {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: optimize-contrast;
+}
+
+/* Prevent blurry images on zoom */
+img[src*="supabase"] {
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: optimize-contrast;
+  
+  /* Ensure proper loading */
+  loading: lazy;
+  decoding: async;
+} 

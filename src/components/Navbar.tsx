@@ -361,20 +361,8 @@ export default function Navbar({ user }: { user: any }) {
           <div className="flex items-center justify-between">
             {/* Left - Logo */}
             <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-              <img src="/images/ctfpl1.png" alt="CTFPL" className="h-8 w-auto" />
+              <img src="/images/ctfpl1.png" alt="CTFPL" className="h-16 w-auto" />
             </Link>
-
-            {/* Center - Search */}
-            <div className="hidden md:flex flex-1 max-w-md mx-8">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search players, squads, matches..."
-                  className="w-full pl-10 pr-4 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-gray-300 placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:bg-gray-800"
-                />
-              </div>
-            </div>
 
             {/* Right - Utilities */}
             <div className="flex items-center space-x-3">
@@ -577,9 +565,9 @@ export default function Navbar({ user }: { user: any }) {
                   className="flex items-center space-x-2 p-1.5 hover:bg-gray-800/50 rounded-lg transition-colors"
                 >
                   {userAvatar ? (
-                    <img src={userAvatar} alt="Avatar" className="w-7 h-7 rounded-full" />
+                    <img src={userAvatar} alt="Avatar" className="w-14 h-14 rounded-full" />
                   ) : (
-                    <div className="w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                    <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
                       <span className="text-white text-xs font-bold">
                         {user.email?.charAt(0).toUpperCase()}
                       </span>

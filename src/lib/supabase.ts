@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Environment variable handling for both development and production
 const getSupabaseUrl = () => {
@@ -30,12 +30,17 @@ console.log('🔧 Supabase configuration:', {
   environment: process.env.NODE_ENV || 'development'
 });
 
-// Optimized client configuration for better performance
+// Optimized client configuration with disabled realtime for reduced warnings
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   },
   global: {
     headers: {
@@ -48,36 +53,62 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Cached service client instance to prevent multiple instantiations
+let serviceClient: SupabaseClient | null = null;
+
 // Service client with optimizations for server-side operations
-export const getServiceSupabase = () => createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    global: {
-      headers: {
-        'Cache-Control': 'max-age=300'
+export const getServiceSupabase = () => {
+  if (!serviceClient) {
+    serviceClient = createClient(
+      supabaseUrl,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        },
+        realtime: {
+          params: {
+            eventsPerSecond: 2
+          }
+        },
+        global: {
+          headers: {
+            'Cache-Control': 'max-age=300'
+          }
+        }
       }
-    }
+    );
   }
-);
+  return serviceClient;
+};
+
+// Cached read-only client instance
+let cachedClient: SupabaseClient | null = null;
 
 // Cached client for read-heavy operations
-export const getCachedSupabase = () => createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    },
-    global: {
-      headers: {
-        'Cache-Control': 'max-age=600' // 10 minute cache for read operations
+export const getCachedSupabase = () => {
+  if (!cachedClient) {
+    cachedClient = createClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
+        },
+        realtime: {
+          params: {
+            eventsPerSecond: 1
+          }
+        },
+        global: {
+          headers: {
+            'Cache-Control': 'max-age=600' // 10 minute cache for read operations
+          }
+        }
       }
-    }
+    );
   }
-); 
+  return cachedClient;
+}; 

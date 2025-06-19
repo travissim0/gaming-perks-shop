@@ -5,11 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'react-hot-toast';
+import AvatarSelector from '@/components/AvatarSelector';
+import { getDefaultAvatarUrl } from '@/utils/supabaseHelpers';
 
 export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inGameAlias, setInGameAlias] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { signUp } = useAuth();
@@ -25,7 +28,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const { data, error } = await signUp(email, password, inGameAlias);
+      const { data, error } = await signUp(email, password, inGameAlias, selectedAvatar || undefined);
       
       if (error) {
         // Handle specific error cases
@@ -136,6 +139,15 @@ export default function Register() {
                   placeholder="Create a secure password..."
                 />
               </div>
+            </div>
+
+            {/* Avatar Selection */}
+            <div>
+              <AvatarSelector 
+                selectedAvatar={selectedAvatar}
+                onAvatarSelect={setSelectedAvatar}
+                size="small"
+              />
             </div>
 
             <div>

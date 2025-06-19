@@ -65,6 +65,7 @@ export interface Squad {
   website_link?: string | null;
   captain_id: string;
   is_active: boolean;
+  is_legacy: boolean;
   tournament_eligible: boolean;
   banner_url?: string | null;
   created_at: string;

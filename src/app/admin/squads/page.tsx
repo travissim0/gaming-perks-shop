@@ -233,7 +233,7 @@ export default function AdminSquads() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           {squad.banner_url && (
-                            <div className="w-8 h-8 mr-3 flex-shrink-0">
+                            <div className="w-16 h-16 mr-3 flex-shrink-0">
                               <img 
                                 src={squad.banner_url} 
                                 alt={`${squad.name} banner`}

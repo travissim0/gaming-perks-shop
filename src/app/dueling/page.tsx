@@ -142,6 +142,7 @@ const SORT_OPTIONS = [
 ];
 
 const MATCH_TYPE_OPTIONS = [
+  { value: 'overall', label: 'Overall Rankings' },
   { value: 'all', label: 'All Types' },
   { value: 'unranked', label: 'Unranked' },
   { value: 'ranked_bo3', label: 'Ranked Bo3' },
@@ -164,8 +165,8 @@ export default function DuelingPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Filters
-  const [matchType, setMatchType] = useState('all');
-  const [sortBy, setSortBy] = useState('win_rate');
+  const [matchType, setMatchType] = useState('overall');
+  const [sortBy, setSortBy] = useState('current_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -1332,7 +1333,6 @@ export default function DuelingPage() {
                       <th className="px-6 py-4 text-left text-sm font-medium text-blue-200">K/D</th>
                       <th className="px-6 py-4 text-left text-sm font-medium text-blue-200">Accuracy</th>
                       <th className="px-6 py-4 text-left text-sm font-medium text-blue-200">ELO</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-blue-200">Burst</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1368,18 +1368,15 @@ export default function DuelingPage() {
                             <div className="text-white">{formatPercentage(player.overall_accuracy)}</div>
                           </td>
                           <td className="px-6 py-4">
-                            {player.match_type.startsWith('ranked') ? (
+                            {player.match_type.startsWith('ranked') || player.match_type === 'overall' ? (
                               <div>
                                 <div className={`font-bold ${tier.color}`}>{player.current_elo}</div>
                                 <div className="text-xs text-blue-300">Peak: {player.peak_elo}</div>
+                                <div className={`text-xs ${tier.color}`}>{tier.name}</div>
                               </div>
                             ) : (
                               <span className="text-gray-500">N/A</span>
                             )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-white">{formatPercentage(player.burst_damage_ratio)}</div>
-                            <div className="text-xs text-blue-300">{player.double_hits + player.triple_hits} hits</div>
                           </td>
                         </tr>
                       );
@@ -1435,12 +1432,6 @@ export default function DuelingPage() {
                       >
                         Duration {matchSortBy === 'duration_seconds' && (matchSortOrder === 'asc' ? '↑' : '↓')}
                       </th>
-                      <th 
-                        className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase cursor-pointer hover:text-cyan-400"
-                        onClick={() => handleMatchSort('arena_name')}
-                      >
-                        Arena {matchSortBy === 'arena_name' && (matchSortOrder === 'asc' ? '↑' : '↓')}
-                      </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Player 1 Stats</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Player 2 Stats</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-blue-200 uppercase">Rounds</th>
@@ -1481,9 +1472,6 @@ export default function DuelingPage() {
                         </td>
                         <td className="px-4 py-3 text-center text-sm text-blue-300">
                           {match.formatted_duration}
-                        </td>
-                        <td className="px-4 py-3 text-center text-sm text-blue-300">
-                          {match.arena_name}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <div className="text-xs space-y-1">

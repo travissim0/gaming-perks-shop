@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import AvatarSelector from '@/components/AvatarSelector';
+import { getDefaultAvatarUrl } from '@/utils/supabaseHelpers';
 
 export default function ProfilePage() {
   const { user, loading } = useAuth();
@@ -17,7 +19,6 @@ export default function ProfilePage() {
   const [updateLoading, setUpdateLoading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [defaultAvatars, setDefaultAvatars] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [userSquad, setUserSquad] = useState<any>(null);
 
@@ -53,23 +54,10 @@ export default function ProfilePage() {
           // Fetch user's squad information
           await loadUserSquad();
 
-          // Fetch default avatars (skip if bucket doesn't exist yet)
-          try {
-            const { data: avatarData, error: avatarError } = await supabase
-              .storage
-              .from('avatars')
-              .list('defaults');
-
-            if (avatarError) {
-              console.log('Avatars bucket not set up yet:', avatarError.message);
-            } else if (avatarData) {
-              const avatarUrls = avatarData.map(file => {
-                return supabase.storage.from('avatars').getPublicUrl(`defaults/${file.name}`).data.publicUrl;
-              });
-              setDefaultAvatars(avatarUrls);
-            }
-          } catch (error) {
-            console.log('Storage not configured yet');
+          // Set default avatar if none exists
+          if (!data.avatar_url) {
+            const defaultAvatar = getDefaultAvatarUrl();
+            setAvatarUrl(defaultAvatar);
           }
         } catch (error: any) {
           toast.error('Error loading profile: ' + error.message);
@@ -198,10 +186,7 @@ export default function ProfilePage() {
     }
   };
 
-  const selectDefaultAvatar = (url: string) => {
-    setAvatarUrl(url);
-    setAvatarFile(null);
-  };
+
 
   const loadUserSquad = async () => {
     if (!user) return;
@@ -342,32 +327,18 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 
-                {defaultAvatars.length > 0 && (
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
-                    <label className="block text-lg font-bold text-cyan-400 mb-4 tracking-wide">
-                      🎖️ SELECT DEFAULT AVATAR
-                    </label>
-                    <div className="grid grid-cols-4 gap-4">
-                      {defaultAvatars.map((url, index) => (
-                        <div 
-                          key={index}
-                          onClick={() => selectDefaultAvatar(url)}
-                          className={`cursor-pointer rounded-lg overflow-hidden border-4 h-20 w-20 transition-all duration-300 ${
-                            avatarUrl === url 
-                              ? 'border-cyan-400 shadow-lg shadow-cyan-400/50' 
-                              : 'border-gray-600 hover:border-cyan-500/50'
-                          }`}
-                        >
-                          <img 
-                            src={url} 
-                            alt={`Default avatar ${index + 1}`}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Avatar Selection */}
+                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
+                  <AvatarSelector 
+                    selectedAvatar={avatarUrl}
+                    onAvatarSelect={(url) => {
+                      setAvatarUrl(url);
+                      setAvatarFile(null); // Clear any uploaded file
+                    }}
+                    showLabel={true}
+                    size="medium"
+                  />
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">

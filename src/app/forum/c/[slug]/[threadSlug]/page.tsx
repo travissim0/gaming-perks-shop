@@ -50,9 +50,39 @@ export default function ThreadPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [deletingThread, setDeletingThread] = useState(false);
+  const [userPostCounts, setUserPostCounts] = useState<Record<string, number>>({});
   
   const categorySlug = params.slug as string;
   const threadSlug = params.threadSlug as string;
+
+  // Function to get user post counts
+  const getUserPostCounts = async (userIds: string[]) => {
+    if (userIds.length === 0) return {};
+    
+    try {
+      const { data, error } = await supabase
+        .from('forum_posts')
+        .select('author_id')
+        .in('author_id', userIds)
+        .eq('is_deleted', false);
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      userIds.forEach(id => counts[id] = 0);
+      
+      data?.forEach(post => {
+        if (post.author_id) {
+          counts[post.author_id] = (counts[post.author_id] || 0) + 1;
+        }
+      });
+
+      return counts;
+    } catch (err) {
+      console.error('Error fetching post counts:', err);
+      return {};
+    }
+  };
 
   // Single consolidated useEffect for all data loading
   useEffect(() => {
@@ -89,6 +119,17 @@ export default function ThreadPage() {
         if (isCancelled) return;
         
         setPosts(postsData?.posts || []);
+
+        // Get unique user IDs and fetch post counts
+        const allUserIds = [threadData.author?.id, ...(postsData?.posts || []).map(p => p.author?.id)].filter(Boolean) as string[];
+        const uniqueUserIds = [...new Set(allUserIds)];
+        
+        if (uniqueUserIds.length > 0) {
+          const postCounts = await getUserPostCounts(uniqueUserIds);
+          if (!isCancelled) {
+            setUserPostCounts(postCounts);
+          }
+        }
 
         // Increment view count (only once)
         if (!initialLoadComplete) {
@@ -598,7 +639,51 @@ export default function ThreadPage() {
 
         {/* Original Thread Post */}
         <div id="post-0" className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-2xl mb-6 scroll-mt-4 relative overflow-hidden">
-          <div className="flex items-start space-x-6 p-6">
+          {/* Mobile Layout - Stack vertically */}
+          <div className="block md:hidden">
+            {/* Mobile Header with Avatar and User Info */}
+            <div className="flex items-center space-x-4 p-4 bg-gradient-to-b from-gray-700/50 to-gray-800/50 border-b border-gray-600/30">
+              <UserAvatar user={thread.author || {}} size="lg" className="ring-3 ring-cyan-500/30" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-cyan-400 text-lg truncate">{thread.author?.in_game_alias || 'Anonymous'}</h3>
+                <div className="bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded text-xs font-bold border border-cyan-500/30 inline-block">
+                  🏆 THREAD STARTER
+                </div>
+              </div>
+              <div className="text-xs text-gray-400 text-right">
+                <div>Posts: {userPostCounts[thread.author?.id || ''] ?? 'Loading...'}</div>
+                <div>Member: {formatDate(thread.created_at)}</div>
+              </div>
+            </div>
+            {/* Mobile Content */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span 
+                  title={formatDate(thread.created_at)}
+                  className="cursor-help hover:text-gray-300 transition-colors text-sm text-gray-400"
+                >
+                  📅 {getRelativeTime(thread.created_at)}
+                </span>
+                {user && !thread.is_locked && (
+                  <button
+                    onClick={handleReplyToThread}
+                    className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/30 text-cyan-400 px-3 py-1.5 rounded text-sm font-medium transition-all"
+                  >
+                    💬 Reply
+                  </button>
+                )}
+              </div>
+              <div className="prose prose-invert max-w-none">
+                <div 
+                  className="text-gray-200 whitespace-pre-wrap break-words leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: formatPostContent(thread.content) }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Layout - Side by side */}
+          <div className="hidden md:flex items-start space-x-6 p-6">
             {/* Left User Info Panel - Much Larger */}
             <div className="flex flex-col items-center space-y-3 min-w-[220px] bg-gradient-to-b from-gray-700/50 to-gray-800/50 rounded-lg p-6 border border-gray-600/30">
               <UserAvatar user={thread.author || {}} size="3xl" className="ring-4 ring-cyan-500/30" />
@@ -608,7 +693,7 @@ export default function ThreadPage() {
                   🏆 THREAD STARTER
                 </div>
                 <div className="text-xs text-gray-400 space-y-1">
-                  <div>Posts: {(thread.author as any)?.posts_count || 'N/A'}</div>
+                  <div>Posts: {userPostCounts[thread.author?.id || ''] ?? 'Loading...'}</div>
                   <div>Member since: {formatDate(thread.created_at)}</div>
                 </div>
               </div>
@@ -685,14 +770,83 @@ export default function ThreadPage() {
               id={`post-${index + 1}`} 
               className="bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/30 rounded-lg shadow-xl mb-4 scroll-mt-4 relative overflow-hidden"
             >
-              <div className="flex items-start space-x-6 p-6">
+              {/* Mobile Layout - Stack vertically */}
+              <div className="block md:hidden">
+                {/* Mobile Header with Avatar and User Info */}
+                <div className="flex items-center space-x-4 p-4 bg-gradient-to-b from-gray-700/30 to-gray-800/30 border-b border-gray-600/20">
+                  <UserAvatar user={post.author || {}} size="md" className="ring-2 ring-gray-500/30" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-gray-200 text-base truncate">{post.author?.in_game_alias || 'Anonymous'}</h4>
+                  </div>
+                  <div className="text-xs text-gray-500 text-right">
+                    <div>Posts: {userPostCounts[post.author?.id || ''] ?? 'Loading...'}</div>
+                    <div>Member: {formatDate(post.created_at)}</div>
+                  </div>
+                </div>
+                {/* Mobile Content */}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <span 
+                        title={formatDate(post.created_at)}
+                        className="cursor-help hover:text-gray-300 transition-colors text-sm text-gray-400"
+                      >
+                        {getRelativeTime(post.created_at)}
+                      </span>
+                      <button
+                        onClick={() => copyPostLink(index)}
+                        className="hover:text-cyan-400 transition-colors text-sm"
+                        title="Copy link to this post"
+                      >
+                        #{index + 1} 🔗
+                      </button>
+                      {post.edited_at && (
+                        <span className="text-xs text-yellow-400" title={`Edited: ${formatDate(post.edited_at)}`}>
+                          ✏️ Edited
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      {user && !thread.is_locked && (
+                        <button
+                          onClick={() => handleReplyToPost(post)}
+                          className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/30 text-cyan-400 px-2 py-1 rounded text-xs font-medium transition-all"
+                        >
+                          💬
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="prose prose-invert max-w-none">
+                    {editingPost?.id === post.id ? (
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="w-full h-32 bg-gradient-to-b from-gray-700 to-gray-800 border border-cyan-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-400 transition-all duration-300 resize-vertical"
+                        placeholder="Edit your post..."
+                      />
+                    ) : (
+                      <div 
+                        className="text-gray-200 break-words leading-relaxed"
+                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                        dangerouslySetInnerHTML={{ __html: formatPostContent(post.content) }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop Layout - Side by side */}
+              <div className="hidden md:flex items-start space-x-6 p-6">
                 {/* Left User Info Panel */}
                 <div className="flex flex-col items-center space-y-3 min-w-[200px] bg-gradient-to-b from-gray-700/30 to-gray-800/30 rounded-lg p-5 border border-gray-600/20">
                   <UserAvatar user={post.author || {}} size="2xl" className="ring-3 ring-gray-500/30" />
                   <div className="text-center space-y-2">
                     <h4 className="font-bold text-gray-200 text-lg">{post.author?.in_game_alias || 'Anonymous'}</h4>
                     <div className="text-xs text-gray-500 space-y-1">
-                      <div>Posts: {(post.author as any)?.posts_count || 'N/A'}</div>
+                      <div>Posts: {userPostCounts[post.author?.id || ''] ?? 'Loading...'}</div>
                       <div>Member: {formatDate(post.created_at)}</div>
                     </div>
                   </div>
@@ -795,7 +949,8 @@ export default function ThreadPage() {
                       />
                     ) : (
                       <div 
-                        className="text-gray-200 whitespace-pre-wrap break-words leading-relaxed"
+                        className="text-gray-200 break-words leading-relaxed"
+                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                         dangerouslySetInnerHTML={{ __html: formatPostContent(post.content) }}
                       />
                     )}
@@ -833,14 +988,59 @@ export default function ThreadPage() {
                     <div className="absolute -left-2 top-0 bottom-0 w-px bg-cyan-500/30"></div>
                     <div className="absolute -left-4 top-6 w-3 h-px bg-cyan-500/30"></div>
                     
-                    <div className="flex items-start space-x-4 p-4">
+                    {/* Mobile Reply Layout */}
+                    <div className="block md:hidden">
+                      <div className="flex items-center space-x-3 p-3 bg-gradient-to-b from-gray-600/30 to-gray-700/30 border-b border-gray-500/20">
+                        <UserAvatar user={reply.author || {}} size="sm" className="ring-1 ring-cyan-500/20" />
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-medium text-gray-200 text-sm truncate">{reply.author?.in_game_alias || 'Anonymous'}</h5>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Posts: {userPostCounts[reply.author?.id || ''] ?? 'Loading...'}
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2 text-xs text-gray-500">
+                            <span 
+                              title={formatDate(reply.created_at)}
+                              className="cursor-help hover:text-gray-400 transition-colors"
+                            >
+                              {getRelativeTime(reply.created_at)}
+                            </span>
+                            <span>•</span>
+                            <span>replying to #{index + 1}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="prose prose-invert prose-sm max-w-none">
+                          {editingPost?.id === reply.id ? (
+                            <textarea
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              className="w-full h-24 bg-gradient-to-b from-gray-600 to-gray-700 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all resize-vertical"
+                              placeholder="Edit your reply..."
+                            />
+                          ) : (
+                            <div 
+                              className="text-gray-300 break-words leading-relaxed text-sm"
+                              style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                              dangerouslySetInnerHTML={{ __html: formatPostContent(reply.content) }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Desktop Reply Layout */}
+                    <div className="hidden md:flex items-start space-x-4 p-4">
                       {/* Left User Info Panel - Smaller for replies */}
                       <div className="flex flex-col items-center space-y-2 min-w-[140px] bg-gradient-to-b from-gray-600/30 to-gray-700/30 rounded-lg p-3 border border-gray-500/20">
                         <UserAvatar user={reply.author || {}} size="lg" className="ring-2 ring-cyan-500/20" />
                         <div className="text-center space-y-1">
                           <h5 className="font-medium text-gray-200 text-sm">{reply.author?.in_game_alias || 'Anonymous'}</h5>
                           <div className="text-xs text-gray-500 space-y-1">
-                            <div>Posts: {(reply.author as any)?.posts_count || 'N/A'}</div>
+                            <div>Posts: {userPostCounts[reply.author?.id || ''] ?? 'Loading...'}</div>
                           </div>
                         </div>
                         
@@ -931,7 +1131,8 @@ export default function ThreadPage() {
                             />
                           ) : (
                             <div 
-                              className="text-gray-300 whitespace-pre-wrap break-words leading-relaxed text-sm"
+                              className="text-gray-300 break-words leading-relaxed text-sm"
+                              style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                               dangerouslySetInnerHTML={{ __html: formatPostContent(reply.content) }}
                             />
                           )}

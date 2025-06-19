@@ -24,6 +24,7 @@ interface Squad {
   members: SquadMember[];
   banner_url?: string;
   is_active?: boolean;
+  is_legacy?: boolean;
 }
 
 interface SquadMember {
@@ -66,6 +67,7 @@ export default function SquadsPage() {
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [allSquads, setAllSquads] = useState<Squad[]>([]);
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<SquadInvite[]>([]);
   const [receivedInvitations, setReceivedInvitations] = useState<SquadInvite[]>([]);
   const [sentJoinRequests, setSentJoinRequests] = useState<SquadInvite[]>([]);
@@ -190,10 +192,11 @@ export default function SquadsPage() {
       console.log('🚀 loadInitialData: Set loading to true');
       
       // Load public data that everyone can see
-      console.log('🚀 loadInitialData: Loading public data (squads + free agents)...');
+      console.log('🚀 loadInitialData: Loading public data (squads + free agents + all players)...');
       const results = await Promise.allSettled([
         loadAllSquads(),
-        user ? loadFreeAgents() : Promise.resolve() // Only load free agents for authenticated users
+        user ? loadFreeAgents() : Promise.resolve(), // Only load free agents for authenticated users
+        user ? loadAllPlayers() : Promise.resolve() // Only load all players for authenticated users
       ]);
 
       console.log('🚀 loadInitialData: Public data results:', results.map(r => r.status));
@@ -510,6 +513,35 @@ export default function SquadsPage() {
       
       if (isMountedRef.current) {
         setFreeAgents([]);
+      }
+    }
+  };
+
+  const loadAllPlayers = async () => {
+    if (!user || !isMountedRef.current) return;
+
+    try {
+      // Import the helper functions
+      const supabaseHelpers = await import('@/utils/supabaseHelpers');
+      const getAllPlayers = supabaseHelpers.getAllPlayers;
+      
+      if (!getAllPlayers) {
+        console.error('getAllPlayers function not found in supabaseHelpers');
+        setAllPlayers([]);
+        return;
+      }
+
+      const data = await getAllPlayers();
+
+      if (!isMountedRef.current) return;
+
+      console.log('loadAllPlayers: Found', data.length, 'players');
+      setAllPlayers(data);
+    } catch (error: any) {
+      console.error('Error loading all players:', error);
+      
+      if (isMountedRef.current) {
+        setAllPlayers([]);
       }
     }
   };
@@ -978,6 +1010,7 @@ export default function SquadsPage() {
       setSelectedInvitee('');
       loadAllSquads();
       loadFreeAgents();
+      loadAllPlayers();
     } catch (error) {
       console.error('Error sending invitation:', error);
       toast.error('Failed to send invitation');
@@ -1517,8 +1550,25 @@ export default function SquadsPage() {
                 <span>👥</span>
                 Members ({userSquad.member_count})
               </h3>
-              <div className="grid gap-3">
-                {userSquad.members.map((member) => (
+              <div className="flex gap-6">
+                {/* Large Squad Banner */}
+                {userSquad.banner_url && (
+                  <div className="w-48 h-48 flex-shrink-0">
+                    <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
+                      <img 
+                        src={userSquad.banner_url} 
+                        alt={`${userSquad.name} banner`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.parentElement!.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {/* Members List */}
+                <div className="flex-1 grid gap-3">
+                  {userSquad.members.map((member) => (
                   <div key={member.id} className="bg-gradient-to-r from-gray-700/80 to-gray-600/60 rounded-lg p-4 border border-gray-600/30">
                     <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3">
                       <div className="flex items-center gap-3">
@@ -1571,6 +1621,7 @@ export default function SquadsPage() {
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </div>
 
@@ -1774,7 +1825,7 @@ export default function SquadsPage() {
                       <div className="flex gap-4">
                         {/* Squad Picture */}
                         {squad.banner_url && (
-                          <div className="w-24 h-24 flex-shrink-0">
+                          <div className="w-48 h-48 flex-shrink-0">
                             <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                               <img 
                                 src={squad.banner_url} 
@@ -1823,20 +1874,24 @@ export default function SquadsPage() {
               </div>
 
               {/* Inactive and Legacy Squad Buttons */}
-              {!dataLoading && allSquads.some(squad => squad.is_active === false) && (
+              {!dataLoading && (allSquads.some(squad => squad.is_active === false && !squad.is_legacy) || allSquads.some(squad => squad.is_legacy === true)) && (
                 <div className="mt-6 flex gap-4 justify-center">
-                  <button
-                    onClick={() => setShowInactiveSquads(!showInactiveSquads)}
-                    className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
-                  >
-                    {showInactiveSquads ? 'Hide' : 'Show'} Inactive Squads ({allSquads.filter(s => s.is_active === false && new Date(s.created_at) > new Date('2023-01-01')).length})
-                  </button>
-                  <button
-                    onClick={() => setShowLegacySquads(!showLegacySquads)}
-                    className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
-                  >
-                    {showLegacySquads ? 'Hide' : 'Show'} Legacy Squads ({allSquads.filter(s => s.is_active === false && new Date(s.created_at) <= new Date('2023-01-01')).length})
-                  </button>
+                  {allSquads.some(squad => squad.is_active === false && !squad.is_legacy) && (
+                    <button
+                      onClick={() => setShowInactiveSquads(!showInactiveSquads)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
+                    >
+                      {showInactiveSquads ? 'Hide' : 'Show'} Inactive Squads ({allSquads.filter(s => s.is_active === false && !s.is_legacy).length})
+                    </button>
+                  )}
+                  {allSquads.some(squad => squad.is_legacy === true) && (
+                    <button
+                      onClick={() => setShowLegacySquads(!showLegacySquads)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
+                    >
+                      {showLegacySquads ? 'Hide' : 'Show'} Legacy Squads ({allSquads.filter(s => s.is_legacy === true).length})
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1845,13 +1900,13 @@ export default function SquadsPage() {
                 <div className="mt-6">
                   <h3 className="text-xl font-bold mb-4 text-orange-400">Inactive Squads</h3>
                   <div className="grid gap-4">
-                    {allSquads.filter(squad => squad.is_active === false && new Date(squad.created_at) > new Date('2023-01-01')).map((squad) => (
+                    {allSquads.filter(squad => squad.is_active === false && !squad.is_legacy).map((squad) => (
                       <Link key={squad.id} href={`/squads/${squad.id}`}>
                         <div className="bg-gray-700/50 rounded-lg overflow-hidden hover:bg-gray-600/50 transition-colors cursor-pointer border border-orange-500/30">
                           <div className="p-4">
                             <div className="flex gap-4">
                               {squad.banner_url && (
-                                <div className="w-24 h-24 flex-shrink-0">
+                                <div className="w-48 h-48 flex-shrink-0">
                                   <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                                     <img 
                                       src={squad.banner_url} 
@@ -1897,13 +1952,13 @@ export default function SquadsPage() {
                 <div className="mt-6">
                   <h3 className="text-xl font-bold mb-4 text-purple-400">Legacy Squads</h3>
                   <div className="grid gap-4">
-                    {allSquads.filter(squad => squad.is_active === false && new Date(squad.created_at) <= new Date('2023-01-01')).map((squad) => (
+                    {allSquads.filter(squad => squad.is_legacy === true).map((squad) => (
                       <Link key={squad.id} href={`/squads/${squad.id}`}>
                         <div className="bg-gray-700/30 rounded-lg overflow-hidden hover:bg-gray-600/30 transition-colors cursor-pointer border border-purple-500/30">
                           <div className="p-4">
                             <div className="flex gap-4">
                               {squad.banner_url && (
-                                <div className="w-24 h-24 flex-shrink-0">
+                                <div className="w-48 h-48 flex-shrink-0">
                                   <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                                     <img 
                                       src={squad.banner_url} 
@@ -2029,7 +2084,7 @@ export default function SquadsPage() {
               <h3 className="text-xl font-bold mb-4">Invite Player</h3>
               <form onSubmit={invitePlayer}>
                 <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Select Free Agent</label>
+                  <label className="block text-sm font-medium mb-2">Select Player</label>
                   <select
                     value={selectedInvitee}
                     onChange={(e) => setSelectedInvitee(e.target.value)}
@@ -2037,11 +2092,17 @@ export default function SquadsPage() {
                     required
                   >
                     <option value="">Choose a player...</option>
-                    {freeAgents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.in_game_alias}
-                      </option>
-                    ))}
+                    {allPlayers
+                      .filter(player => 
+                        // Exclude current squad members
+                        !userSquad?.members.some(member => member.player_id === player.id)
+                      )
+                      .map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.in_game_alias}
+                        </option>
+                      ))
+                    }
                   </select>
                 </div>
                 <div className="flex gap-3">
