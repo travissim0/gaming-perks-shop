@@ -21,6 +21,9 @@ export default function Navbar({ user }: { user: any }) {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [isAxidus, setIsAxidus] = useState(false);
+  const [orderNotifications, setOrderNotifications] = useState<any[]>([]);
+  const [donationNotifications, setDonationNotifications] = useState<any[]>([]);
   const notificationRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +75,41 @@ export default function Navbar({ user }: { user: any }) {
     }
   };
 
+  // Function to load recent orders and donations for Axidus
+  const loadAdminNotifications = async () => {
+    if (!isAxidus) return;
+
+    try {
+      // Get recent donations (last 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data: donations, error: donationsError } = await supabase
+        .from('donations')
+        .select('id, amount, donor_name, created_at')
+        .gte('created_at', oneDayAgo)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      // Get recent orders/purchases
+      const { data: orders, error: ordersError } = await supabase
+        .from('product_purchases')
+        .select('id, amount, user_id, created_at, profiles(in_game_alias)')
+        .gte('created_at', oneDayAgo)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (!donationsError && donations) {
+        setDonationNotifications(donations);
+      }
+
+      if (!ordersError && orders) {
+        setOrderNotifications(orders);
+      }
+    } catch (error) {
+      console.error('Error loading admin notifications:', error);
+    }
+  };
+
   useEffect(() => {
     const checkUserData = async () => {
       if (!user) return;
@@ -79,7 +117,7 @@ export default function Navbar({ user }: { user: any }) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_admin, ctf_role, is_media_manager, avatar_url')
+          .select('is_admin, ctf_role, is_media_manager, avatar_url, in_game_alias')
           .eq('id', user.id)
           .single();
         
@@ -87,9 +125,18 @@ export default function Navbar({ user }: { user: any }) {
         setIsCtfAdmin(profile?.is_admin || profile?.ctf_role === 'ctf_admin');
         setIsMediaManager(profile?.is_media_manager || false);
         setUserAvatar(profile?.avatar_url || null);
+        
+        // Check if user is Axidus
+        const userIsAxidus = profile?.in_game_alias === 'Axidus';
+        setIsAxidus(userIsAxidus);
 
         // Also check for pending squad requests
         await checkPendingSquadRequests();
+        
+        // Load admin notifications if user is Axidus
+        if (userIsAxidus) {
+          await loadAdminNotifications();
+        }
       } catch (error) {
         console.error('Error checking user data:', error);
       }
@@ -100,8 +147,94 @@ export default function Navbar({ user }: { user: any }) {
     // Set up interval to check for new squad requests every 30 seconds
     const interval = setInterval(checkPendingSquadRequests, 30000);
     
-    return () => clearInterval(interval);
-  }, [user]);
+    // Set up interval to check for admin notifications every 60 seconds (only for Axidus)
+    const adminInterval = setInterval(() => {
+      if (isAxidus) {
+        loadAdminNotifications();
+      }
+    }, 60000);
+    
+    return () => {
+      clearInterval(interval);
+      clearInterval(adminInterval);
+    };
+  }, [user, isAxidus]);
+
+  // Set up real-time subscriptions for Axidus
+  useEffect(() => {
+    if (!isAxidus) return;
+
+    // Subscribe to new donations
+    const donationsSubscription = supabase
+      .channel('admin-donations')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'donations' 
+        }, 
+        (payload) => {
+          const newDonation = payload.new as any;
+          setDonationNotifications(prev => [newDonation, ...prev.slice(0, 4)]);
+          
+          // Show browser notification if permission granted
+          if (Notification.permission === 'granted') {
+            new Notification('New Donation!', {
+              body: `$${newDonation.amount} from ${newDonation.donor_name || 'Anonymous'}`,
+              icon: '/favicon.ico'
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to new orders
+    const ordersSubscription = supabase
+      .channel('admin-orders')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'product_purchases' 
+        }, 
+        async (payload) => {
+          const newOrder = payload.new as any;
+          
+          // Get user profile for the order
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('in_game_alias')
+            .eq('id', newOrder.user_id)
+            .single();
+          
+          const orderWithProfile = {
+            ...newOrder,
+            profiles: profile
+          };
+          
+          setOrderNotifications(prev => [orderWithProfile, ...prev.slice(0, 4)]);
+          
+          // Show browser notification if permission granted
+          if (Notification.permission === 'granted') {
+            new Notification('New Order!', {
+              body: `$${newOrder.amount} from ${profile?.in_game_alias || 'User'}`,
+              icon: '/favicon.ico'
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Request notification permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    return () => {
+      donationsSubscription.unsubscribe();
+      ordersSubscription.unsubscribe();
+    };
+  }, [isAxidus]);
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -170,7 +303,7 @@ export default function Navbar({ user }: { user: any }) {
   // Navigation groups
   const squadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/free-agents', label: 'Free Agents', icon: '🎯' },
+    { href: '/free-agents', label: 'Players', icon: '🎯' },
     { href: '/matches', label: 'Match Log', icon: '⚔️' },
     { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
   ];
@@ -252,9 +385,9 @@ export default function Navbar({ user }: { user: any }) {
                   className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
                 >
                   <Bell className="w-5 h-5" />
-                  {(unreadMessageCount + pendingSquadRequests) > 0 && (
+                  {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {(unreadMessageCount + pendingSquadRequests) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests)}
+                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0))}
                     </span>
                   )}
                 </button>
@@ -307,6 +440,59 @@ export default function Navbar({ user }: { user: any }) {
                         </div>
                       )}
 
+                      {/* Admin Notifications - Only for Axidus */}
+                      {isAxidus && (donationNotifications.length > 0 || orderNotifications.length > 0) && (
+                        <div className="border-b border-gray-600/30">
+                          <div className="px-4 py-2 bg-gray-700/50">
+                            <p className="text-sm font-medium text-green-400">💰 Admin Notifications</p>
+                          </div>
+                          
+                          {/* Donation Notifications */}
+                          {donationNotifications.map((donation) => (
+                            <div key={`donation-${donation.id}`} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-green-400 font-bold">💰</span>
+                                    <p className="text-sm font-medium text-white">
+                                      New Donation: ${donation.amount}
+                                    </p>
+                                  </div>
+                                  <p className="text-xs text-gray-400">
+                                    From: {donation.donor_name || 'Anonymous'}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(donation.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Order Notifications */}
+                          {orderNotifications.map((order) => (
+                            <div key={`order-${order.id}`} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-blue-400 font-bold">🛒</span>
+                                    <p className="text-sm font-medium text-white">
+                                      New Order: ${order.amount}
+                                    </p>
+                                  </div>
+                                  <p className="text-xs text-gray-400">
+                                    From: {order.profiles?.in_game_alias || 'User'}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(order.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Messages */}
                       <Link 
                         href="/messages"
@@ -335,7 +521,7 @@ export default function Navbar({ user }: { user: any }) {
                       </Link>
 
                       {/* Empty State */}
-                      {(unreadMessageCount + pendingSquadRequests) === 0 && (
+                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) === 0 && (
                         <div className="px-4 py-6 text-center text-gray-400">
                           <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
                           <p className="text-sm">No new notifications</p>

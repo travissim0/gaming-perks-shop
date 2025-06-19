@@ -564,6 +564,36 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Quick Actions */}
+            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-6 shadow-2xl mb-6">
+              <h2 className="text-xl font-bold text-cyan-400 mb-4 tracking-wider">⚡ QUICK ACTIONS</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Link 
+                  href="/free-agents/update"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25 text-center"
+                >
+                  <div className="text-lg mb-1">🎯</div>
+                  Update Free Agent Info
+                </Link>
+                
+                <Link 
+                  href="/profile"
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-blue-500/25 text-center"
+                >
+                  <div className="text-lg mb-1">👤</div>
+                  Edit Profile
+                </Link>
+                
+                <Link 
+                  href="/perks"
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-green-500/25 text-center"
+                >
+                  <div className="text-lg mb-1">🛍️</div>
+                  Browse Perks
+                </Link>
+              </div>
+            </div>
+
             {/* Statistics Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Forum Statistics */}

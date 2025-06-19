@@ -145,7 +145,7 @@ const MATCH_TYPE_OPTIONS = [
   { value: 'all', label: 'All Types' },
   { value: 'unranked', label: 'Unranked' },
   { value: 'ranked_bo3', label: 'Ranked Bo3' },
-  { value: 'ranked_bo6', label: 'Ranked Bo6' }
+  { value: 'ranked_bo5', label: 'Ranked Bo5' }
 ];
 
 export default function DuelingPage() {

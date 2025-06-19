@@ -59,6 +59,9 @@ export default function SquadDetailPage() {
   const [hasExistingRequest, setHasExistingRequest] = useState(false);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
   
+  // Add user profile state for role checking
+  const [userProfile, setUserProfile] = useState<any>(null);
+  
   // Banner management states
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [bannerUrl, setBannerUrl] = useState('');
@@ -80,6 +83,13 @@ export default function SquadDetailPage() {
       loadAllData();
     }
   }, [squadId, loading]);
+
+  // Load user profile for permission checks
+  useEffect(() => {
+    if (user && !loading) {
+      loadUserProfile();
+    }
+  }, [user, loading]);
 
   // Load pending requests when squad data becomes available and user is captain/co-captain
   useEffect(() => {
@@ -315,9 +325,49 @@ export default function SquadDetailPage() {
   };
 
   const isUserCaptainOrCoCaptain = () => {
-    if (!squad || !user) return false;
+    if (!user || !squad?.members) return false;
     const userMember = squad.members.find(m => m.player_id === user.id);
-    return userMember && (userMember.role === 'captain' || userMember.role === 'co_captain');
+    return userMember && ['captain', 'co_captain'].includes(userMember.role);
+  };
+
+  const isCaptain = () => {
+    if (!user || !squad?.members) return false;
+    const userMember = squad.members.find(m => m.player_id === user.id);
+    return userMember && userMember.role === 'captain';
+  };
+
+  const isUserInSquad = () => {
+    if (!user || !squad?.members) return false;
+    return squad.members.some(m => m.player_id === user.id);
+  };
+  
+  // Enhanced permission check for photo editing
+  const canEditSquadPhotos = () => {
+    if (!user || !squad) return false;
+    return (
+      isUserCaptainOrCoCaptain() || // Captain or co-captain
+      userProfile?.is_admin || // Site admin
+      userProfile?.ctf_role === 'ctf_admin' || // CTF admin
+      userProfile?.is_media_manager // Media manager
+    );
+  };
+
+  // Load user profile for permission checks
+  const loadUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, in_game_alias, is_admin, ctf_role, is_media_manager')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setUserProfile(data);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
   };
 
   const canRequestToJoin = () => {
@@ -428,7 +478,7 @@ export default function SquadDetailPage() {
 
   // Banner management functions
   const updateSquadBanner = async () => {
-    if (!squad || !user || !isUserCaptainOrCoCaptain()) return;
+    if (!squad || !user || !canEditSquadPhotos()) return;
 
     try {
       let finalBannerUrl = bannerUrl.trim();
@@ -666,12 +716,6 @@ export default function SquadDetailPage() {
     return userMember && ['captain', 'co_captain'].includes(userMember.role);
   };
 
-  const isCaptain = () => {
-    if (!squad || !user) return false;
-    const userMember = squad.members.find(m => m.player_id === user.id);
-    return userMember && userMember.role === 'captain';
-  };
-
   // Enhanced loading screen with timeout indicator
   if (loading || pageLoading) {
     return (
@@ -823,8 +867,8 @@ export default function SquadDetailPage() {
                       </button>
                     )}
                     
-                    {/* Banner Management Button for Captains/Co-Captains */}
-                    {isUserCaptainOrCoCaptain() && (
+                    {/* Banner Management Button for Captains/Co-Captains/Admins */}
+                    {canEditSquadPhotos() && (
                       <button
                         onClick={() => setShowBannerForm(true)}
                         className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300"

@@ -312,7 +312,7 @@ The Dueling System is a comprehensive 1v1 combat system that integrates with you
 - **ELO Rating**: Competitive ranking system for ranked matches
 - **Tier System**: Bronze, Silver, Gold, Platinum, Diamond, Master, Grandmaster, Legend
 - **Peak ELO Tracking**: Remember your highest achieved rating
-- **Separate Rankings**: Different rankings for Bo3 and Bo6 matches
+- **Separate Rankings**: Different rankings for Bo3 and Bo5 matches
 
 ### 🌐 Web Integration
 - **Real-time Leaderboards**: View top players by various metrics
@@ -326,7 +326,7 @@ The Dueling System is a comprehensive 1v1 combat system that integrates with you
 
 #### `dueling_matches`
 Tracks individual dueling matches:
-- Match type (unranked, ranked_bo3, ranked_bo6)
+- Match type (unranked, ranked_bo3, ranked_bo5)
 - Player names and winner
 - Round scores and match status
 - Arena name and timestamps
@@ -418,7 +418,7 @@ Update the `DUELING_TILES` dictionary in `CTFUtilities.cs` with your actual map 
 private static readonly Dictionary<string, (short x, short y)> DUELING_TILES = new Dictionary<string, (short x, short y)>
 {
     ["ranked_bo3"] = (512, 512),   // Replace with your Bo3 tile coordinates
-    ["ranked_bo6"] = (256, 256)    // Replace with your Bo6 tile coordinates
+    ["ranked_bo5"] = (256, 256)    // Replace with your Bo5 tile coordinates
 };
 ```
 
