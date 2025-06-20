@@ -178,10 +178,11 @@ export default function PlayerEventLogPage() {
     // Parse the description and replace player/squad names with clickable links
     switch (event.event_type) {
       case 'squad_joined':
+        const squadType = event.event_data?.is_legacy ? 'legacy squad' : 'squad';
         return (
           <span className="text-white">
             <PlayerLink>{playerName}</PlayerLink>
-            <span className="text-gray-300"> joined squad </span>
+            <span className="text-gray-300"> joined {squadType} </span>
             {squadName && <SquadLink>{squadName}</SquadLink>}
             <span className="text-gray-400"> as {event.event_data?.role || 'player'}</span>
           </span>

@@ -565,60 +565,61 @@ export default function FreeAgentsPage() {
 
           {/* Compact Controls */}
           <div className="bg-gradient-to-r from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-xl p-4 border border-cyan-500/20 shadow-xl mb-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              {/* Left side: View Toggle & Results */}
-              <div className="flex items-center gap-4">
-                <div className="bg-gray-800/50 rounded-lg p-1 border border-gray-600/50">
+            {/* Mobile: Stack vertically, Desktop: Side by side */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              {/* View Toggle & Results */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="bg-gray-800/50 rounded-lg p-1 border border-gray-600/50 w-fit">
                   <button
                     onClick={() => setViewMode('cards')}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 flex items-center gap-1 ${
+                    className={`px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-300 flex items-center gap-1 ${
                       viewMode === 'cards'
                         ? 'bg-gradient-to-r from-cyan-500 to-purple-500 text-white shadow-lg'
                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                     }`}
                   >
-                    <span className="text-lg">🎴</span>
-                    Card View
+                    <span className="text-sm sm:text-lg">🎴</span>
+                    <span className="hidden sm:inline">Card View</span>
                   </button>
                   <button
                     onClick={() => setViewMode('table')}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-300 flex items-center gap-1 ${
+                    className={`px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-300 flex items-center gap-1 ${
                       viewMode === 'table'
                         ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                     }`}
                   >
-                    <span className="text-lg">📊</span>
-                    Table View
+                    <span className="text-sm sm:text-lg">📊</span>
+                    <span className="hidden sm:inline">Table View</span>
                   </button>
                 </div>
                 
-                <span className="bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-full px-4 py-1 text-cyan-300 text-sm font-medium">
+                <span className="bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1 text-cyan-300 text-xs sm:text-sm font-medium w-fit">
                   <span className="text-white font-bold">{filteredAndSortedAgents.length}</span> players found
                 </span>
               </div>
 
-              {/* Right side: Filters */}
-              <div className="flex items-center gap-3">
+              {/* Filters - Mobile: Stack vertically, Desktop: Horizontal */}
+              <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto">
                 {/* Search */}
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🔍</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm sm:text-lg flex-shrink-0">🔍</span>
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by name, class, or notes..."
-                    className="bg-gray-700/50 border border-cyan-500/30 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-cyan-400 transition-all duration-300 w-64"
+                    placeholder="Search players..."
+                    className="bg-gray-700/50 border border-cyan-500/30 rounded-lg px-2 sm:px-3 py-2 text-white placeholder-gray-400 focus:border-cyan-400 transition-all duration-300 text-sm min-w-0 flex-1 sm:w-48"
                   />
                 </div>
 
                 {/* Player Type Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">👥</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm sm:text-lg flex-shrink-0">👥</span>
                   <select
                     value={playerTypeFilter}
                     onChange={(e) => setPlayerTypeFilter(e.target.value)}
-                    className="bg-gray-700/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white focus:border-purple-400 transition-all duration-300"
+                    className="bg-gray-700/50 border border-purple-500/30 rounded-lg px-2 sm:px-3 py-2 text-white focus:border-purple-400 transition-all duration-300 text-sm min-w-0 flex-1 sm:w-auto"
                   >
                     <option value="combined">Combined</option>
                     <option value="free_agents">Free Agents</option>
@@ -627,12 +628,12 @@ export default function FreeAgentsPage() {
                 </div>
 
                 {/* Classes Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">⚔️</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm sm:text-lg flex-shrink-0">⚔️</span>
                   <select
                     value={classFilter}
                     onChange={(e) => setClassFilter(e.target.value)}
-                    className="bg-gray-700/50 border border-pink-500/30 rounded-lg px-3 py-2 text-white focus:border-pink-400 transition-all duration-300"
+                    className="bg-gray-700/50 border border-pink-500/30 rounded-lg px-2 sm:px-3 py-2 text-white focus:border-pink-400 transition-all duration-300 text-sm min-w-0 flex-1 sm:w-auto"
                   >
                     <option value="all">All Classes</option>
                     <option value="O INF">O INF</option>
@@ -1542,76 +1543,80 @@ function FreeAgentJoinForm({
           {/* Availability */}
           <div className="border border-green-500/30 rounded-xl bg-gradient-to-r from-green-500/5 to-blue-500/5 shadow-lg hover:shadow-green-500/20 transition-all duration-300">
             <div className="p-4 bg-gradient-to-r from-green-600/20 to-blue-600/20 rounded-t-xl">
-              <div className="flex items-center justify-between gap-4 mb-4">
-                {/* Left: Title */}
+              {/* Mobile: Stack vertically, Desktop: Horizontal layout */}
+              <div className="space-y-4 mb-4">
+                {/* Title - Always at top */}
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl animate-pulse">⏰</span>
-                  <span className="text-lg font-bold bg-gradient-to-r from-green-300 to-blue-300 bg-clip-text text-transparent">
+                  <span className="text-xl sm:text-2xl animate-pulse">⏰</span>
+                  <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-green-300 to-blue-300 bg-clip-text text-transparent">
                     Practice Availability
                   </span>
                 </div>
 
-                {/* Center: Time Controls */}
-                <div className="flex items-center gap-2">
-                  {syncTimes && (
+                {/* Controls - Mobile: Stack, Desktop: Side by side */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  {/* Time Controls & Sync Toggle */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    {syncTimes && (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={masterTime.start}
+                          onChange={(e) => handleMasterTimeChange('start', e.target.value)}
+                          className="bg-gray-700/80 border border-green-500/30 rounded-lg px-2 py-1 text-white text-xs focus:border-green-400 transition-all duration-300 min-w-0 flex-1 sm:w-auto"
+                        >
+                          {generateTimeSlots().map(time => (
+                            <option key={time} value={time}>{formatTimeForDisplay(time, userTimezone)}</option>
+                          ))}
+                        </select>
+                        <span className="text-gray-400 text-xs flex-shrink-0">to</span>
+                        <select
+                          value={masterTime.end}
+                          onChange={(e) => handleMasterTimeChange('end', e.target.value)}
+                          className="bg-gray-700/80 border border-green-500/30 rounded-lg px-2 py-1 text-white text-xs focus:border-green-400 transition-all duration-300 min-w-0 flex-1 sm:w-auto"
+                        >
+                          {generateTimeSlots().map(time => (
+                            <option key={time} value={time}>{formatTimeForDisplay(time, userTimezone)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    
+                    {/* Sync Times Toggle */}
                     <div className="flex items-center gap-2">
-                      <select
-                        value={masterTime.start}
-                        onChange={(e) => handleMasterTimeChange('start', e.target.value)}
-                        className="bg-gray-700/80 border border-green-500/30 rounded-lg px-2 py-1 text-white text-xs focus:border-green-400 transition-all duration-300"
+                      <span className="text-xs font-medium text-green-300">Sync Times</span>
+                      <button
+                        type="button"
+                        onClick={() => setSyncTimes(!syncTimes)}
+                        className={`relative w-8 h-4 rounded-full transition-all duration-300 ${
+                          syncTimes ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
+                        } shadow-sm flex-shrink-0`}
                       >
-                        {generateTimeSlots().map(time => (
-                          <option key={time} value={time}>{formatTimeForDisplay(time, userTimezone)}</option>
-                        ))}
-                      </select>
-                      <span className="text-gray-400 text-xs">to</span>
-                      <select
-                        value={masterTime.end}
-                        onChange={(e) => handleMasterTimeChange('end', e.target.value)}
-                        className="bg-gray-700/80 border border-green-500/30 rounded-lg px-2 py-1 text-white text-xs focus:border-green-400 transition-all duration-300"
-                      >
-                        {generateTimeSlots().map(time => (
-                          <option key={time} value={time}>{formatTimeForDisplay(time, userTimezone)}</option>
-                        ))}
-                      </select>
+                        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-300 ${
+                          syncTimes ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}></div>
+                      </button>
                     </div>
-                  )}
-                  
-                  {/* Sync Times Toggle */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-green-300">Sync Times</span>
-                    <button
-                      type="button"
-                      onClick={() => setSyncTimes(!syncTimes)}
-                      className={`relative w-8 h-4 rounded-full transition-all duration-300 ${
-                        syncTimes ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
-                      } shadow-sm`}
-                    >
-                      <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-300 ${
-                        syncTimes ? 'translate-x-4' : 'translate-x-0.5'
-                      }`}></div>
-                    </button>
                   </div>
-                </div>
-                
-                {/* Right: Timezone Selection */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm animate-spin-slow">🌍</span>
-                  <select
-                    value={userTimezone}
-                    onChange={(e) => setUserTimezone(e.target.value)}
-                    className="bg-gray-700/80 border border-blue-500/30 rounded-lg px-3 py-1 text-white text-sm focus:border-blue-400 transition-all duration-300"
-                  >
-                    <option value="America/New_York">EST</option>
-                    <option value="America/Chicago">CST</option>
-                    <option value="America/Denver">MST</option>
-                    <option value="America/Los_Angeles">PST</option>
-                    <option value="America/Phoenix">AZ</option>
-                    <option value="Europe/London">GMT</option>
-                    <option value="Europe/Berlin">CET</option>
-                    <option value="Asia/Tokyo">JST</option>
-                    <option value="Australia/Sydney">AEST</option>
-                  </select>
+                  
+                  {/* Timezone Selection */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm animate-spin-slow flex-shrink-0">🌍</span>
+                    <select
+                      value={userTimezone}
+                      onChange={(e) => setUserTimezone(e.target.value)}
+                      className="bg-gray-700/80 border border-blue-500/30 rounded-lg px-2 sm:px-3 py-1 text-white text-xs sm:text-sm focus:border-blue-400 transition-all duration-300 min-w-0 flex-1 sm:w-auto"
+                    >
+                      <option value="America/New_York">EST</option>
+                      <option value="America/Chicago">CST</option>
+                      <option value="America/Denver">MST</option>
+                      <option value="America/Los_Angeles">PST</option>
+                      <option value="America/Phoenix">AZ</option>
+                      <option value="Europe/London">GMT</option>
+                      <option value="Europe/Berlin">CET</option>
+                      <option value="Asia/Tokyo">JST</option>
+                      <option value="Australia/Sydney">AEST</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               

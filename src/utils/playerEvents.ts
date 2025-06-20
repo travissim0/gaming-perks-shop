@@ -44,13 +44,15 @@ export class PlayerEventLogger {
     squadId: string,
     squadName: string,
     playerName: string,
-    role: string = 'player'
+    role: string = 'player',
+    isLegacy: boolean = false
   ): Promise<string | null> {
+    const squadType = isLegacy ? 'legacy squad' : 'squad';
     return this.logEvent({
       player_id: playerId,
       event_type: 'squad_joined',
-      description: `${playerName} joined squad ${squadName} as ${role}`,
-      event_data: { squad_name: squadName, role },
+      description: `${playerName} joined ${squadType} ${squadName} as ${role}`,
+      event_data: { squad_name: squadName, role, is_legacy: isLegacy },
       squad_id: squadId
     });
   }

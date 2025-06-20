@@ -2137,10 +2137,10 @@ export default function SquadsPage() {
                 <Link key={squad.id} href={`/squads/${squad.id}`}>
                   <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
                     <div className="p-4">
-                      <div className="flex gap-4">
-                        {/* Squad Picture */}
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        {/* Squad Picture - Mobile optimized */}
                         {squad.banner_url && (
-                          <div className="w-48 h-48 flex-shrink-0">
+                          <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
                             <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                               <img 
                                 src={squad.banner_url} 
@@ -2154,24 +2154,24 @@ export default function SquadsPage() {
                           </div>
                         )}
                         
-                        {/* Squad Info */}
-                        <div className="flex-1 min-w-0">
+                        {/* Squad Info - Ensure no overflow */}
+                        <div className="flex-1 min-w-0 overflow-hidden">
                           <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate">
                             [{squad.tag}] {squad.name}
                           </h3>
                           
-                          <p className="text-gray-300 mb-3 text-sm line-clamp-2">{squad.description}</p>
+                          <p className="text-gray-300 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
                           
-                          <div className="flex justify-between items-center">
-                            <div className="flex gap-4 text-sm text-gray-400">
-                              <span className="flex items-center gap-1">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-400">
+                              <span className="flex items-center gap-1 truncate">
                                 👥 {squad.member_count} members
                               </span>
-                              <span className="flex items-center gap-1">
-                                👑 {squad.captain_alias}
+                              <span className="flex items-center gap-1 truncate">
+                                👑 <span className="truncate">{squad.captain_alias}</span>
                               </span>
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-500 flex-shrink-0">
                               {new Date(squad.created_at).toLocaleDateString()}
                             </div>
                           </div>
@@ -2219,9 +2219,9 @@ export default function SquadsPage() {
                       <Link key={squad.id} href={`/squads/${squad.id}`}>
                         <div className="bg-gray-700/50 rounded-lg overflow-hidden hover:bg-gray-600/50 transition-colors cursor-pointer border border-orange-500/30">
                           <div className="p-4">
-                            <div className="flex gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4">
                               {squad.banner_url && (
-                                <div className="w-48 h-48 flex-shrink-0">
+                                <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
                                   <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                                     <img 
                                       src={squad.banner_url} 
@@ -2234,21 +2234,21 @@ export default function SquadsPage() {
                                   </div>
                                 </div>
                               )}
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 overflow-hidden">
                                 <h3 className="text-lg font-semibold mb-2 text-orange-400 hover:text-orange-300 truncate">
                                   [{squad.tag}] {squad.name} <span className="text-sm text-gray-500">(Inactive)</span>
                                 </h3>
-                                <p className="text-gray-400 mb-3 text-sm line-clamp-2">{squad.description}</p>
-                                <div className="flex justify-between items-center">
-                                  <div className="flex gap-4 text-sm text-gray-500">
-                                    <span className="flex items-center gap-1">
+                                <p className="text-gray-400 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-500">
+                                    <span className="flex items-center gap-1 truncate">
                                       👥 {squad.member_count} members
                                     </span>
-                                    <span className="flex items-center gap-1">
-                                      👑 {squad.captain_alias}
+                                    <span className="flex items-center gap-1 truncate">
+                                      👑 <span className="truncate">{squad.captain_alias}</span>
                                     </span>
                                   </div>
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-gray-500 flex-shrink-0">
                                     {new Date(squad.created_at).toLocaleDateString()}
                                   </div>
                                 </div>
@@ -2271,9 +2271,9 @@ export default function SquadsPage() {
                       <Link key={squad.id} href={`/squads/${squad.id}`}>
                         <div className="bg-gray-700/30 rounded-lg overflow-hidden hover:bg-gray-600/30 transition-colors cursor-pointer border border-purple-500/30">
                           <div className="p-4">
-                            <div className="flex gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4">
                               {squad.banner_url && (
-                                <div className="w-48 h-48 flex-shrink-0">
+                                <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
                                   <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
                                     <img 
                                       src={squad.banner_url} 
@@ -2286,21 +2286,21 @@ export default function SquadsPage() {
                                   </div>
                                 </div>
                               )}
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 overflow-hidden">
                                 <h3 className="text-lg font-semibold mb-2 text-purple-400 hover:text-purple-300 truncate">
                                   [{squad.tag}] {squad.name} <span className="text-sm text-gray-500">(Legacy)</span>
                                 </h3>
-                                <p className="text-gray-500 mb-3 text-sm line-clamp-2">{squad.description}</p>
-                                <div className="flex justify-between items-center">
-                                  <div className="flex gap-4 text-sm text-gray-600">
-                                    <span className="flex items-center gap-1">
+                                <p className="text-gray-500 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-600">
+                                    <span className="flex items-center gap-1 truncate">
                                       👥 {squad.member_count} members
                                     </span>
-                                    <span className="flex items-center gap-1">
-                                      👑 {squad.captain_alias}
+                                    <span className="flex items-center gap-1 truncate">
+                                      👑 <span className="truncate">{squad.captain_alias}</span>
                                     </span>
                                   </div>
-                                  <div className="text-xs text-gray-600">
+                                  <div className="text-xs text-gray-600 flex-shrink-0">
                                     {new Date(squad.created_at).toLocaleDateString()}
                                   </div>
                                 </div>

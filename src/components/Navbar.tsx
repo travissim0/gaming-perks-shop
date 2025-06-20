@@ -188,7 +188,7 @@ export default function Navbar({ user }: { user: any }) {
           setDonationNotifications(prev => [newDonation, ...prev.slice(0, 4)]);
           
           // Show browser notification if permission granted
-          if (Notification.permission === 'granted') {
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             new Notification('New Donation!', {
               body: `$${newDonation.amount} from ${newDonation.donor_name || 'Anonymous'}`,
               icon: '/favicon.ico'
@@ -225,7 +225,7 @@ export default function Navbar({ user }: { user: any }) {
           setOrderNotifications(prev => [orderWithProfile, ...prev.slice(0, 4)]);
           
           // Show browser notification if permission granted
-          if (Notification.permission === 'granted') {
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             new Notification('New Order!', {
               body: `$${newOrder.amount} from ${profile?.in_game_alias || 'User'}`,
               icon: '/favicon.ico'
@@ -236,7 +236,7 @@ export default function Navbar({ user }: { user: any }) {
       .subscribe();
 
     // Request notification permission
-    if (Notification.permission === 'default') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
 
@@ -569,33 +569,48 @@ export default function Navbar({ user }: { user: any }) {
                 💰 Donate
               </Link>
 
-              {/* Admin Quick Access */}
+              {/* Admin Functions Dropdown */}
               {(isAdmin || isCtfAdmin || isMediaManager) && (
-                <div className="flex items-center space-x-2">
-                  {isAdmin && (
-                    <Link 
-                      href="/admin"
-                      className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded transition-all"
-                    >
-                      ADMIN
-                    </Link>
-                  )}
-                  {isCtfAdmin && (
-                    <Link 
-                      href="/admin/ctf"
-                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded transition-all"
-                    >
-                      CTF
-                    </Link>
-                  )}
-                  {(isAdmin || isMediaManager) && (
-                    <Link 
-                      href="/admin/videos"
-                      className="px-2 py-1 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded transition-all"
-                    >
-                      MEDIA
-                    </Link>
-                  )}
+                <div className="group relative">
+                  <button className="flex items-center space-x-1 px-3 py-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold rounded-lg transition-all duration-300 border border-red-500/30 group-hover:shadow-lg group-hover:shadow-red-500/20">
+                    <span>⚙️</span>
+                    <span>Admin</span>
+                    <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  <div className="absolute right-0 top-full mt-1 w-40 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                    <div className="py-2">
+                      {isAdmin && (
+                        <Link 
+                          href="/admin"
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-red-400 text-sm font-medium"
+                        >
+                          <span className="mr-2 text-red-400">🛡️</span>
+                          <span>Site Admin</span>
+                        </Link>
+                      )}
+                      {isCtfAdmin && (
+                        <Link 
+                          href="/admin/ctf"
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-indigo-400 hover:bg-gradient-to-r hover:from-indigo-600/10 hover:to-indigo-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-indigo-400 text-sm font-medium"
+                        >
+                          <span className="mr-2 text-indigo-400">⚔️</span>
+                          <span>CTF Admin</span>
+                        </Link>
+                      )}
+                      {(isAdmin || isMediaManager) && (
+                        <Link 
+                          href="/admin/videos"
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-pink-400 text-sm font-medium"
+                        >
+                          <span className="mr-2 text-pink-400">🎬</span>
+                          <span>Media</span>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -885,6 +900,45 @@ export default function Navbar({ user }: { user: any }) {
                     </Link>
                   </div>
                 </div>
+
+                {/* Admin Section - Mobile */}
+                {(isAdmin || isCtfAdmin || isMediaManager) && (
+                  <div>
+                    <h4 className="text-sm font-medium text-red-400 uppercase tracking-wider mb-2">⚙️ Admin Functions</h4>
+                    <div className="space-y-1">
+                      {isAdmin && (
+                        <Link 
+                          href="/admin" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <span className="mr-3 text-red-400">🛡️</span>
+                          Site Admin
+                        </Link>
+                      )}
+                      {isCtfAdmin && (
+                        <Link 
+                          href="/admin/ctf" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-indigo-400 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <span className="mr-3 text-indigo-400">⚔️</span>
+                          CTF Admin
+                        </Link>
+                      )}
+                      {(isAdmin || isMediaManager) && (
+                        <Link 
+                          href="/admin/videos" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-pink-400 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <span className="mr-3 text-pink-400">🎬</span>
+                          Media
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

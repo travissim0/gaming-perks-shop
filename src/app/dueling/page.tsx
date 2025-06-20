@@ -142,11 +142,11 @@ const SORT_OPTIONS = [
 ];
 
 const MATCH_TYPE_OPTIONS = [
-  { value: 'overall', label: 'Overall Rankings' },
   { value: 'all', label: 'All Types' },
-  { value: 'unranked', label: 'Unranked' },
   { value: 'ranked_bo3', label: 'Ranked Bo3' },
-  { value: 'ranked_bo5', label: 'Ranked Bo5' }
+  { value: 'ranked_bo5', label: 'Ranked Bo5' },
+  { value: 'unranked', label: 'Unranked' },
+  { value: 'overall', label: 'Overall Rankings' }
 ];
 
 export default function DuelingPage() {
@@ -165,7 +165,7 @@ export default function DuelingPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Filters
-  const [matchType, setMatchType] = useState('overall');
+  const [matchType, setMatchType] = useState('all');
   const [sortBy, setSortBy] = useState('current_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [playerName, setPlayerName] = useState('');
@@ -1104,9 +1104,23 @@ export default function DuelingPage() {
 
   useEffect(() => {
     if (activeTab === 'matches') {
-      fetchRecentMatches(0);
+      // If we're on matches tab and matchType is 'overall', switch to 'all'
+      if (matchType === 'overall') {
+        setMatchType('all');
+      } else {
+        fetchRecentMatches(0);
+      }
     }
   }, [activeTab, matchType, playerName]);
+
+  // Auto-switch match type when changing tabs
+  useEffect(() => {
+    if (activeTab === 'leaderboard' && matchType === 'all') {
+      setMatchType('overall');
+    } else if (activeTab === 'matches' && matchType === 'overall') {
+      setMatchType('all');
+    }
+  }, [activeTab]);
 
   const handleSearch = () => {
     setPlayerName(searchInput);

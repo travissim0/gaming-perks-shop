@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Build the base query
     let query = supabaseAdmin
       .from('recent_dueling_matches')
-      .select('*');
+      .select('*', { count: 'exact' });
 
     // Apply filters
     if (matchType && matchType !== 'all') {
