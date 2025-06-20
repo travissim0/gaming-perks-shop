@@ -591,6 +591,15 @@ export default function Navbar({ user }: { user: any }) {
                           <span>Site Admin</span>
                         </Link>
                       )}
+                      {isAdmin && (
+                        <Link 
+                          href="/admin/zones"
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-sm font-medium"
+                        >
+                          <span className="mr-2 text-orange-400">🖥️</span>
+                          <span>Zone Control</span>
+                        </Link>
+                      )}
                       {isCtfAdmin && (
                         <Link 
                           href="/admin/ctf"
