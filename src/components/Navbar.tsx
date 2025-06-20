@@ -51,7 +51,7 @@ export default function Navbar({ user }: { user: any }) {
 
       const squadIds = userSquads.map(sq => sq.squad_id);
 
-      // Get pending join requests TO these squads (self-requests where someone wants to join)
+      // Get ALL pending requests TO these squads (both join requests and invitations)
       const { data: allRequests, error: requestsError } = await supabase
         .from('squad_invites')
         .select('id, invited_by, invited_player_id, squad_id, profiles!squad_invites_invited_player_id_fkey(in_game_alias)')
@@ -61,10 +61,20 @@ export default function Navbar({ user }: { user: any }) {
 
       if (requestsError) throw requestsError;
 
-      // Filter to only self-requests (where invited_by = invited_player_id)
-      const requests = allRequests?.filter(request => 
-        request.invited_by === request.invited_player_id
-      ) || [];
+      // Include ALL requests - both self-requests (join requests) and captain invitations
+      const requests = allRequests || [];
+
+      console.log('🔔 Navbar notification check:', {
+        userSquads: userSquads.length,
+        totalRequests: requests.length,
+        requestDetails: requests.map((r: any) => ({
+          id: r.id,
+          invited_by: r.invited_by,
+          invited_player_id: r.invited_player_id,
+          is_self_request: r.invited_by === r.invited_player_id,
+          player_alias: r.profiles?.in_game_alias
+        }))
+      });
 
       if (!requestsError && requests) {
         setPendingSquadRequests(requests.length);
@@ -393,38 +403,69 @@ export default function Navbar({ user }: { user: any }) {
                       {squadRequests.length > 0 && (
                         <div className="border-b border-gray-600/30">
                           <div className="px-4 py-2 bg-gray-700/50">
-                            <p className="text-sm font-medium text-yellow-400">🛡️ Squad Join Requests</p>
+                            <p className="text-sm font-medium text-yellow-400">🛡️ Squad Invitations & Requests</p>
                           </div>
-                          {squadRequests.map((request) => (
-                            <div key={request.id} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
-                              <div className="flex items-center justify-between mb-2">
-                                <div>
-                                  <p className="text-sm font-medium text-white">
-                                    {request.profiles?.in_game_alias || 'Unknown Player'}
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    Wants to join squad
-                                  </p>
+                          {squadRequests.map((request: any) => {
+                            const isJoinRequest = request.invited_by === request.invited_player_id;
+                            const isInvitation = request.invited_by !== request.invited_player_id;
+                            
+                            return (
+                              <div key={request.id} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="text-sm font-medium text-white">
+                                        {request.profiles?.in_game_alias || 'Unknown Player'}
+                                      </p>
+                                      {isJoinRequest && (
+                                        <span className="bg-green-600/20 text-green-300 px-2 py-0.5 rounded text-xs font-medium border border-green-500/30">
+                                          📥 JOIN REQUEST
+                                        </span>
+                                      )}
+                                      {isInvitation && (
+                                        <span className="bg-blue-600/20 text-blue-300 px-2 py-0.5 rounded text-xs font-medium border border-blue-500/30">
+                                          📤 INVITATION SENT
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-gray-400">
+                                      {isJoinRequest ? 'Wants to join squad' : 'Pending your invitation response'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  {isJoinRequest && (
+                                    <>
+                                      <button
+                                        onClick={() => handleRequestAction(request.id, 'approve')}
+                                        disabled={processingRequest === request.id}
+                                        className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
+                                      >
+                                        {processingRequest === request.id ? '⏳' : '✅'} Approve
+                                      </button>
+                                      <button
+                                        onClick={() => handleRequestAction(request.id, 'deny')}
+                                        disabled={processingRequest === request.id}
+                                        className="flex-1 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
+                                      >
+                                        {processingRequest === request.id ? '⏳' : '❌'} Deny
+                                      </button>
+                                    </>
+                                  )}
+                                  {isInvitation && (
+                                    <button
+                                      onClick={() => handleRequestAction(request.id, 'deny')}
+                                      disabled={processingRequest === request.id}
+                                      className="flex-1 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
+                                      title="Cancel this invitation"
+                                    >
+                                      {processingRequest === request.id ? '⏳' : '🚫'} Cancel Invite
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleRequestAction(request.id, 'approve')}
-                                  disabled={processingRequest === request.id}
-                                  className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
-                                >
-                                  {processingRequest === request.id ? '⏳' : '✅'} Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRequestAction(request.id, 'deny')}
-                                  disabled={processingRequest === request.id}
-                                  className="flex-1 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:cursor-not-allowed"
-                                >
-                                  {processingRequest === request.id ? '⏳' : '❌'} Deny
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
 

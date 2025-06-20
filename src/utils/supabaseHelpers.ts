@@ -1,7 +1,7 @@
 // Supabase Helper Utilities
 // Handles connection management, retries, and error handling
 
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedSupabase, withRetry } from '@/lib/supabase';
 import { PostgrestError } from '@supabase/supabase-js';
 
 // Connection management and retry configuration
@@ -45,8 +45,8 @@ const isConnectionError = (error: any): boolean => {
   );
 };
 
-// Retry wrapper for Supabase queries
-async function withRetry<T>(
+// Local retry wrapper for Supabase queries with context
+async function retryWithContext<T>(
   operation: () => Promise<T>,
   context: string = 'query'
 ): Promise<T> {
@@ -98,118 +98,274 @@ async function withRetry<T>(
   }
 }
 
-// Safe free agents query
-export async function getFreeAgents(): Promise<any[]> {
-  return withRetry(async () => {
-    const { data, error } = await supabase
-      .from('free_agents')
-      .select(`
-        id,
-        player_id,
-        preferred_roles,
-        secondary_roles,
-        availability,
-        availability_days,
-        availability_times,
-        skill_level,
-        class_ratings,
-        classes_to_try,
-        notes,
-        contact_info,
-        timezone,
-        is_active,
-        created_at,
-        updated_at,
-        profiles(
-          id,
-          in_game_alias,
-          email,
-          created_at
-        )
-      `)
-      .eq('is_active', true)
-      .not('profiles.in_game_alias', 'is', null)
-      .neq('profiles.in_game_alias', '')
-      .order('created_at', { ascending: false })
-      .limit(50);
+// Enhanced helper functions with better error handling and retry logic
 
-    if (error) {
-      throw error;
+export const getFreeAgents = async () => {
+  try {
+    const operation = async () => {
+      const { data, error } = await getCachedSupabase()
+        .from('free_agents')
+        .select(`
+          *,
+          profiles!free_agents_player_id_fkey (
+            in_game_alias,
+            avatar_url
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching free agents:', error);
+        throw new Error(`Failed to fetch free agents: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getFreeAgents failed:', error.message);
+    // Return empty array instead of throwing to prevent page crashes
+    return [];
+  }
+};
+
+export const getAllPlayers = async () => {
+  try {
+    const operation = async () => {
+      const { data, error } = await getCachedSupabase()
+        .from('profiles')
+        .select('*')
+        .order('in_game_alias', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching players:', error);
+        throw new Error(`Failed to fetch players: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getAllPlayers failed:', error.message);
+    return [];
+  }
+};
+
+export const checkIfUserInFreeAgentPool = async (userId: string) => {
+  if (!userId) return false;
+
+  try {
+    const operation = async () => {
+      // First check if user is in free agent pool
+      const { data: freeAgentData, error: freeAgentError } = await supabase
+        .from('free_agents')
+        .select('id')
+        .eq('player_id', userId)
+        .eq('is_active', true)
+        .single();
+
+      if (freeAgentError && freeAgentError.code !== 'PGRST116') { // PGRST116 is "not found"
+        console.error('Error checking free agent status:', freeAgentError);
+        throw new Error(`Failed to check free agent status: ${freeAgentError.message}`);
+      }
+
+      const isInFreeAgentPool = !!freeAgentData;
+      
+      if (!isInFreeAgentPool) {
+        return false;
+      }
+
+      // Check if user can actually be a free agent (not in active squads)
+      const { data: canBeFreeAgent, error: canBeError } = await supabase
+        .rpc('can_be_free_agent', { user_id: userId });
+
+      if (canBeError) {
+        console.error('Error checking can_be_free_agent:', canBeError);
+        // Fallback to old logic if function fails
+        return isInFreeAgentPool;
+      }
+
+      return isInFreeAgentPool && canBeFreeAgent;
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('checkIfUserInFreeAgentPool failed:', error.message);
+    return false;
+  }
+};
+
+export const getSquadInvitations = async (userId: string) => {
+  if (!userId) return [];
+
+  try {
+    const operation = async () => {
+      const { data, error } = await supabase
+        .from('squad_invitations')
+        .select(`
+          *,
+          squads (
+            id,
+            name,
+            description,
+            squad_photo_url
+          )
+        `)
+        .eq('invited_player_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching squad invitations:', error);
+        throw new Error(`Failed to fetch squad invitations: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getSquadInvitations failed:', error.message);
+    return [];
+  }
+};
+
+export const getAllSquads = async () => {
+  try {
+    const operation = async () => {
+      const { data, error } = await getCachedSupabase()
+        .from('squads')
+        .select(`
+          *,
+          squad_members (
+            id,
+            profiles (
+              in_game_alias,
+              avatar_url
+            )
+          )
+        `)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching squads:', error);
+        throw new Error(`Failed to fetch squads: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getAllSquads failed:', error.message);
+    return [];
+  }
+};
+
+export const getRecentGames = async (limit: number = 5) => {
+  try {
+    const operation = async () => {
+      const { data, error } = await getCachedSupabase()
+        .from('player_stats')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching recent games:', error);
+        throw new Error(`Failed to fetch recent games: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getRecentGames failed:', error.message);
+    return [];
+  }
+};
+
+export const getPlayerStats = async (playerName?: string) => {
+  try {
+    const operation = async () => {
+      let query = getCachedSupabase()
+        .from('player_stats')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (playerName) {
+        query = query.eq('player_name', playerName);
+      }
+
+      const { data, error } = await query.limit(100);
+
+      if (error) {
+        console.error('Error fetching player stats:', error);
+        throw new Error(`Failed to fetch player stats: ${error.message}`);
+      }
+
+      return data || [];
+    };
+
+    return await withRetry(operation);
+  } catch (error: any) {
+    console.error('getPlayerStats failed:', error.message);
+    return [];
+  }
+};
+
+// Utility function to handle API responses consistently
+export const handleApiResponse = async (response: Response) => {
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      // If we can't parse the error response, use the default message
     }
+    
+    throw new Error(errorMessage);
+  }
+  
+  try {
+    return await response.json();
+  } catch (error) {
+    console.warn('Failed to parse JSON response:', error);
+    return null;
+  }
+};
 
-    return data || [];
-  }, 'getFreeAgents');
-}
-
-// Safe squad invitations query
-export async function getSquadInvitations(userId: string): Promise<any[]> {
-  return withRetry(async () => {
+// Connection health check utility
+export const checkSupabaseConnection = async () => {
+  try {
     const { data, error } = await supabase
-      .from('squad_invites')
-      .select(`
-        id,
-        squad_id,
-        message,
-        created_at,
-        expires_at,
-        status,
-        squads!inner(
-          id,
-          name,
-          tag,
-          is_active
-        ),
-        profiles!squad_invites_invited_by_fkey(
-          in_game_alias
-        )
-      `)
-      .eq('invited_player_id', userId)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false });
+      .from('profiles')
+      .select('count')
+      .limit(1);
 
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }, 'getSquadInvitations');
-}
-
-// Safe squads query
-export async function getAllSquads(): Promise<any[]> {
-  return withRetry(async () => {
-    const { data, error } = await supabase
-      .from('squads')
-      .select(`
-        id,
-        name,
-        tag,
-        description,
-        discord_link,
-        website_link,
-        captain_id,
-        is_active,
-        is_legacy,
-        tournament_eligible,
-        banner_url,
-        created_at,
-        updated_at,
-        profiles!squads_captain_id_fkey(in_game_alias)
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }, 'getAllSquads');
-}
+    return { 
+      healthy: !error, 
+      error: error?.message,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error: any) {
+    return { 
+      healthy: false, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+};
 
 // Safe squad members query
 export async function getSquadMembers(squadId: string): Promise<any[]> {
-  return withRetry(async () => {
+  return retryWithContext(async () => {
     const { data, error } = await supabase
       .from('squad_members')
       .select(`
@@ -236,69 +392,9 @@ export async function getSquadMembers(squadId: string): Promise<any[]> {
   }, 'getSquadMembers');
 }
 
-// Safe check if user is in free agent pool
-export async function checkIfUserInFreeAgentPool(userId: string): Promise<boolean> {
-  return withRetry(async () => {
-    const { data, error } = await supabase
-      .from('free_agents')
-      .select('id')
-      .eq('player_id', userId)
-      .eq('is_active', true)
-      .maybeSingle(); // Use maybeSingle instead of single to handle no results
-
-    if (error) {
-      throw error;
-    }
-
-    return !!data; // Return true if data exists, false otherwise
-  }, 'checkIfUserInFreeAgentPool');
-}
-
-// Connection health check
-export async function checkSupabaseConnection(): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .limit(1);
-    
-    return !error;
-  } catch (error) {
-    console.error('Supabase connection check failed:', error);
-    return false;
-  }
-}
-
-// Get all players for the players filter (shows everyone signed up)
-export async function getAllPlayers(): Promise<any[]> {
-  return withRetry(async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        id,
-        in_game_alias,
-        email,
-        registration_status,
-        created_at,
-        is_league_banned,
-        ctf_role
-      `)
-      .eq('registration_status', 'completed')
-      .not('in_game_alias', 'is', null)
-      .neq('in_game_alias', '')
-      .order('in_game_alias', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }, 'getAllPlayers');
-}
-
 // Get all site avatars for user selection
 export async function getSiteAvatars(): Promise<string[]> {
-  return withRetry(async () => {
+  return retryWithContext(async () => {
     try {
       // Use API route to fetch avatars (server-side with service role)
       const response = await fetch('/api/avatars');

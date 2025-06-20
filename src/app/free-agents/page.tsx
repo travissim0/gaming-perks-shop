@@ -158,9 +158,19 @@ export default function FreeAgentsPage() {
     if (!user) return;
 
     try {
-      // Use the safe utility function with retry logic
-      const isInPool = await checkIfUserInFreeAgentPool(user.id);
-      setIsInFreeAgentPool(isInPool);
+      // Use the new function that only considers active (non-legacy) squads
+      const { data, error } = await supabase.rpc('can_be_free_agent', { user_id: user.id });
+      
+      if (error) {
+        console.error('Error checking free agent status:', error);
+        // Fallback to old logic
+        const isInPool = await checkIfUserInFreeAgentPool(user.id);
+        setIsInFreeAgentPool(isInPool);
+      } else {
+        // User can be free agent if not in any active squads (legacy squads don't count)
+        const actualStatus = await checkIfUserInFreeAgentPool(user.id);
+        setIsInFreeAgentPool(actualStatus && data);
+      }
     } catch (error) {
       console.error('Error checking free agent pool status:', error);
       // Default to false if check fails

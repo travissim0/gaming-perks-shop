@@ -91,12 +91,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if user is already in a squad
+    // Check if user is already in an active (non-legacy) squad
     const { data: existingMembership, error: membershipError } = await supabase
       .from('squad_members')
-      .select('id')
+      .select(`
+        id,
+        squads!inner(is_legacy)
+      `)
       .eq('player_id', captainId)
       .eq('status', 'active')
+      .eq('squads.is_legacy', false)
       .maybeSingle();
 
     if (membershipError && membershipError.code !== 'PGRST116') {
@@ -105,10 +109,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (existingMembership) {
-      return NextResponse.json({ error: 'You are already a member of a squad' }, { status: 409 });
+      return NextResponse.json({ error: 'You are already a member of an active squad. You can be in legacy squads and one active squad.' }, { status: 409 });
     }
 
-    // Create the squad
+    // Create the squad (new squads are never legacy)
     const { data: newSquad, error: squadError } = await supabaseAdmin
       .from('squads')
       .insert([
@@ -119,7 +123,8 @@ export async function POST(req: NextRequest) {
           captain_id: captainId,
           logo_url: logoUrl,
           discord_link: discordLink,
-          website_link: websiteLink
+          website_link: websiteLink,
+          is_legacy: false // New squads are always active, never legacy
         }
       ])
       .select()

@@ -29,6 +29,7 @@ interface Squad {
   created_at: string;
   banner_url?: string;
   is_active: boolean;
+  is_legacy?: boolean; // Add legacy flag (optional for backward compatibility)
   members: SquadMember[];
 }
 
@@ -36,6 +37,7 @@ interface UserSquad {
   id: string;
   name: string;
   tag: string;
+  is_legacy?: boolean; // Add legacy flag (optional since it may not be loaded)
 }
 
 interface PendingRequest {
@@ -131,6 +133,8 @@ export default function SquadDetailPage() {
 
     const { data: membersData } = await queries.getSquadMembers(squadId);
     
+    console.log('🛡️ [Squad Detail] Raw members data:', membersData);
+    
     const formattedSquad: Squad = {
       ...squadData,
       members: membersData?.map((member: any) => ({
@@ -142,9 +146,14 @@ export default function SquadDetailPage() {
       })) || []
     };
 
-    // Debug logging for banner URL
-    console.log('Squad data:', squadData);
-    console.log('Banner URL:', squadData.banner_url);
+    console.log('🛡️ [Squad Detail] Formatted squad:', {
+      id: formattedSquad.id,
+      name: formattedSquad.name,
+      tag: formattedSquad.tag,
+      is_legacy: formattedSquad.is_legacy,
+      membersCount: formattedSquad.members.length,
+      members: formattedSquad.members
+    });
 
     setSquad(formattedSquad);
   };
@@ -152,14 +161,23 @@ export default function SquadDetailPage() {
   const loadUserSquad = async () => {
     if (!user) return;
     
+    console.log('🏴 [Squad Detail] Loading user squad for:', user.id);
+    
     const { data: squadData } = await queries.getUserSquad(user.id);
     
     if (squadData) {
-      setUserSquad({
+      const userSquadInfo = {
         id: (squadData.squads as any).id,
         name: (squadData.squads as any).name,
-        tag: (squadData.squads as any).tag
-      });
+        tag: (squadData.squads as any).tag,
+        is_legacy: (squadData.squads as any).is_legacy || false
+      };
+      
+      console.log('🏴 [Squad Detail] Setting user squad:', userSquadInfo);
+      setUserSquad(userSquadInfo);
+    } else {
+      console.log('🏴 [Squad Detail] No user squad found, setting to null');
+      setUserSquad(null);
     }
   };
 
@@ -239,36 +257,93 @@ export default function SquadDetailPage() {
 
     setIsRequesting(true);
     
-    const { success, error } = await robustFetch(
-      async () => {
-        const result = await supabase
-          .from('squad_invites')
-          .insert({
-            squad_id: squad.id,
-            invited_player_id: user.id,
-            invited_by: user.id,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-          });
+    try {
+      // First check if there's already a pending request
+      const { data: existingRequest, error: checkError } = await supabase
+        .from('squad_invites')
+        .select('id, created_at')
+        .eq('invited_player_id', user.id)
+        .eq('invited_by', user.id)
+        .eq('squad_id', squad.id)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
-        if (result.error) throw new Error(result.error.message);
-        return result.data;
-      },
-      { errorMessage: 'Failed to send join request' }
-    );
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw new Error(checkError.message);
+      }
 
-    if (success) {
-      toast.success('Join request sent successfully!');
-      setHasExistingRequest(true);
+      if (existingRequest) {
+        console.log('📋 Found existing request:', existingRequest);
+        toast.error('You already have a pending join request for this squad');
+        setHasExistingRequest(true);
+        setIsRequesting(false);
+        return;
+      }
+
+      // Proceed with creating new request
+      const { error: insertError } = await supabase
+        .from('squad_invites')
+        .insert({
+          squad_id: squad.id,
+          invited_player_id: user.id,
+          invited_by: user.id,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          message: squad.is_legacy ? 'Request to join legacy squad' : undefined
+        });
+
+      if (insertError) {
+        if (insertError.message.includes('duplicate') || insertError.message.includes('unique_pending')) {
+          toast.error('You already have a pending join request for this squad');
+          setHasExistingRequest(true);
+        } else {
+          throw new Error(insertError.message);
+        }
+      } else {
+        const squadType = squad.is_legacy ? 'legacy squad' : 'squad';
+        toast.success(`Join request sent to ${squadType} successfully!`);
+        setHasExistingRequest(true);
+      }
+
       // Refresh the existing request check to ensure UI stays in sync
       await checkExistingRequest();
-    } else if (error && error.message.includes('duplicate') || error?.message.includes('already have a pending')) {
-      toast.error('You already have a pending join request for this squad');
-      setHasExistingRequest(true);
-      // Also refresh check in case of duplicate to ensure UI is correct
-      await checkExistingRequest();
+      
+    } catch (error: any) {
+      console.error('Error requesting to join squad:', error);
+      toast.error(error.message || 'Failed to send join request');
+    } finally {
+      setIsRequesting(false);
     }
-    
-    setIsRequesting(false);
+  };
+
+  const withdrawRequest = async () => {
+    if (!user || !squadId || !hasExistingRequest) return;
+
+    try {
+      setIsRequesting(true);
+      
+      const { error } = await supabase
+        .from('squad_invites')
+        .delete()
+        .eq('invited_player_id', user.id)
+        .eq('invited_by', user.id) // Only self-requests
+        .eq('squad_id', squadId)
+        .eq('status', 'pending');
+
+      if (error) throw error;
+
+      toast.success('Request withdrawn successfully');
+      setHasExistingRequest(false);
+      
+      // Refresh data
+      await checkExistingRequest();
+      
+    } catch (error: any) {
+      console.error('Error withdrawing request:', error);
+      toast.error(error.message || 'Failed to withdraw request');
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   const handleRequestAction = async (requestId: string, action: 'approve' | 'deny') => {
@@ -381,7 +456,7 @@ export default function SquadDetailPage() {
       isActive: squad?.is_active
     });
     
-    if (!user || !squad || hasExistingRequest) {
+    if (!user || !squad) {
       console.log('❌ Failed basic checks');
       return false;
     }
@@ -389,14 +464,21 @@ export default function SquadDetailPage() {
     // Check if user is already a member of this squad
     const isAlreadyMember = squad.members.some(member => member.player_id === user.id);
     if (isAlreadyMember) {
-      console.log('❌ User is already a member');
+      console.log('❌ User is already a member of this squad');
       return false;
     }
     
-    // Check if user is already in another squad (unless it's this squad)
-    if (userSquad && userSquad.id !== squad.id) {
-      console.log('❌ User is in another squad');
+    // Check if user is already in another active (non-legacy) squad
+    // Legacy squads don't block joining other squads
+    if (userSquad && userSquad.id !== squad.id && !(userSquad.is_legacy === true)) {
+      console.log('❌ User is in another active squad');
       return false;
+    }
+    
+    // If target squad is legacy, can always request to join
+    if (squad.is_legacy === true) {
+      console.log('✅ Can request to join legacy squad');
+      return true;
     }
     
     // Can't request to join if user is the captain (shouldn't happen, but safety check)
@@ -411,7 +493,20 @@ export default function SquadDetailPage() {
   };
 
   const isCurrentMember = () => {
-    return user && userSquad && userSquad.id === squad?.id;
+    // Check if user is actually in this squad's member list
+    // This works for both active and legacy squads
+    const isMember = user && squad && squad.members.some(member => member.player_id === user.id);
+    
+    console.log('🔍 isCurrentMember check:', {
+      userId: user?.id,
+      squadId: squad?.id,
+      squadName: squad?.name,
+      squadMembersCount: squad?.members?.length,
+      squadMembers: squad?.members?.map(m => ({ id: m.player_id, alias: m.in_game_alias })),
+      isMember
+    });
+    
+    return isMember;
   };
 
   const canLeaveSquad = () => {
@@ -832,21 +927,50 @@ export default function SquadDetailPage() {
                   
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-3 lg:flex-shrink-0">
-                    {canRequestToJoin() && (
-                      <button
-                        onClick={requestToJoin}
-                        disabled={isRequesting}
-                        className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed"
-                      >
-                        {isRequesting ? (
-                          <span className="flex items-center gap-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                            Sending...
-                          </span>
-                        ) : (
-                          '📤 Request to Join'
+                    {/* Join Request Button - Show different states based on request status */}
+                    {(canRequestToJoin() || hasExistingRequest) && !isCurrentMember() && (
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={hasExistingRequest ? undefined : requestToJoin}
+                          disabled={isRequesting || hasExistingRequest}
+                          className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed ${
+                            hasExistingRequest 
+                              ? 'bg-gradient-to-r from-yellow-600 to-amber-600 text-white cursor-default'
+                              : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white'
+                          }`}
+                        >
+                          {hasExistingRequest ? (
+                            <span className="flex items-center gap-2">
+                              ⏳ Request Pending
+                            </span>
+                          ) : isRequesting ? (
+                            <span className="flex items-center gap-2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                              Sending...
+                            </span>
+                          ) : (
+                            '📤 Request to Join'
+                          )}
+                        </button>
+                        
+                        {/* Withdraw Request Button */}
+                        {hasExistingRequest && (
+                          <button
+                            onClick={withdrawRequest}
+                            disabled={isRequesting}
+                            className="px-6 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed text-sm"
+                          >
+                            {isRequesting ? (
+                              <span className="flex items-center gap-2">
+                                <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white"></div>
+                                Withdrawing...
+                              </span>
+                            ) : (
+                              '🗑️ Withdraw Request'
+                            )}
+                          </button>
                         )}
-                      </button>
+                      </div>
                     )}
                     
                     {/* Leave Squad Button for Current Members */}
@@ -887,11 +1011,7 @@ export default function SquadDetailPage() {
                       </button>
                     )}
                     
-                    {hasExistingRequest && (
-                      <div className="bg-yellow-600/20 text-yellow-400 px-4 py-2 rounded-lg text-center border border-yellow-600/30">
-                        ⏳ Request Pending
-                      </div>
-                    )}
+
                     
                     {userSquad && userSquad.id !== squad.id && (
                       <div className="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-lg text-center border border-blue-600/30">

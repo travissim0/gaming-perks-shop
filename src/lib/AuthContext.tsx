@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { supabase } from './supabase';
+import { supabase, withRetry } from './supabase';
 import { User } from '@supabase/supabase-js';
 import { toast } from 'react-hot-toast';
 
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false); // Start false for immediate render
   const [error, setError] = useState<string | null>(null);
 
-  // Fast, reliable auth check with short timeouts
+  // Improved auth check with better error handling
   useEffect(() => {
     let isMounted = true;
     let timeoutId: NodeJS.Timeout;
@@ -39,20 +39,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         console.log('🔍 Quick auth check starting...');
         
-        // Fast session check with 5-second timeout (much shorter than before)
-        const sessionPromise = supabase.auth.getSession();
+        // Use retry mechanism for session check
+        const sessionCheck = () => supabase.auth.getSession();
+        
+        // Set a timeout warning but don't fail the operation
         timeoutId = setTimeout(() => {
-          console.warn('⚠️ Auth check taking longer than expected, continuing without session');
-        }, 5000);
+          console.warn('⚠️ Auth check taking longer than expected, but continuing...');
+        }, 3000); // Reduced from 5 seconds
 
-        const { data: { session }, error } = await sessionPromise;
+        const { data: { session }, error } = await withRetry(sessionCheck, 2, 1000);
         clearTimeout(timeoutId);
         
         if (!isMounted) return;
 
         if (error) {
           console.warn('⚠️ Session error (non-blocking):', error.message);
-          // Don't show error toast for session issues - just continue
+          // Only set error for critical auth failures
+          if (error.message.includes('Invalid JWT')) {
+            setError('Session expired. Please sign in again.');
+          }
           return;
         }
 
@@ -60,16 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(session.user);
           console.log('✅ User session found:', session.user.email);
           
-          // Background profile update (non-blocking)
+          // Background profile update (non-blocking with retry)
           updateUserActivity(session.user).catch(err => 
-            console.warn('Profile update failed (non-blocking):', err)
+            console.warn('Profile update failed (non-blocking):', err.message)
           );
         } else {
           console.log('ℹ️ No active session');
         }
       } catch (error: any) {
         console.warn('⚠️ Auth check failed (non-blocking):', error.message);
-        // Don't show error toasts for auth checks - they're often due to network issues
+        // Only show critical errors to users
+        if (error.message?.includes('network') || error.message?.includes('fetch')) {
+          setError('Connection issues detected. Some features may be limited.');
+        }
       }
     };
 
@@ -90,9 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setError(null);
               console.log('✅ User signed in:', session.user.email);
               
-              // Background profile update
+              // Background profile update with retry
               updateUserActivity(session.user).catch(err => 
-                console.warn('Profile update failed:', err)
+                console.warn('Profile update failed:', err.message)
               );
             }
             break;
@@ -108,6 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(session.user);
               setError(null);
               console.log('🔄 Token refreshed for:', session.user.email);
+            }
+            break;
+            
+          case 'USER_UPDATED':
+            if (session?.user) {
+              setUser(session.user);
+              console.log('👤 User updated:', session.user.email);
             }
             break;
             
@@ -128,20 +143,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Fast, non-blocking user activity update
+  // Improved user activity update with retry logic
   const updateUserActivity = async (user: User) => {
     try {
-      const response = await fetch('/api/user/update-activity', { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
-      });
+      const updateOperation = async () => {
+        const response = await fetch('/api/user/update-activity', { 
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+          },
+          body: JSON.stringify({ userId: user.id })
+        });
+        
+        if (!response.ok && response.status !== 404) {
+          throw new Error(`Activity update failed: ${response.status}`);
+        }
+        
+        return response;
+      };
       
-      if (!response.ok && response.status !== 404) {
-        console.warn('Activity update failed:', response.status);
-      }
-    } catch (error) {
-      console.warn('Activity update error:', error);
+      await withRetry(updateOperation, 2, 1000);
+    } catch (error: any) {
+      console.warn('Activity update error:', error.message);
     }
   };
 
@@ -152,16 +176,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('🔑 Signing in...');
       
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const signInOperation = () => supabase.auth.signInWithPassword({
         email,
         password,
       });
+
+      const { data, error: signInError } = await withRetry(signInOperation, 2, 1000);
 
       if (signInError) {
         console.error('❌ Sign in error:', signInError.message);
         const errorMessage = signInError.message || 'Failed to sign in';
         setError(errorMessage);
-        toast.error(errorMessage);
+        
+        // More user-friendly error messages
+        if (errorMessage.includes('Invalid login credentials')) {
+          toast.error('Invalid email or password');
+        } else if (errorMessage.includes('network')) {
+          toast.error('Connection error. Please check your internet connection.');
+        } else {
+          toast.error(errorMessage);
+        }
         throw signInError;
       }
 
@@ -175,9 +209,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       const message = error.message || 'Failed to sign in';
       setError(message);
-      if (!message.includes('Invalid login credentials')) {
-        toast.error(message);
-      }
       throw error;
     } finally {
       setLoading(false);

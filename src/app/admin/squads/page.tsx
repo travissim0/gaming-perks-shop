@@ -14,6 +14,7 @@ interface Squad {
   captain_alias: string;
   member_count: number;
   is_active: boolean;
+  is_legacy: boolean; // Add legacy field
   created_at: string;
   banner_url?: string;
 }
@@ -23,7 +24,7 @@ export default function AdminSquads() {
   const [squads, setSquads] = useState<Squad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'legacy'>('all');
 
   useEffect(() => {
     checkAdminStatus();
@@ -69,6 +70,7 @@ export default function AdminSquads() {
           tag,
           description,
           is_active,
+          is_legacy,
           created_at,
           banner_url,
           captain_id,
@@ -87,6 +89,7 @@ export default function AdminSquads() {
         captain_alias: squad.profiles?.in_game_alias || 'Unknown',
         member_count: squad.squad_members?.length || 0,
         is_active: squad.is_active,
+        is_legacy: squad.is_legacy || false,
         created_at: squad.created_at,
         banner_url: squad.banner_url
       }));
@@ -123,9 +126,33 @@ export default function AdminSquads() {
     }
   };
 
+  const toggleLegacyStatus = async (squadId: string, currentLegacyStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('squads')
+        .update({ is_legacy: !currentLegacyStatus })
+        .eq('id', squadId);
+
+      if (error) throw error;
+
+      // Update local state
+      setSquads(prev => prev.map(squad => 
+        squad.id === squadId 
+          ? { ...squad, is_legacy: !currentLegacyStatus }
+          : squad
+      ));
+
+      toast.success(`Squad ${!currentLegacyStatus ? 'marked as legacy' : 'removed from legacy'} successfully`);
+    } catch (error) {
+      console.error('Error updating legacy status:', error);
+      toast.error('Error updating legacy status');
+    }
+  };
+
   const filteredSquads = squads.filter(squad => {
-    if (filter === 'active') return squad.is_active;
-    if (filter === 'inactive') return !squad.is_active;
+    if (filter === 'active') return squad.is_active && !squad.is_legacy;
+    if (filter === 'inactive') return !squad.is_active && !squad.is_legacy;
+    if (filter === 'legacy') return squad.is_legacy;
     return true;
   });
 
@@ -162,10 +189,18 @@ export default function AdminSquads() {
             ← Back to Admin
           </Link>
           <h1 className="text-3xl font-bold text-cyan-400 mb-2">Squad Management</h1>
-          <p className="text-gray-400">
+          <p className="text-gray-400 mb-2">
             Control which squads appear on the main page widget. 
             Only active squads are shown to regular users.
           </p>
+          <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
+            <h3 className="text-purple-300 font-semibold mb-2">🏛️ Legacy Squad System</h3>
+            <p className="text-purple-200 text-sm">
+              Legacy squads preserve historical teams while allowing flexible membership. 
+              Players can be on both a legacy squad (for history) and an active squad simultaneously.
+              Legacy squads don't block players from joining other squads or appearing in the free agent pool.
+            </p>
+          </div>
         </div>
 
         {/* Filter Tabs */}
@@ -173,8 +208,9 @@ export default function AdminSquads() {
           <div className="flex space-x-1 bg-gray-800 p-1 rounded-lg w-fit">
             {[
               { key: 'all', label: 'All Squads', count: squads.length },
-              { key: 'active', label: 'Active', count: squads.filter(s => s.is_active).length },
-              { key: 'inactive', label: 'Inactive', count: squads.filter(s => !s.is_active).length }
+              { key: 'active', label: 'Active', count: squads.filter(s => s.is_active && !s.is_legacy).length },
+              { key: 'inactive', label: 'Inactive', count: squads.filter(s => !s.is_active && !s.is_legacy).length },
+              { key: 'legacy', label: 'Legacy', count: squads.filter(s => s.is_legacy).length }
             ].map(({ key, label, count }) => (
               <button
                 key={key}
@@ -263,32 +299,54 @@ export default function AdminSquads() {
                         {squad.member_count}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          squad.is_active 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {squad.is_active ? '🟢 Active' : '🔴 Inactive'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            squad.is_legacy 
+                              ? 'bg-purple-100 text-purple-800' 
+                              : squad.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                          }`}>
+                            {squad.is_legacy ? '🏛️ Legacy' : squad.is_active ? '🟢 Active' : '🔴 Inactive'}
+                          </span>
+                          {squad.is_legacy && (
+                            <span className="text-xs text-gray-400">
+                              Historical squad
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {new Date(squad.created_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 flex-wrap gap-1">
+                          {!squad.is_legacy && (
+                            <button
+                              onClick={() => toggleSquadStatus(squad.id, squad.is_active)}
+                              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                squad.is_active
+                                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                                  : 'bg-green-600 hover:bg-green-700 text-white'
+                              }`}
+                            >
+                              {squad.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
                           <button
-                            onClick={() => toggleSquadStatus(squad.id, squad.is_active)}
+                            onClick={() => toggleLegacyStatus(squad.id, squad.is_legacy)}
                             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                              squad.is_active
-                                ? 'bg-red-600 hover:bg-red-700 text-white'
-                                : 'bg-green-600 hover:bg-green-700 text-white'
+                              squad.is_legacy
+                                ? 'bg-gray-600 hover:bg-gray-700 text-white'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white'
                             }`}
+                            title={squad.is_legacy ? 'Remove from legacy status' : 'Mark as legacy squad'}
                           >
-                            {squad.is_active ? 'Deactivate' : 'Activate'}
+                            {squad.is_legacy ? 'Un-Legacy' : 'Make Legacy'}
                           </button>
                           <Link
                             href={`/squads/${squad.id}`}
-                            className="text-blue-400 hover:text-blue-300"
+                            className="text-blue-400 hover:text-blue-300 text-xs"
                           >
                             View
                           </Link>
@@ -303,22 +361,28 @@ export default function AdminSquads() {
         </div>
 
         {/* Summary Stats */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="text-2xl font-bold text-cyan-400">{squads.length}</div>
             <div className="text-sm text-gray-400">Total Squads</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="text-2xl font-bold text-green-400">
-              {squads.filter(s => s.is_active).length}
+              {squads.filter(s => s.is_active && !s.is_legacy).length}
             </div>
             <div className="text-sm text-gray-400">Active Squads</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="text-2xl font-bold text-red-400">
-              {squads.filter(s => !s.is_active).length}
+              {squads.filter(s => !s.is_active && !s.is_legacy).length}
             </div>
             <div className="text-sm text-gray-400">Inactive Squads</div>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="text-2xl font-bold text-purple-400">
+              {squads.filter(s => s.is_legacy).length}
+            </div>
+            <div className="text-sm text-gray-400">Legacy Squads</div>
           </div>
         </div>
       </div>

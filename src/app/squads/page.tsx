@@ -60,6 +60,9 @@ interface SquadInvite {
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   message?: string;
   inviter_alias?: string;
+  is_join_request?: boolean;
+  is_invitation?: boolean;
+  request_type?: 'join_request' | 'invitation';
 }
 
 export default function SquadsPage() {
@@ -164,6 +167,14 @@ export default function SquadsPage() {
     }
   }, [user, loading]);
 
+  // Reload join requests when userSquad changes
+  useEffect(() => {
+    if (user && userSquad && !loading) {
+      console.log('🔄 userSquad changed, reloading join requests for squad:', userSquad.name);
+      loadJoinRequestsForSquad();
+    }
+  }, [user, userSquad, loading]);
+
   // Add error boundary for auth-related errors
   useEffect(() => {
     const handleAuthError = (error: any) => {
@@ -210,11 +221,15 @@ export default function SquadsPage() {
       // Load user-specific data only for authenticated users
       if (user) {
         console.log('🚀 loadInitialData: Loading user-specific data...');
+        
+        // First load user squad (required for join requests)
+        await loadUserSquad();
+        
+        // Then load other user data in parallel
         const userResults = await Promise.allSettled([
-          loadUserSquad(),
           loadReceivedInvitations(),
           loadSentJoinRequests(),
-          loadJoinRequestsForSquad()
+          loadJoinRequestsForSquad() // This now runs after loadUserSquad completes
         ]);
         console.log('🚀 loadInitialData: User data results:', userResults.map(r => r.status));
       } else {
@@ -241,8 +256,10 @@ export default function SquadsPage() {
     if (!user || !isMountedRef.current) return;
 
     try {
-      // First, get the user's squad membership - try both possible column names
-      let membershipData = null;
+      console.log('🏴 Loading user squad for:', user.id);
+      
+      // Get ALL user's squad memberships - try both possible column names
+      let allMembershipsData = null;
       let membershipError = null;
       
       // Try with player_id first (newer schema)
@@ -262,15 +279,17 @@ export default function SquadsPage() {
             website_link,
             captain_id,
             created_at,
-            banner_url
+            banner_url,
+            is_legacy,
+            is_active
           )
         `)
         .eq('player_id', user.id)
         .eq('status', 'active')
-        .maybeSingle();
+        .order('joined_at', { ascending: false }); // Most recent first
 
       if (!membershipError1) {
-        membershipData = membershipData1;
+        allMembershipsData = membershipData1;
         membershipError = membershipError1;
       } else {
         // Try with user_id (older schema)
@@ -290,14 +309,16 @@ export default function SquadsPage() {
               website_link,
               captain_id,
               created_at,
-              banner_url
+              banner_url,
+              is_legacy,
+              is_active
             )
           `)
           .eq('user_id', user.id)
           .eq('status', 'active')
-          .maybeSingle();
+          .order('joined_at', { ascending: false }); // Most recent first
         
-        membershipData = membershipData2;
+        allMembershipsData = membershipData2;
         membershipError = membershipError2;
       }
 
@@ -306,12 +327,37 @@ export default function SquadsPage() {
         return;
       }
 
-      if (!membershipData || !isMountedRef.current) {
+      // Only set to null if we're sure there's no squad membership
+      if (!allMembershipsData || allMembershipsData.length === 0 || !isMountedRef.current) {
+        console.log('🏴 No squad membership found, setting userSquad to null');
         setUserSquad(null);
         return;
       }
 
+      console.log('🏴 Found squad memberships:', allMembershipsData.map(m => ({
+        squadName: (m.squads as any).name,
+        isLegacy: (m.squads as any).is_legacy,
+        isActive: (m.squads as any).is_active,
+        role: m.role
+      })));
+
+      // Prioritize squad selection:
+      // 1. Active (non-legacy) squads first
+      // 2. Then legacy squads
+      // 3. Then inactive squads
+      const membershipData = allMembershipsData.find(m => 
+        (m.squads as any).is_legacy === false && (m.squads as any).is_active !== false
+      ) || allMembershipsData.find(m => 
+        (m.squads as any).is_legacy === true
+      ) || allMembershipsData[0]; // Fallback to first one
+
       const squadData = membershipData.squads as any;
+      console.log('🏴 Selected squad for display:', {
+        squadName: squadData.name,
+        isLegacy: squadData.is_legacy,
+        isActive: squadData.is_active,
+        role: membershipData.role
+      });
       
       // Get squad members first, then fetch their profiles separately for better reliability
       // Try both possible column names for compatibility
@@ -387,6 +433,8 @@ export default function SquadsPage() {
         captain_id: squadData.captain_id,
         created_at: squadData.created_at,
         banner_url: squadData.banner_url,
+        is_legacy: squadData.is_legacy || false,
+        is_active: squadData.is_active !== false,
         captain_alias: 'Loading...',
         member_count: allMembersData?.length || 0,
         members: allMembersData?.map((member: any) => ({
@@ -402,10 +450,20 @@ export default function SquadsPage() {
       const captain = formattedSquad.members.find(m => m.role === 'captain');
       formattedSquad.captain_alias = captain?.in_game_alias || 'Unknown';
 
+      console.log('🏴 Setting formatted squad:', {
+        name: formattedSquad.name,
+        isLegacy: formattedSquad.is_legacy,
+        isActive: formattedSquad.is_active,
+        memberCount: formattedSquad.member_count
+      });
+      
       setUserSquad(formattedSquad);
     } catch (error) {
       console.error('Error loading user squad:', error);
-      setUserSquad(null);
+      // Only set to null on actual error, not on loading
+      if (isMountedRef.current) {
+        setUserSquad(null);
+      }
     }
   };
 
@@ -431,6 +489,7 @@ export default function SquadsPage() {
           created_at,
           banner_url,
           is_active,
+          is_legacy,
           profiles!squads_captain_id_fkey(in_game_alias),
           squad_members!inner(id)
         `)
@@ -550,6 +609,8 @@ export default function SquadsPage() {
     if (!user || !isMountedRef.current) return;
 
     try {
+      console.log('📬 Loading received invitations for user:', user.id);
+      
       // Use direct query instead of RPC function to avoid type mismatch
       const { data, error } = await supabase
         .from('squad_invites')
@@ -564,7 +625,8 @@ export default function SquadsPage() {
             id,
             name,
             tag,
-            is_active
+            is_active,
+            is_legacy
           ),
           profiles!squad_invites_invited_by_fkey(
             in_game_alias
@@ -583,9 +645,25 @@ export default function SquadsPage() {
         return;
       }
 
+      console.log('📬 Raw invitation data:', data);
+
       if (data) {
         const formattedInvitations = data
-          .filter((invite: any) => invite.squads?.is_active !== false) // Only show invites from active squads
+          .filter((invite: any) => {
+            // Show invites from all squads (active, inactive, and legacy)
+            // The key change: legacy squads should always show invites regardless of is_active
+            const isFromLegacySquad = invite.squads?.is_legacy === true;
+            const isFromActiveSquad = invite.squads?.is_active !== false;
+            
+            console.log('📬 Filtering invitation:', {
+              squadName: invite.squads?.name,
+              isLegacy: isFromLegacySquad,
+              isActive: isFromActiveSquad,
+              shouldShow: isFromLegacySquad || isFromActiveSquad
+            });
+            
+            return isFromLegacySquad || isFromActiveSquad;
+          })
           .map((invite: any) => ({
             id: invite.id,
             squad_id: invite.squad_id,
@@ -594,12 +672,14 @@ export default function SquadsPage() {
             invited_player_id: user.id,
             invited_alias: '',
             invited_by_alias: invite.profiles?.in_game_alias || 'Unknown',
+            inviter_alias: invite.profiles?.in_game_alias || 'Unknown', // Add this for consistency
             created_at: invite.created_at,
             expires_at: invite.expires_at,
             status: invite.status,
             message: invite.message
           }));
 
+        console.log('📬 Formatted invitations:', formattedInvitations);
         setReceivedInvitations(formattedInvitations);
       }
     } catch (error) {
@@ -684,19 +764,40 @@ export default function SquadsPage() {
   };
 
   const loadJoinRequestsForSquad = async () => {
-    if (!user || !userSquad || !isMountedRef.current) return;
+    if (!user || !userSquad || !isMountedRef.current) {
+      console.log('🚫 loadJoinRequestsForSquad: Early return -', {
+        hasUser: !!user,
+        hasUserSquad: !!userSquad,
+        isMounted: isMountedRef.current,
+        userSquadName: userSquad?.name
+      });
+      return;
+    }
 
     const userMember = userSquad.members.find(m => m.player_id === user.id);
     if (!userMember || (userMember.role !== 'captain' && userMember.role !== 'co_captain')) {
+      console.log('🚫 loadJoinRequestsForSquad: User is not captain/co-captain -', {
+        userMember,
+        userRole: userMember?.role,
+        squadName: userSquad.name
+      });
       return;
     }
+
+    console.log('🔍 loadJoinRequestsForSquad: Starting query for squad:', {
+      squadId: userSquad.id,
+      squadName: userSquad.name,
+      isLegacy: userSquad.is_legacy,
+      userRole: userMember.role
+    });
 
     try {
       const { data, error } = await supabase
         .from('squad_invites')
         .select(`
           *,
-          profiles!squad_invites_invited_player_id_fkey(in_game_alias)
+          profiles!squad_invites_invited_player_id_fkey(in_game_alias),
+          inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
         `)
         .eq('squad_id', userSquad.id)
         .eq('status', 'pending')
@@ -705,27 +806,54 @@ export default function SquadsPage() {
       if (!isMountedRef.current) return;
 
       if (error) {
-        console.error('Error loading join requests for squad:', error);
+        console.error('❌ loadJoinRequestsForSquad: Database error:', error);
         setJoinRequests([]);
         return;
       }
 
+      console.log('📊 loadJoinRequestsForSquad: Raw database results:', {
+        totalRecords: data?.length || 0,
+        squadId: userSquad.id,
+        rawData: data
+      });
+
       if (data) {
-        // Filter to only self-requests (where invited_by = invited_player_id)
-        const selfRequests = data.filter((request: any) => 
-          request.invited_by === request.invited_player_id
-        );
-        
-        const formattedRequests = selfRequests.map((request: any) => ({
-          ...request,
-          requester_alias: request.profiles?.in_game_alias,
-          invited_alias: request.profiles?.in_game_alias // Add this for consistency
-        }));
+        // Include both self-requests AND invitations sent by captains
+        const formattedRequests = data.map((request: any) => {
+          const isJoinRequest = request.invited_by === request.invited_player_id;
+          const isInvitation = request.invited_by !== request.invited_player_id;
+          
+          return {
+            ...request,
+            requester_alias: request.profiles?.in_game_alias,
+            invited_alias: request.profiles?.in_game_alias,
+            inviter_alias: request.inviter?.in_game_alias,
+            is_join_request: isJoinRequest,
+            is_invitation: isInvitation,
+            request_type: isJoinRequest ? 'join_request' : 'invitation'
+          };
+        });
+
+        console.log('📋 loadJoinRequestsForSquad: Processed results:', {
+          total: formattedRequests.length,
+          joinRequests: formattedRequests.filter((r: any) => r.is_join_request).length,
+          invitations: formattedRequests.filter((r: any) => r.is_invitation).length,
+          squadIsLegacy: userSquad.is_legacy,
+          details: formattedRequests.map(r => ({
+            type: r.request_type,
+            invitedPlayer: r.invited_alias,
+            inviter: r.inviter_alias,
+            isLegacySquad: userSquad.is_legacy
+          }))
+        });
 
         setJoinRequests(formattedRequests);
+      } else {
+        console.log('📋 loadJoinRequestsForSquad: No data returned, setting empty array');
+        setJoinRequests([]);
       }
     } catch (error) {
-      console.error('Error loading join requests for squad:', error);
+      console.error('❌ loadJoinRequestsForSquad: Exception caught:', error);
       if (isMountedRef.current) {
         setJoinRequests([]);
       }
@@ -841,6 +969,15 @@ export default function SquadsPage() {
     if (!user) return;
 
     try {
+      // Get the squad info to check if it's legacy
+      const { data: squadInfo, error: squadError } = await supabase
+        .from('squads')
+        .select('is_legacy, name')
+        .eq('id', squadId)
+        .single();
+
+      if (squadError) throw squadError;
+
       // Update invitation status to accepted
       const { error: updateError } = await supabase
         .from('squad_invites')
@@ -871,7 +1008,8 @@ export default function SquadsPage() {
         loadFreeAgents()
       ]);
 
-      toast.success('Successfully joined the squad!');
+      const squadType = squadInfo.is_legacy ? 'legacy squad' : 'squad';
+      toast.success(`Successfully joined the ${squadType} ${squadInfo.name}!`);
     } catch (error) {
       console.error('Error accepting invitation:', error);
       toast.error('Error accepting invitation');
@@ -992,6 +1130,40 @@ export default function SquadsPage() {
     if (!selectedInvitee || !userSquad) return;
 
     try {
+      // First check if there's already a pending invitation for this player to this squad
+      const { data: existingInvite, error: checkError } = await supabase
+        .from('squad_invites')
+        .select('id, status, expires_at')
+        .eq('squad_id', userSquad.id)
+        .eq('invited_player_id', selectedInvitee)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing invitations:', checkError);
+        // Continue anyway, let the database constraint handle duplicates
+      }
+
+      if (existingInvite) {
+        const invitedPlayer = allPlayers.find(p => p.id === selectedInvitee);
+        const playerName = invitedPlayer?.in_game_alias || 'Player';
+        
+        if (userSquad.is_legacy) {
+          toast.error(
+            `🏛️ ${playerName} already has a pending invitation to this legacy squad. Please wait for them to respond.`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.error(
+            `${playerName} already has a pending invitation to this squad. Please wait for them to respond.`,
+            { duration: 5000 }
+          );
+        }
+        return;
+      }
+
+      // Create the invitation
       const { error } = await supabase
         .from('squad_invites')
         .insert([
@@ -999,21 +1171,62 @@ export default function SquadsPage() {
             squad_id: userSquad.id,
             invited_player_id: selectedInvitee,
             invited_by: user?.id,
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+            message: userSquad.is_legacy 
+              ? `Invitation to join legacy squad [${userSquad.tag}] ${userSquad.name}. You can join while keeping your current active squad membership.`
+              : `Invitation to join [${userSquad.tag}] ${userSquad.name}`
           }
         ]);
 
       if (error) throw error;
 
-      toast.success('Invitation sent successfully');
+      // Get the invited player's name for better feedback
+      const invitedPlayer = allPlayers.find(p => p.id === selectedInvitee);
+      const playerName = invitedPlayer?.in_game_alias || 'Player';
+
+      // Provide specific feedback based on squad type
+      if (userSquad.is_legacy) {
+        toast.success(
+          `🏛️ Legacy squad invitation sent to ${playerName}! They can join while keeping their current active squad membership.`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(`Invitation sent to ${playerName} successfully!`);
+      }
+
       setShowInviteForm(false);
       setSelectedInvitee('');
+      
+      // Refresh the pending invites to show the new invitation
+      if (userSquad.id) {
+        fetchPendingInvitesForSquad(userSquad.id);
+      }
+      
       loadAllSquads();
       loadFreeAgents();
       loadAllPlayers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending invitation:', error);
-      toast.error('Failed to send invitation');
+      
+      // Handle specific database constraint errors
+      if (error.code === '23505' && error.message.includes('squad_invites')) {
+        const invitedPlayer = allPlayers.find(p => p.id === selectedInvitee);
+        const playerName = invitedPlayer?.in_game_alias || 'Player';
+        
+        if (userSquad?.is_legacy) {
+          toast.error(
+            `🏛️ ${playerName} already has a pending invitation to this legacy squad.`,
+            { duration: 5000 }
+          );
+        } else {
+          toast.error(
+            `${playerName} already has a pending invitation to this squad.`,
+            { duration: 5000 }
+          );
+        }
+      } else {
+        toast.error(`Failed to send invitation: ${error.message || 'Unknown error'}`);
+      }
     }
   };
 
@@ -1450,7 +1663,7 @@ export default function SquadsPage() {
         )}
 
         {/* User's Squad Section - Only show for authenticated users */}
-        {user && (dataLoading ? (
+        {user && (dataLoading || loading ? (
           <div className="bg-gray-800 rounded-lg p-6 mb-8">
             <div className="animate-pulse">
               <div className="h-6 bg-gray-700 rounded w-1/3 mb-4"></div>
@@ -1628,17 +1841,54 @@ export default function SquadsPage() {
             {/* Pending Invites */}
             {canManageSquad && pendingInvites.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold mb-4">Pending Invitations</h3>
+                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  📤 Pending Invitations
+                  {userSquad?.is_legacy && (
+                    <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
+                      🏛️ LEGACY SQUAD
+                    </span>
+                  )}
+                </h3>
+                {userSquad?.is_legacy && (
+                  <div className="bg-amber-600/10 border border-amber-500/20 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-amber-400">💡</span>
+                      <span className="text-amber-300 font-medium text-sm">Legacy Squad Invitations</span>
+                    </div>
+                    <p className="text-amber-200 text-xs">
+                      Players can join your legacy squad while keeping their current active squad membership. 
+                      This preserves historical squad connections without affecting competitive play.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-3">
                   {pendingInvites.map((invite) => (
-                    <div key={invite.id} className="bg-gray-700 rounded p-4 flex justify-between items-center">
-                      <div>
-                        <span className="font-semibold">{invite.invited_alias}</span>
-                        <div className="text-sm text-gray-400">
-                          Invited by {invite.invited_by_alias} • Expires {new Date(invite.expires_at).toLocaleDateString()}
+                    <div key={invite.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-semibold text-cyan-400">{invite.invited_alias}</span>
+                            {userSquad?.is_legacy && (
+                              <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
+                                🏛️ LEGACY INVITE
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-400 mb-2">
+                            Invited by {invite.invited_by_alias} • Expires {new Date(invite.expires_at).toLocaleDateString()}
+                          </div>
+                          {userSquad?.is_legacy && (
+                            <div className="text-xs text-amber-300 bg-amber-600/10 p-2 rounded border border-amber-500/20">
+                              💡 This player can accept and join your legacy squad while keeping their current active squad membership.
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-xs font-medium border border-yellow-500/30 animate-pulse">
+                            ⏳ Pending Response
+                          </span>
                         </div>
                       </div>
-                      <span className="text-yellow-400 text-sm">Pending</span>
                     </div>
                   ))}
                 </div>
@@ -1648,39 +1898,89 @@ export default function SquadsPage() {
             {/* Join Requests to Squad */}
             {canManageSquad && joinRequests.length > 0 && (
               <div>
-                <h3 className="text-xl font-semibold mb-4">Join Requests</h3>
+                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  📤 Pending Invitations & Join Requests
+                  <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded text-xs font-medium border border-blue-500/30">
+                    {joinRequests.length}
+                  </span>
+                </h3>
                 <div className="grid gap-3">
-                  {joinRequests.map((request) => (
-                    <div key={request.id} className="bg-gray-700 rounded p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <span className="font-semibold text-green-400">{request.invited_alias}</span>
-                          <div className="text-sm text-gray-400 mb-2">
-                            Requested to join {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
-                          </div>
-                          {request.message && (
-                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
-                              "{request.message}"
+                  {joinRequests.map((request) => {
+                    const isJoinRequest = request.request_type === 'join_request';
+                    const isInvitation = request.request_type === 'invitation';
+                    
+                    return (
+                      <div key={request.id} className="bg-gray-700 rounded p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-semibold text-green-400">{request.invited_alias}</span>
+                              {isJoinRequest && (
+                                <span className="bg-green-600/20 text-green-300 px-2 py-1 rounded text-xs font-medium border border-green-500/30">
+                                  📥 JOIN REQUEST
+                                </span>
+                              )}
+                              {isInvitation && (
+                                <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded text-xs font-medium border border-blue-500/30">
+                                  📤 INVITATION SENT
+                                </span>
+                              )}
+                              {userSquad?.is_legacy && (
+                                <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
+                                  🏛️ LEGACY
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <button
-                            onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
-                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => denyJoinRequest(request.id)}
-                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                          >
-                            Deny
-                          </button>
+                            <div className="text-sm text-gray-400 mb-2">
+                              {isJoinRequest ? (
+                                <>Requested to join {new Date(request.created_at).toLocaleDateString()}</>
+                              ) : (
+                                <>Invited by {request.inviter_alias} on {new Date(request.created_at).toLocaleDateString()}</>
+                              )}
+                              {' • Expires '}{new Date(request.expires_at).toLocaleDateString()}
+                            </div>
+                            {userSquad?.is_legacy && isInvitation && (
+                              <div className="text-sm text-amber-300 bg-amber-600/10 p-2 rounded mb-2 border border-amber-500/20">
+                                💡 Legacy squad invitation - {request.invited_alias} can join while keeping their current active squad membership.
+                              </div>
+                            )}
+                            {request.message && (
+                              <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
+                                "{request.message}"
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            {isJoinRequest && (
+                              <>
+                                <button
+                                  onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
+                                  className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => denyJoinRequest(request.id)}
+                                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                                >
+                                  Deny
+                                </button>
+                              </>
+                            )}
+                            {isInvitation && (
+                              <button
+                                onClick={() => denyJoinRequest(request.id)}
+                                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm"
+                                title="Cancel this invitation"
+                              >
+                                Cancel Invite
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1736,41 +2036,56 @@ export default function SquadsPage() {
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Squad Invitations</h2>
                 <div className="grid gap-3">
-                  {receivedInvitations.map((invitation) => (
-                    <div key={invitation.id} className="bg-gray-700 rounded p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold text-cyan-400">
-                              [{invitation.squad_tag}] {invitation.squad_name}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-400 mb-2">
-                            Invited by {invitation.inviter_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
-                          </div>
-                          {invitation.message && (
-                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
-                              "{invitation.message}"
+                  {receivedInvitations.map((invitation) => {
+                    // Check if this invitation is from a legacy squad
+                    const isLegacyInvite = allSquads.find(s => s.id === invitation.squad_id)?.is_legacy;
+                    
+                    return (
+                      <div key={invitation.id} className="bg-gray-700 rounded p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-semibold text-cyan-400">
+                                [{invitation.squad_tag}] {invitation.squad_name}
+                              </span>
+                              {isLegacyInvite && (
+                                <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
+                                  🏛️ LEGACY
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <button
-                            onClick={() => acceptInvitation(invitation.id, invitation.squad_id!)}
-                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => declineInvitation(invitation.id)}
-                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                          >
-                            Decline
-                          </button>
+                            <div className="text-sm text-gray-400 mb-2">
+                              Invited by {invitation.inviter_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
+                            </div>
+                            {isLegacyInvite && (
+                              <div className="text-sm text-amber-300 bg-amber-600/10 p-2 rounded mb-2 border border-amber-500/20">
+                                💡 This is a legacy squad invitation. You can join this historical squad while keeping your current active squad membership.
+                              </div>
+                            )}
+                            {invitation.message && (
+                              <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
+                                "{invitation.message}"
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => acceptInvitation(invitation.id, invitation.squad_id!)}
+                              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => declineInvitation(invitation.id)}
+                              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
+                            >
+                              Decline
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2081,7 +2396,28 @@ export default function SquadsPage() {
         {showInviteForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
-              <h3 className="text-xl font-bold mb-4">Invite Player</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-xl font-bold">📤 Invite Player</h3>
+                {userSquad?.is_legacy && (
+                  <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
+                    🏛️ LEGACY
+                  </span>
+                )}
+              </div>
+              
+              {userSquad?.is_legacy && (
+                <div className="bg-amber-600/10 border border-amber-500/20 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-amber-400">💡</span>
+                    <span className="text-amber-300 font-medium text-sm">Legacy Squad Invitation</span>
+                  </div>
+                  <p className="text-amber-200 text-xs">
+                    Players can join your legacy squad while keeping their current active squad membership. 
+                    This is perfect for preserving historical connections!
+                  </p>
+                </div>
+              )}
+              
               <form onSubmit={invitePlayer}>
                 <div className="mb-6">
                   <label className="block text-sm font-medium mb-2">Select Player</label>
@@ -2093,10 +2429,22 @@ export default function SquadsPage() {
                   >
                     <option value="">Choose a player...</option>
                     {allPlayers
-                      .filter(player => 
+                      .filter(player => {
                         // Exclude current squad members
-                        !userSquad?.members.some(member => member.player_id === player.id)
-                      )
+                        if (userSquad?.members.some(member => member.player_id === player.id)) {
+                          return false;
+                        }
+                        
+                        // If this is a legacy squad, can invite anyone (including players in active squads)
+                        if (userSquad?.is_legacy === true) {
+                          return true;
+                        }
+                        
+                        // For active squads, check if player is in any active (non-legacy) squad
+                        // This would require additional data, so for now we'll allow all non-members
+                        // TODO: In a future enhancement, we could load player squad status
+                        return true;
+                      })
                       .map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.in_game_alias}
@@ -2104,13 +2452,22 @@ export default function SquadsPage() {
                       ))
                     }
                   </select>
+                  {userSquad?.is_legacy && (
+                    <p className="text-xs text-amber-300 mt-2">
+                      ✨ You can invite players even if they're already in other active squads
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <button
                     type="submit"
-                    className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded"
+                    className={`flex-1 py-2 rounded font-medium transition-all duration-300 ${
+                      userSquad?.is_legacy 
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
                   >
-                    Send Invitation
+                    {userSquad?.is_legacy ? '🏛️ Send Legacy Invite' : 'Send Invitation'}
                   </button>
                   <button
                     type="button"

@@ -201,7 +201,7 @@ export const queries = {
         // Optimized with specific field selection
         const query = getCachedSupabase()
           .from('squad_members')
-          .select(`squads!inner(id, name, tag)`)
+          .select(`squads!inner(id, name, tag, is_legacy)`)
           .eq('player_id', userId)
           .eq('status', 'active')
           .limit(1)
@@ -221,7 +221,7 @@ export const queries = {
       async () => {
         const query = getCachedSupabase()
           .from('squads')
-          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, banner_url, is_active')
+          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, banner_url, is_active, is_legacy')
           .eq('id', squadId)
           .maybeSingle();
         return await query;
@@ -302,6 +302,7 @@ export const queries = {
             captain_id,
             created_at,
             is_active,
+            is_legacy,
             banner_url,
             profiles!squads_captain_id_fkey(in_game_alias)
           `)
@@ -327,7 +328,7 @@ export const queries = {
             invited_by,
             expires_at,
             created_at,
-            squads!squad_invites_squad_id_fkey(name, tag),
+            squads!squad_invites_squad_id_fkey(name, tag, is_legacy),
             inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
           `)
           .eq('invited_player_id', userId)
