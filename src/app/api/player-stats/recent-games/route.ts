@@ -20,7 +20,10 @@ export async function GET(req: NextRequest) {
         game_mode,
         arena_name,
         player_name,
-        team
+        team,
+        side,
+        main_class,
+        result
       `)
       .not('game_id', 'is', null)
       .order('game_date', { ascending: false })
@@ -40,13 +43,26 @@ export async function GET(req: NextRequest) {
           gameDate: stat.game_date,
           gameMode: stat.game_mode,
           mapName: stat.arena_name,
-          players: [stat.player_name],
-          teams: [stat.team]
+          playerDetails: [{
+            name: stat.player_name,
+            team: stat.team,
+            side: stat.side,
+            main_class: stat.main_class,
+            result: stat.result
+          }],
+          teams: [stat.team].filter(Boolean)
         });
       } else {
         const game = gamesMap.get(stat.game_id);
-        if (!game.players.includes(stat.player_name)) {
-          game.players.push(stat.player_name);
+        const existingPlayer = game.playerDetails.find((p: any) => p.name === stat.player_name);
+        if (!existingPlayer) {
+          game.playerDetails.push({
+            name: stat.player_name,
+            team: stat.team,
+            side: stat.side,
+            main_class: stat.main_class,
+            result: stat.result
+          });
         }
         if (stat.team && !game.teams.includes(stat.team)) {
           game.teams.push(stat.team);
@@ -57,7 +73,11 @@ export async function GET(req: NextRequest) {
     // Convert to array and sort by date, then limit
     const uniqueGames = Array.from(gamesMap.values())
       .sort((a, b) => new Date(b.gameDate).getTime() - new Date(a.gameDate).getTime())
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(game => ({
+        ...game,
+        players: game.playerDetails.length // For backward compatibility
+      }));
 
     return NextResponse.json({
       success: true,

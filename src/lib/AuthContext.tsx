@@ -27,61 +27,97 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false); // Start false for immediate render
+  const [loading, setLoading] = useState(true); // Start true to wait for auth check
   const [error, setError] = useState<string | null>(null);
 
-  // Improved auth check with better error handling
+  // Improved auth check with better error handling and shorter timeouts
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let authTimeout: NodeJS.Timeout;
+    let fallbackTimeout: NodeJS.Timeout;
 
     const quickAuthCheck = async () => {
       try {
-        console.log('🔍 Quick auth check starting...');
+        console.log('🔍 AUTH: Quick auth check starting...', new Date().toISOString());
+        setLoading(true);
         
-        // Use retry mechanism for session check
-        const sessionCheck = () => supabase.auth.getSession();
-        
-        // Set a timeout warning but don't fail the operation
-        timeoutId = setTimeout(() => {
-          console.warn('⚠️ Auth check taking longer than expected, but continuing...');
-        }, 3000); // Reduced from 5 seconds
+        // Set a hard timeout for auth operations (reduced to 3 seconds)
+        const authPromise = (async () => {
+          try {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            console.log('🔄 AUTH: Session check completed', { 
+              hasSession: !!session, 
+              hasUser: !!session?.user,
+              error: error?.message 
+            });
+            return { session, error };
+          } catch (sessionError: any) {
+            console.warn('⚠️ AUTH: Session check failed:', sessionError.message);
+            return { session: null, error: sessionError };
+          }
+        })();
 
-        const { data: { session }, error } = await withRetry(sessionCheck, 2, 1000);
-        clearTimeout(timeoutId);
+        // Create a timeout promise that resolves after 3 seconds (reduced from 5)
+        const timeoutPromise = new Promise<{ session: any, error: any }>((resolve) => {
+          authTimeout = setTimeout(() => {
+            console.warn('⏰ AUTH: Session check timed out, proceeding without user');
+            resolve({ session: null, error: new Error('Auth timeout') });
+          }, 3000);
+        });
+
+        // Race between auth check and timeout
+        const { session, error } = await Promise.race([authPromise, timeoutPromise]);
+        
+        // Clear timeout if auth completed first
+        if (authTimeout) clearTimeout(authTimeout);
         
         if (!isMounted) return;
 
-        if (error) {
-          console.warn('⚠️ Session error (non-blocking):', error.message);
+        if (error && !error.message.includes('timeout')) {
+          console.warn('⚠️ AUTH: Session error (non-blocking):', error.message);
           // Only set error for critical auth failures
           if (error.message.includes('Invalid JWT')) {
             setError('Session expired. Please sign in again.');
           }
-          return;
         }
 
         if (session?.user) {
           setUser(session.user);
-          console.log('✅ User session found:', session.user.email);
+          console.log('✅ AUTH: User session found:', session.user.email, session.user.id);
           
           // Background profile update (non-blocking with retry)
           updateUserActivity(session.user).catch(err => 
             console.warn('Profile update failed (non-blocking):', err.message)
           );
         } else {
-          console.log('ℹ️ No active session');
+          console.log('ℹ️ AUTH: No active session found');
+          setUser(null);
         }
+        
+        setLoading(false);
+        console.log('🏁 AUTH: Initial auth check complete, loading set to false');
       } catch (error: any) {
-        console.warn('⚠️ Auth check failed (non-blocking):', error.message);
+        console.warn('⚠️ AUTH: Auth check failed (non-blocking):', error.message);
         // Only show critical errors to users
         if (error.message?.includes('network') || error.message?.includes('fetch')) {
           setError('Connection issues detected. Some features may be limited.');
         }
+        if (isMounted) {
+          setLoading(false);
+          console.log('🏁 AUTH: Auth check failed, loading set to false');
+        }
       }
     };
 
-    // Start quick check immediately (non-blocking)
+    // Add a fallback timeout to ensure loading never stays true indefinitely (reduced to 5 seconds)
+    fallbackTimeout = setTimeout(() => {
+      if (isMounted && loading) {
+        console.warn('🚨 AUTH: Fallback timeout triggered - forcing loading to false');
+        setLoading(false);
+      }
+    }, 5000); // 5 second absolute maximum (reduced from 8)
+
+    // Start quick check immediately
     quickAuthCheck();
 
     // Set up auth state listener for real-time updates
@@ -89,13 +125,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!isMounted) return;
 
-        console.log('🔄 Auth state change:', event);
+        console.log('🔄 AUTH: Auth state change:', event, session?.user?.email);
+        
+        // Clear fallback timeout when we get any auth state change
+        if (fallbackTimeout) clearTimeout(fallbackTimeout);
         
         switch (event) {
           case 'SIGNED_IN':
             if (session?.user) {
               setUser(session.user);
               setError(null);
+              setLoading(false);
               console.log('✅ User signed in:', session.user.email);
               
               // Background profile update with retry
@@ -108,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           case 'SIGNED_OUT':
             setUser(null);
             setError(null);
+            setLoading(false);
             console.log('👋 User signed out');
             break;
             
@@ -115,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (session?.user) {
               setUser(session.user);
               setError(null);
+              setLoading(false);
               console.log('🔄 Token refreshed for:', session.user.email);
             }
             break;
@@ -122,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           case 'USER_UPDATED':
             if (session?.user) {
               setUser(session.user);
+              setLoading(false);
               console.log('👤 User updated:', session.user.email);
             }
             break;
@@ -132,13 +175,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
               setUser(null);
             }
+            setLoading(false);
         }
       }
     );
 
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      if (authTimeout) clearTimeout(authTimeout);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
       subscription.unsubscribe();
     };
   }, []);

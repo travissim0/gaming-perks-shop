@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
 
 const execAsync = promisify(exec);
 
@@ -10,36 +11,52 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Script path - since we're on the same server, we can execute directly
+// Configuration - check if we're running locally or on the server
+const IS_LOCAL = process.env.NODE_ENV === 'development' || os.hostname() !== 'linux-1';
+const SERVER_HOST = process.env.INFANTRY_SERVER_HOST || 'linux-1.freeinfantry.com';
+const SERVER_USER = process.env.INFANTRY_SERVER_USER || 'root';
+const SSH_KEY_PATH = process.env.INFANTRY_SSH_KEY_PATH || `${os.homedir()}/.ssh/id_rsa`;
 const SCRIPT_PATH = '/root/Infantry/scripts/zone-manager.sh';
 
-// Function to check if user is admin
-async function isUserAdmin(userId: string): Promise<boolean> {
+// Function to check if user is admin or zone admin
+async function isUserZoneAdmin(userId: string): Promise<boolean> {
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, is_zone_admin')
       .eq('id', userId)
       .single();
     
-    return profile?.is_admin || false;
+    return profile?.is_admin || profile?.is_zone_admin || false;
   } catch (error) {
     console.error('Error checking admin status:', error);
     return false;
   }
 }
 
-// Function to execute local command
+// Function to execute command (local or remote)
 async function executeCommand(command: string): Promise<{ success: boolean; output: string; error?: string }> {
   try {
-    console.log('Executing command:', command);
+    let fullCommand: string;
     
-    const { stdout, stderr } = await execAsync(command, { 
+    if (IS_LOCAL) {
+      // Running locally, use SSH to connect to remote server
+      console.log('Local development mode - using SSH to connect to', SERVER_HOST);
+      fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "${command}"`;
+    } else {
+      // Running on the server, execute directly
+      console.log('Server mode - executing command directly');
+      fullCommand = command;
+    }
+    
+    console.log('Executing command:', fullCommand);
+    
+    const { stdout, stderr } = await execAsync(fullCommand, { 
       timeout: 30000,
-      cwd: '/root/Infantry/scripts' // Set working directory
+      cwd: IS_LOCAL ? undefined : '/root/Infantry/scripts'
     });
     
-    if (stderr && !stderr.includes('Warning:')) {
+    if (stderr && !stderr.includes('Warning:') && !stderr.includes('Pseudo-terminal')) {
       console.error('Command stderr:', stderr);
       return { success: false, output: '', error: stderr };
     }
@@ -72,9 +89,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // Check if user is admin
-    if (!(await isUserAdmin(user.id))) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    // Check if user is admin or zone admin
+    if (!(await isUserZoneAdmin(user.id))) {
+      return NextResponse.json({ error: 'Zone admin access required' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -139,9 +156,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // Check if user is admin
-    if (!(await isUserAdmin(user.id))) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    // Check if user is admin or zone admin
+    if (!(await isUserZoneAdmin(user.id))) {
+      return NextResponse.json({ error: 'Zone admin access required' }, { status: 403 });
     }
 
     const body = await request.json();

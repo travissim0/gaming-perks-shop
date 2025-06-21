@@ -324,6 +324,8 @@ export default function SquadsPage() {
 
       if (membershipError && membershipError.code !== 'PGRST116') {
         console.error('Error loading user squad membership:', membershipError);
+        // Don't return here - continue with null squad to prevent hanging
+        setUserSquad(null);
         return;
       }
 

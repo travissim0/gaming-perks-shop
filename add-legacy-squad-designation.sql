@@ -28,9 +28,10 @@ BEGIN
       AND sm.status = 'active'
       AND s.is_legacy = false;
     
-    -- Allow joining if:
-    -- 1. Target is legacy squad (can always join legacy squads)
+    -- Allow sending requests if:
+    -- 1. Target is legacy squad (can request to join legacy squads even if in active squad)
     -- 2. Target is active squad AND user has no active squad memberships
+    -- Note: This function only checks if user can REQUEST to join, captain approval is still required
     RETURN (target_is_legacy = true) OR (target_is_legacy = false AND active_squad_count = 0);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

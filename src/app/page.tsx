@@ -113,6 +113,7 @@ export default function Home() {
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
+  const [recentGames, setRecentGames] = useState<any[]>([]);
   
   // Collapsible states for player lists
   const [isSpectatorsCollapsed, setIsSpectatorsCollapsed] = useState(false);
@@ -153,11 +154,59 @@ export default function Home() {
       showWhen: "always"
     },
     {
+      title: "FREE AGENTS",
+      subtitle: "Find Your Perfect Squad",
+      description: "🎯 Connect Players with Teams",
+      highlight: "Join the Pool",
+      color: "pink",
+      showWhen: "always"
+    },
+    {
       title: "LIVE MATCHES",
       subtitle: "Compete in Real-Time",
       description: "⚔️ Schedule and Play Competitive Matches",
       highlight: "Enter the Arena",
       color: "green",
+      showWhen: "always"
+    },
+    {
+      title: "PLAYER STATS",
+      subtitle: "Track Your Performance",
+      description: "📊 Advanced Statistics & ELO Rankings",
+      highlight: "View Stats",
+      color: "blue",
+      showWhen: "always"
+    },
+    {
+      title: "DUELING SYSTEM",
+      subtitle: "1v1 Competitive Matches",
+      description: "⚡ Face Off in Skill-Based Duels",
+      highlight: "Challenge Players",
+      color: "orange",
+      showWhen: "always"
+    },
+    {
+      title: "COMMUNITY FORUM",
+      subtitle: "Connect with Players",
+      description: "💬 Discuss Strategies & Share Content",
+      highlight: "Join Discussion",
+      color: "indigo",
+      showWhen: "always"
+    },
+    {
+      title: "NEWS & UPDATES",
+      subtitle: "Stay Informed",
+      description: "📰 Latest Patch Notes & Announcements",
+      highlight: "Read Latest",
+      color: "teal",
+      showWhen: "always"
+    },
+    {
+      title: "GAMING PERKS",
+      subtitle: "Enhance Your Experience",
+      description: "🛍️ Exclusive In-Game Perks & Items",
+      highlight: "Browse Shop",
+      color: "red",
       showWhen: "always"
     },
     {
@@ -421,10 +470,10 @@ export default function Home() {
         if (onlineData) {
           // Filter and format users, prioritizing those with in_game_alias but including others
           const formattedUsers = onlineData
-            .filter(user => user.in_game_alias || user.email) // Include if they have either alias or email
+            .filter(user => user.in_game_alias) // Only include users with proper aliases
             .map((user: any) => ({
               id: user.id,
-              in_game_alias: user.in_game_alias || user.email?.split('@')[0] || 'Unknown User',
+              in_game_alias: user.in_game_alias,
               last_seen: user.last_seen,
               squad_name: undefined, // We'll add squad info back later as an enhancement
               squad_tag: undefined,
@@ -446,7 +495,21 @@ export default function Home() {
       }
     };
 
-    // Fetch top squads - Only active squads
+    // Fetch recent games
+    const fetchRecentGames = async () => {
+      try {
+        const response = await fetch('/api/player-stats/recent-games?limit=5');
+        if (response.ok) {
+          const data = await response.json();
+          setRecentGames(data.games || []);
+        }
+      } catch (error) {
+        console.error('Error fetching recent games:', error);
+        setRecentGames([]);
+      }
+    };
+
+    // Fetch top squads - Only active squads (removed inner join to get all active squads)
     const fetchTopSquads = async () => {
       try {
         // Use direct query to ensure we filter by is_active
@@ -458,19 +521,25 @@ export default function Home() {
             tag,
             banner_url,
             captain_id,
-            profiles!squads_captain_id_fkey(in_game_alias),
-            squad_members!inner(id)
+            profiles!squads_captain_id_fkey(in_game_alias)
           `)
           .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(6);
+          .order('created_at', { ascending: false });
 
         if (!error && data) {
+          // Get member counts separately to avoid inner join limitations
+          const squadIds = data.map(squad => squad.id);
+          const { data: memberCounts } = await supabase
+            .from('squad_members')
+            .select('squad_id')
+            .in('squad_id', squadIds)
+            .eq('status', 'active');
+          
           const squads: Squad[] = data.map((squad: any) => ({
             id: squad.id,
             name: squad.name,
             tag: squad.tag,
-            member_count: squad.squad_members?.length || 0,
+            member_count: memberCounts?.filter(m => m.squad_id === squad.id).length || 0,
             captain_alias: squad.profiles?.in_game_alias || 'Unknown',
             banner_url: squad.banner_url
           }));
@@ -553,6 +622,7 @@ export default function Home() {
     fetchGameData();
     fetchFeaturedVideos();
     fetchOnlineUsers();
+    fetchRecentGames();
     fetchTopSquads();
     fetchUpcomingMatches();
     fetchUserSquad();
@@ -562,6 +632,7 @@ export default function Home() {
     const gameInterval = setInterval(fetchGameData, 5000);
     const videosInterval = setInterval(fetchFeaturedVideos, 300000); // Refresh every 5 minutes
     const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
+    const recentGamesInterval = setInterval(fetchRecentGames, 30000); // Refresh every 30 seconds
     const squadsInterval = setInterval(fetchTopSquads, 60000);
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
     const activityInterval = setInterval(updateUserActivity, 600000); // Update activity every 10 minutes
@@ -580,6 +651,7 @@ export default function Home() {
       clearInterval(gameInterval);
       clearInterval(videosInterval);
       clearInterval(usersInterval);
+      clearInterval(recentGamesInterval);
       clearInterval(squadsInterval);
       clearInterval(matchesInterval);
       clearInterval(activityInterval);
@@ -821,7 +893,13 @@ export default function Home() {
               bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] ? (
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90' :
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'purple' ? 'bg-gradient-to-r from-gray-900/90 via-purple-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'pink' ? 'bg-gradient-to-r from-gray-900/90 via-pink-900/60 to-gray-900/90' :
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'green' ? 'bg-gradient-to-r from-gray-900/90 via-green-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'blue' ? 'bg-gradient-to-r from-gray-900/90 via-blue-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'orange' ? 'bg-gradient-to-r from-gray-900/90 via-orange-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'indigo' ? 'bg-gradient-to-r from-gray-900/90 via-indigo-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'teal' ? 'bg-gradient-to-r from-gray-900/90 via-teal-900/60 to-gray-900/90' :
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'red' ? 'bg-gradient-to-r from-gray-900/90 via-red-900/60 to-gray-900/90' :
                 'bg-gradient-to-r from-gray-900/90 via-yellow-900/60 to-gray-900/90'
               ) : 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90'
             }`}
@@ -841,7 +919,13 @@ export default function Home() {
                   className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'text-cyan-400' :
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'text-purple-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'text-pink-400' :
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'text-green-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'text-blue-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'text-orange-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'text-indigo-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'text-teal-400' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'text-red-400' :
                     'text-yellow-400'
                   }`}
                 >
@@ -859,7 +943,13 @@ export default function Home() {
                   className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 ${
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white hover:shadow-cyan-500/25' :
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white hover:shadow-purple-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white hover:shadow-pink-500/25' :
                     bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white hover:shadow-green-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white hover:shadow-blue-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white hover:shadow-orange-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white hover:shadow-indigo-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white hover:shadow-teal-500/25' :
+                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white hover:shadow-red-500/25' :
                     'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:shadow-yellow-500/25'
                   }`}
                   onClick={() => {
@@ -867,8 +957,20 @@ export default function Home() {
                     if (currentBannerSlide) {
                       if (currentBannerSlide.highlight === "Build Your Team") {
                         window.location.href = '/squads';
+                      } else if (currentBannerSlide.highlight === "Join the Pool") {
+                        window.location.href = '/free-agents';
                       } else if (currentBannerSlide.highlight === "Enter the Arena") {
                         window.location.href = '/matches';
+                      } else if (currentBannerSlide.highlight === "View Stats") {
+                        window.location.href = '/stats';
+                      } else if (currentBannerSlide.highlight === "Challenge Players") {
+                        window.location.href = '/dueling';
+                      } else if (currentBannerSlide.highlight === "Join Discussion") {
+                        window.location.href = '/forum';
+                      } else if (currentBannerSlide.highlight === "Read Latest") {
+                        window.location.href = '/news';
+                      } else if (currentBannerSlide.highlight === "Browse Shop") {
+                        window.location.href = '/perks';
                       } else if (currentBannerSlide.highlight === "Make a Difference") {
                         window.location.href = '/donate';
                       } else if (currentBannerSlide.highlight === "Join the Battle") {
@@ -914,7 +1016,13 @@ export default function Home() {
                   index === currentSlide 
                     ? `${bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-cyan-400' :
                         bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-purple-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'bg-pink-400' :
                         bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-green-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'bg-blue-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'bg-orange-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'bg-indigo-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'bg-teal-400' :
+                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'bg-red-400' :
                         'bg-yellow-400'} scale-125` 
                     : 'bg-white/50 hover:bg-white/70'
                 }`}
@@ -1000,6 +1108,101 @@ export default function Home() {
                     <p className="text-xs text-gray-500 mt-3 text-center font-mono">
                       {new Date(serverData.lastUpdated).toLocaleTimeString()}
                     </p>
+                  )}
+                </div>
+              </section>
+
+              {/* Recent Games */}
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
+                <div className="bg-gray-700/50 px-3 py-2 border-b border-green-500/30">
+                  <h3 className="text-green-400 font-bold text-sm tracking-wider">🎮 RECENT GAMES</h3>
+                </div>
+                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
+                  {recentGames.length > 0 ? (
+                    <div className="space-y-2">
+                      {recentGames.slice(0, 3).map((game, index) => (
+                        <Link key={index} href={`/stats/game/${encodeURIComponent(game.gameId)}`}>
+                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-green-500/50 transition-all duration-300 cursor-pointer">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-green-400 font-bold text-xs">{game.gameMode}</span>
+                              <span className="text-gray-400 text-xs">{game.mapName}</span>
+                            </div>
+                            <div className="text-xs text-gray-400 mb-1">
+                              {new Date(game.gameDate).toLocaleDateString()}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {game.playerDetails.slice(0, 4).map((player: any, pIndex: number) => (
+                                <span key={pIndex} className="text-xs text-gray-300">
+                                  {player.name}{pIndex < Math.min(3, game.playerDetails.length - 1) ? ',' : ''}
+                                </span>
+                              ))}
+                              {game.playerDetails.length > 4 && (
+                                <span className="text-xs text-gray-500">+{game.playerDetails.length - 4} more</span>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="text-gray-500 text-sm">No recent games</div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Scheduled Matches - Only show if there are matches */}
+              {upcomingMatches.length > 0 && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
+                  <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
+                    <h3 className="text-cyan-400 font-bold text-sm tracking-wider">🎯 SCHEDULED MATCHES</h3>
+                  </div>
+                  <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
+                    <div className="space-y-2">
+                      {upcomingMatches.slice(0, 3).map((match) => (
+                        <Link key={match.id} href={`/matches/${match.id}`}>
+                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer">
+                            <h4 className="text-cyan-400 font-bold text-xs mb-1 truncate">
+                              {match.title}
+                            </h4>
+                            <div className="text-xs text-gray-400">
+                              {new Date(match.scheduled_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* Active Squads */}
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
+                <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
+                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">🛡️ SQUADS</h3>
+                </div>
+                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
+                  {topSquads.length > 0 ? (
+                    <div className="space-y-2">
+                      {topSquads.map((squad) => (
+                        <Link key={squad.id} href={`/squads/${squad.id}`}>
+                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-purple-400 font-bold text-xs">[{squad.tag}]</span>
+                              <span className="text-gray-300 text-xs truncate flex-1">{squad.name}</span>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              {squad.member_count} members
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="text-gray-500 text-sm">No active squads</div>
+                    </div>
                   )}
                 </div>
               </section>
@@ -1094,7 +1297,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR (3 columns) - Top supporters and matches/squads */}
+          {/* RIGHT SIDEBAR (3 columns) - Top supporters only */}
           <div className="xl:col-span-3">
             <div className="space-y-3">
               
@@ -1104,65 +1307,6 @@ export default function Home() {
                 maxSupporters={10}
                 className=""
               />
-
-              {/* Upcoming Matches */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
-                  <h3 className="text-cyan-400 font-bold text-sm tracking-wider">🎯 MATCHES</h3>
-                </div>
-                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                  {upcomingMatches.length > 0 ? (
-                    <div className="space-y-2">
-                      {upcomingMatches.slice(0, 3).map((match) => (
-                        <Link key={match.id} href={`/matches/${match.id}`}>
-                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer">
-                            <h4 className="text-cyan-400 font-bold text-xs mb-1 truncate">
-                              {match.title}
-                            </h4>
-                            <div className="text-xs text-gray-400">
-                              {new Date(match.scheduled_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="text-gray-500 text-sm">No upcoming matches</div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Active Squads */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
-                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">🛡️ SQUADS</h3>
-                </div>
-                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                  {topSquads.length > 0 ? (
-                    <div className="space-y-2">
-                      {topSquads.slice(0, 4).map((squad) => (
-                        <Link key={squad.id} href={`/squads/${squad.id}`}>
-                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-purple-400 font-bold text-xs">[{squad.tag}]</span>
-                              <span className="text-gray-300 text-xs truncate flex-1">{squad.name}</span>
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {squad.member_count} members
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="text-gray-500 text-sm">No active squads</div>
-                    </div>
-                  )}
-                </div>
-              </section>
 
             </div>
           </div>

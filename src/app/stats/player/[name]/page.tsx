@@ -258,6 +258,126 @@ export default function PlayerPage() {
           </div>
         </motion.div>
 
+        {/* Class/Role Breakdown */}
+        {playerData?.recentGames && playerData.recentGames.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20 mb-8"
+          >
+            <div className="p-6 border-b border-white/10">
+              <h2 className="text-2xl font-bold text-cyan-400">Class/Role Breakdown</h2>
+              <p className="text-blue-200 text-sm mt-1">Performance statistics by class played</p>
+            </div>
+            <div className="overflow-x-auto">
+              {(() => {
+                // Calculate class statistics
+                const classStats = playerData.recentGames.reduce((acc: any, game) => {
+                  const className = game.main_class;
+                  if (!acc[className]) {
+                    acc[className] = {
+                      games: 0,
+                      wins: 0,
+                      kills: 0,
+                      deaths: 0,
+                      captures: 0,
+                      accuracy: 0,
+                      totalAccuracy: 0
+                    };
+                  }
+                  
+                  acc[className].games += 1;
+                  if (game.result === 'Win') acc[className].wins += 1;
+                  acc[className].kills += game.kills;
+                  acc[className].deaths += game.deaths;
+                  acc[className].captures += game.captures;
+                  acc[className].totalAccuracy += game.accuracy;
+                  
+                  return acc;
+                }, {});
+
+                // Sort by games played (most played first)
+                const sortedClasses = Object.entries(classStats)
+                  .map(([className, stats]: [string, any]) => ({
+                    className,
+                    ...stats,
+                    winRate: stats.games > 0 ? stats.wins / stats.games : 0,
+                    kd: stats.deaths > 0 ? stats.kills / stats.deaths : stats.kills,
+                    avgAccuracy: stats.games > 0 ? stats.totalAccuracy / stats.games : 0,
+                    avgKills: stats.games > 0 ? stats.kills / stats.games : 0,
+                    avgDeaths: stats.games > 0 ? stats.deaths / stats.games : 0,
+                    avgCaptures: stats.games > 0 ? stats.captures / stats.games : 0
+                  }))
+                  .sort((a, b) => b.games - a.games);
+
+                return (
+                  <table className="w-full">
+                    <thead className="bg-white/20">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-blue-200">Class</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Games</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Win Rate</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">K/D</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Avg K</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Avg D</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Avg Caps</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-blue-200">Avg Acc</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedClasses.map((classData, index) => (
+                        <motion.tr
+                          key={classData.className}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-sm" style={getClassColorStyle(classData.className)}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">{classData.className}</span>
+                              <span className="text-xs text-gray-400">
+                                (#{index + 1})
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-cyan-400">
+                            {classData.games}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${
+                              classData.winRate >= 0.6 ? 'bg-green-500/20 text-green-400' :
+                              classData.winRate >= 0.4 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {formatPercentage(classData.winRate)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-purple-400">
+                            {formatNumber(classData.kd, 2)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-green-400">
+                            {formatNumber(classData.avgKills, 1)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-red-400">
+                            {formatNumber(classData.avgDeaths, 1)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-cyan-400">
+                            {formatNumber(classData.avgCaptures, 1)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-blue-300">
+                            {formatPercentage(classData.avgAccuracy)}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </motion.div>
+        )}
+
         {/* Stats Overview */}
         {playerData?.calculatedStats && (
           <motion.div

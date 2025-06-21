@@ -82,6 +82,10 @@ export default function Dashboard() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUserProduct, setEditingUserProduct] = useState<UserProduct | null>(null);
 
+  // Alias editing states
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [tempAlias, setTempAlias] = useState('');
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/auth/login');
@@ -95,7 +99,7 @@ export default function Dashboard() {
           // Fetch user profile
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('*')
+            .select('*, hide_from_free_agents')
             .eq('id', user.id)
             .maybeSingle();
 
@@ -334,6 +338,57 @@ export default function Dashboard() {
     }
   };
 
+  const handleSaveAlias = async () => {
+    if (!user || tempAlias === (profile?.in_game_alias || '')) {
+      setEditingAlias(false);
+      return;
+    }
+    
+    try {
+      // Update alias in profiles
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          in_game_alias: tempAlias,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      setProfile((prev: any) => ({ ...prev, in_game_alias: tempAlias }));
+      setEditingAlias(false);
+      setTempAlias('');
+      toast.success('Alias updated successfully!');
+    } catch (error: any) {
+      toast.error('Error updating alias: ' + error.message);
+    }
+  };
+
+  const toggleFreeAgentVisibility = async () => {
+    if (!user || !profile) return;
+
+    try {
+      const newValue = !profile.hide_from_free_agents;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ hide_from_free_agents: newValue })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setProfile((prev: any) => ({ ...prev, hide_from_free_agents: newValue }));
+      
+      if (newValue) {
+        toast.success('You are now hidden from the free agents page');
+      } else {
+        toast.success('You are now visible on the free agents page');
+      }
+    } catch (error: any) {
+      toast.error('Error updating free agent visibility: ' + error.message);
+    }
+  };
+
   const formatCurrency = (amount: number, currency: string = 'usd') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -544,12 +599,82 @@ export default function Dashboard() {
                           </div>
                         </div>
                         
-                        {/* In-Game Alias - Read Only */}
+                        {/* In-Game Alias - Editable */}
                         <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
-                          <p className="text-gray-300 text-sm">
-                            <span className="font-bold text-cyan-400">In-Game Alias:</span> 
-                            <span className="ml-2 text-yellow-400 font-mono">{profile.in_game_alias || 'Not Set'}</span>
-                            <span className="ml-2 text-xs text-gray-500">(Contact admin to change)</span>
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <span className="font-bold text-cyan-400">In-Game Alias:</span>
+                              {editingAlias ? (
+                                <input
+                                  type="text"
+                                  value={tempAlias}
+                                  onChange={(e) => setTempAlias(e.target.value)}
+                                  onKeyPress={(e) => e.key === 'Enter' && handleSaveAlias()}
+                                  className="ml-2 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-yellow-400 font-mono text-sm"
+                                  autoFocus
+                                />
+                              ) : (
+                                <span className="ml-2 text-yellow-400 font-mono">{profile.in_game_alias || 'Not Set'}</span>
+                              )}
+                            </div>
+                            {!editingAlias ? (
+                              <button
+                                onClick={() => {
+                                  setEditingAlias(true);
+                                  setTempAlias(profile.in_game_alias || '');
+                                }}
+                                className="text-cyan-400 hover:text-cyan-300 ml-2"
+                                title="Edit Alias"
+                              >
+                                ✏️
+                              </button>
+                            ) : (
+                              <div className="flex gap-2 ml-2">
+                                <button
+                                  onClick={handleSaveAlias}
+                                  className="text-green-400 hover:text-green-300"
+                                  title="Save"
+                                >
+                                  ✅
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingAlias(false);
+                                    setTempAlias('');
+                                  }}
+                                  className="text-red-400 hover:text-red-300"
+                                  title="Cancel"
+                                >
+                                  ❌
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Free Agent Visibility */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <span className="font-bold text-cyan-400 text-sm">Free Agent Visibility:</span>
+                              <span className="ml-2 text-sm text-gray-300">
+                                {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
+                              </span>
+                            </div>
+                            <button
+                              onClick={toggleFreeAgentVisibility}
+                              className={`relative w-10 h-5 rounded-full transition-all duration-300 ${
+                                !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
+                              } shadow-sm flex-shrink-0`}
+                              title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${
+                                !profile.hide_from_free_agents ? 'translate-x-5' : 'translate-x-0.5'
+                              }`}></div>
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Control whether you appear on the free agents page for squad recruitment
                           </p>
                         </div>
                       </div>

@@ -34,6 +34,18 @@ interface PlayerGameStats {
   total_players: number;
 }
 
+interface VideoInfo {
+  matchId: string;
+  matchTitle: string;
+  youtube_url?: string;
+  vod_url?: string;
+  highlight_url?: string;
+  video_title?: string;
+  video_description?: string;
+  video_thumbnail_url?: string;
+  has_video: boolean;
+}
+
 interface GameData {
   gameId: string;
   gameDate: string;
@@ -45,6 +57,12 @@ interface GameData {
   players: PlayerGameStats[];
   linkedMatchId?: string;
   linkedMatchTitle?: string;
+  videoInfo?: VideoInfo;
+  winningInfo?: {
+    type: string;
+    side: string;
+    winner: string;
+  };
 }
 
 export default function GameStatsPage() {
@@ -53,6 +71,8 @@ export default function GameStatsPage() {
   const [gameData, setGameData] = useState<GameData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVideoExpanded, setIsVideoExpanded] = useState(true);
+  const [showVideoEmbed, setShowVideoEmbed] = useState(false);
 
   useEffect(() => {
     if (gameId) {
@@ -97,6 +117,35 @@ export default function GameStatsPage() {
     return new Date(dateString).toLocaleString();
   };
 
+  // Helper function to get YouTube video ID from URL
+  const getYouTubeVideoId = (url: string) => {
+    if (!url) return null;
+    
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,           // youtube.com/watch?v=
+      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,             // youtube.com/embed/
+      /(?:youtube\.com\/v\/)([^&\n?#]+)/,                 // youtube.com/v/
+      /(?:youtu\.be\/)([^&\n?#]+)/,                       // youtu.be/
+      /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/           // any youtube.com with v= parameter
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    return null;
+  };
+
+  // Helper function to get YouTube thumbnail URL
+  const getYouTubeThumbnail = (url: string, quality = 'hqdefault') => {
+    const videoId = getYouTubeVideoId(url);
+    if (!videoId) return null;
+    return `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
+  };
+
   // Class ordering functions
   const getDefenseClassOrder = (className: string): number => {
     const order = {
@@ -124,6 +173,36 @@ export default function GameStatsPage() {
     if (teamName.includes('C')) return '#ef4444'; // red for Collective
     if (teamName.includes('T')) return '#22c55e'; // green for Titan
     return '#9ca3af'; // default gray
+  };
+
+  // Win/Loss determination function
+  const getPlayerWinStatus = (player: PlayerGameStats): 'win' | 'loss' | 'unknown' => {
+    if (!gameData?.winningInfo) return 'unknown';
+    
+    const { type, side, winner } = gameData.winningInfo;
+    
+    if (type === 'side') {
+      // Win/loss based on offensive/defensive side
+      return player.side === side ? 'win' : 'loss';
+    } else if (type === 'team') {
+      // Win/loss based on team
+      return player.team === winner ? 'win' : 'loss';
+    }
+    
+    return 'unknown';
+  };
+
+  // Get background class for win/loss
+  const getWinLossBackground = (player: PlayerGameStats): string => {
+    const status = getPlayerWinStatus(player);
+    switch (status) {
+      case 'win':
+        return 'bg-green-500/10 border-green-500/20';
+      case 'loss':
+        return 'bg-red-500/10 border-red-500/20';
+      default:
+        return 'bg-transparent';
+    }
   };
 
   // Group and sort players
@@ -225,44 +304,214 @@ export default function GameStatsPage() {
           <p className="text-xl text-blue-200">Game ID: {gameData.gameId}</p>
         </motion.div>
 
-        {/* Game Info */}
+        {/* Game Summary - Compact horizontal layout */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8 border border-white/20"
+          className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-8 border border-white/20"
         >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-cyan-400">{gameData.gameMode}</div>
-              <div className="text-sm text-blue-200">Game Mode</div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-xl font-bold text-cyan-400">{gameData.gameMode}</div>
+                <div className="text-xs text-blue-200">Mode</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-purple-400">{gameData.mapName}</div>
+                <div className="text-xs text-blue-200">Map</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-400">{gameData.totalPlayers}</div>
+                <div className="text-xs text-blue-200">Players</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-orange-400">
+                  {gameData.duration > 0 ? formatTime(gameData.duration) : 'Unknown'}
+                </div>
+                <div className="text-xs text-blue-200">Duration</div>
+              </div>
             </div>
-            <div>
-              <div className="text-2xl font-bold text-purple-400">{gameData.mapName}</div>
-              <div className="text-sm text-blue-200">Map</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-green-400">{gameData.totalPlayers}</div>
-              <div className="text-sm text-blue-200">Players</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-orange-400">{formatTime(gameData.duration)}</div>
-              <div className="text-sm text-blue-200">Duration</div>
-            </div>
+            
+            {/* Winner display */}
+            {gameData.winningInfo && (
+              <div className="text-center">
+                <div className={`text-xl font-bold ${
+                  gameData.winningInfo.type === 'side' 
+                    ? (gameData.winningInfo.side === 'offense' ? 'text-red-400' : 'text-blue-400')
+                    : 'text-yellow-400'
+                }`}>
+                  🏆 {gameData.winningInfo.winner}
+                </div>
+                <div className="text-xs text-blue-200">Winner</div>
+              </div>
+            )}
           </div>
-          <div className="mt-4 text-center">
-            <div className="text-lg text-blue-200">
-              <span className="font-semibold">Server:</span> {gameData.serverName} | 
-              <span className="font-semibold"> Date:</span> {formatDate(gameData.gameDate)}
-            </div>
+          
+          <div className="mt-3 text-center text-sm text-blue-200">
+            <span className="font-semibold">{gameData.serverName}</span> • {formatDate(gameData.gameDate)}
           </div>
         </motion.div>
 
-        {/* Player Statistics Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20"
-        >
+        {/* Video and Stats Grid Layout */}
+        <div className={`${gameData.videoInfo?.has_video && isVideoExpanded ? 'grid grid-cols-1 xl:grid-cols-5 gap-6' : 'block'}`}>
+          
+          {/* Video Section */}
+          {gameData.videoInfo?.has_video && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`mb-8 ${isVideoExpanded ? 'xl:col-span-3' : ''}`}
+            >
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
+              {/* Video Header */}
+              <div className="p-4 bg-white/20 border-b border-white/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-blue-200">Match Video</h2>
+                  {gameData.videoInfo.video_title && (
+                    <span className="text-sm text-gray-300">• {gameData.videoInfo.video_title}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* External Links */}
+                  {gameData.videoInfo.youtube_url && (
+                    <a
+                      href={gameData.videoInfo.youtube_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                    >
+                      📺 YouTube
+                    </a>
+                  )}
+                  {gameData.videoInfo.vod_url && (
+                    <a
+                      href={gameData.videoInfo.vod_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                    >
+                      🎮 VOD
+                    </a>
+                  )}
+                  {gameData.videoInfo.highlight_url && (
+                    <a
+                      href={gameData.videoInfo.highlight_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                    >
+                      ⭐ Highlights
+                    </a>
+                  )}
+                  
+                  {/* Expand/Collapse Toggle */}
+                  <button
+                    onClick={() => setIsVideoExpanded(!isVideoExpanded)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                  >
+                    {isVideoExpanded ? '📱 Minimize' : '📺 Expand'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Video Content */}
+              {isVideoExpanded && (
+                <div className="p-4">
+                  {gameData.videoInfo.youtube_url && !showVideoEmbed ? (
+                    /* YouTube Thumbnail/Preview */
+                    <div 
+                      className="relative cursor-pointer group"
+                      onClick={() => setShowVideoEmbed(true)}
+                    >
+                      <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                        <img
+                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url) || '/placeholder-video.jpg'}
+                          alt={gameData.videoInfo.video_title || 'Match Video'}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        {/* Play Button Overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
+                          <div className="bg-red-600 rounded-full p-4 group-hover:bg-red-500 transition-colors">
+                            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-center">
+                        <p className="text-gray-300 text-sm">Click to play embedded video</p>
+                      </div>
+                    </div>
+                  ) : gameData.videoInfo.youtube_url && showVideoEmbed ? (
+                    /* YouTube Embedded Player */
+                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://www.youtube.com/embed/${getYouTubeVideoId(gameData.videoInfo.youtube_url)}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3`}
+                        title={gameData.videoInfo.video_title || 'Match Video'}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        loading="eager"
+                      />
+                      <div className="mt-2 text-center">
+                        <button
+                          onClick={() => setShowVideoEmbed(false)}
+                          className="text-cyan-400 hover:text-cyan-300 text-sm"
+                        >
+                          🔙 Show Thumbnail
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* No YouTube URL - Show other video options */
+                    <div className="text-center py-8">
+                      <div className="text-4xl mb-4">🎬</div>
+                      <p className="text-gray-400 mb-4">Video available via external links</p>
+                      <div className="flex justify-center gap-2">
+                        {gameData.videoInfo.vod_url && (
+                          <a
+                            href={gameData.videoInfo.vod_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition-colors"
+                          >
+                            📺 Watch VOD
+                          </a>
+                        )}
+                        {gameData.videoInfo.highlight_url && (
+                          <a
+                            href={gameData.videoInfo.highlight_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition-colors"
+                          >
+                            ⭐ View Highlights
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Video Description */}
+                  {gameData.videoInfo.video_description && (
+                    <div className="mt-4 p-3 bg-white/5 rounded-lg">
+                      <p className="text-gray-300 text-sm">{gameData.videoInfo.video_description}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+          {/* Player Statistics Table */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20 ${
+              gameData.videoInfo?.has_video && isVideoExpanded ? 'xl:col-span-2' : ''
+            }`}
+          >
           <div className="p-4 bg-white/20 border-b border-white/20">
             <h2 className="text-xl font-bold text-blue-200">Player Performance</h2>
           </div>
@@ -316,7 +565,7 @@ export default function GameStatsPage() {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                        className={`border-b border-white/10 hover:bg-white/5 transition-colors ${getWinLossBackground(player)}`}
                       >
                         <td className="px-3 py-2">
                           <Link 
@@ -380,7 +629,7 @@ export default function GameStatsPage() {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                        className={`border-b border-white/10 hover:bg-white/5 transition-colors ${getWinLossBackground(player)}`}
                       >
                         <td className="px-3 py-2">
                           <Link 
@@ -436,7 +685,9 @@ export default function GameStatsPage() {
               </tbody>
             </table>
           </div>
-        </motion.div>
+          </motion.div>
+        
+        </div> {/* End Video and Stats Grid Layout */}
 
         {/* Squad Performance Summary */}
         <motion.div

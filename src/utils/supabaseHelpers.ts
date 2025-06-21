@@ -103,13 +103,15 @@ async function retryWithContext<T>(
 export const getFreeAgents = async () => {
   try {
     const operation = async () => {
-      const { data, error } = await getCachedSupabase()
+      // Use regular supabase client to avoid caching issues with visibility changes
+      const { data, error } = await supabase
         .from('free_agents')
         .select(`
           *,
           profiles!free_agents_player_id_fkey (
             in_game_alias,
-            avatar_url
+            avatar_url,
+            hide_from_free_agents
           )
         `)
         .order('created_at', { ascending: false });
@@ -119,6 +121,7 @@ export const getFreeAgents = async () => {
         throw new Error(`Failed to fetch free agents: ${error.message}`);
       }
 
+      // Return all free agents - filtering will be done on the frontend
       return data || [];
     };
 
@@ -133,7 +136,9 @@ export const getFreeAgents = async () => {
 export const getAllPlayers = async () => {
   try {
     const operation = async () => {
-      const { data, error } = await getCachedSupabase()
+      // Get ALL players without filtering - let the frontend handle visibility filtering
+      // Use regular supabase client to avoid caching issues with visibility changes
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('in_game_alias', { ascending: true });
@@ -143,6 +148,9 @@ export const getAllPlayers = async () => {
         throw new Error(`Failed to fetch players: ${error.message}`);
       }
 
+      console.log(`getAllPlayers: Fetched ${data?.length || 0} total players`);
+      
+      // Return all players - filtering will be done on the frontend
       return data || [];
     };
 

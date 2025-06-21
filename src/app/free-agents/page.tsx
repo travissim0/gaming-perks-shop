@@ -29,6 +29,7 @@ interface UserProfile {
   id: string;
   in_game_alias: string;
   is_league_banned: boolean;
+  hide_from_free_agents?: boolean; // Make optional to handle cases where column doesn't exist yet
 }
 
 const SKILL_LEVEL_COLORS = {
@@ -60,11 +61,74 @@ const CLASS_COLORS = {
 };
 
 export default function FreeAgentsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [directUser, setDirectUser] = useState<any>(null); // Direct user check bypass
+  
+  // Handle client-side mounting - only run once
+  useEffect(() => {
+    console.log('🔄 Mounting effect triggered');
+    setMounted(true);
+    console.log('✅ Component mounted');
+  }, []); // Empty dependency array - only run once
+
+  // Separate effect for auth checking
+  useEffect(() => {
+    let isMounted = true;
+    let authInterval: NodeJS.Timeout;
+
+    // Direct auth check as fallback
+    const checkDirectAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          console.log('🚀 DIRECT AUTH: Found session', session.user.id);
+          setHasDirectSession(true);
+          if (!user && authLoading) {
+            console.log('🚀 DIRECT AUTH: Bypassing AuthContext loading');
+            setDirectUser(session.user);
+          }
+        } else if (!session?.user && isMounted) {
+          console.log('🚀 DIRECT AUTH: No session found');
+          setHasDirectSession(false);
+        }
+      } catch (error) {
+        console.log('⚠️ DIRECT AUTH: Check failed:', error);
+      }
+    };
+    
+    // Always check for direct session immediately
+    checkDirectAuth();
+    
+    // Also check periodically if auth is stuck or loading
+    if (authLoading || !user) {
+      authInterval = setInterval(checkDirectAuth, 1000); // Check every second
+    }
+
+    return () => {
+      isMounted = false;
+      if (authInterval) clearInterval(authInterval);
+    };
+  }, [authLoading, user]);
+  
+  // Simple debug logging
+  const effectiveUser = user || directUser;
+  console.log('🚀 FREE AGENTS PAGE RENDER:', {
+    mounted,
+    authLoading,
+    hasUser: !!user,
+    hasDirectUser: !!directUser,
+    effectiveUser: !!effectiveUser,
+    userId: effectiveUser?.id,
+    hasProfile: !!profile,
+    profileHidden: profile?.hide_from_free_agents
+  });
+  
   const [isInFreeAgentPool, setIsInFreeAgentPool] = useState(false);
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [playerTypeFilter, setPlayerTypeFilter] = useState<string>('combined');
@@ -73,24 +137,64 @@ export default function FreeAgentsPage() {
   const [sortField, setSortField] = useState<keyof FreeAgent>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
+  const [hasDirectSession, setHasDirectSession] = useState(false);
 
   useEffect(() => {
     loadData();
-    if (user) {
+  }, []);
+
+  // Profile loading effect
+  useEffect(() => {
+    console.log('🔄 Auth effect triggered:', { 
+      hasUser: !!user, 
+      hasDirectUser: !!directUser,
+      effectiveUser: !!effectiveUser,
+      userId: effectiveUser?.id, 
+      authLoading,
+      mounted,
+      hasDirectSession
+    });
+    
+    if (effectiveUser) {
+      console.log('👤 Loading profile for user:', effectiveUser.id);
       loadUserProfile();
       checkIfInFreeAgentPool();
+    } else if (hasDirectSession && mounted) {
+      // If we have a direct session but no effectiveUser, try to load profile anyway
+      console.log('👤 Loading profile with direct session');
+      const loadProfileWithDirectSession = async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            console.log('👤 Loading profile for direct session user:', session.user.id);
+            await loadUserProfileDirect(session.user.id);
+            await checkIfInFreeAgentPoolDirect(session.user.id);
+          }
+        } catch (error) {
+          console.error('❌ Error loading profile with direct session:', error);
+        }
+      };
+      loadProfileWithDirectSession();
+    } else if (!effectiveUser && !authLoading && !hasDirectSession && mounted) {
+      console.log('❌ No user, clearing profile');
+      setProfile(null);
+    } else {
+      console.log('⏳ Waiting for auth:', { authLoading, hasUser: !!user, hasDirectUser: !!directUser, hasDirectSession, mounted });
     }
-  }, [user]);
+  }, [user, directUser, authLoading, hasDirectSession, mounted]);
 
   const loadData = async () => {
+    console.log('📊 FREE AGENTS: Starting data load...');
     setLoading(true);
     try {
       await Promise.all([
         loadFreeAgents(),
         loadAllPlayers()
       ]);
+      console.log('✅ FREE AGENTS: Data load completed');
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('❌ FREE AGENTS: Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -98,6 +202,7 @@ export default function FreeAgentsPage() {
 
   const loadFreeAgents = async () => {
     try {
+      console.log('🔍 FREE AGENTS: Loading free agents...');
       // Use the safe utility function with retry logic
       const data = await getFreeAgents();
 
@@ -120,60 +225,148 @@ export default function FreeAgentsPage() {
       }));
 
       setFreeAgents(formattedAgents);
+      console.log(`✅ FREE AGENTS: Loaded ${formattedAgents.length} free agents`);
     } catch (error) {
-      console.error('Error loading free agents:', error);
+      console.error('❌ FREE AGENTS: Error loading free agents:', error);
       toast.error('Failed to load free agents');
     }
   };
 
   const loadAllPlayers = async () => {
     try {
-      // Use the safe utility function with retry logic
+      console.log('🔍 FREE AGENTS: Loading all players...');
+      // Use the safe utility function with retry logic (already filters hide_from_free_agents = true)
       const data = await getAllPlayers();
       setAllPlayers(data || []);
+      console.log(`✅ FREE AGENTS: Loaded ${data?.length || 0} players`);
     } catch (error) {
-      console.error('Error loading all players:', error);
+      console.error('❌ FREE AGENTS: Error loading all players:', error);
       toast.error('Failed to load players');
     }
   };
 
   const loadUserProfile = async () => {
-    if (!user) return;
+    if (!effectiveUser) {
+      console.log('⚠️ FREE AGENTS: loadUserProfile called but no effective user');
+      return;
+    }
     
+    setProfileLoading(true);
     try {
+      console.log('🔍 FREE AGENTS: Loading user profile for:', effectiveUser.id);
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, in_game_alias, is_league_banned')
-        .eq('id', user.id)
+        .select('id, in_game_alias, is_league_banned, hide_from_free_agents')
+        .eq('id', effectiveUser.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ FREE AGENTS: Profile loading error:', error);
+        throw error;
+      }
+      
+      console.log('✅ FREE AGENTS: Loaded profile data:', {
+        id: data.id,
+        alias: data.in_game_alias,
+        banned: data.is_league_banned,
+        hidden: data.hide_from_free_agents
+      });
       setProfile(data);
+      console.log('🔄 FREE AGENTS: Profile state updated, should trigger re-render');
     } catch (error) {
-      console.error('Error loading user profile:', error);
+      console.error('❌ FREE AGENTS: Error loading user profile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  // New function to load profile directly with user ID (for force resolution)
+  const loadUserProfileDirect = async (userId: string) => {
+    setProfileLoading(true);
+    try {
+      console.log('🔍 FREE AGENTS: Loading profile directly for:', userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, in_game_alias, is_league_banned, hide_from_free_agents')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('❌ FREE AGENTS: Direct profile loading error:', error);
+        throw error;
+      }
+      
+      console.log('✅ FREE AGENTS: Loaded profile data directly:', {
+        id: data.id,
+        alias: data.in_game_alias,
+        banned: data.is_league_banned,
+        hidden: data.hide_from_free_agents
+      });
+      setProfile(data);
+      
+      // Also check if user is in free agent pool
+      checkIfInFreeAgentPoolDirect(userId);
+    } catch (error) {
+      console.error('❌ FREE AGENTS: Error loading user profile directly:', error);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  // Direct version for force auth resolution
+  const checkIfInFreeAgentPoolDirect = async (userId: string) => {
+    try {
+      console.log('🔍 FREE AGENTS: Checking if user is in free agent pool (direct):', userId);
+      
+      const { data: freeAgentData, error: freeAgentError } = await supabase
+        .from('free_agents')
+        .select('id')
+        .eq('player_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (freeAgentError) {
+        console.error('❌ FREE AGENTS: Error checking free agent status (direct):', freeAgentError);
+        setIsInFreeAgentPool(false);
+        return;
+      }
+
+      const isInPool = !!freeAgentData;
+      console.log('✅ FREE AGENTS: User is in free agent pool (direct):', isInPool);
+      setIsInFreeAgentPool(isInPool);
+      
+    } catch (error) {
+      console.error('❌ FREE AGENTS: Error checking free agent pool status (direct):', error);
+      setIsInFreeAgentPool(false);
     }
   };
 
   const checkIfInFreeAgentPool = async () => {
-    if (!user) return;
+    if (!effectiveUser) return;
 
     try {
-      // Use the new function that only considers active (non-legacy) squads
-      const { data, error } = await supabase.rpc('can_be_free_agent', { user_id: user.id });
+      console.log('Checking if user is in free agent pool:', effectiveUser.id);
       
-      if (error) {
-        console.error('Error checking free agent status:', error);
-        // Fallback to old logic
-        const isInPool = await checkIfUserInFreeAgentPool(user.id);
-        setIsInFreeAgentPool(isInPool);
-      } else {
-        // User can be free agent if not in any active squads (legacy squads don't count)
-        const actualStatus = await checkIfUserInFreeAgentPool(user.id);
-        setIsInFreeAgentPool(actualStatus && data);
+      // First check if user is in free agent pool directly
+      const { data: freeAgentData, error: freeAgentError } = await supabase
+        .from('free_agents')
+        .select('id')
+        .eq('player_id', effectiveUser.id)
+        .eq('is_active', true)
+        .maybeSingle(); // Use maybeSingle to avoid errors when no record found
+
+      if (freeAgentError) {
+        console.error('Error checking free agent status:', freeAgentError);
+        setIsInFreeAgentPool(false);
+        return;
       }
+
+      const isInPool = !!freeAgentData;
+      console.log('User is in free agent pool:', isInPool);
+      setIsInFreeAgentPool(isInPool);
+      
     } catch (error) {
       console.error('Error checking free agent pool status:', error);
-      // Default to false if check fails
       setIsInFreeAgentPool(false);
     }
   };
@@ -191,7 +384,7 @@ export default function FreeAgentsPage() {
     contact_info?: string;
     timezone?: string;
   }) => {
-    if (!user || !profile) {
+    if (!effectiveUser || !profile) {
       toast.error('You must be logged in to join the free agent pool');
       return;
     }
@@ -205,7 +398,7 @@ export default function FreeAgentsPage() {
       const { error } = await supabase
         .from('free_agents')
         .insert({
-          player_id: user.id,
+          player_id: effectiveUser.id,
           preferred_roles: formData.preferred_roles,
           secondary_roles: formData.secondary_roles || [],
           availability: formData.availability,
@@ -233,13 +426,13 @@ export default function FreeAgentsPage() {
   };
 
   const leaveFreeAgentPool = async () => {
-    if (!user) return;
+    if (!effectiveUser) return;
 
     try {
       const { error } = await supabase
         .from('free_agents')
         .update({ is_active: false })
-        .eq('player_id', user.id)
+        .eq('player_id', effectiveUser.id)
         .eq('is_active', true);
 
       if (error) throw error;
@@ -253,11 +446,115 @@ export default function FreeAgentsPage() {
     }
   };
 
+  const toggleFreeAgentVisibility = async () => {
+    // Try direct session check if effectiveUser is not available
+    let userToUse = effectiveUser;
+    if (!userToUse) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        userToUse = session?.user || null;
+        console.log('🔄 DIRECT SESSION CHECK:', !!userToUse);
+      } catch (error) {
+        console.error('❌ Direct session check failed:', error);
+      }
+    }
+    
+    if (!userToUse) {
+      console.error('❌ NO USER AVAILABLE - Cannot toggle');
+      toast.error('Please sign in to update your visibility');
+      return;
+    }
+
+    setIsTogglingVisibility(true);
+    console.log('🚀 TOGGLE STARTING - User ID:', userToUse.id);
+    
+    try {
+      // Get current value from state first
+      const currentValue = profile?.hide_from_free_agents || false;
+      const newValue = !currentValue;
+      
+      console.log(`📝 UPDATING: ${currentValue} → ${newValue}`);
+      
+      // Get the user's session token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      // Call the API endpoint
+      const response = await fetch('/api/profile/visibility', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          hide_from_free_agents: newValue
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update visibility');
+      }
+
+      const result = await response.json();
+      console.log('✅ API UPDATE SUCCESS:', result);
+      
+      if (result.success) {
+        console.log('🎉 SUCCESS - Database updated correctly!');
+        // Update local state immediately
+        setProfile(prev => {
+          if (prev) {
+            const updatedProfile = { ...prev, hide_from_free_agents: result.hide_from_free_agents };
+            console.log('🔄 TOGGLE: Updated profile state:', updatedProfile);
+            return updatedProfile;
+          }
+          return null;
+        });
+        toast.success(`Visibility ${result.hide_from_free_agents ? 'hidden' : 'visible'} successfully!`);
+        
+        // Don't reload immediately to prevent flicker - the state is already updated
+        // Only reload after a short delay if needed
+        setTimeout(() => {
+          console.log('🔄 TOGGLE: Reloading profile after successful toggle');
+          if (effectiveUser) {
+            loadUserProfile();
+          } else if (hasDirectSession) {
+            const reloadWithDirectSession = async () => {
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                  await loadUserProfileDirect(session.user.id);
+                }
+              } catch (error) {
+                console.error('❌ Error reloading profile:', error);
+              }
+            };
+            reloadWithDirectSession();
+          }
+        }, 500); // Small delay to prevent flicker
+      } else {
+        console.log('💥 FAILURE - Database not updated correctly!');
+        toast.error('Failed to update visibility');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ TOGGLE ERROR:', error);
+      toast.error(error.message || 'Failed to update visibility');
+    } finally {
+      setIsTogglingVisibility(false);
+    }
+  };
+
   // Get the appropriate data source based on filter
   const getDataSource = (): FreeAgent[] => {
     if (playerTypeFilter === 'players') {
       // Convert all players to FreeAgent format for consistent display
-      return allPlayers.map(player => ({
+      // Filter out hidden players at the frontend level as a backup
+      const visiblePlayers = allPlayers.filter(player => !player.hide_from_free_agents);
+      
+      return visiblePlayers.map(player => ({
         id: player.id,
         player_id: player.id,
         player_alias: player.in_game_alias || 'Unknown Player',
@@ -269,17 +566,29 @@ export default function FreeAgentsPage() {
         skill_level: 'unknown',
         class_ratings: {} as Record<string, number>,
         classes_to_try: [] as string[],
-        notes: `Registered player - ${player.ctf_role ? `CTF Role: ${player.ctf_role}` : 'No specific role'}`,
+        notes: `Registered player`,
         created_at: player.created_at,
         contact_info: player.email,
         timezone: 'Unknown'
       }));
     } else if (playerTypeFilter === 'free_agents') {
-      return freeAgents;
+      // Filter out free agents whose profiles are hidden
+      return freeAgents.filter(agent => {
+        // Find the corresponding player profile to check visibility
+        const playerProfile = allPlayers.find(p => p.id === agent.player_id);
+        return !playerProfile || !playerProfile.hide_from_free_agents;
+      });
     } else {
       // Combined: merge both lists, prioritizing free agents
-      const freeAgentPlayerIds = new Set(freeAgents.map(fa => fa.player_id));
-      const playersNotInFreeAgents = allPlayers
+      // Filter out hidden players from both lists
+      const visiblePlayers = allPlayers.filter(player => !player.hide_from_free_agents);
+      const visibleFreeAgents = freeAgents.filter(agent => {
+        const playerProfile = allPlayers.find(p => p.id === agent.player_id);
+        return !playerProfile || !playerProfile.hide_from_free_agents;
+      });
+      
+      const freeAgentPlayerIds = new Set(visibleFreeAgents.map(fa => fa.player_id));
+      const playersNotInFreeAgents = visiblePlayers
         .filter(player => !freeAgentPlayerIds.has(player.id))
         .map(player => ({
           id: player.id,
@@ -293,13 +602,13 @@ export default function FreeAgentsPage() {
           skill_level: 'unknown',
           class_ratings: {} as Record<string, number>,
           classes_to_try: [] as string[],
-          notes: `Registered player - ${player.ctf_role ? `CTF Role: ${player.ctf_role}` : 'No specific role'}`,
+          notes: `Registered player`,
           created_at: player.created_at,
           contact_info: player.email,
           timezone: 'Unknown'
         }));
       
-      return [...freeAgents, ...playersNotInFreeAgents];
+      return [...visibleFreeAgents, ...playersNotInFreeAgents];
     }
   };
 
@@ -507,31 +816,115 @@ export default function FreeAgentsPage() {
               </div>
               
               {/* User Actions */}
-              {user && profile && !profile.is_league_banned && (
-                <div className="flex justify-center gap-6 mb-8">
-                  {!isInFreeAgentPool ? (
-                    <button
-                      onClick={() => setShowJoinForm(true)}
-                      className="px-8 py-4 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-white rounded-xl hover:from-green-400 hover:via-emerald-400 hover:to-cyan-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-green-500/30 border border-green-400/30 relative overflow-hidden group"
-                    >
-                      <span className="relative flex items-center gap-2">
-                        🚀 Join Free Agent Pool
-                        <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
-                      </span>
-                      <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-cyan-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={leaveFreeAgentPool}
-                      className="px-8 py-4 bg-gradient-to-r from-red-500 via-pink-500 to-rose-500 text-white rounded-xl hover:from-red-400 hover:via-pink-400 hover:to-rose-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-red-500/30 border border-red-400/30 relative overflow-hidden group"
-                    >
-                      <span className="relative flex items-center gap-2">
-                        🚪 Leave Free Agent Pool
-                        <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
-                      </span>
-                      <div className="absolute inset-0 bg-gradient-to-r from-red-400/20 to-rose-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                    </button>
-                  )}
+              {(() => {
+                // More robust check - show if we have user or if profile exists
+                // This fixes the auth loading issue where user exists but component doesn't mount
+                const hasUserOrProfile = effectiveUser || (profile && profile.id) || hasDirectSession;
+                const isNotBanned = !profile?.is_league_banned;
+                const canShowSection = hasUserOrProfile && isNotBanned;
+                
+                console.log('🔍 VISIBILITY SECTION CHECK:', {
+                  mounted,
+                  authLoading,
+                  hasUser: !!user,
+                  userId: user?.id,
+                  hasProfile: !!profile,
+                  hasUserOrProfile,
+                  hasDirectSession,
+                  isLeagueBanned: profile?.is_league_banned,
+                  isNotBanned,
+                  canShowSection,
+                  profileData: profile ? {
+                    id: profile.id,
+                    alias: profile.in_game_alias,
+                    hidden: profile.hide_from_free_agents
+                  } : null
+                });
+                return canShowSection;
+              })() && (
+                <div className="flex flex-col items-center gap-4 mb-8">
+                  <div className="flex justify-center gap-6">
+                    {!isInFreeAgentPool ? (
+                      <button
+                        onClick={() => setShowJoinForm(true)}
+                        className="px-8 py-4 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-white rounded-xl hover:from-green-400 hover:via-emerald-400 hover:to-cyan-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-green-500/30 border border-green-400/30 relative overflow-hidden group"
+                      >
+                        <span className="relative flex items-center gap-2">
+                          🚀 Join Free Agent Pool
+                          <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-cyan-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={leaveFreeAgentPool}
+                        className="px-8 py-4 bg-gradient-to-r from-red-500 via-pink-500 to-rose-500 text-white rounded-xl hover:from-red-400 hover:via-pink-400 hover:to-rose-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-red-500/30 border border-red-400/30 relative overflow-hidden group"
+                      >
+                        <span className="relative flex items-center gap-2">
+                          🚪 Leave Free Agent Pool
+                          <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
+                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-red-400/20 to-rose-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Free Agent Visibility Toggle */}
+                  <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-xl p-4 backdrop-blur-sm shadow-lg">
+                    <div className="flex items-center justify-center gap-3">
+                      {profile ? (
+                        <>
+                          <span className="text-sm text-indigo-300 font-medium">
+                            {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
+                            <span className="text-xs text-gray-500 ml-2">
+                              (DB: {profile.hide_from_free_agents === true ? 'true' : profile.hide_from_free_agents === false ? 'false' : 'null'})
+                            </span>
+                          </span>
+                          <button
+                            onClick={toggleFreeAgentVisibility}
+                            disabled={isTogglingVisibility || !profile}
+                            className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+                              !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
+                            } shadow-sm flex-shrink-0 ${isTogglingVisibility ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
+                          >
+                            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-300 ${
+                              !profile.hide_from_free_agents ? 'translate-x-6' : 'translate-x-0.5'
+                            } ${isTogglingVisibility ? 'animate-pulse' : ''}`}></div>
+                          </button>
+                          <span className="text-xs text-gray-400">
+                            {profile.hide_from_free_agents ? '👁️‍🗨️ Show me' : '🫥 Hide me'}
+                          </span>
+                        </>
+                      ) : (hasDirectSession || effectiveUser) ? (
+                        <div className="flex items-center justify-center gap-3">
+                          <span className="text-sm text-indigo-300 font-medium animate-pulse">
+                            Loading visibility settings...
+                          </span>
+                          <button
+                            onClick={toggleFreeAgentVisibility}
+                            disabled={isTogglingVisibility}
+                            className={`relative w-12 h-6 rounded-full transition-all duration-300 bg-gray-600 shadow-sm flex-shrink-0 ${isTogglingVisibility ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
+                            title="Loading visibility settings..."
+                          >
+                            <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full translate-x-0.5"></div>
+                          </button>
+                          <span className="text-xs text-gray-400 animate-pulse">
+                            Loading...
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-3">
+                          <span className="text-sm text-red-300 font-medium">
+                            Please sign in to manage visibility
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 text-center mt-2">
+                      Control whether you appear on this page for squad recruitment
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -547,7 +940,7 @@ export default function FreeAgentsPage() {
                 </div>
               )}
 
-              {!user && (
+              {!effectiveUser && (
                 <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-2xl p-6 mb-8 max-w-md mx-auto backdrop-blur-sm shadow-lg">
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-2xl animate-bounce">🔐</span>

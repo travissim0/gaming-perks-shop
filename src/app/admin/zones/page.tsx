@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -9,11 +9,15 @@ import { toast } from 'react-hot-toast';
 interface Zone {
   name: string;
   status: 'RUNNING' | 'STOPPED';
+  key: string;
 }
 
 interface ZoneData {
-  [key: string]: Zone;
+  [key: string]: Omit<Zone, 'key'>;
 }
+
+type SortField = 'name' | 'status' | 'key';
+type SortOrder = 'asc' | 'desc';
 
 export default function ZoneManagementPage() {
   const { user, loading: authLoading } = useAuth();
@@ -24,6 +28,9 @@ export default function ZoneManagementPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [filter, setFilter] = useState<'all' | 'running' | 'stopped'>('all');
 
   // Check admin access
   useEffect(() => {
@@ -41,12 +48,12 @@ export default function ZoneManagementPage() {
     try {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_admin')
+        .select('is_admin, is_zone_admin')
         .eq('id', user?.id)
         .single();
 
-      if (!profile?.is_admin) {
-        toast.error('Access denied: Admin privileges required');
+      if (!profile?.is_admin && !profile?.is_zone_admin) {
+        toast.error('Access denied: Zone admin privileges required');
         router.push('/');
         return;
       }
@@ -140,6 +147,64 @@ export default function ZoneManagementPage() {
     }
   }, [message]);
 
+  // Convert zones object to sorted and filtered array
+  const sortedAndFilteredZones = useMemo(() => {
+    const zoneArray = Object.entries(zones).map(([key, zone]) => ({
+      ...zone,
+      key
+    }));
+
+    // Apply filter
+    const filtered = zoneArray.filter(zone => {
+      if (filter === 'running') return zone.status === 'RUNNING';
+      if (filter === 'stopped') return zone.status === 'STOPPED';
+      return true;
+    });
+
+    // Apply sort
+    return filtered.sort((a, b) => {
+      let aValue: string, bValue: string;
+      
+      switch (sortField) {
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'key':
+          aValue = a.key.toLowerCase();
+          bValue = b.key.toLowerCase();
+          break;
+        default:
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+  }, [zones, sortField, sortOrder, filter]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return '⇅';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  };
+
   if (!user || !hasAdminAccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
@@ -152,172 +217,226 @@ export default function ZoneManagementPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-8">
-      <div className="max-w-6xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Infantry Zone Management
           </h1>
-          <p className="text-gray-400">
-            Manage Infantry game zones - Start, Stop, and Restart zones remotely
-          </p>
-          {lastUpdated && (
-            <p className="text-sm text-gray-500 mt-2">
-              Last updated: {lastUpdated.toLocaleTimeString()}
+          <div className="flex items-center justify-between">
+            <p className="text-gray-400">
+              Manage Infantry game zones remotely
             </p>
-          )}
+            {lastUpdated && (
+              <p className="text-sm text-gray-500">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Message Display */}
         {message && (
-          <div className={`mb-6 p-4 rounded-lg border ${
+          <div className={`mb-6 p-3 rounded-lg border text-sm ${
             message.type === 'success' 
               ? 'bg-green-900/20 border-green-500/30 text-green-300' 
               : 'bg-red-900/20 border-red-500/30 text-red-300'
           }`}>
             <div className="flex items-center gap-2">
               {message.type === 'success' ? (
-                <span className="text-green-400">✅</span>
+                <span className="text-green-400">✓</span>
               ) : (
-                <span className="text-red-400">❌</span>
+                <span className="text-red-400">✗</span>
               )}
               {message.text}
             </div>
           </div>
         )}
 
-        {/* Refresh Button */}
-        <div className="mb-6">
+        {/* Controls */}
+        <div className="mb-6 flex flex-wrap items-center gap-4">
+          {/* Filter */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-400">Filter:</label>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'running' | 'stopped')}
+              className="bg-gray-800 border border-gray-600 text-white text-sm rounded px-3 py-1 focus:outline-none focus:border-cyan-500"
+            >
+              <option value="all">All Zones</option>
+              <option value="running">Running Only</option>
+              <option value="stopped">Stopped Only</option>
+            </select>
+          </div>
+
+          {/* Refresh Button */}
           <button
             onClick={fetchZoneStatus}
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
           >
             {loading ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
                 Refreshing...
               </>
             ) : (
               <>
-                🔄 Refresh Status
+                🔄 Refresh
               </>
             )}
           </button>
+
+          {/* Zone Count */}
+          <div className="text-sm text-gray-400 ml-auto">
+            Showing {sortedAndFilteredZones.length} of {Object.keys(zones).length} zones
+          </div>
         </div>
 
-        {/* Zone Cards */}
+        {/* Zone Table */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-cyan-500 border-t-transparent"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-cyan-500 border-t-transparent"></div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(zones).map(([zoneKey, zone]) => (
-              <div
-                key={zoneKey}
-                className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-600/30 p-6 hover:border-cyan-500/30 transition-all duration-300"
-              >
-                {/* Zone Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-white truncate">
-                    {zone.name}
-                  </h3>
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    zone.status === 'RUNNING'
-                      ? 'bg-green-900/30 text-green-300 border border-green-500/30'
-                      : 'bg-red-900/30 text-red-300 border border-red-500/30'
-                  }`}>
-                    {zone.status === 'RUNNING' ? '🟢 RUNNING' : '🔴 STOPPED'}
+        ) : sortedAndFilteredZones.length > 0 ? (
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 overflow-hidden">
+            {/* Table Header */}
+            <div className="bg-gray-700/50 border-b border-gray-600/30">
+              <div className="grid grid-cols-12 gap-4 px-6 py-3 text-sm font-medium text-gray-300">
+                <button
+                  onClick={() => handleSort('name')}
+                  className="col-span-4 text-left hover:text-white transition-colors flex items-center gap-2"
+                >
+                  Zone Name {getSortIcon('name')}
+                </button>
+                <button
+                  onClick={() => handleSort('key')}
+                  className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
+                >
+                  Key {getSortIcon('key')}
+                </button>
+                <button
+                  onClick={() => handleSort('status')}
+                  className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
+                >
+                  Status {getSortIcon('status')}
+                </button>
+                <div className="col-span-4 text-center">Actions</div>
+              </div>
+            </div>
+
+            {/* Table Body */}
+            <div className="divide-y divide-gray-600/30">
+              {sortedAndFilteredZones.map((zone) => (
+                <div
+                  key={zone.key}
+                  className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-700/30 transition-colors"
+                >
+                  {/* Zone Name */}
+                  <div className="col-span-4 flex items-center">
+                    <div className="text-white font-medium truncate">{zone.name}</div>
+                  </div>
+
+                  {/* Zone Key */}
+                  <div className="col-span-2 flex items-center">
+                    <code className="text-cyan-300 text-sm bg-gray-900/50 px-2 py-1 rounded">
+                      {zone.key}
+                    </code>
+                  </div>
+
+                  {/* Status */}
+                  <div className="col-span-2 flex items-center">
+                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                      zone.status === 'RUNNING'
+                        ? 'bg-green-900/30 text-green-300 border border-green-500/30'
+                        : 'bg-red-900/30 text-red-300 border border-red-500/30'
+                    }`}>
+                      <div className={`w-2 h-2 rounded-full ${
+                        zone.status === 'RUNNING' ? 'bg-green-400' : 'bg-red-400'
+                      }`}></div>
+                      {zone.status}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-4 flex items-center justify-center gap-2">
+                    {/* Start Button */}
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'start')}
+                      disabled={zone.status === 'RUNNING' || actionLoading === `${zone.key}-start`}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                    >
+                      {actionLoading === `${zone.key}-start` ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                      ) : (
+                        <>▶ Start</>
+                      )}
+                    </button>
+
+                    {/* Stop Button */}
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'stop')}
+                      disabled={zone.status === 'STOPPED' || actionLoading === `${zone.key}-stop`}
+                      className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                    >
+                      {actionLoading === `${zone.key}-stop` ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                      ) : (
+                        <>⏹ Stop</>
+                      )}
+                    </button>
+
+                    {/* Restart Button */}
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'restart')}
+                      disabled={actionLoading === `${zone.key}-restart`}
+                      className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                    >
+                      {actionLoading === `${zone.key}-restart` ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                      ) : (
+                        <>🔄 Restart</>
+                      )}
+                    </button>
                   </div>
                 </div>
-
-                {/* Zone Details */}
-                <div className="text-gray-400 text-sm mb-6">
-                  <div>Zone Key: <span className="text-cyan-300 font-mono">{zoneKey}</span></div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-2">
-                  {/* Start Button */}
-                  <button
-                    onClick={() => executeZoneAction(zoneKey, 'start')}
-                    disabled={zone.status === 'RUNNING' || actionLoading === `${zoneKey}-start`}
-                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 min-w-0"
-                  >
-                    {actionLoading === `${zoneKey}-start` ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        Starting...
-                      </>
-                    ) : (
-                      <>
-                        ▶️ Start
-                      </>
-                    )}
-                  </button>
-
-                  {/* Stop Button */}
-                  <button
-                    onClick={() => executeZoneAction(zoneKey, 'stop')}
-                    disabled={zone.status === 'STOPPED' || actionLoading === `${zoneKey}-stop`}
-                    className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 min-w-0"
-                  >
-                    {actionLoading === `${zoneKey}-stop` ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        Stopping...
-                      </>
-                    ) : (
-                      <>
-                        ⏹️ Stop
-                      </>
-                    )}
-                  </button>
-
-                  {/* Restart Button */}
-                  <button
-                    onClick={() => executeZoneAction(zoneKey, 'restart')}
-                    disabled={actionLoading === `${zoneKey}-restart`}
-                    className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 mt-2"
-                  >
-                    {actionLoading === `${zoneKey}-restart` ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                        Restarting...
-                      </>
-                    ) : (
-                      <>
-                        🔄 Restart
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && Object.keys(zones).length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-xl mb-4">No zones found</div>
-            <p className="text-gray-500">
-              Make sure the zone management scripts are properly installed on your server.
+        ) : (
+          <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-600/20">
+            <div className="text-gray-400 text-lg mb-2">
+              {Object.keys(zones).length === 0 ? 'No zones found' : 'No zones match your filter'}
+            </div>
+            <p className="text-gray-500 text-sm">
+              {Object.keys(zones).length === 0 
+                ? 'Make sure the zone management scripts are properly installed on your server.'
+                : 'Try adjusting your filter settings.'}
             </p>
           </div>
         )}
 
-        {/* Footer Info */}
-        <div className="mt-12 bg-gray-800/30 rounded-lg p-6 border border-gray-600/20">
-          <h3 className="text-lg font-semibold text-white mb-3">Zone Management Info</h3>
-          <div className="text-gray-400 text-sm space-y-2">
-            <p>• Zones are automatically refreshed every 30 seconds</p>
-            <p>• All actions are logged for security and audit purposes</p>
-            <p>• Zone status is retrieved in real-time from the Infantry server</p>
-            <p>• Use the restart function to apply configuration changes</p>
+        {/* Quick Stats */}
+        {!loading && Object.keys(zones).length > 0 && (
+          <div className="mt-6 grid grid-cols-3 gap-4">
+            <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-600/20 text-center">
+              <div className="text-2xl font-bold text-white">{Object.keys(zones).length}</div>
+              <div className="text-sm text-gray-400">Total Zones</div>
+            </div>
+            <div className="bg-green-900/20 rounded-lg p-4 border border-green-500/30 text-center">
+              <div className="text-2xl font-bold text-green-300">
+                {Object.values(zones).filter(z => z.status === 'RUNNING').length}
+              </div>
+              <div className="text-sm text-green-400">Running</div>
+            </div>
+            <div className="bg-red-900/20 rounded-lg p-4 border border-red-500/30 text-center">
+              <div className="text-2xl font-bold text-red-300">
+                {Object.values(zones).filter(z => z.status === 'STOPPED').length}
+              </div>
+              <div className="text-sm text-red-400">Stopped</div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -668,6 +668,17 @@ export default function AdminDashboard() {
                   <div className="text-xs text-red-400">Posts & announcements</div>
                 </div>
               </Link>
+
+              <Link
+                href="/admin/zones"
+                className="flex items-center gap-4 px-4 py-3 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-orange-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-orange-500/20"
+              >
+                <span className="text-3xl">🖥️</span>
+                <div>
+                  <div className="font-semibold">Zone Control</div>
+                  <div className="text-xs text-orange-400">Start/stop Infantry zones</div>
+                </div>
+              </Link>
             </div>
             
             <div className="mt-6">

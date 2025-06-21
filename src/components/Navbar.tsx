@@ -13,6 +13,8 @@ export default function Navbar({ user }: { user: any }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCtfAdmin, setIsCtfAdmin] = useState(false);
   const [isMediaManager, setIsMediaManager] = useState(false);
+  const [isZoneAdmin, setIsZoneAdmin] = useState(false);
+  const [isSiteAdmin, setIsSiteAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [pendingSquadRequests, setPendingSquadRequests] = useState(0);
@@ -127,13 +129,15 @@ export default function Navbar({ user }: { user: any }) {
       try {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('is_admin, ctf_role, is_media_manager, avatar_url, in_game_alias')
+          .select('is_admin, ctf_role, is_media_manager, is_zone_admin, site_admin, avatar_url, in_game_alias')
           .eq('id', user.id)
           .single();
         
         setIsAdmin(profile?.is_admin || false);
         setIsCtfAdmin(profile?.is_admin || profile?.ctf_role === 'ctf_admin');
         setIsMediaManager(profile?.is_media_manager || false);
+        setIsZoneAdmin(profile?.is_zone_admin || false);
+        setIsSiteAdmin(profile?.site_admin || false);
         setUserAvatar(profile?.avatar_url || null);
         
         // Check if user is Axidus
@@ -320,6 +324,7 @@ export default function Navbar({ user }: { user: any }) {
 
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
+    { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
     { href: '/event-log', label: 'Player Event Log', icon: '📋' },
   ];
 
@@ -588,10 +593,19 @@ export default function Navbar({ user }: { user: any }) {
                           className="flex items-center px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-red-400 text-sm font-medium"
                         >
                           <span className="mr-2 text-red-400">🛡️</span>
+                          <span>Full Admin</span>
+                        </Link>
+                      )}
+                      {isSiteAdmin && !isAdmin && (
+                        <Link 
+                          href="/site-admin"
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-sm font-medium"
+                        >
+                          <span className="mr-2 text-blue-400">👤</span>
                           <span>Site Admin</span>
                         </Link>
                       )}
-                      {isAdmin && (
+                      {(isAdmin || isZoneAdmin) && (
                         <Link 
                           href="/admin/zones"
                           className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-sm font-medium"
@@ -609,7 +623,7 @@ export default function Navbar({ user }: { user: any }) {
                           <span>CTF Admin</span>
                         </Link>
                       )}
-                      {(isAdmin || isMediaManager) && (
+                      {(isAdmin || isMediaManager || isSiteAdmin) && (
                         <Link 
                           href="/admin/videos"
                           className="flex items-center px-3 py-2 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-pink-400 text-sm font-medium"

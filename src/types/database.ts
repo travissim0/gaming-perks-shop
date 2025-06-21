@@ -46,12 +46,15 @@ export interface Profile {
   in_game_alias?: string | null;
   is_admin: boolean;
   is_media_manager: boolean;
+  is_zone_admin: boolean;
+  site_admin: boolean;
   ctf_role?: CtfRoleType | null;
   registration_status: string;
   is_league_banned: boolean;
   league_ban_reason?: string | null;
   league_ban_date?: string | null;
   avatar_url?: string | null;
+  hide_from_free_agents: boolean;
   created_at: string;
   updated_at: string;
 }
