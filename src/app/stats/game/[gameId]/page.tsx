@@ -65,6 +65,8 @@ interface GameData {
   };
 }
 
+type ViewMode = 'theater' | 'balanced' | 'stats-only';
+
 export default function GameStatsPage() {
   const params = useParams();
   const gameId = params.gameId as string;
@@ -73,6 +75,7 @@ export default function GameStatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isVideoExpanded, setIsVideoExpanded] = useState(true);
   const [showVideoEmbed, setShowVideoEmbed] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('theater');
 
   useEffect(() => {
     if (gameId) {
@@ -139,8 +142,8 @@ export default function GameStatsPage() {
     return null;
   };
 
-  // Helper function to get YouTube thumbnail URL
-  const getYouTubeThumbnail = (url: string, quality = 'hqdefault') => {
+  // Helper function to get YouTube thumbnail URL with high quality
+  const getYouTubeThumbnail = (url: string, quality = 'maxresdefault') => {
     const videoId = getYouTubeVideoId(url);
     if (!videoId) return null;
     return `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
@@ -250,6 +253,40 @@ export default function GameStatsPage() {
     return teamGroups;
   };
 
+  // Get class color style for player names
+  const getClassColorStyle = (className: string) => {
+    const colors: Record<string, string> = {
+      'Rifleman': '#90EE90',
+      'Grenadier': '#FFB6C1',
+      'Rocket': '#FF6347',
+      'Mortar': '#DDA0DD',
+      'Sniper': '#87CEEB',
+      'Engineer': '#F0E68C',
+      'Medic': '#98FB98',
+      'Pilot': '#FFA500'
+    };
+    return { color: colors[className] || '#FFFFFF' };
+  };
+
+  // Get simplified team summary for theater mode
+  const getTeamSummary = () => {
+    const grouped = getGroupedPlayers();
+    return Object.entries(grouped).map(([team, { defense, offense }]) => {
+      const winStatus = defense.length > 0 ? getPlayerWinStatus(defense[0]) : 
+                       offense.length > 0 ? getPlayerWinStatus(offense[0]) : 'unknown';
+      
+      return {
+        name: team,
+        color: getTeamColor(team),
+        playerCount: defense.length + offense.length,
+        defenseCount: defense.length,
+        offenseCount: offense.length,
+        winStatus,
+        topPlayers: [...defense.slice(0, 2), ...offense.slice(0, 2)]
+      };
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
@@ -284,76 +321,294 @@ export default function GameStatsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <div className="flex items-center gap-4 mb-4">
-            <Link href="/stats" className="text-cyan-400 hover:text-cyan-300">
-              ← Back to Stats
-            </Link>
-            {gameData.linkedMatchId && (
-              <Link 
-                href={`/matches/${gameData.linkedMatchId}`}
-                className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm"
-              >
-                🔗 View Match: {gameData.linkedMatchTitle}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Link href="/stats" className="text-cyan-400 hover:text-cyan-300">
+                ← Back to Stats
               </Link>
-            )}
-          </div>
-          
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
-            Game Statistics
-          </h1>
-          <p className="text-xl text-blue-200">Game ID: {gameData.gameId}</p>
-        </motion.div>
-
-        {/* Game Summary - Compact horizontal layout */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-8 border border-white/20"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="text-center">
-                <div className="text-xl font-bold text-cyan-400">{gameData.gameMode}</div>
-                <div className="text-xs text-blue-200">Mode</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-purple-400">{gameData.mapName}</div>
-                <div className="text-xs text-blue-200">Map</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-green-400">{gameData.totalPlayers}</div>
-                <div className="text-xs text-blue-200">Players</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-orange-400">
-                  {gameData.duration > 0 ? formatTime(gameData.duration) : 'Unknown'}
-                </div>
-                <div className="text-xs text-blue-200">Duration</div>
-              </div>
+              {gameData.linkedMatchId && (
+                <Link 
+                  href={`/matches/${gameData.linkedMatchId}`}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm"
+                >
+                  🔗 View Match: {gameData.linkedMatchTitle}
+                </Link>
+              )}
             </div>
             
-            {/* Winner display */}
-            {gameData.winningInfo && (
-              <div className="text-center">
-                <div className={`text-xl font-bold ${
-                  gameData.winningInfo.type === 'side' 
-                    ? (gameData.winningInfo.side === 'offense' ? 'text-red-400' : 'text-blue-400')
-                    : 'text-yellow-400'
-                }`}>
-                  🏆 {gameData.winningInfo.winner}
+            {/* View Mode Selector */}
+            {gameData.videoInfo?.has_video && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-blue-200">View:</span>
+                <div className="flex bg-white/10 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('theater')}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${
+                      viewMode === 'theater' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'text-blue-200 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    🎭 Theater
+                  </button>
+                  <button
+                    onClick={() => setViewMode('balanced')}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${
+                      viewMode === 'balanced' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'text-blue-200 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    ⚖️ Balanced
+                  </button>
+                  <button
+                    onClick={() => setViewMode('stats-only')}
+                    className={`px-3 py-1 rounded text-sm transition-colors ${
+                      viewMode === 'stats-only' 
+                        ? 'bg-purple-600 text-white' 
+                        : 'text-blue-200 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    📊 Stats Only
+                  </button>
                 </div>
-                <div className="text-xs text-blue-200">Winner</div>
               </div>
             )}
           </div>
           
-          <div className="mt-3 text-center text-sm text-blue-200">
-            <span className="font-semibold">{gameData.serverName}</span> • {formatDate(gameData.gameDate)}
+          <div className="flex items-center gap-4">
+            <div className="text-lg text-blue-200">
+              {gameData.mapName} • {gameData.gameMode} • {formatDate(gameData.gameDate)}
+            </div>
           </div>
         </motion.div>
 
-        {/* Video and Stats Grid Layout */}
-        <div className={`${gameData.videoInfo?.has_video && isVideoExpanded ? 'grid grid-cols-1 xl:grid-cols-5 gap-6' : 'block'}`}>
+
+
+        {/* Dynamic Layout Based on View Mode */}
+        {viewMode === 'theater' && gameData.videoInfo?.has_video ? (
+          /* THEATER MODE - Full width video with minimal sidebar */
+          <div className="space-y-6">
+            {/* Video Section - Full Width */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full"
+            >
+              <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
+                {/* Video Header */}
+                <div className="p-4 bg-white/20 border-b border-white/20 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-bold text-blue-200">🎬 Match Recording</h2>
+                    {gameData.videoInfo.video_title && (
+                      <span className="text-lg text-gray-300">• {gameData.videoInfo.video_title}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* External Links */}
+                    {gameData.videoInfo.youtube_url && (
+                      <a
+                        href={gameData.videoInfo.youtube_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm transition-colors"
+                      >
+                        📺 YouTube
+                      </a>
+                    )}
+                    {gameData.videoInfo.vod_url && (
+                      <a
+                        href={gameData.videoInfo.vod_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm transition-colors"
+                      >
+                        🎮 VOD
+                      </a>
+                    )}
+                    {gameData.videoInfo.highlight_url && (
+                      <a
+                        href={gameData.videoInfo.highlight_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm transition-colors"
+                      >
+                        ⭐ Highlights
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Theater Mode Video Content */}
+                <div className="p-6">
+                  {gameData.videoInfo.youtube_url && !showVideoEmbed ? (
+                    /* High-Quality YouTube Thumbnail */
+                    <div 
+                      className="relative cursor-pointer group"
+                      onClick={() => setShowVideoEmbed(true)}
+                    >
+                      <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-2xl">
+                        <img
+                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || '/placeholder-video.jpg'}
+                          alt={gameData.videoInfo.video_title || 'Match Video'}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            // Fallback to lower quality if maxres fails
+                            const target = e.target as HTMLImageElement;
+                            const videoUrl = gameData.videoInfo?.youtube_url;
+                            if (videoUrl && target.src.includes('maxresdefault')) {
+                              const fallbackUrl = getYouTubeThumbnail(videoUrl, 'hqdefault');
+                              if (fallbackUrl) target.src = fallbackUrl;
+                            } else if (videoUrl && target.src.includes('hqdefault')) {
+                              const fallbackUrl = getYouTubeThumbnail(videoUrl, 'mqdefault');
+                              if (fallbackUrl) target.src = fallbackUrl;
+                            }
+                          }}
+                        />
+                        {/* Enhanced Play Button Overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-all duration-300">
+                          <div className="bg-red-600 rounded-full p-8 group-hover:bg-red-500 group-hover:scale-110 transition-all duration-300 shadow-2xl">
+                            <svg className="w-16 h-16 text-white ml-2" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                        {/* Quality indicator */}
+                        <div className="absolute top-4 right-4 bg-black/70 px-3 py-1 rounded-full">
+                          <span className="text-white text-sm font-medium">4K Available</span>
+                        </div>
+                      </div>
+                      <div className="mt-4 text-center">
+                        <p className="text-gray-300 text-xl">🎮 Click to watch the full match recording</p>
+                        <p className="text-gray-400 text-sm mt-1">High quality video with full game audio</p>
+                      </div>
+                    </div>
+                  ) : gameData.videoInfo.youtube_url && showVideoEmbed ? (
+                    /* YouTube Embedded Player - Theater Size */
+                    <div className="space-y-4">
+                      <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${getYouTubeVideoId(gameData.videoInfo.youtube_url)}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&hd=1`}
+                          title={gameData.videoInfo.video_title || 'Match Video'}
+                          className="w-full h-full border-0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          loading="eager"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <button
+                          onClick={() => setShowVideoEmbed(false)}
+                          className="text-cyan-400 hover:text-cyan-300 text-lg transition-colors"
+                        >
+                          🔙 Back to Thumbnail
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Video Description */}
+                  {gameData.videoInfo.video_description && (
+                    <div className="mt-6 p-4 bg-white/5 rounded-lg">
+                      <p className="text-gray-300">{gameData.videoInfo.video_description}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Theater Mode - Team Summary with All Players */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            >
+              {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => {
+                const winStatus = defense.length > 0 ? getPlayerWinStatus(defense[0]) : 
+                                 offense.length > 0 ? getPlayerWinStatus(offense[0]) : 'unknown';
+                
+                return (
+                  <div key={team} className="bg-white/10 backdrop-blur-lg rounded-xl p-5 border border-white/20">
+                    {/* Team Header */}
+                    <div className="text-center mb-6 relative">
+                      <h3 className="text-3xl font-bold mb-4" style={{ color: getTeamColor(team) }}>
+                        {team}
+                      </h3>
+                      {winStatus !== 'unknown' && (
+                        <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                                        px-8 py-4 rounded-2xl text-4xl font-black border-4 backdrop-blur-sm ${
+                          winStatus === 'win' 
+                            ? 'bg-green-500/30 text-green-200 border-green-400/50 shadow-green-500/30' 
+                            : 'bg-red-500/30 text-red-200 border-red-400/50 shadow-red-500/30'
+                        } shadow-2xl`}>
+                          {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Defense Players */}
+                    {defense.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center justify-center mb-3">
+                          <span className="bg-blue-500/20 text-blue-300 px-4 py-2 rounded-lg text-lg font-semibold">
+                            🛡️ Defense
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {defense.map((player) => (
+                            <div key={player.id} className="flex items-center justify-between text-sm bg-blue-500/10 rounded p-2">
+                              <div className="flex items-center gap-2">
+                                <span 
+                                  className="font-medium"
+                                  style={getClassColorStyle(player.main_class || '')}
+                                >
+                                  {player.player_name}
+                                </span>
+                                <span className="text-xs text-gray-400">({player.main_class})</span>
+                              </div>
+                              <span className="text-gray-400 text-xs">{player.kills}K/{player.deaths}D</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Offense Players */}
+                    {offense.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-center mb-3">
+                          <span className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-lg font-semibold">
+                            ⚔️ Offense
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {offense.map((player) => (
+                            <div key={player.id} className="flex items-center justify-between text-sm bg-red-500/10 rounded p-2">
+                              <div className="flex items-center gap-2">
+                                <span 
+                                  className="font-medium"
+                                  style={getClassColorStyle(player.main_class || '')}
+                                >
+                                  {player.player_name}
+                                </span>
+                                <span className="text-xs text-gray-400">({player.main_class})</span>
+                              </div>
+                              <span className="text-gray-400 text-xs">{player.kills}K/{player.deaths}D</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+
+                  </div>
+                );
+              })}
+            </motion.div>
+          </div>
+        ) : viewMode === 'balanced' && gameData.videoInfo?.has_video ? (
+          /* BALANCED MODE - Side by side layout */
+          <div className={`${gameData.videoInfo?.has_video && isVideoExpanded ? 'grid grid-cols-1 xl:grid-cols-5 gap-6' : 'block'}`}>
           
           {/* Video Section */}
           {gameData.videoInfo?.has_video && (
@@ -425,21 +680,38 @@ export default function GameStatsPage() {
                     >
                       <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
                         <img
-                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url) || '/placeholder-video.jpg'}
+                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || '/placeholder-video.jpg'}
                           alt={gameData.videoInfo.video_title || 'Match Video'}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            // Fallback to lower quality if maxres fails
+                            const target = e.target as HTMLImageElement;
+                            const videoUrl = gameData.videoInfo?.youtube_url;
+                            if (videoUrl && target.src.includes('maxresdefault')) {
+                              const fallbackUrl = getYouTubeThumbnail(videoUrl, 'hqdefault');
+                              if (fallbackUrl) target.src = fallbackUrl;
+                            } else if (videoUrl && target.src.includes('hqdefault')) {
+                              const fallbackUrl = getYouTubeThumbnail(videoUrl, 'mqdefault');
+                              if (fallbackUrl) target.src = fallbackUrl;
+                            }
+                          }}
                         />
                         {/* Play Button Overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                          <div className="bg-red-600 rounded-full p-4 group-hover:bg-red-500 transition-colors">
-                            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-all duration-300">
+                          <div className="bg-red-600 rounded-full p-6 group-hover:bg-red-500 group-hover:scale-110 transition-all duration-300 shadow-2xl">
+                            <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8 5v14l11-7z"/>
                             </svg>
                           </div>
                         </div>
+                        {/* Quality indicator */}
+                        <div className="absolute top-4 right-4 bg-black/70 px-3 py-1 rounded-full">
+                          <span className="text-white text-sm font-medium">4K Available</span>
+                        </div>
                       </div>
-                      <div className="mt-2 text-center">
-                        <p className="text-gray-300 text-sm">Click to play embedded video</p>
+                      <div className="mt-4 text-center">
+                        <p className="text-gray-300 text-lg">🎮 Click to watch the full match recording</p>
+                        <p className="text-gray-400 text-sm mt-1">High quality video with full game audio</p>
                       </div>
                     </div>
                   ) : gameData.videoInfo.youtube_url && showVideoEmbed ? (
@@ -686,56 +958,191 @@ export default function GameStatsPage() {
             </table>
           </div>
           </motion.div>
-        
-        </div> {/* End Video and Stats Grid Layout */}
+        </div>
+        ) : (
+          /* STATS ONLY MODE - No video, just stats */
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20"
+          >
+            <div className="p-4 bg-white/20 border-b border-white/20">
+              <h2 className="text-xl font-bold text-blue-200">Player Performance</h2>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-white/20">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Side</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Base</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FC</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CK</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CT</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CS</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TD</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ACC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => (
+                    <React.Fragment key={team}>
+                      <tr className="bg-white/20">
+                        <td colSpan={14} className="px-3 py-2 text-center text-sm font-bold">
+                          <span 
+                            className="font-bold text-lg"
+                            style={{ color: getTeamColor(team) }}
+                          >
+                            {team}
+                          </span>
+                          <span className="text-xs text-blue-200 ml-2">
+                            ({defense.length + offense.length} players)
+                          </span>
+                        </td>
+                      </tr>
+                      {defense.length > 0 && (
+                        <tr className="bg-blue-500/20">
+                          <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                            🛡️ DEFENSE ({defense.length})
+                          </td>
+                        </tr>
+                      )}
+                      {defense.map((player, index) => (
+                        <motion.tr
+                          key={player.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className={`border-b border-white/10 hover:bg-white/5 transition-colors ${getWinLossBackground(player)}`}
+                        >
+                          <td className="px-3 py-2">
+                            <Link 
+                              href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                              className="transition-colors font-medium hover:text-cyan-300"
+                              style={getClassColorStyle(player.main_class || '')}
+                            >
+                              {player.player_name}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span 
+                              className="font-medium text-xs"
+                              style={getClassColorStyle(player.main_class || '')}
+                            >
+                              {player.main_class || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              player.side === 'offense' 
+                                ? 'bg-red-500/20 text-red-300' 
+                                : player.side === 'defense' 
+                                ? 'bg-blue-500/20 text-blue-300'
+                                : 'bg-gray-500/20 text-gray-300'
+                            }`}>
+                              {player.side || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                              {player.base_used || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-red-400">{player.deaths}</td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-cyan-400">
+                            {typeof player.deaths === 'number' && player.deaths > 0
+                              ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
+                              : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs text-purple-400">{player.flag_captures}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
+                          <td className="px-3 py-2 text-right text-xs">{formatTime(player.carry_time_seconds)}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.class_swaps}</td>
+                          <td className="px-3 py-2 text-right text-xs text-yellow-400">{player.eb_hits}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
+                          <td className="px-3 py-2 text-right text-xs text-orange-400">{formatPercentage(player.accuracy)}</td>
+                        </motion.tr>
+                      ))}
+                      {offense.length > 0 && (
+                        <tr className="bg-red-500/20">
+                          <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                            ⚔️ OFFENSE ({offense.length})
+                          </td>
+                        </tr>
+                      )}
+                      {offense.map((player, index) => (
+                        <motion.tr
+                          key={player.id}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className={`border-b border-white/10 hover:bg-white/5 transition-colors ${getWinLossBackground(player)}`}
+                        >
+                          <td className="px-3 py-2">
+                            <Link 
+                              href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                              className="transition-colors font-medium hover:text-cyan-300"
+                              style={getClassColorStyle(player.main_class || '')}
+                            >
+                              {player.player_name}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span 
+                              className="font-medium text-xs"
+                              style={getClassColorStyle(player.main_class || '')}
+                            >
+                              {player.main_class || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              player.side === 'offense' 
+                                ? 'bg-red-500/20 text-red-300' 
+                                : player.side === 'defense' 
+                                ? 'bg-blue-500/20 text-blue-300'
+                                : 'bg-gray-500/20 text-gray-300'
+                            }`}>
+                              {player.side || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="bg-white/20 px-2 py-1 rounded text-xs">
+                              {player.base_used || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-red-400">{player.deaths}</td>
+                          <td className="px-3 py-2 text-right text-xs font-bold text-cyan-400">
+                            {typeof player.deaths === 'number' && player.deaths > 0
+                              ? (typeof player.kills === 'number' ? (player.kills / player.deaths).toFixed(2) : 'N/A')
+                              : (typeof player.kills === 'number' ? player.kills.toFixed(2) : 'N/A')}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs text-purple-400">{player.flag_captures}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.carrier_kills}</td>
+                          <td className="px-3 py-2 text-right text-xs">{formatTime(player.carry_time_seconds)}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.class_swaps}</td>
+                          <td className="px-3 py-2 text-right text-xs text-yellow-400">{player.eb_hits}</td>
+                          <td className="px-3 py-2 text-right text-xs">{player.turret_damage}</td>
+                          <td className="px-3 py-2 text-right text-xs text-orange-400">{formatPercentage(player.accuracy)}</td>
+                        </motion.tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        )}
 
-        {/* Squad Performance Summary */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-8"
-        >
-          <h2 className="text-2xl font-bold text-blue-200 mb-4">Squad Performance</h2>
-          <div className="grid gap-4">
-            {Object.entries(
-              gameData.players.reduce((squads, player) => {
-                if (!squads[player.squad_name]) {
-                  squads[player.squad_name] = [];
-                }
-                squads[player.squad_name].push(player);
-                return squads;
-              }, {} as Record<string, PlayerGameStats[]>)
-            ).map(([squadName, players]) => {
-              const totalKills = players.reduce((sum, p) => sum + p.kills, 0);
-              const totalDeaths = players.reduce((sum, p) => sum + p.deaths, 0);
-              const totalCaptures = players.reduce((sum, p) => sum + p.flag_captures, 0);
-              
-              return (
-                <div key={squadName} className="bg-white/10 backdrop-blur-lg rounded-lg p-4 border border-white/20">
-                  <h3 className="text-lg font-bold text-cyan-400 mb-2">{squadName}</h3>
-                  <div className="grid grid-cols-4 gap-4 text-center text-sm">
-                    <div>
-                      <div className="text-xl font-bold">{totalKills}</div>
-                      <div className="text-blue-200">Total Kills</div>
-                    </div>
-                    <div>
-                      <div className="text-xl font-bold">{totalDeaths}</div>
-                      <div className="text-blue-200">Total Deaths</div>
-                    </div>
-                    <div>
-                      <div className="text-xl font-bold">{totalCaptures}</div>
-                      <div className="text-blue-200">Flag Captures</div>
-                    </div>
-                    <div>
-                      <div className="text-xl font-bold">{players.length}</div>
-                      <div className="text-blue-200">Players</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
+
       </div>
     </div>
   );

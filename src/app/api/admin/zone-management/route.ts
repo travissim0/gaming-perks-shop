@@ -12,11 +12,25 @@ const supabase = createClient(
 );
 
 // Configuration - check if we're running locally or on the server
-const IS_LOCAL = process.env.NODE_ENV === 'development' || os.hostname() !== 'linux-1';
+// IS_LOCAL means we need SSH to connect to remote server
+// If running on production server, we should execute commands directly
+const IS_LOCAL = process.env.NODE_ENV === 'development' || 
+                 process.env.ZONE_MANAGEMENT_MODE === 'ssh' ||
+                 process.env.ZONE_MANAGEMENT_LOCAL === 'true';
 const SERVER_HOST = process.env.INFANTRY_SERVER_HOST || 'linux-1.freeinfantry.com';
 const SERVER_USER = process.env.INFANTRY_SERVER_USER || 'root';
 const SSH_KEY_PATH = process.env.INFANTRY_SSH_KEY_PATH || `${os.homedir()}/.ssh/id_rsa`;
 const SCRIPT_PATH = '/root/Infantry/scripts/zone-manager.sh';
+
+// Debug logging
+console.log('Zone Management Configuration:', {
+  NODE_ENV: process.env.NODE_ENV,
+  ZONE_MANAGEMENT_MODE: process.env.ZONE_MANAGEMENT_MODE,
+  ZONE_MANAGEMENT_LOCAL: process.env.ZONE_MANAGEMENT_LOCAL,
+  IS_LOCAL,
+  hostname: os.hostname(),
+  SERVER_HOST
+});
 
 // Function to check if user is admin or zone admin
 async function isUserZoneAdmin(userId: string): Promise<boolean> {
@@ -38,37 +52,62 @@ async function isUserZoneAdmin(userId: string): Promise<boolean> {
 async function executeCommand(command: string): Promise<{ success: boolean; output: string; error?: string }> {
   try {
     let fullCommand: string;
+    let execOptions: any = { timeout: 30000 };
     
     if (IS_LOCAL) {
       // Running locally, use SSH to connect to remote server
-      console.log('Local development mode - using SSH to connect to', SERVER_HOST);
-      fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "${command}"`;
+      console.log('🔗 Local/SSH mode - connecting to', SERVER_HOST);
+      fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SERVER_USER}@${SERVER_HOST} "${command}"`;
     } else {
       // Running on the server, execute directly
-      console.log('Server mode - executing command directly');
+      console.log('🖥️ Server mode - executing command directly');
       fullCommand = command;
+      execOptions.cwd = '/root/Infantry/scripts';
     }
     
-    console.log('Executing command:', fullCommand);
+    console.log('📋 Executing command:', fullCommand);
+    console.log('⚙️ Exec options:', execOptions);
     
-    const { stdout, stderr } = await execAsync(fullCommand, { 
-      timeout: 30000,
-      cwd: IS_LOCAL ? undefined : '/root/Infantry/scripts'
+    const { stdout, stderr } = await execAsync(fullCommand, execOptions);
+    
+    console.log('📤 Command stdout:', stdout);
+    console.log('📤 Command stderr:', stderr);
+    
+    const stderrStr = stderr.toString();
+    const stdoutStr = stdout.toString();
+    
+    if (stderrStr && !stderrStr.includes('Warning:') && !stderrStr.includes('Pseudo-terminal') && !stderrStr.includes('Connection')) {
+      console.error('❌ Command stderr (treated as error):', stderrStr);
+      return { success: false, output: '', error: stderrStr };
+    }
+    
+    const output = stdoutStr.trim();
+    console.log('✅ Command completed successfully, output length:', output.length);
+    return { success: true, output };
+  } catch (error: any) {
+    console.error('💥 Command execution failed:', {
+      message: error.message,
+      code: error.code,
+      signal: error.signal,
+      killed: error.killed,
+      cmd: error.cmd
     });
     
-    if (stderr && !stderr.includes('Warning:') && !stderr.includes('Pseudo-terminal')) {
-      console.error('Command stderr:', stderr);
-      return { success: false, output: '', error: stderr };
+    let errorMessage = error.message || 'Command execution failed';
+    
+    // Provide more specific error messages
+    if (error.code === 'ENOENT') {
+      errorMessage = IS_LOCAL ? 'SSH command not found or SSH key invalid' : 'Script not found on server';
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = IS_LOCAL ? 'SSH connection timeout' : 'Command execution timeout';
+    } else if (error.signal === 'SIGTERM') {
+      errorMessage = 'Command was terminated (timeout)';
     }
     
-    console.log('Command output:', stdout.trim());
-    return { success: true, output: stdout.trim() };
-  } catch (error: any) {
-    console.error('Command execution failed:', error);
     return { 
       success: false, 
       output: '', 
-      error: error.message || 'Command execution failed' 
+      error: errorMessage 
     };
   }
 }

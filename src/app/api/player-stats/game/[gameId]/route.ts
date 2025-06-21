@@ -45,7 +45,7 @@ export async function GET(
           video_description,
           video_thumbnail_url
         `)
-        .eq('linked_game_id', gameId);
+        .eq('game_id', gameId);
       
       if (linkedMatches && linkedMatches.length > 0) {
         const match = linkedMatches[0]; // Use first linked match
