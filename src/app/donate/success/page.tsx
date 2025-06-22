@@ -181,7 +181,7 @@ function DonateSuccessContent() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-blue-400">💝</span>
-                  <span className="text-gray-300">Thank you for helping keep Infantry Online thriving!</span>
+                  <span className="text-gray-300">Thank you for helping keep Free Infantry thriving!</span>
                 </div>
               </div>
             </div>
@@ -212,7 +212,7 @@ function DonateSuccessContent() {
 
             {/* Testimonial */}
             <div className="mt-8 text-gray-400 italic text-lg">
-              "Your support helps keep the Infantry Online community strong and growing. Every soldier counts!" 
+              "Your support helps keep the Free Infantry community strong and growing. Every soldier counts!" 
               <br />
               <span className="text-cyan-400 font-bold not-italic">- The Development Team</span>
             </div>

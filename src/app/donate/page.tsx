@@ -125,7 +125,7 @@ export default function DonatePage() {
             Support Our Community
           </h1>
           <p className="text-lg text-gray-300 max-w-3xl mx-auto leading-relaxed">
-            Help keep our Infantry Online servers running, support development of new features, 
+            Help keep our Free Infantry servers running, support development of new features, 
             and contribute to special community events. Every donation makes a difference!
           </p>
         </div>

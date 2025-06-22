@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CTFPL",
-  description: "Capture The Flag Premier League - Infantry Online competitive gaming platform",
+  description: "Capture The Flag Player's League - Free Infantry competitive gaming platform",
 };
 
 export default function RootLayout({

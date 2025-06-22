@@ -80,7 +80,7 @@ export default function Login() {
       {/* Header Section */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
         <div className="text-cyan-400 text-4xl font-bold tracking-wider mb-4">
-          INFANTRY ONLINE
+                          FREE INFANTRY
         </div>
         <h2 className="text-3xl font-bold text-cyan-400 mb-4 tracking-wider">
           🔐 Sign In

@@ -123,7 +123,7 @@ export default function GuidesPage() {
             <h3 className="text-2xl font-bold text-cyan-400 mb-4">🎮 Interactive Learning</h3>
             <p className="text-gray-300 leading-relaxed">
               Our guides feature scroll-triggered animations, interactive elements, and practical 
-              training exercises. Experience a new way to learn Infantry Online tactics!
+              training exercises. Experience a new way to learn Free Infantry tactics!
             </p>
           </div>
         </motion.div>

@@ -211,7 +211,7 @@ export default function Home() {
     },
     {
       title: "SUPPORT THE GAME",
-      subtitle: "Keep Infantry Online Running",
+      subtitle: "Keep Free Infantry Running",
       description: "💰 Donate to Support Development",
       highlight: "Make a Difference",
       color: "yellow",
@@ -1287,7 +1287,7 @@ export default function Home() {
                       <div className="text-6xl mb-4">🎬</div>
                       <div className="text-gray-500 text-lg mb-2">No featured videos yet</div>
                       <div className="text-gray-600 text-sm">
-                        Check back soon for the latest Infantry Online content!
+                        Check back soon for the latest Free Infantry content!
                       </div>
                     </div>
                   )}

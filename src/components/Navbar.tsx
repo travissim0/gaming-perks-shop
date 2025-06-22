@@ -959,6 +959,16 @@ export default function Navbar({ user }: { user: any }) {
                           Media
                         </Link>
                       )}
+                      {(isAdmin || isZoneAdmin) && (
+                        <Link 
+                          href="/admin/zones" 
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <span className="mr-3 text-orange-400">🖥️</span>
+                          Zone Management
+                        </Link>
+                      )}
                     </div>
                   </div>
                 )}

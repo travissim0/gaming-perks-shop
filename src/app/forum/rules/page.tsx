@@ -93,7 +93,7 @@ export default function ForumRulesPage() {
       },
       {
         title: "Stay On Topic",
-        content: "Keep discussions relevant to the forum category and Infantry Online. Off-topic posts may be moved or removed.",
+        content: "Keep discussions relevant to the forum category and Free Infantry. Off-topic posts may be moved or removed.",
         order_index: 2
       },
       {
@@ -138,7 +138,7 @@ export default function ForumRulesPage() {
       },
       {
         title: "Stay On Topic", 
-        content: "Keep discussions relevant to the forum category and Infantry Online. Off-topic posts may be moved or removed.",
+        content: "Keep discussions relevant to the forum category and Free Infantry. Off-topic posts may be moved or removed.",
         order_index: 2
       },
       {
@@ -321,7 +321,7 @@ export default function ForumRulesPage() {
                 📜 Community Guidelines
               </h2>
               <p className="text-gray-300 leading-relaxed">
-                Welcome to the Infantry Online forum community! These rules help ensure a positive experience for all members. 
+                Welcome to the Free Infantry forum community! These rules help ensure a positive experience for all members. 
                 By participating in our forums, you agree to follow these guidelines. Moderators reserve the right to 
                 take action against violations.
               </p>

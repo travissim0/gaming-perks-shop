@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import Navbar from '@/components/Navbar';
 
 interface Zone {
   name: string;
@@ -254,14 +255,15 @@ export default function ZoneManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-8">
-      <div className="max-w-7xl mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <Navbar user={user} />
+      <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
             Infantry Zone Management
           </h1>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-2">
             <p className="text-gray-400">
               Manage Infantry game zones remotely
             </p>
@@ -292,155 +294,212 @@ export default function ZoneManagementPage() {
         )}
 
         {/* Controls */}
-        <div className="mb-6 flex flex-wrap items-center gap-4">
-          {/* Filter */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-400">Filter:</label>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as 'all' | 'running' | 'stopped')}
-              className="bg-gray-800 border border-gray-600 text-white text-sm rounded px-3 py-1 focus:outline-none focus:border-cyan-500"
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-400">Filter:</label>
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as 'all' | 'running' | 'stopped')}
+                className="bg-gray-800 border border-gray-600 text-white text-sm rounded px-3 py-1 focus:outline-none focus:border-cyan-500"
+              >
+                <option value="all">All Zones</option>
+                <option value="running">Running Only</option>
+                <option value="stopped">Stopped Only</option>
+              </select>
+            </div>
+
+            {/* Refresh Button */}
+            <button
+              onClick={fetchZoneStatus}
+              disabled={loading}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
             >
-              <option value="all">All Zones</option>
-              <option value="running">Running Only</option>
-              <option value="stopped">Stopped Only</option>
-            </select>
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  🔄 Refresh
+                </>
+              )}
+            </button>
           </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={fetchZoneStatus}
-            disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                Refreshing...
-              </>
-            ) : (
-              <>
-                🔄 Refresh
-              </>
-            )}
-          </button>
-
           {/* Zone Count */}
-          <div className="text-sm text-gray-400 ml-auto">
+          <div className="text-sm text-gray-400 sm:ml-auto">
             Showing {sortedAndFilteredZones.length} of {Object.keys(zones).length} zones
           </div>
         </div>
 
-        {/* Zone Table */}
+        {/* Zone List */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-4 border-cyan-500 border-t-transparent"></div>
           </div>
         ) : sortedAndFilteredZones.length > 0 ? (
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 overflow-hidden">
-            {/* Table Header */}
-            <div className="bg-gray-700/50 border-b border-gray-600/30">
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 text-sm font-medium text-gray-300">
-                <button
-                  onClick={() => handleSort('name')}
-                  className="col-span-4 text-left hover:text-white transition-colors flex items-center gap-2"
-                >
-                  Zone Name {getSortIcon('name')}
-                </button>
-                <button
-                  onClick={() => handleSort('key')}
-                  className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
-                >
-                  Key {getSortIcon('key')}
-                </button>
-                <button
-                  onClick={() => handleSort('status')}
-                  className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
-                >
-                  Status {getSortIcon('status')}
-                </button>
-                <div className="col-span-4 text-center">Actions</div>
+          <>
+            {/* Desktop Table */}
+            <div className="hidden lg:block bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 overflow-hidden">
+              {/* Table Header */}
+              <div className="bg-gray-700/50 border-b border-gray-600/30">
+                <div className="grid grid-cols-12 gap-4 px-6 py-3 text-sm font-medium text-gray-300">
+                  <button
+                    onClick={() => handleSort('name')}
+                    className="col-span-4 text-left hover:text-white transition-colors flex items-center gap-2"
+                  >
+                    Zone Name {getSortIcon('name')}
+                  </button>
+                  <button
+                    onClick={() => handleSort('key')}
+                    className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
+                  >
+                    Key {getSortIcon('key')}
+                  </button>
+                  <button
+                    onClick={() => handleSort('status')}
+                    className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
+                  >
+                    Status {getSortIcon('status')}
+                  </button>
+                  <div className="col-span-4 text-center">Actions</div>
+                </div>
+              </div>
+
+              {/* Table Body */}
+              <div className="divide-y divide-gray-600/30">
+                {sortedAndFilteredZones.map((zone) => (
+                  <div
+                    key={zone.key}
+                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-700/30 transition-colors"
+                  >
+                    {/* Zone Name */}
+                    <div className="col-span-4 flex items-center">
+                      <div className="text-white font-medium truncate">{zone.name}</div>
+                    </div>
+
+                    {/* Zone Key */}
+                    <div className="col-span-2 flex items-center">
+                      <code className="text-cyan-300 text-sm bg-gray-900/50 px-2 py-1 rounded">
+                        {zone.key}
+                      </code>
+                    </div>
+
+                    {/* Status */}
+                    <div className="col-span-2 flex items-center">
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                        zone.status === 'RUNNING'
+                          ? 'bg-green-900/30 text-green-300 border border-green-500/30'
+                          : 'bg-red-900/30 text-red-300 border border-red-500/30'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          zone.status === 'RUNNING' ? 'bg-green-400' : 'bg-red-400'
+                        }`}></div>
+                        {zone.status}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="col-span-4 flex items-center justify-center gap-2">
+                      {/* Start Button */}
+                      <button
+                        onClick={() => executeZoneAction(zone.key, 'start')}
+                        disabled={zone.status === 'RUNNING' || actionLoading === `${zone.key}-start`}
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                      >
+                        {actionLoading === `${zone.key}-start` ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                        ) : (
+                          <>▶ Start</>
+                        )}
+                      </button>
+
+                      {/* Stop Button */}
+                      <button
+                        onClick={() => executeZoneAction(zone.key, 'stop')}
+                        disabled={zone.status === 'STOPPED' || actionLoading === `${zone.key}-stop`}
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                      >
+                        {actionLoading === `${zone.key}-stop` ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                        ) : (
+                          <>⏹ Stop</>
+                        )}
+                      </button>
+
+                      {/* Restart Button */}
+                      <button
+                        onClick={() => executeZoneAction(zone.key, 'restart')}
+                        disabled={actionLoading === `${zone.key}-restart`}
+                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                      >
+                        {actionLoading === `${zone.key}-restart` ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                        ) : (
+                          <>🔄 Restart</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Table Body */}
-            <div className="divide-y divide-gray-600/30">
+            {/* Mobile Card Layout */}
+            <div className="lg:hidden space-y-4">
               {sortedAndFilteredZones.map((zone) => (
                 <div
                   key={zone.key}
-                  className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-700/30 transition-colors"
+                  className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 p-4"
                 >
-                  {/* Zone Name */}
-                  <div className="col-span-4 flex items-center">
-                    <div className="text-white font-medium truncate">{zone.name}</div>
-                  </div>
-
-                  {/* Zone Key */}
-                  <div className="col-span-2 flex items-center">
-                    <code className="text-cyan-300 text-sm bg-gray-900/50 px-2 py-1 rounded">
-                      {zone.key}
-                    </code>
-                  </div>
-
-                  {/* Status */}
-                  <div className="col-span-2 flex items-center">
-                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                      zone.status === 'RUNNING'
-                        ? 'bg-green-900/30 text-green-300 border border-green-500/30'
-                        : 'bg-red-900/30 text-red-300 border border-red-500/30'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full ${
+                  {/* Zone Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      {/* Status Indicator */}
+                      <div className={`w-3 h-3 rounded-full ${
                         zone.status === 'RUNNING' ? 'bg-green-400' : 'bg-red-400'
                       }`}></div>
-                      {zone.status}
+                      <div>
+                        <h3 className="text-white font-medium truncate">{zone.name}</h3>
+                        <code className="text-cyan-300 text-xs bg-gray-900/50 px-1.5 py-0.5 rounded">
+                          {zone.key}
+                        </code>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="col-span-4 flex items-center justify-center gap-2">
-                    {/* Start Button */}
-                    <button
-                      onClick={() => executeZoneAction(zone.key, 'start')}
-                      disabled={zone.status === 'RUNNING' || actionLoading === `${zone.key}-start`}
-                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                  {/* Action Dropdown */}
+                  <div className="mt-3">
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          executeZoneAction(zone.key, e.target.value as 'start' | 'stop' | 'restart');
+                          e.target.value = ''; // Reset dropdown
+                        }
+                      }}
+                      disabled={actionLoading?.startsWith(zone.key)}
+                      className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-2 focus:outline-none focus:border-cyan-500 disabled:bg-gray-800 disabled:cursor-not-allowed"
                     >
-                      {actionLoading === `${zone.key}-start` ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
-                      ) : (
-                        <>▶ Start</>
+                      <option value="">
+                        {actionLoading?.startsWith(zone.key) ? 'Processing...' : 'Select Action'}
+                      </option>
+                      {zone.status === 'STOPPED' && (
+                        <option value="start">▶ Start Zone</option>
                       )}
-                    </button>
-
-                    {/* Stop Button */}
-                    <button
-                      onClick={() => executeZoneAction(zone.key, 'stop')}
-                      disabled={zone.status === 'STOPPED' || actionLoading === `${zone.key}-stop`}
-                      className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
-                    >
-                      {actionLoading === `${zone.key}-stop` ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
-                      ) : (
-                        <>⏹ Stop</>
+                      {zone.status === 'RUNNING' && (
+                        <option value="stop">⏹ Stop Zone</option>
                       )}
-                    </button>
-
-                    {/* Restart Button */}
-                    <button
-                      onClick={() => executeZoneAction(zone.key, 'restart')}
-                      disabled={actionLoading === `${zone.key}-restart`}
-                      className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
-                    >
-                      {actionLoading === `${zone.key}-restart` ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
-                      ) : (
-                        <>🔄 Restart</>
-                      )}
-                    </button>
+                      <option value="restart">🔄 Restart Zone</option>
+                    </select>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </>
+        
         ) : (
           <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-600/20">
             <div className="text-gray-400 text-lg mb-2">
@@ -456,7 +515,7 @@ export default function ZoneManagementPage() {
 
         {/* Quick Stats */}
         {!loading && Object.keys(zones).length > 0 && (
-          <div className="mt-6 grid grid-cols-3 gap-4">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-600/20 text-center">
               <div className="text-2xl font-bold text-white">{Object.keys(zones).length}</div>
               <div className="text-sm text-gray-400">Total Zones</div>

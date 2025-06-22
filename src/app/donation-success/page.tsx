@@ -116,7 +116,7 @@ function DonationSuccessContent() {
     if (!transaction) return;
 
     const receiptContent = `
-INFANTRY ONLINE DONATION RECEIPT
+                FREE INFANTRY DONATION RECEIPT
 ================================
 
 Transaction ID: ${transaction.id}
@@ -135,7 +135,7 @@ Product: ${transaction.product_name}
 Description: ${transaction.product_description || 'N/A'}
 ` : ''}
 
-Thank you for supporting Infantry Online!
+              Thank you for supporting Free Infantry!
 
 This receipt is for tax purposes. Please keep this record for your files.
 Generated on: ${new Date().toLocaleString()}
@@ -202,7 +202,7 @@ Generated on: ${new Date().toLocaleString()}
             <div className="text-8xl mb-6">🎉</div>
             <h1 className="text-4xl font-bold text-green-400 mb-4 tracking-wider">Thank you for your support!</h1>
             <p className="text-xl text-gray-300 mb-6">
-              Your donation helps keep Infantry Online running and supports ongoing development!
+              Your donation helps keep Free Infantry running and supports ongoing development!
             </p>
             <div className="text-cyan-400 font-mono text-lg">
               MISSION SUPPORT CONFIRMED

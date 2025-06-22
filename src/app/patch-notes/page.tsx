@@ -39,7 +39,7 @@ export default function PatchNotesPage() {
     fetchPatchNotes();
   }, []);
 
-  // Function to parse and highlight .nws content based on the Infantry Online in-game colors
+  // Function to parse and highlight .nws content based on the Free Infantry in-game colors
   const parseNWSContent = (content: string) => {
     const lines = content.split('\n');
     
@@ -47,7 +47,7 @@ export default function PatchNotesPage() {
       let className = 'text-green-400'; // Default bright green
       let processedLine = line;
 
-      // Parse Infantry Online .nws syntax based on in-game appearance
+      // Parse Free Infantry .nws syntax based on in-game appearance
       // Title/Header lines (like "OTF News") - Red/Orange
       if (line.includes('OTF News') || line.includes('News') && index < 5) {
         className = 'text-red-400 font-bold';
@@ -137,11 +137,11 @@ export default function PatchNotesPage() {
             <h3 className="text-2xl font-bold mb-4 text-cyan-400 tracking-wider">🎖️ MISSION INTEL</h3>
             <div className="space-y-4 text-gray-300">
               <p>
-                These tactical updates are automatically synchronized from the Infantry Online command center 
+                These tactical updates are automatically synchronized from the Free Infantry command center 
                 and contain real-time battlefield modifications and combat system enhancements.
               </p>
               <p>
-                The display format follows Infantry Online's native .nws protocol with color-coded 
+                The display format follows Free Infantry's native .nws protocol with color-coded 
                 classification levels and tactical formatting for optimal readability during combat operations.
               </p>
               <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 mt-4">

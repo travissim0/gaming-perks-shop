@@ -321,7 +321,7 @@ export default function SupportersPage() {
               Our Supporters
             </h1>
             <p className="text-sm text-gray-300 leading-relaxed">
-              Community members keeping Infantry Online running strong!
+              Community members keeping Free Infantry running strong!
             </p>
           </div>
         </div>
@@ -406,7 +406,7 @@ export default function SupportersPage() {
         <div className="bg-gradient-to-r from-red-900/20 to-pink-900/20 border border-red-500/30 rounded-xl p-4">
           <h3 className="text-lg font-bold text-white mb-2 text-center">Join the Community!</h3>
           <p className="text-sm text-gray-300 mb-4 text-center">
-            Help keep Infantry Online running strong
+            Help keep Free Infantry running strong
           </p>
           <div className="flex flex-col gap-2">
             <Link 

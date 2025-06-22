@@ -219,7 +219,7 @@ export default function CombatEngineerGuide() {
             >
               <h2 className="text-amber-400 font-bold mb-4">🎒 THE BACKBONE OF VICTORY</h2>
               <p className="text-amber-100 leading-relaxed">
-                The Combat Engineer is the unsung hero of Infantry Online. While others focus on kills, 
+                The Combat Engineer is the unsung hero of Free Infantry. While others focus on kills, 
                 you focus on victory. Your brown backpack carries the tools that can turn the tide of any battle.
               </p>
             </motion.div>

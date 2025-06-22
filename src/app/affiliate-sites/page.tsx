@@ -10,21 +10,21 @@ const affiliateSites = [
     name: 'Free Infantry',
     url: 'https://www.freeinfantry.com',
     image: '/images/sites/freeinfantrydotcom.png',
-    description: 'The main Infantry Online community hub featuring news, forums, downloads, and everything you need to get started playing Infantry Online.',
+          description: 'The main Free Infantry community hub featuring news, forums, downloads, and everything you need to get started playing Free Infantry.',
     tags: ['Community', 'Downloads', 'News']
   },
   {
     name: 'USL Zone',
     url: 'https://www.uslzone.com',
     image: '/images/sites/uslzone.png',
-    description: 'The United Squad League - Home of competitive Infantry Online leagues, tournaments, and organized team-based gameplay.',
+          description: 'The United Squad League - Home of competitive Free Infantry leagues, tournaments, and organized team-based gameplay.',
     tags: ['Competitive', 'Leagues', 'Teams']
   },
   {
     name: 'Infantry Archive',
     url: 'https://www.infantryarchive.com',
     image: '/images/sites/infantryarchive.png',
-    description: 'Preserving Infantry Online history with archived maps, mods, documentation, and memories from the game\'s rich past.',
+          description: 'Preserving Free Infantry history with archived maps, mods, documentation, and memories from the game\'s rich past.',
     tags: ['Archive', 'History', 'Maps']
   }
 ];
@@ -43,7 +43,7 @@ export default function AffiliateSitesPage() {
             Infantry Community Sites
           </h1>
           <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-            Explore the broader Infantry Online community through these essential websites that keep our game alive and thriving.
+            Explore the broader Free Infantry community through these essential websites that keep our game alive and thriving.
           </p>
         </div>
 
@@ -115,7 +115,7 @@ export default function AffiliateSitesPage() {
             Join the Infantry Community
           </h3>
           <p className="text-gray-300 mb-6 max-w-2xl mx-auto">
-            These sites work together to keep Infantry Online alive and growing. Each serves a unique purpose in our community ecosystem.
+            These sites work together to keep Free Infantry alive and growing. Each serves a unique purpose in our community ecosystem.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <span className="px-4 py-2 bg-green-500/20 text-green-300 rounded-full text-sm">
