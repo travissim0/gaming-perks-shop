@@ -98,7 +98,7 @@ export default function ZoneManagementPage() {
         return;
       }
 
-      const response = await fetch('/api/admin/zone-management?action=status-all', {
+      const response = await fetch('/api/admin/zone-database', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -166,7 +166,7 @@ export default function ZoneManagementPage() {
       const token = session?.access_token;
       if (!token) throw new Error('No auth token');
 
-      const response = await fetch('/api/admin/zone-management', {
+      const response = await fetch('/api/admin/zone-database', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
