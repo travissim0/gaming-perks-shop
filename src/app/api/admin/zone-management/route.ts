@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import { supabase } from '@/lib/supabase';
 
 const execAsync = promisify(exec);
 
-const supabase = createClient(
+const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
@@ -35,7 +36,7 @@ console.log('Zone Management Configuration:', {
 // Function to check if user is admin or zone admin
 async function isUserZoneAdmin(userId: string): Promise<boolean> {
   try {
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseClient
       .from('profiles')
       .select('is_admin, is_zone_admin')
       .eq('id', userId)
@@ -277,69 +278,58 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
 }
 
 // GET - Get zone status or list zones
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    // Check authentication
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Get current zone status
+    const { data: status, error } = await supabase
+      .from('zone_status')
+      .select('*')
+      .eq('id', 'current')
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows
+      console.error('Zone status query error:', error);
+      throw error;
     }
 
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (!status) {
+      return NextResponse.json({
+        success: false,
+        error: 'No zone status found. Check if zone-database-client.sh daemon is running.',
+        zones: {},
+        last_update: null,
+        hostname: null
+      });
+    }
+
+    // Check if status is stale (older than 60 seconds)
+    const lastUpdate = new Date(status.last_update);
+    const now = new Date();
+    const ageSeconds = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
     
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    if (ageSeconds > 60) {
+      return NextResponse.json({
+        success: false,
+        error: `Zone status is stale (${ageSeconds}s old). Check zone-database-client.sh daemon.`,
+        zones: status.zones_data || {},
+        last_update: status.last_update,
+        hostname: status.hostname,
+        age_seconds: ageSeconds
+      });
     }
 
-    // Check if user is admin or zone admin
-    if (!(await isUserZoneAdmin(user.id))) {
-      return NextResponse.json({ error: 'Zone admin access required' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const action = searchParams.get('action') || 'status-all';
-    const zone = searchParams.get('zone');
-
-    let command = `${SCRIPT_PATH} ${action}`;
-    if (zone && action !== 'status-all' && action !== 'list') {
-      command += ` ${zone}`;
-    }
-
-    const result = await executeCommand(command);
-    
-    if (!result.success) {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.error || 'Command execution failed' 
-      }, { status: 500 });
-    }
-
-    // Parse the output based on action
-    if (action === 'status-all') {
-      try {
-        const data = JSON.parse(result.output);
-        return NextResponse.json({ success: true, data });
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : String(e);
-        return NextResponse.json({ 
-          success: false, 
-          error: errorMessage 
-        }, { status: 500 });
-      }
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: result.output,
-      timestamp: new Date().toISOString()
+    return NextResponse.json({
+      success: true,
+      zones: status.zones_data || {},
+      last_update: status.last_update,
+      hostname: status.hostname,
+      age_seconds: ageSeconds
     });
-
   } catch (error) {
-    console.error('Zone management GET error:', error);
+    console.error('Zone status error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Internal server error' 
+      error: 'Failed to get zone status: ' + (error as Error).message 
     }, { status: 500 });
   }
 }
@@ -347,79 +337,43 @@ export async function GET(request: NextRequest) {
 // POST - Execute zone actions (start, stop, restart)
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    // Check if user is admin or zone admin
-    if (!(await isUserZoneAdmin(user.id))) {
-      return NextResponse.json({ error: 'Zone admin access required' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { action, zone } = body;
-
-    if (!action || !zone) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Action and zone are required' 
-      }, { status: 400 });
-    }
+    const { action, zone, admin_id } = await request.json();
 
     if (!['start', 'stop', 'restart'].includes(action)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid action. Must be start, stop, or restart' 
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
 
-    const command = `${SCRIPT_PATH} ${action} ${zone}`;
-    const result = await executeCommand(command);
-    
-    if (!result.success) {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.error || result.output || 'Command execution failed' 
-      }, { status: 500 });
+    if (!zone) {
+      return NextResponse.json({ success: false, error: 'Zone name required' }, { status: 400 });
     }
 
-    // Log the admin action
-    try {
-      await supabase
-        .from('admin_logs')
-        .insert({
-          admin_id: user.id,
-          action: `zone_${action}`,
-          details: `${action.toUpperCase()} zone: ${zone}`,
-          timestamp: new Date().toISOString()
-        });
-    } catch (logError) {
-      console.error('Failed to log admin action:', logError);
-      // Don't fail the request if logging fails
+    // Insert command for the daemon to pick up
+    const { data, error } = await supabase
+      .from('zone_commands')
+      .insert({
+        action,
+        zone,
+        admin_id: admin_id || null,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Zone command insert error:', error);
+      throw error;
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: result.output,
-      action,
-      zone,
-      timestamp: new Date().toISOString()
+    return NextResponse.json({
+      success: true,
+      command_id: data.id,
+      message: `${action} command queued for zone ${zone}`
     });
-
   } catch (error) {
-    console.error('Zone management POST error:', error);
+    console.error('Zone command error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Internal server error' 
+      error: 'Failed to queue command: ' + (error as Error).message 
     }, { status: 500 });
   }
 } 

@@ -82,27 +82,9 @@ export default function ZoneManagementPage() {
   // Fetch zone status
   const fetchZoneStatus = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      
-      console.log('Auth debug:', {
-        hasSession: !!session,
-        hasToken: !!token,
-        user: session?.user?.id,
-        tokenLength: token?.length
-      });
-      
-      if (!token) {
-        console.error('No auth token available');
-        setMessage({ type: 'error', text: 'Authentication required. Please log in again.' });
-        return;
-      }
+      // No authentication needed for the new API endpoint
 
-      const response = await fetch('/api/admin/zone-database', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await fetch('/api/admin/zone-management');
 
       console.log('API Response:', {
         status: response.status,
@@ -127,18 +109,13 @@ export default function ZoneManagementPage() {
         throw new Error(result.error || `Failed to fetch zone status (${response.status})`);
       }
       
-      console.log('Fetched zone data:', result.data);
+      console.log('Fetched zone data:', result.zones);
       
-      const zoneData: ZoneData = result.data;
+      const zoneData: ZoneData = result.zones || {};
       if (!zoneData) {
         console.error("zoneData is null or undefined", result);
         throw new Error("No zone data received from API.");
       }
-      const zonesArray = Object.entries(zoneData).map(([key, value]) => ({
-        key,
-        name: value.name,
-        status: value.status,
-      }));
 
       setZones(zoneData);
       setLastUpdated(new Date());
@@ -166,13 +143,12 @@ export default function ZoneManagementPage() {
       const token = session?.access_token;
       if (!token) throw new Error('No auth token');
 
-      const response = await fetch('/api/admin/zone-database', {
+      const response = await fetch('/api/admin/zone-management', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ action, zone: zoneKey }),
+        body: JSON.stringify({ action, zone: zoneKey, admin_id: session?.user?.id }),
       });
 
       const data = await response.json();
