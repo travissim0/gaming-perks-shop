@@ -63,14 +63,11 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
       // Use `bash -l -c` to ensure a login shell is used, which loads the environment.
       fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SERVER_USER}@${SERVER_HOST} "bash -l -c '${command}'"`;
     } else {
-      // Running on the server, execute directly
-      console.log('🖥️ Server mode - executing command with a login shell environment');
-      
-      // Use 'bash -l -c' to simulate a login shell, which loads the user's full environment.
-      // This can fix issues where scripts rely on environment variables set in .bashrc or .profile.
-      fullCommand = `bash -l -c "cd /root/Infantry/scripts && ${command}"`;
-      
-      // We don't need to set cwd or env here as bash -l -c will handle it.
+      // Running on the server, execute script directly (no SSH)
+      console.log('🖥️ Server mode - executing script directly');
+      fullCommand = `${command}`;
+      // If the script relies on being in its own directory, set cwd instead of using an inline cd
+      execOptions.cwd = '/root/Infantry/scripts';
     }
     
     console.log('📋 Executing command:', fullCommand);
