@@ -46,21 +46,38 @@ export default function ZoneManagementPage() {
 
   const checkAdminStatus = async () => {
     try {
-      const { data: profile } = await supabase
+      console.log('Checking admin status for user:', user?.id);
+      
+      const { data: profile, error } = await supabase
         .from('profiles')
-        .select('is_admin, is_zone_admin')
+        .select('is_admin, is_zone_admin, alias')
         .eq('id', user?.id)
         .single();
 
+      console.log('Profile query result:', { profile, error });
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        throw error;
+      }
+
       if (!profile?.is_admin && !profile?.is_zone_admin) {
+        console.log('Access denied - user is not admin or zone admin:', profile);
         toast.error('Access denied: Zone admin privileges required');
         router.push('/');
         return;
       }
 
+      console.log('Admin access granted:', {
+        alias: profile.alias,
+        is_admin: profile.is_admin,
+        is_zone_admin: profile.is_zone_admin
+      });
+      
       setHasAdminAccess(true);
     } catch (error) {
       console.error('Error checking admin status:', error);
+      toast.error('Error checking admin permissions');
       router.push('/');
     }
   };
@@ -70,7 +87,19 @@ export default function ZoneManagementPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) throw new Error('No auth token');
+      
+      console.log('Auth debug:', {
+        hasSession: !!session,
+        hasToken: !!token,
+        user: session?.user?.id,
+        tokenLength: token?.length
+      });
+      
+      if (!token) {
+        console.error('No auth token available');
+        setMessage({ type: 'error', text: 'Authentication required. Please log in again.' });
+        return;
+      }
 
       const response = await fetch('/api/admin/zone-management?action=status-all', {
         headers: {
@@ -78,17 +107,40 @@ export default function ZoneManagementPage() {
         },
       });
 
+      console.log('API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       const data = await response.json();
+      console.log('API Data:', data);
+      
+      if (response.status === 401) {
+        setMessage({ type: 'error', text: 'Authentication failed. Please log in again.' });
+        return;
+      }
+      
+      if (response.status === 403) {
+        setMessage({ type: 'error', text: 'Access denied. Zone admin privileges required.' });
+        return;
+      }
       
       if (data.success) {
         setZones(data.zones);
         setLastUpdated(new Date());
+        setMessage(null); // Clear any previous error messages
       } else {
         throw new Error(data.error || 'Failed to fetch zone status');
       }
     } catch (error) {
       console.error('Error fetching zone status:', error);
-      setMessage({ type: 'error', text: 'Failed to fetch zone status' });
+      if (error instanceof TypeError && error.message.includes('NetworkError')) {
+        setMessage({ type: 'error', text: 'Network error: Unable to connect to zone management service.' });
+      } else {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setMessage({ type: 'error', text: `Failed to fetch zone status: ${errorMessage}` });
+      }
     } finally {
       setLoading(false);
     }

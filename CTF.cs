@@ -7925,9 +7925,7 @@ private Player FindPlayerByAlias(string alias)
                     // Initialize tracking for new players if needed
                     if (!player.IsSpectator && !playerClassPlayTimes.ContainsKey(player))
                     {
-                        playerClassPlayTimes[player] = new Dictionary<string, int>();
-                        playerLastClassSwitch[player] = Environment.TickCount;
-                        playerClassSwaps[player] = 0;
+                        InitializePlayerClassTracking(player);
                     }
 
                     // We need to get the current skill name from the player's skills dictionary
@@ -8987,6 +8985,90 @@ private Player FindPlayerByAlias(string alias)
         private Dictionary<Player, int> playerClassSwaps = new Dictionary<Player, int>();
 
         /// <summary>
+        /// Enhanced method to initialize class tracking for players who are manually unspecced
+        /// This should be called whenever a player joins a team (including via mod commands)
+        /// </summary>
+        private void InitializePlayerClassTracking(Player player)
+        {
+            if (player == null || player.IsSpectator) return;
+            
+            // Skip if already initialized and player has existing class time data
+            if (playerClassPlayTimes.ContainsKey(player) && playerClassPlayTimes[player].Count > 0)
+                return;
+
+            // Initialize tracking dictionaries
+            if (!playerClassPlayTimes.ContainsKey(player))
+            {
+                playerClassPlayTimes[player] = new Dictionary<string, int>();
+            }
+            
+            if (!playerLastClassSwitch.ContainsKey(player))
+            {
+                playerLastClassSwitch[player] = Environment.TickCount;
+            }
+            
+            if (!playerClassSwaps.ContainsKey(player))
+            {
+                playerClassSwaps[player] = 0;
+            }
+
+            // Get the player's current class and initialize it with some time
+            string currentClass = GetPrimarySkillName(player);
+            if (currentClass != "Unknown" && !playerClassPlayTimes[player].ContainsKey(currentClass))
+            {
+                // Give them a small initial time (1 second) so they have a tracked class
+                playerClassPlayTimes[player][currentClass] = 1000; // 1 second in milliseconds
+            }
+        }
+
+        /// <summary>
+        /// Enhanced method to determine the most played class with better fallback logic
+        /// </summary>
+        private string GetMostPlayedClass(Player player)
+        {
+            if (player == null) return "Unknown";
+
+            string mostPlayedClass = "Unknown";
+            
+            // First priority: Use playerClassPlayTimes if available
+            if (playerClassPlayTimes.ContainsKey(player))
+            {
+                var playTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                
+                // Add current class time if player has one
+                string currentClass = GetPrimarySkillName(player);
+                if (currentClass != "Unknown")
+                {
+                    int currentTick = Environment.TickCount;
+                    int sessionTime = Math.Max(0, currentTick - (playerLastClassSwitch.ContainsKey(player) ? playerLastClassSwitch[player] : currentTick));
+                    
+                    if (!playTimes.ContainsKey(currentClass))
+                        playTimes[currentClass] = 0;
+                    playTimes[currentClass] += sessionTime;
+                }
+                
+                // Get the class with the most play time
+                if (playTimes.Any())
+                {
+                    var mostPlayed = playTimes.OrderByDescending(x => x.Value).First();
+                    // Only use this if they played it for at least 5 seconds
+                    if (mostPlayed.Value >= 5000) // 5 seconds minimum
+                    {
+                        mostPlayedClass = mostPlayed.Key;
+                    }
+                }
+            }
+            
+            // Fallback to current class if no significant play time recorded
+            if (mostPlayedClass == "Unknown")
+            {
+                mostPlayedClass = GetPrimarySkillName(player);
+            }
+            
+            return mostPlayedClass;
+        }
+
+        /// <summary>
         /// Triggered when a player's purchase is successful
         /// </summary>
         [Scripts.Event("Shop.SkillPurchase")]
@@ -9060,12 +9142,8 @@ private Player FindPlayerByAlias(string alias)
             if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
                 return;
 
-            // Initialize tracking for new players
-            if (!playerClassPlayTimes.ContainsKey(player))
-            {
-                playerClassPlayTimes[player] = new Dictionary<string, int>();
-                playerLastClassSwitch[player] = Environment.TickCount;
-            }
+            // Ensure player is initialized (handles manual unspec cases)
+            InitializePlayerClassTracking(player);
 
             // Get current time
             int currentTick = Environment.TickCount;
@@ -9076,8 +9154,8 @@ private Player FindPlayerByAlias(string alias)
             if (currentSkill != null)
             {
                 // Calculate time played in current session
-                int startTime = playerLastClassSwitch[player];
-                int sessionPlayTime = Math.Max(0, currentTick - startTime); // Ensure non-negative
+                int startTime = playerLastClassSwitch.ContainsKey(player) ? playerLastClassSwitch[player] : currentTick;
+                int sessionPlayTime = Math.Max(0, currentTick - startTime);
 
                 // Add session time to accumulated time for current skill
                 if (!playerClassPlayTimes[player].ContainsKey(currentSkill))
@@ -10146,6 +10224,15 @@ private Player FindPlayerByAlias(string alias)
                                 }
                             }
 
+                            // Check if this game had any meaningful turret damage
+                            bool hasSignificantTurretDamage = playerDamageStats.Values.Any(damage => damage > 0);
+                            
+                            if (!hasSignificantTurretDamage)
+                            {
+                                arena.sendArenaMessage("&Game stats not recorded - no turret damage detected (likely reset without gameplay)");
+                                return; // Don't process stats for games without turret damage
+                            }
+
                             // Cache the players list to avoid potential modification during iteration
                             var players = arena.Players.ToList();
                             foreach (Player p in players)
@@ -10154,21 +10241,21 @@ private Player FindPlayerByAlias(string alias)
                                 if (p == null || p.StatsLastGame == null || p._team == null) continue;
                                 if (!p._team._name.Contains(" T") && !p._team._name.Contains(" C")) continue;
 
+                                // Use the enhanced most played class detection
+                                string mainClass = GetMostPlayedClass(p);
+                                
                                 // Skip players with Dueler class
-                                string mainClass = "Unknown";
-                                if (playerClassPlayTimes.ContainsKey(p))
-                                {
-                                    var playTimes = playerClassPlayTimes[p];
-                                    if (playTimes.Any())
-                                    {
-                                        mainClass = playTimes.OrderByDescending(x => x.Value).First().Key;
-                                    }
-                                }
-                                if (mainClass == "Unknown")
-                                {
-                                    mainClass = GetPrimarySkillName(p);
-                                }
                                 if (mainClass == "Dueler") continue;
+
+                                // Only include players who have some recorded play time or turret damage
+                                int turretDamage = playerDamageStats.ContainsKey(p._id) ? playerDamageStats[p._id] : 0;
+                                bool hasPlayTime = playerClassPlayTimes.ContainsKey(p) && playerClassPlayTimes[p].Values.Sum() > 5000; // At least 5 seconds
+                                
+                                // Skip players who didn't really participate (no turret damage and minimal play time)
+                                if (turretDamage == 0 && !hasPlayTime)
+                                {
+                                    continue;
+                                }
 
                                 ctfPlayerProxy.player = p;
                                 double gameLengthMinutes = (arena._tickGameEnded - arena._tickGameStarted) / (1000.0 * 60.0);
@@ -10241,7 +10328,6 @@ private Player FindPlayerByAlias(string alias)
                                     }
                                 }
 
-                                int turretDamage = playerDamageStats.ContainsKey(p._id) ? playerDamageStats[p._id] : 0;
                                 int classSwaps = playerClassSwaps.ContainsKey(p) ? playerClassSwaps[p] : 0;
 
                                 // Calculate Accuracy - get best weapon accuracy for this player
@@ -10351,11 +10437,18 @@ private Player FindPlayerByAlias(string alias)
                                             Console.WriteLine(string.Format("Error in async player stats submission: {0}", asyncEx.Message));
                                         }
                                     });
+                                    
+                                    arena.sendArenaMessage(string.Format("&Game stats recorded for {0} players with turret damage validation", playerStatsForWeb.Count));
                                 }
                                 catch (Exception ex)
                                 {
+                                    arena.sendArenaMessage("&Error processing game stats: " + ex.Message);
                                     Console.WriteLine(string.Format("Error initiating player stats submission: {0}", ex.Message));
                                 }
+                            }
+                            else
+                            {
+                                arena.sendArenaMessage("&No valid player stats to record (no turret damage or significant play time)");
                             }
                         }
                     }
@@ -12553,6 +12646,9 @@ private Player FindPlayerByAlias(string alias)
                 temp.lastUsedWepTick = -1;
                 killStreaks.Add(player._alias, temp);
             }
+
+            // Initialize class tracking for manually unspecced players
+            InitializePlayerClassTracking(player);
 
             if (currentEventType == EventType.SUT)
             {

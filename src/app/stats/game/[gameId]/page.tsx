@@ -314,7 +314,7 @@ export default function GameStatsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-2 py-4">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -387,13 +387,13 @@ export default function GameStatsPage() {
 
         {/* Dynamic Layout Based on View Mode */}
         {viewMode === 'theater' && gameData.videoInfo?.has_video ? (
-          /* THEATER MODE - Full width video with minimal sidebar */
-          <div className="space-y-6">
-            {/* Video Section - Full Width */}
+          /* THEATER MODE - Video left, compact sidebar right */
+          <div className="grid grid-cols-1 lg:grid-cols-6 gap-1">
+            {/* Video Section - Takes up 3/4 of the width */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full"
+                              className="lg:col-span-5"
             >
               <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
                 {/* Video Header */}
@@ -517,56 +517,49 @@ export default function GameStatsPage() {
               </div>
             </motion.div>
 
-            {/* Theater Mode - Team Summary with All Players */}
+                        {/* Theater Mode - Compact Right Sidebar */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-1 md:grid-cols-2 gap-6"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="lg:col-span-1 space-y-2"
             >
               {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => {
                 const winStatus = defense.length > 0 ? getPlayerWinStatus(defense[0]) : 
                                  offense.length > 0 ? getPlayerWinStatus(offense[0]) : 'unknown';
                 
                 return (
-                  <div key={team} className="bg-white/10 backdrop-blur-lg rounded-xl p-5 border border-white/20">
-                    {/* Team Header */}
-                    <div className="text-center mb-6 relative">
-                      <h3 className="text-3xl font-bold mb-4" style={{ color: getTeamColor(team) }}>
-                        {team}
-                      </h3>
-                      {winStatus !== 'unknown' && (
-                        <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
-                                        px-8 py-4 rounded-2xl text-4xl font-black border-4 backdrop-blur-sm ${
-                          winStatus === 'win' 
-                            ? 'bg-green-500/30 text-green-200 border-green-400/50 shadow-green-500/30' 
-                            : 'bg-red-500/30 text-red-200 border-red-400/50 shadow-red-500/30'
-                        } shadow-2xl`}>
-                          {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
-                        </div>
-                      )}
-                    </div>
-
+                  <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-2 border border-white/20">
                     {/* Defense Players */}
                     {defense.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-center justify-center mb-3">
-                          <span className="bg-blue-500/20 text-blue-300 px-4 py-2 rounded-lg text-lg font-semibold">
+                      <div className="mb-2">
+                        {/* WIN/LOSS and Defense on same line */}
+                        <div className="flex justify-between items-center mb-1">
+                          {winStatus !== 'unknown' && (
+                            <div className={`px-2 py-1 rounded text-lg font-black ${
+                              winStatus === 'win' 
+                                ? 'bg-green-500/40 text-green-100' 
+                                : 'bg-red-500/40 text-red-100'
+                            }`}>
+                              {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
+                            </div>
+                          )}
+                          <span className="bg-blue-500/30 text-blue-200 px-2 py-1 rounded text-lg font-semibold">
                             🛡️ Defense
                           </span>
                         </div>
                         <div className="space-y-1">
                           {defense.map((player) => (
-                            <div key={player.id} className="flex items-center justify-between text-sm bg-blue-500/10 rounded p-2">
-                              <div className="flex items-center gap-2">
+                            <div key={player.id} className="bg-blue-500/10 rounded p-1">
+                              <div className="flex items-center justify-between">
                                 <span 
-                                  className="font-medium"
+                                  className="font-medium text-lg truncate"
                                   style={getClassColorStyle(player.main_class || '')}
+                                  title={`${player.player_name} (${player.main_class})`}
                                 >
                                   {player.player_name}
                                 </span>
-                                <span className="text-xs text-gray-400">({player.main_class})</span>
+                                <span className="text-gray-300 text-lg ml-1">{player.kills}K/{player.deaths}D</span>
                               </div>
-                              <span className="text-gray-400 text-xs">{player.kills}K/{player.deaths}D</span>
                             </div>
                           ))}
                         </div>
@@ -576,31 +569,39 @@ export default function GameStatsPage() {
                     {/* Offense Players */}
                     {offense.length > 0 && (
                       <div>
-                        <div className="flex items-center justify-center mb-3">
-                          <span className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-lg font-semibold">
+                        {/* WIN/LOSS and Offense on same line */}
+                        <div className="flex justify-between items-center mb-1">
+                          {winStatus !== 'unknown' && defense.length === 0 && (
+                            <div className={`px-2 py-1 rounded text-lg font-black ${
+                              winStatus === 'win' 
+                                ? 'bg-green-500/40 text-green-100' 
+                                : 'bg-red-500/40 text-red-100'
+                            }`}>
+                              {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
+                            </div>
+                          )}
+                          <span className="bg-red-500/30 text-red-200 px-2 py-1 rounded text-lg font-semibold ml-auto">
                             ⚔️ Offense
                           </span>
                         </div>
                         <div className="space-y-1">
                           {offense.map((player) => (
-                            <div key={player.id} className="flex items-center justify-between text-sm bg-red-500/10 rounded p-2">
-                              <div className="flex items-center gap-2">
+                            <div key={player.id} className="bg-red-500/10 rounded p-1">
+                              <div className="flex items-center justify-between">
                                 <span 
-                                  className="font-medium"
+                                  className="font-medium text-lg truncate"
                                   style={getClassColorStyle(player.main_class || '')}
+                                  title={`${player.player_name} (${player.main_class})`}
                                 >
                                   {player.player_name}
                                 </span>
-                                <span className="text-xs text-gray-400">({player.main_class})</span>
+                                <span className="text-gray-300 text-lg ml-1">{player.kills}K/{player.deaths}D</span>
                               </div>
-                              <span className="text-gray-400 text-xs">{player.kills}K/{player.deaths}D</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
-
-
                   </div>
                 );
               })}

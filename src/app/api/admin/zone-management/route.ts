@@ -52,7 +52,10 @@ async function isUserZoneAdmin(userId: string): Promise<boolean> {
 async function executeCommand(command: string): Promise<{ success: boolean; output: string; error?: string }> {
   try {
     let fullCommand: string;
-    let execOptions: any = { timeout: 30000 };
+    let execOptions: any = { 
+      timeout: 30000,
+      env: { ...process.env } // Inherit all environment variables
+    };
     
     if (IS_LOCAL) {
       // Running locally, use SSH to connect to remote server
@@ -61,12 +64,18 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
     } else {
       // Running on the server, execute directly
       console.log('🖥️ Server mode - executing command directly');
-      fullCommand = command;
-      execOptions.cwd = '/root/Infantry/scripts';
+      
+      // Use bash explicitly and set proper working directory
+      fullCommand = `bash -c "${command}"`;
+      execOptions.cwd = '/root/Infantry'; // Set to Infantry root, not scripts directory
+      
+      // Ensure script has execute permissions
+      execOptions.env.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+      execOptions.env.HOME = '/root';
     }
     
     console.log('📋 Executing command:', fullCommand);
-    console.log('⚙️ Exec options:', execOptions);
+    console.log('⚙️ Exec options:', JSON.stringify(execOptions, null, 2));
     
     const { stdout, stderr } = await execAsync(fullCommand, execOptions);
     
@@ -76,13 +85,30 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
     const stderrStr = stderr.toString();
     const stdoutStr = stdout.toString();
     
-    if (stderrStr && !stderrStr.includes('Warning:') && !stderrStr.includes('Pseudo-terminal') && !stderrStr.includes('Connection')) {
+    // Only treat stderr as error if it contains actual error messages
+    if (stderrStr && !stderrStr.includes('Warning:') && 
+        !stderrStr.includes('Pseudo-terminal') && 
+        !stderrStr.includes('Connection') &&
+        !stderrStr.includes('Permanently added') &&
+        stderrStr.trim().length > 0) {
       console.error('❌ Command stderr (treated as error):', stderrStr);
       return { success: false, output: '', error: stderrStr };
     }
     
     const output = stdoutStr.trim();
     console.log('✅ Command completed successfully, output length:', output.length);
+    
+    // Validate that we got JSON output for status-all commands
+    if (command.includes('status-all') && output.length > 0) {
+      try {
+        JSON.parse(output);
+        console.log('✅ Valid JSON output confirmed');
+      } catch (parseError) {
+        console.error('❌ Invalid JSON output:', output.substring(0, 200));
+        return { success: false, output: '', error: 'Script returned invalid JSON' };
+      }
+    }
+    
     return { success: true, output };
   } catch (error: any) {
     console.error('💥 Command execution failed:', {
@@ -100,8 +126,8 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
       errorMessage = IS_LOCAL ? 'SSH command not found or SSH key invalid' : 'Script not found on server';
     } else if (error.code === 'ETIMEDOUT') {
       errorMessage = IS_LOCAL ? 'SSH connection timeout' : 'Command execution timeout';
-    } else if (error.signal === 'SIGTERM') {
-      errorMessage = 'Command was terminated (timeout)';
+    } else if (error.signal === 'SIGTERM' || error.signal === 'SIGINT') {
+      errorMessage = 'Command was terminated (likely timeout or permission issue)';
     }
     
     return { 
