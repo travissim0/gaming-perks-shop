@@ -53,29 +53,27 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
   try {
     let fullCommand: string;
     let execOptions: any = { 
-      timeout: 30000,
+      timeout: 60000,
       env: { ...process.env } // Inherit all environment variables
     };
     
     if (IS_LOCAL) {
       // Running locally, use SSH to connect to remote server
       console.log('🔗 Local/SSH mode - connecting to', SERVER_HOST);
-      fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SERVER_USER}@${SERVER_HOST} "${command}"`;
+      // Use `bash -l -c` to ensure a login shell is used, which loads the environment.
+      fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SERVER_USER}@${SERVER_HOST} "bash -l -c '${command}'"`;
     } else {
       // Running on the server, execute directly
-      console.log('🖥️ Server mode - executing command directly');
+      console.log('🖥️ Server mode - executing command with a login shell environment');
       
-      // Use bash explicitly and set proper working directory
-      fullCommand = `bash -c "${command}"`;
-      execOptions.cwd = '/root/Infantry'; // Set to Infantry root, not scripts directory
+      // Use 'bash -l -c' to simulate a login shell, which loads the user's full environment.
+      // This can fix issues where scripts rely on environment variables set in .bashrc or .profile.
+      fullCommand = `bash -l -c "cd /root/Infantry/scripts && ${command}"`;
       
-      // Ensure script has execute permissions
-      execOptions.env.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
-      execOptions.env.HOME = '/root';
+      // We don't need to set cwd or env here as bash -l -c will handle it.
     }
     
     console.log('📋 Executing command:', fullCommand);
-    console.log('⚙️ Exec options:', JSON.stringify(execOptions, null, 2));
     
     const { stdout, stderr } = await execAsync(fullCommand, execOptions);
     
@@ -180,12 +178,13 @@ export async function GET(request: NextRequest) {
     // Parse the output based on action
     if (action === 'status-all') {
       try {
-        const zones = JSON.parse(result.output);
-        return NextResponse.json({ success: true, zones });
-      } catch (parseError) {
+        const data = JSON.parse(result.output);
+        return NextResponse.json({ success: true, data });
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
         return NextResponse.json({ 
           success: false, 
-          error: 'Failed to parse zone status' 
+          error: errorMessage 
         }, { status: 500 });
       }
     }
