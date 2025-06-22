@@ -136,7 +136,7 @@ export default function Navbar({ user }: { user: any }) {
         setIsAdmin(profile?.is_admin || false);
         setIsCtfAdmin(profile?.is_admin || profile?.ctf_role === 'ctf_admin');
         setIsMediaManager(profile?.is_media_manager || false);
-        setIsZoneAdmin(profile?.is_zone_admin || false);
+        setIsZoneAdmin(profile?.is_admin || profile?.is_zone_admin || profile?.ctf_role === 'ctf_admin' || profile?.ctf_role === 'ctf_head_referee');
         setIsSiteAdmin(profile?.site_admin || false);
         setUserAvatar(profile?.avatar_url || null);
         
@@ -191,12 +191,16 @@ export default function Navbar({ user }: { user: any }) {
           const newDonation = payload.new as any;
           setDonationNotifications(prev => [newDonation, ...prev.slice(0, 4)]);
           
-          // Show browser notification if permission granted
+          // Show browser notification if permission granted and supported
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('New Donation!', {
-              body: `$${newDonation.amount} from ${newDonation.donor_name || 'Anonymous'}`,
-              icon: '/favicon.ico'
-            });
+            try {
+              new Notification('New Donation!', {
+                body: `$${newDonation.amount} from ${newDonation.donor_name || 'Anonymous'}`,
+                icon: '/favicon.ico'
+              });
+            } catch (error) {
+              console.warn('Notification not supported on this platform:', error);
+            }
           }
         }
       )
@@ -228,20 +232,28 @@ export default function Navbar({ user }: { user: any }) {
           
           setOrderNotifications(prev => [orderWithProfile, ...prev.slice(0, 4)]);
           
-          // Show browser notification if permission granted
+          // Show browser notification if permission granted and supported
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('New Order!', {
-              body: `$${newOrder.amount} from ${profile?.in_game_alias || 'User'}`,
-              icon: '/favicon.ico'
-            });
+            try {
+              new Notification('New Order!', {
+                body: `$${newOrder.amount} from ${profile?.in_game_alias || 'User'}`,
+                icon: '/favicon.ico'
+              });
+            } catch (error) {
+              console.warn('Notification not supported on this platform:', error);
+            }
           }
         }
       )
       .subscribe();
 
-    // Request notification permission
+    // Request notification permission if supported
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+      try {
+        Notification.requestPermission();
+      } catch (error) {
+        console.warn('Notification permission request not supported on this platform:', error);
+      }
     }
 
     return () => {
@@ -575,58 +587,63 @@ export default function Navbar({ user }: { user: any }) {
               </Link>
 
               {/* Admin Functions Dropdown */}
-              {(isAdmin || isCtfAdmin || isMediaManager) && (
+              {(isAdmin || isCtfAdmin || isMediaManager || isZoneAdmin) && (
                 <div className="group relative">
-                  <button className="flex items-center space-x-1 px-3 py-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold rounded-lg transition-all duration-300 border border-red-500/30 group-hover:shadow-lg group-hover:shadow-red-500/20">
+                  <button className="flex items-center space-x-1 px-2 py-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold rounded-lg transition-all duration-300 border border-red-500/30 group-hover:shadow-lg group-hover:shadow-red-500/20">
                     <span>⚙️</span>
-                    <span>Admin</span>
+                    <span className="hidden sm:inline">Admin</span>
                     <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
                   
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                  <div className="absolute right-0 top-full mt-1 w-32 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
                     <div className="py-2">
                       {isAdmin && (
                         <Link 
                           href="/admin"
-                          className="flex items-center px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-red-400 text-sm font-medium"
+                          className="flex items-center px-2 py-1.5 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-red-400 text-xs font-medium"
+                          title="Site Administration"
                         >
                           <span className="mr-2 text-red-400">🛡️</span>
-                          <span>Full Admin</span>
+                          <span>Site</span>
                         </Link>
                       )}
                       {isSiteAdmin && !isAdmin && (
                         <Link 
                           href="/site-admin"
-                          className="flex items-center px-3 py-2 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-sm font-medium"
+                          className="flex items-center px-2 py-1.5 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-xs font-medium"
+                          title="Site Administration"
                         >
                           <span className="mr-2 text-blue-400">👤</span>
-                          <span>Site Admin</span>
+                          <span>Site</span>
                         </Link>
                       )}
                       {(isAdmin || isZoneAdmin) && (
                         <Link 
                           href="/admin/zones"
-                          className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-sm font-medium"
+                          className="flex items-center px-2 py-1.5 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-xs font-medium"
+                          title="Zone Management"
                         >
                           <span className="mr-2 text-orange-400">🖥️</span>
-                          <span>Zone Control</span>
+                          <span>Zones</span>
                         </Link>
                       )}
                       {isCtfAdmin && (
                         <Link 
                           href="/admin/ctf"
-                          className="flex items-center px-3 py-2 text-gray-300 hover:text-indigo-400 hover:bg-gradient-to-r hover:from-indigo-600/10 hover:to-indigo-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-indigo-400 text-sm font-medium"
+                          className="flex items-center px-2 py-1.5 text-gray-300 hover:text-indigo-400 hover:bg-gradient-to-r hover:from-indigo-600/10 hover:to-indigo-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-indigo-400 text-xs font-medium"
+                          title="CTF Administration"
                         >
                           <span className="mr-2 text-indigo-400">⚔️</span>
-                          <span>CTF Admin</span>
+                          <span>CTF</span>
                         </Link>
                       )}
                       {(isAdmin || isMediaManager || isSiteAdmin) && (
                         <Link 
                           href="/admin/videos"
-                          className="flex items-center px-3 py-2 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-pink-400 text-sm font-medium"
+                          className="flex items-center px-2 py-1.5 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-pink-400 text-xs font-medium"
+                          title="Media Management"
                         >
                           <span className="mr-2 text-pink-400">🎬</span>
                           <span>Media</span>
@@ -644,9 +661,9 @@ export default function Navbar({ user }: { user: any }) {
                   className="flex items-center space-x-2 p-1.5 hover:bg-gray-800/50 rounded-lg transition-colors"
                 >
                   {userAvatar ? (
-                    <img src={userAvatar} alt="Avatar" className="w-14 h-14 rounded-full" />
+                    <img src={userAvatar} alt="Avatar" className="w-12 h-12 sm:w-14 sm:h-14 rounded-full" />
                   ) : (
-                    <div className="w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
                       <span className="text-white text-xs font-bold">
                         {user.email?.charAt(0).toUpperCase()}
                       </span>
@@ -701,6 +718,121 @@ export default function Navbar({ user }: { user: any }) {
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Compact Navigation Bar */}
+      <div className="md:hidden border-t border-gray-700/50">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between py-2 overflow-x-auto">
+            {/* Squads */}
+            <div className="group relative">
+              <button className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-green-600/20 hover:to-emerald-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap">
+                <Gamepad2 className="w-3 h-3" />
+                <span className="font-medium">Squads</span>
+                <svg className="w-2 h-2 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-2">
+                  {squadsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="group relative">
+              <button className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-blue-600/20 hover:to-indigo-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap">
+                <BarChart3 className="w-3 h-3" />
+                <span className="font-medium">Stats</span>
+                <svg className="w-2 h-2 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-2">
+                  {statsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Community */}
+            <div className="group relative">
+              <button className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap">
+                <Users className="w-3 h-3" />
+                <span className="font-medium">Community</span>
+                <svg className="w-2 h-2 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-2">
+                  {communityNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Misc */}
+            <div className="group relative">
+              <button className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap">
+                <span className="text-sm">🔧</span>
+                <span className="font-medium">Misc</span>
+                <svg className="w-2 h-2 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[100] backdrop-blur-sm">
+                <div className="py-2">
+                  {miscNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 text-xs"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -925,7 +1057,7 @@ export default function Navbar({ user }: { user: any }) {
                 </div>
 
                 {/* Admin Section - Mobile */}
-                {(isAdmin || isCtfAdmin || isMediaManager) && (
+                {(isAdmin || isCtfAdmin || isMediaManager || isZoneAdmin) && (
                   <div>
                     <h4 className="text-sm font-medium text-red-400 uppercase tracking-wider mb-2">⚙️ Admin Functions</h4>
                     <div className="space-y-1">
@@ -968,6 +1100,42 @@ export default function Navbar({ user }: { user: any }) {
                           <span className="mr-3 text-orange-400">🖥️</span>
                           Zone Management
                         </Link>
+                      )}
+                      {isAdmin && (
+                        <>
+                          <Link 
+                            href="/admin/users" 
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center px-3 py-2 text-gray-300 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                          >
+                            <span className="mr-3 text-blue-400">👥</span>
+                            Users
+                          </Link>
+                          <Link 
+                            href="/admin/squads" 
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center px-3 py-2 text-gray-300 hover:text-green-400 hover:bg-gray-700 rounded transition-colors"
+                          >
+                            <span className="mr-3 text-green-400">🛡️</span>
+                            Squads
+                          </Link>
+                          <Link 
+                            href="/admin/news" 
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
+                          >
+                            <span className="mr-3 text-yellow-400">📰</span>
+                            News
+                          </Link>
+                          <Link 
+                            href="/admin/donations" 
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center px-3 py-2 text-gray-300 hover:text-emerald-400 hover:bg-gray-700 rounded transition-colors"
+                          >
+                            <span className="mr-3 text-emerald-400">💰</span>
+                            Donations
+                          </Link>
+                        </>
                       )}
                     </div>
                   </div>

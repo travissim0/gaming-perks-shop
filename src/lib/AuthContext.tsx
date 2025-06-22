@@ -265,24 +265,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
-      console.log('📝 Signing up...');
+      console.log('📝 Signing up...', { email, aliasLength: inGameAlias.length });
+      
+      // Enhanced validation for mobile
+      if (!email || !email.includes('@')) {
+        throw new Error('Please enter a valid email address');
+      }
+      
+      if (!inGameAlias || inGameAlias.length < 2) {
+        throw new Error('Username must be at least 2 characters');
+      }
+      
+      if (!password || password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
       
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
-            in_game_alias: inGameAlias,
+            in_game_alias: inGameAlias.trim(),
           },
         },
       });
 
       if (signUpError) {
         console.error('❌ Sign up error:', signUpError.message);
-        const errorMessage = signUpError.message || 'Failed to create account';
+        
+        // Enhanced error handling for mobile
+        let errorMessage = signUpError.message || 'Failed to create account';
+        
+        if (errorMessage.includes('User already registered')) {
+          errorMessage = 'An account with this email already exists. Please sign in instead.';
+        } else if (errorMessage.includes('Invalid email')) {
+          errorMessage = 'Please enter a valid email address';
+        } else if (errorMessage.includes('Password')) {
+          errorMessage = 'Password is too weak. Please choose a stronger password.';
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        }
+        
         setError(errorMessage);
-        toast.error(errorMessage);
-        throw signUpError;
+        throw new Error(errorMessage);
       }
 
       console.log('✅ Sign up successful');
@@ -290,22 +317,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Create profile synchronously to ensure it exists before success
       if (data.user) {
         try {
-          await createUserProfile(data.user, inGameAlias, avatarUrl);
+          await createUserProfile(data.user, inGameAlias.trim(), avatarUrl);
           console.log('✅ Profile created successfully for:', data.user.email);
-          toast.success('Account created successfully!');
         } catch (profileError: any) {
           console.error('❌ Profile creation failed:', profileError);
-          toast.error('Account created but profile setup incomplete. Please try signing in.');
+          // Don't throw here - account was created successfully
+          console.warn('Account created but profile setup incomplete. User can complete setup later.');
         }
-      } else {
-        toast.success('Account created successfully!');
       }
 
       return data;
     } catch (error: any) {
       const message = error.message || 'Failed to create account';
       setError(message);
-      toast.error(message);
+      console.error('Sign up failed:', message);
       throw error;
     } finally {
       setLoading(false);

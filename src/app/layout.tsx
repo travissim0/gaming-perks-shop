@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
@@ -18,6 +18,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CTFPL",
   description: "Capture The Flag Player's League - Free Infantry competitive gaming platform",
+  other: {
+    'format-detection': 'telephone=no',
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -27,12 +37,39 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthErrorBoundary>
           <AuthProvider>
-            <Toaster position="top-right" />
+            <Toaster 
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#374151',
+                  color: '#fff',
+                  fontSize: '14px',
+                  maxWidth: '90vw',
+                },
+                success: {
+                  style: {
+                    background: '#059669',
+                  },
+                },
+                error: {
+                  style: {
+                    background: '#dc2626',
+                  },
+                },
+              }}
+            />
             {children}
           </AuthProvider>
         </AuthErrorBoundary>
