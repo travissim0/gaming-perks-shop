@@ -50,7 +50,7 @@ export default function ZoneManagementPage() {
       
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('is_admin, is_zone_admin, alias')
+        .select('is_admin, is_zone_admin, in_game_alias')
         .eq('id', user?.id)
         .single();
 
@@ -69,7 +69,7 @@ export default function ZoneManagementPage() {
       }
 
       console.log('Admin access granted:', {
-        alias: profile.alias,
+        in_game_alias: profile.in_game_alias,
         is_admin: profile.is_admin,
         is_zone_admin: profile.is_zone_admin
       });
