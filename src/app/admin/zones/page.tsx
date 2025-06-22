@@ -61,20 +61,17 @@ export default function ZoneManagementPage() {
         throw error;
       }
 
-      if (!profile?.is_admin && !profile?.is_zone_admin) {
+      const hasAccess = profile?.is_admin || profile?.is_zone_admin;
+      setHasAdminAccess(hasAccess || false);
+      console.log('Zone Admin Check:', { hasAccess, profileData: profile });
+
+      if (hasAccess) {
+        await fetchZoneStatus();
+      } else {
         console.log('Access denied - user is not admin or zone admin:', profile);
         toast.error('Access denied: Zone admin privileges required');
         router.push('/');
-        return;
       }
-
-      console.log('Admin access granted:', {
-        in_game_alias: profile.in_game_alias,
-        is_admin: profile.is_admin,
-        is_zone_admin: profile.is_zone_admin
-      });
-      
-      setHasAdminAccess(true);
     } catch (error) {
       console.error('Error checking admin status:', error);
       toast.error('Error checking admin permissions');
@@ -113,8 +110,8 @@ export default function ZoneManagementPage() {
         ok: response.ok
       });
 
-      const data = await response.json();
-      console.log('API Data:', data);
+      const result = await response.json();
+      console.log('Raw API response:', result);
       
       if (response.status === 401) {
         setMessage({ type: 'error', text: 'Authentication failed. Please log in again.' });
@@ -126,13 +123,26 @@ export default function ZoneManagementPage() {
         return;
       }
       
-      if (data.success) {
-        setZones(data.zones);
-        setLastUpdated(new Date());
-        setMessage(null); // Clear any previous error messages
-      } else {
-        throw new Error(data.error || 'Failed to fetch zone status');
+      if (!response.ok) {
+        throw new Error(result.error || `Failed to fetch zone status (${response.status})`);
       }
+      
+      console.log('Fetched zone data:', result.data);
+      
+      const zoneData: ZoneData = result.data;
+      if (!zoneData) {
+        console.error("zoneData is null or undefined", result);
+        throw new Error("No zone data received from API.");
+      }
+      const zonesArray = Object.entries(zoneData).map(([key, value]) => ({
+        key,
+        name: value.name,
+        status: value.status,
+      }));
+
+      setZones(zoneData);
+      setLastUpdated(new Date());
+      setMessage(null); // Clear any previous error messages
     } catch (error) {
       console.error('Error fetching zone status:', error);
       if (error instanceof TypeError && error.message.includes('NetworkError')) {
