@@ -20,7 +20,7 @@ const IS_LOCAL = process.env.NODE_ENV === 'development' ||
 const SERVER_HOST = process.env.INFANTRY_SERVER_HOST || 'linux-1.freeinfantry.com';
 const SERVER_USER = process.env.INFANTRY_SERVER_USER || 'root';
 const SSH_KEY_PATH = process.env.INFANTRY_SSH_KEY_PATH || `${os.homedir()}/.ssh/id_rsa`;
-const SCRIPT_PATH = '/root/Infantry/scripts/zone-manager.sh';
+const SCRIPT_PATH = '/var/www/gaming-perks-shop/zone-manager.sh';
 
 // Debug logging
 console.log('Zone Management Configuration:', {
@@ -52,9 +52,13 @@ async function isUserZoneAdmin(userId: string): Promise<boolean> {
 async function executeCommand(command: string): Promise<{ success: boolean; output: string; error?: string }> {
   try {
     let fullCommand: string;
+    let args: string[] = [];
     let execOptions: any = { 
-      timeout: 60000,
-      env: { ...process.env } // Inherit all environment variables
+      timeout: 90000, // Increased to 90 seconds
+      env: { 
+        ...process.env,
+        PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      }
     };
     
     if (IS_LOCAL) {
@@ -62,15 +66,154 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
       console.log('🔗 Local/SSH mode - connecting to', SERVER_HOST);
       // Use `bash -l -c` to ensure a login shell is used, which loads the environment.
       fullCommand = `ssh -i "${SSH_KEY_PATH}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SERVER_USER}@${SERVER_HOST} "bash -l -c '${command}'"`;
+      args = [];
     } else {
       // Running on the server, execute script directly (no SSH)
       console.log('🖥️ Server mode - executing script directly');
-      fullCommand = `${command}`;
-      // If the script relies on being in its own directory, set cwd instead of using an inline cd
-      execOptions.cwd = '/root/Infantry/scripts';
+      console.log('📂 Script path:', SCRIPT_PATH);
+      console.log('📁 Working directory:', '/var/www/gaming-perks-shop');
+      
+      // Check if script exists and is executable before running
+      const fs = require('fs');
+      if (!fs.existsSync(SCRIPT_PATH)) {
+        return { success: false, output: '', error: `Script not found at ${SCRIPT_PATH}` };
+      }
+      
+      try {
+        fs.accessSync(SCRIPT_PATH, fs.constants.F_OK | fs.constants.X_OK);
+      } catch (permError) {
+        return { success: false, output: '', error: `Script at ${SCRIPT_PATH} is not executable. Please run: chmod +x ${SCRIPT_PATH}` };
+      }
+      
+      // Use spawn for better process control
+      const commandParts = command.split(' ');
+      const scriptPath = commandParts[0];
+      const scriptArgs = commandParts.slice(1);
+      
+      console.log('📋 Executing with spawn:', { scriptPath, args: scriptArgs });
+      
+      return new Promise((resolve) => {
+        const { spawn } = require('child_process');
+        const child = spawn('bash', [scriptPath, ...scriptArgs], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          cwd: '/var/www/gaming-perks-shop',
+          env: {
+            ...process.env,
+            PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+          },
+          detached: false // Don't detach to ensure proper cleanup
+        });
+        
+        let stdout = '';
+        let stderr = '';
+        let timedOut = false;
+        let completed = false;
+        
+        // Set up timeout with proper cleanup
+        const timeout = setTimeout(() => {
+          if (!completed) {
+            timedOut = true;
+            console.log('⏰ Command timed out, terminating process...');
+            
+            // Try graceful termination first
+            child.kill('SIGTERM');
+            
+            // Force kill after 5 seconds if still running
+            setTimeout(() => {
+              if (!completed) {
+                console.log('🔨 Force killing process...');
+                child.kill('SIGKILL');
+              }
+            }, 5000);
+          }
+        }, 90000); // 90 second timeout
+        
+                 child.stdout?.on('data', (data: any) => {
+           stdout += data.toString();
+         });
+         
+         child.stderr?.on('data', (data: any) => {
+           stderr += data.toString();
+         });
+         
+         child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+          if (completed) return;
+          completed = true;
+          clearTimeout(timeout);
+          
+          console.log(`📤 Process closed with code: ${code}, signal: ${signal}`);
+          console.log(`📤 Stdout length: ${stdout.length}, Stderr length: ${stderr.length}`);
+          
+          if (timedOut) {
+            resolve({
+              success: false,
+              output: '',
+              error: 'Command execution timed out after 90 seconds'
+            });
+            return;
+          }
+          
+          if (code !== 0 && !signal) {
+            resolve({
+              success: false,
+              output: '',
+              error: `Script exited with code ${code}: ${stderr.trim() || 'No error message'}`
+            });
+            return;
+          }
+          
+          if (signal && signal !== 'SIGTERM') {
+            resolve({
+              success: false,
+              output: '',
+              error: `Script terminated with signal ${signal}`
+            });
+            return;
+          }
+          
+          const output = stdout.trim();
+          
+          // Validate JSON output for status-all commands
+          if (command.includes('status-all') && output.length > 0) {
+            try {
+              JSON.parse(output);
+              console.log('✅ Valid JSON output confirmed');
+            } catch (parseError) {
+              console.error('❌ Invalid JSON output:', output.substring(0, 200));
+              resolve({
+                success: false,
+                output: '',
+                error: 'Script returned invalid JSON'
+              });
+              return;
+            }
+          }
+          
+          resolve({ success: true, output });
+        });
+        
+                 child.on('error', (error: Error) => {
+           if (completed) return;
+           completed = true;
+           clearTimeout(timeout);
+           
+           console.error('💥 Process error:', error);
+           resolve({
+             success: false,
+             output: '',
+             error: `Process error: ${error.message}`
+           });
+         });
+         
+         // Handle process exit
+         child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+           console.log(`🚪 Process exited with code: ${code}, signal: ${signal}`);
+         });
+      });
     }
     
-    console.log('📋 Executing command:', fullCommand);
+    // Fallback to execAsync for SSH mode
+    console.log('📋 Executing command with execAsync:', fullCommand);
     
     const { stdout, stderr } = await execAsync(fullCommand, execOptions);
     
