@@ -492,8 +492,7 @@ export default function SquadsPage() {
           banner_url,
           is_active,
           is_legacy,
-          profiles!squads_captain_id_fkey(in_game_alias),
-          squad_members!inner(id)
+          profiles!squads_captain_id_fkey(in_game_alias)
         `)
         .order('created_at', { ascending: false });
 
@@ -512,6 +511,14 @@ export default function SquadsPage() {
         return;
       }
 
+      // Get active member counts for all squads in a separate query to ensure consistency
+      const squadIds = squadsData.map(squad => squad.id);
+      const { data: memberCounts } = await supabase
+        .from('squad_members')
+        .select('squad_id')
+        .in('squad_id', squadIds)
+        .eq('status', 'active');
+
       const formattedSquads: Squad[] = squadsData.map((squad: any) => ({
         id: squad.id,
         name: squad.name,
@@ -523,7 +530,7 @@ export default function SquadsPage() {
         captain_alias: squad.profiles?.in_game_alias || 'Unknown',
         created_at: squad.created_at,
         banner_url: squad.banner_url,
-        member_count: squad.squad_members?.length || 0,
+        member_count: memberCounts?.filter(m => m.squad_id === squad.id).length || 0,
         members: [], // Not needed for list view
         is_active: squad.is_active
       }));

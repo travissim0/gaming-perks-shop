@@ -754,7 +754,7 @@ export default function Navbar({ user }: { user: any }) {
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 text-gray-400 hover:text-cyan-400 transition-colors"
+                className="lg:hidden p-2 text-gray-400 hover:text-cyan-400 transition-colors"
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -764,7 +764,7 @@ export default function Navbar({ user }: { user: any }) {
       </div>
 
       {/* Mobile Compact Navigation Bar */}
-      <div className="md:hidden border-t border-gray-700/50">
+      <div className="lg:hidden border-t border-gray-700/50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
             {/* Squads */}
@@ -781,7 +781,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileSquadsDropdown && (
-                <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
                   <div className="py-2">
                     {squadsNavItems.map((item) => (
                       <Link
@@ -816,7 +816,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileStatsDropdown && (
-                <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
                   <div className="py-2">
                     {statsNavItems.map((item) => (
                       <Link
@@ -851,7 +851,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileCommunityDropdown && (
-                <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
                   <div className="py-2">
                     {communityNavItems.map((item) => (
                       <Link
@@ -886,7 +886,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileMiscDropdown && (
-                <div className="absolute bottom-full left-0 mb-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
                   <div className="py-2">
                     {miscNavItems.map((item) => (
                       <Link
@@ -911,7 +911,7 @@ export default function Navbar({ user }: { user: any }) {
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <div className="container mx-auto px-4">
           <div className="flex items-center space-x-8 py-3">
             {/* Squads Section */}
@@ -1023,7 +1023,7 @@ export default function Navbar({ user }: { user: any }) {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-gray-800 border-t border-gray-700">
+        <div className="lg:hidden bg-gray-800 border-t border-gray-700">
           <div className="container mx-auto px-4 py-4">
             <div className="space-y-4">
               {/* Search */}
