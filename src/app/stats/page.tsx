@@ -105,8 +105,9 @@ export default function PlayerStatsPage() {
   // Tab state for switching between OvD and Mix statistics
   const [activeTab, setActiveTab] = useState<'OvD' | 'Mix'>('OvD');
 
-  // Sidebar state for filters (now on the right)
+  // Sidebar state for filters - responsive by default
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState({
@@ -249,22 +250,22 @@ export default function PlayerStatsPage() {
   const renderStatsTable = (stats: PlayerAggregateStats[], gameMode: string, pagination: any) => (
     <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-xs lg:text-sm min-w-[600px]">
           <thead className="bg-white/20">
             <tr>
-              {visibleColumns.player && <th className="px-3 py-3 text-left text-sm font-semibold text-blue-200 w-32">Player</th>}
-              {visibleColumns.games && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200 w-16">Games</th>}
-              {visibleColumns.winRate && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Win%</th>}
-              {visibleColumns.kills && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Kills</th>}
-              {visibleColumns.deaths && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Deaths</th>}
-              {visibleColumns.kd && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">K/D</th>}
-              {visibleColumns.captures && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Caps</th>}
-              {visibleColumns.ebHits && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">EB</th>}
-              {visibleColumns.turretDamage && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Turret</th>}
-              {visibleColumns.carryTime && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Carry</th>}
-              {visibleColumns.accuracy && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Acc%</th>}
-              {visibleColumns.classSwaps && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Swaps</th>}
-              {visibleColumns.lastActive && <th className="px-3 py-3 text-right text-sm font-semibold text-blue-200">Last</th>}
+              {visibleColumns.player && <th className="px-2 lg:px-3 py-2 lg:py-3 text-left text-xs lg:text-sm font-semibold text-blue-200 w-24 lg:w-32">Player</th>}
+              {visibleColumns.games && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200 w-12 lg:w-16">Games</th>}
+              {visibleColumns.winRate && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Win%</th>}
+              {visibleColumns.kills && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Kills</th>}
+              {visibleColumns.deaths && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Deaths</th>}
+              {visibleColumns.kd && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">K/D</th>}
+              {visibleColumns.captures && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Caps</th>}
+              {visibleColumns.ebHits && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">EB</th>}
+              {visibleColumns.turretDamage && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Turret</th>}
+              {visibleColumns.carryTime && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Carry</th>}
+              {visibleColumns.accuracy && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Acc%</th>}
+              {visibleColumns.classSwaps && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Swaps</th>}
+              {visibleColumns.lastActive && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Last</th>}
             </tr>
           </thead>
           <tbody>
@@ -279,10 +280,10 @@ export default function PlayerStatsPage() {
                 }`}
               >
                 {visibleColumns.player && (
-                  <td className="px-3 py-3 w-32">
+                  <td className="px-2 lg:px-3 py-2 lg:py-3 w-24 lg:w-32">
                     <Link
                       href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                      className="hover:text-cyan-400 transition-colors font-medium text-sm truncate block"
+                      className="hover:text-cyan-400 transition-colors font-medium text-xs lg:text-sm truncate block"
                       title={player.player_name}
                       style={{ color: getClassColor(player.most_played_class || 'Infantry') }}
                     >
@@ -290,19 +291,19 @@ export default function PlayerStatsPage() {
                     </Link>
                   </td>
                 )}
-                {visibleColumns.games && <td className="px-3 py-3 text-right text-sm text-white w-16">{player.total_games}</td>}
-                {visibleColumns.winRate && <td className="px-3 py-3 text-right text-sm text-white">{formatPercentage(player.win_rate)}</td>}
-                {visibleColumns.kills && <td className="px-3 py-3 text-right text-sm text-white">{player.total_kills}</td>}
-                {visibleColumns.deaths && <td className="px-3 py-3 text-right text-sm text-white">{player.total_deaths}</td>}
-                {visibleColumns.kd && <td className="px-3 py-3 text-right text-sm text-white">{formatNumber(player.kill_death_ratio, 2)}</td>}
-                {visibleColumns.captures && <td className="px-3 py-3 text-right text-sm text-white">{player.total_captures}</td>}
-                {visibleColumns.ebHits && <td className="px-3 py-3 text-right text-sm text-white">{player.total_eb_hits}</td>}
-                {visibleColumns.turretDamage && <td className="px-3 py-3 text-right text-sm text-white">{formatNumber(player.total_turret_damage, 0)}</td>}
-                {visibleColumns.carryTime && <td className="px-3 py-3 text-right text-sm text-white">{formatCarryTime(player.total_carry_time_seconds)}</td>}
-                {visibleColumns.accuracy && <td className="px-3 py-3 text-right text-sm text-white">{formatPercentage(player.avg_accuracy)}</td>}
-                {visibleColumns.classSwaps && <td className="px-3 py-3 text-right text-sm text-white">{player.total_class_swaps}</td>}
+                {visibleColumns.games && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white w-12 lg:w-16">{player.total_games}</td>}
+                {visibleColumns.winRate && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatPercentage(player.win_rate)}</td>}
+                {visibleColumns.kills && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_kills}</td>}
+                {visibleColumns.deaths && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_deaths}</td>}
+                {visibleColumns.kd && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatNumber(player.kill_death_ratio, 2)}</td>}
+                {visibleColumns.captures && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_captures}</td>}
+                {visibleColumns.ebHits && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_eb_hits}</td>}
+                {visibleColumns.turretDamage && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatNumber(player.total_turret_damage, 0)}</td>}
+                {visibleColumns.carryTime && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatCarryTime(player.total_carry_time_seconds)}</td>}
+                {visibleColumns.accuracy && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatPercentage(player.avg_accuracy)}</td>}
+                {visibleColumns.classSwaps && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_class_swaps}</td>}
                 {visibleColumns.lastActive && (
-                  <td className="px-3 py-3 text-right text-sm text-blue-200">
+                  <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-blue-200">
                     {formatDate(player.last_game_date)}
                   </td>
                 )}
@@ -330,9 +331,169 @@ export default function PlayerStatsPage() {
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
       <Navbar user={user} />
       
-      <div className="flex">
-        {/* Recent Games - Left Side */}
-        <div className="w-80 p-6 border-r border-gray-700">
+      {/* Mobile Filters Button */}
+      <div className="lg:hidden fixed top-20 right-4 z-40">
+        <button
+          onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+          className="bg-cyan-600 hover:bg-cyan-700 text-white p-3 rounded-full shadow-lg transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile Filters Overlay */}
+      {mobileFiltersOpen && (
+        <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => setMobileFiltersOpen(false)}>
+          <div className="fixed right-0 top-0 h-full w-80 max-w-[80vw] bg-gray-800 shadow-xl transform transition-transform duration-300 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+              <h3 className="font-medium text-white">Filters & Quick Access</h3>
+              <button
+                onClick={() => setMobileFiltersOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-6">
+              {/* Filters */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
+                
+                {/* Sort By */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => {setSortBy(e.target.value); setMobileFiltersOpen(false);}}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {SORT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Order */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => {setSortOrder(e.target.value as 'asc' | 'desc'); setMobileFiltersOpen(false);}}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    <option value="desc">High to Low</option>
+                    <option value="asc">Low to High</option>
+                  </select>
+                </div>
+
+                {/* Date Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => {setDateFilter(e.target.value); setMobileFiltersOpen(false);}}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {DATE_FILTERS.map(filter => (
+                      <option key={filter.value} value={filter.value}>{filter.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Player Search */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      placeholder="Player name..."
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    />
+                    <button
+                      onClick={() => {handleSearch(); setMobileFiltersOpen(false);}}
+                      className="bg-cyan-600 hover:bg-cyan-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                    >
+                      Go
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Access */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_kills');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setMobileFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
+                >
+                  <div className="text-red-300 font-bold">🎯 Top Killers</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('win_rate');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setMobileFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
+                >
+                  <div className="text-green-300 font-bold">🏆 Win Rate</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_captures');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setMobileFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
+                >
+                  <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_games');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setMobileFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
+                >
+                  <div className="text-purple-300 font-bold">🎮 Most Active</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex flex-col lg:flex-row">
+        {/* Recent Games - Left Side (Hidden on mobile) */}
+        <div className="hidden lg:block lg:w-80 p-6 border-r border-gray-700">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -438,28 +599,30 @@ export default function PlayerStatsPage() {
         </div>
 
         {/* Main Content Area - Statistics with Tabs */}
-        <div className="flex-1 p-6">
-          {/* Tab Navigation */}
-          <div className="flex items-center gap-1 mb-6">
+        <div className="flex-1 p-3 lg:p-6">
+          {/* Tab Navigation - Mobile Responsive */}
+          <div className="flex items-center gap-1 mb-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('OvD')}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
+              className={`px-3 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap ${
                 activeTab === 'OvD'
                   ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg'
                   : 'bg-white/10 text-blue-200 hover:bg-white/20'
               }`}
             >
-              ⚔️ OvD Statistics
+              <span className="hidden sm:inline">⚔️ OvD Statistics</span>
+              <span className="sm:hidden">⚔️ OvD</span>
             </button>
             <button
               onClick={() => setActiveTab('Mix')}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 ${
+              className={`px-3 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap ${
                 activeTab === 'Mix'
                   ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
                   : 'bg-white/10 text-blue-200 hover:bg-white/20'
               }`}
             >
-              🏆 Mix Statistics
+              <span className="hidden sm:inline">🏆 Mix Statistics</span>
+              <span className="sm:hidden">🏆 Mix</span>
             </button>
           </div>
 
@@ -514,188 +677,136 @@ export default function PlayerStatsPage() {
           )}
         </div>
 
-        {/* Right Sidebar - Filters */}
-        <div className={`${sidebarCollapsed ? 'w-12' : 'w-80'} transition-all duration-300 bg-gray-800/50 border-l border-gray-700 min-h-screen`}>
-          {/* Collapse Toggle */}
+        {/* Desktop Right Sidebar - Filters (Hidden on mobile) */}
+        <div className="hidden lg:block lg:w-80 bg-gray-800/50 border-l border-gray-700 min-h-screen">
           <div className="p-4 border-b border-gray-700">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
-            >
-              {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronDown size={20} />}
-              {!sidebarCollapsed && <span className="font-medium">Filters & Quick Access</span>}
-            </button>
+            <h3 className="font-medium text-white">Filters & Quick Access</h3>
           </div>
-
-          {!sidebarCollapsed && (
-            <div className="p-4 space-y-6">
-              {/* Filters */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
-                
-                {/* Sort By */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  >
-                    {SORT_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Sort Order */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
-                  <select
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  >
-                    <option value="desc">High to Low</option>
-                    <option value="asc">Low to High</option>
-                  </select>
-                </div>
-
-                {/* Date Filter */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  >
-                    {DATE_FILTERS.map(filter => (
-                      <option key={filter.value} value={filter.value}>{filter.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Player Search */}
-                <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
-                  <div className="flex gap-1">
-                    <input
-                      type="text"
-                      placeholder="Player name..."
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                    />
-                    <button
-                      onClick={handleSearch}
-                      className="bg-cyan-600 hover:bg-cyan-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      Go
-                    </button>
-                  </div>
-                </div>
-
-                {/* Column Selector */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowColumnSelector(!showColumnSelector)}
-                    className="w-full bg-purple-600 hover:bg-purple-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
-                  >
-                    Columns
-                  </button>
-                  {showColumnSelector && (
-                    <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded p-2 z-50 w-full shadow-xl">
-                      {/* Quick Actions */}
-                      <div className="flex gap-1 mb-2 pb-2 border-b border-gray-600">
-                        <button
-                          onClick={() => setVisibleColumns(prev => Object.keys(prev).reduce((acc, key) => ({ ...acc, [key]: true }), {} as typeof visibleColumns))}
-                          className="flex-1 bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
-                        >
-                          All
-                        </button>
-                        <button
-                          onClick={() => setVisibleColumns(prev => Object.keys(prev).reduce((acc, key) => ({ ...acc, [key]: ['player', 'games', 'kills', 'kd'].includes(key) }), {} as typeof visibleColumns))}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
-                        >
-                          Basic
-                        </button>
-                      </div>
-                      <div className="space-y-1">
-                        {Object.entries(visibleColumns).map(([key, visible]) => (
-                          <label key={key} className="flex items-center gap-2 text-xs cursor-pointer hover:text-cyan-400">
-                            <input
-                              type="checkbox"
-                              checked={visible}
-                              onChange={(e) => setVisibleColumns(prev => ({ ...prev, [key]: e.target.checked }))}
-                              className="w-3 h-3 text-cyan-500 bg-gray-700 border-gray-600 rounded"
-                            />
-                            <span>{key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+          <div className="p-4 space-y-6">
+            {/* Filters */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
+              
+              {/* Sort By */}
+              <div>
+                <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                >
+                  {SORT_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </div>
 
-              {/* Quick Access */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
-                
-                <button 
-                  onClick={() => {
-                    setSortBy('total_kills');
-                    setSortOrder('desc');
-                    setDateFilter('all');
-                    setPlayerName('');
-                    setSearchInput('');
-                  }}
-                  className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
+              {/* Sort Order */}
+              <div>
+                <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
                 >
-                  <div className="text-red-300 font-bold">🎯 Top Killers</div>
-                </button>
-                
-                <button 
-                  onClick={() => {
-                    setSortBy('win_rate');
-                    setSortOrder('desc');
-                    setDateFilter('all');
-                    setPlayerName('');
-                    setSearchInput('');
-                  }}
-                  className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
+                  <option value="desc">High to Low</option>
+                  <option value="asc">Low to High</option>
+                </select>
+              </div>
+
+              {/* Date Filter */}
+              <div>
+                <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
                 >
-                  <div className="text-green-300 font-bold">🏆 Win Rate</div>
-                </button>
-                
-                <button 
-                  onClick={() => {
-                    setSortBy('total_captures');
-                    setSortOrder('desc');
-                    setDateFilter('all');
-                    setPlayerName('');
-                    setSearchInput('');
-                  }}
-                  className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
-                >
-                  <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
-                </button>
-                
-                <button 
-                  onClick={() => {
-                    setSortBy('total_games');
-                    setSortOrder('desc');
-                    setDateFilter('all');
-                    setPlayerName('');
-                    setSearchInput('');
-                  }}
-                  className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
-                >
-                  <div className="text-purple-300 font-bold">🎮 Most Active</div>
-                </button>
+                  {DATE_FILTERS.map(filter => (
+                    <option key={filter.value} value={filter.value}>{filter.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Player Search */}
+              <div>
+                <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    placeholder="Player name..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleSearch}
+                    className="bg-cyan-600 hover:bg-cyan-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                  >
+                    Go
+                  </button>
+                </div>
               </div>
             </div>
-          )}
+
+            {/* Quick Access */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
+              
+              <button 
+                onClick={() => {
+                  setSortBy('total_kills');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
+              >
+                <div className="text-red-300 font-bold">🎯 Top Killers</div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setSortBy('win_rate');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
+              >
+                <div className="text-green-300 font-bold">🏆 Win Rate</div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setSortBy('total_captures');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
+              >
+                <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setSortBy('total_games');
+                  setSortOrder('desc');
+                  setDateFilter('all');
+                  setPlayerName('');
+                  setSearchInput('');
+                }}
+                className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
+              >
+                <div className="text-purple-300 font-bold">🎮 Most Active</div>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

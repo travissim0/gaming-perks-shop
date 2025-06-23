@@ -1040,30 +1040,32 @@ export default function SquadDetailPage() {
                 👥 Squad Members ({squad.members.length})
               </h2>
               
-              <div className="space-y-3">
+              {/* Mobile-optimized compact member list */}
+              <div className="space-y-2 md:space-y-3">
                 {squad.members.map((member) => (
                   <div
                     key={member.id}
-                    className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-lg p-4 border border-slate-600/30"
+                    className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-lg p-3 md:p-4 border border-slate-600/30"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{getRoleIcon(member.role)}</span>
-                        <div>
-                          <p className="font-semibold text-white">{member.in_game_alias}</p>
-                          <p className={`text-sm ${getRoleColor(member.role)}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                        <span className="text-lg md:text-2xl flex-shrink-0">{getRoleIcon(member.role)}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-white text-sm md:text-base truncate">{member.in_game_alias}</p>
+                          <p className={`text-xs md:text-sm ${getRoleColor(member.role)}`}>
                             {getRoleDisplayName(member.role)}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right text-sm text-gray-400">
+                      
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        <div className="text-xs text-gray-400 sm:text-right">
                           Joined {new Date(member.joined_at).toLocaleDateString()}
                         </div>
                         
-                        {/* Squad Management Actions */}
+                        {/* Squad Management Actions - More compact on mobile */}
                         {canManageSquad() && member.player_id !== user?.id && (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             {/* Promote/Demote buttons */}
                             {isCaptain() && member.role === 'player' && (
                               <button
@@ -1071,7 +1073,7 @@ export default function SquadDetailPage() {
                                 className="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs transition-colors"
                                 title="Promote to Co-Captain"
                               >
-                                ⬆️ Promote
+                                ⬆️
                               </button>
                             )}
                             {isCaptain() && member.role === 'co_captain' && (
@@ -1080,7 +1082,7 @@ export default function SquadDetailPage() {
                                 className="bg-orange-600 hover:bg-orange-500 text-white px-2 py-1 rounded text-xs transition-colors"
                                 title="Demote to Player"
                               >
-                                ⬇️ Demote
+                                ⬇️
                               </button>
                             )}
                             
@@ -1091,7 +1093,7 @@ export default function SquadDetailPage() {
                                 className="bg-yellow-600 hover:bg-yellow-500 text-white px-2 py-1 rounded text-xs transition-colors"
                                 title="Transfer Ownership"
                               >
-                                👑 Transfer
+                                👑
                               </button>
                             )}
                             
@@ -1102,7 +1104,7 @@ export default function SquadDetailPage() {
                                 className="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs transition-colors"
                                 title="Kick Member"
                               >
-                                ❌ Kick
+                                ❌
                               </button>
                             )}
                           </div>
