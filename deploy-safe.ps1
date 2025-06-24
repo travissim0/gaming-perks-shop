@@ -33,6 +33,10 @@ function Write-ColorOutput {
 Write-ColorOutput "LIGHTNING Starting FAST & SAFE deployment..." $Blue
 Write-ColorOutput "=============================================" $Blue
 
+# Start timing the entire deployment
+$deploymentStartTime = Get-Date
+$buildDuration = $null
+
 try {
     # Step 0: Clear local .next directory to prevent build cache issues
     Write-ColorOutput "CLEANING Clearing local .next directory..." $Yellow
@@ -45,10 +49,14 @@ try {
 
     # Step 1: Build locally
     Write-ColorOutput "HAMMER Building locally (safer for server)..." $Yellow
+    $buildStartTime = Get-Date
     npm run build
     if ($LASTEXITCODE -ne 0) {
         throw "Local build failed"
     }
+    $buildEndTime = Get-Date
+    $buildDuration = $buildEndTime - $buildStartTime
+    Write-ColorOutput "CLOCK Build completed in $([math]::Round($buildDuration.TotalSeconds, 2)) seconds" $Green
 
     # Step 2: Upload source code (git pull is fast)
     Write-ColorOutput "UPLOAD Syncing source code..." $Yellow
@@ -88,13 +96,31 @@ try {
     Write-ColorOutput "REFRESH Restarting application..." $Yellow
     ssh ${Username}@linux-1.freeinfantry.com "cd /var/www/gaming-perks-shop && pm2 restart $AppName || pm2 start npm --name $AppName -- start"
     
+    # Calculate total deployment time
+    $deploymentEndTime = Get-Date
+    $totalDuration = $deploymentEndTime - $deploymentStartTime
+    
     Write-ColorOutput "SUCCESS Fast deployment completed!" $Green
     Write-ColorOutput "GLOBE Your application should now be live!" $Green
 
 } catch {
+    $deploymentEndTime = Get-Date
+    $totalDuration = $deploymentEndTime - $deploymentStartTime
+    
     Write-ColorOutput "ERROR Deployment failed: $($_.Exception.Message)" $Red
+    Write-ColorOutput "=============================================" $Blue
+    Write-ColorOutput "CLOCK DEPLOYMENT FAILED AFTER:" $Red
+    if ($buildDuration) {
+        Write-ColorOutput "  Build Time: $([math]::Round($buildDuration.TotalSeconds, 2)) seconds" $Yellow
+    }
+    Write-ColorOutput "  Total Time: $([math]::Round($totalDuration.TotalSeconds, 2)) seconds" $Yellow
+    Write-ColorOutput "=============================================" $Blue
     exit 1
 }
 
 Write-ColorOutput "=============================================" $Blue
+Write-ColorOutput "CLOCK DEPLOYMENT SUMMARY:" $Blue
+Write-ColorOutput "  Build Time: $([math]::Round($buildDuration.TotalSeconds, 2)) seconds" $Yellow
+Write-ColorOutput "  Total Time: $([math]::Round($totalDuration.TotalSeconds, 2)) seconds" $Yellow
+Write-ColorOutput "  Build %: $([math]::Round(($buildDuration.TotalSeconds / $totalDuration.TotalSeconds) * 100, 1))% of total time" $Yellow
 Write-ColorOutput "PARTY Safe deployment finished!" $Blue 
