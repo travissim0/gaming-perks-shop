@@ -439,7 +439,7 @@ export default function Navbar({ user }: { user: any }) {
 
                 {showNotificationDropdown && (
                   <div 
-                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[99999] max-w-[calc(100vw-2rem)] sm:max-w-none"
+                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999] max-w-[calc(100vw-2rem)] sm:max-w-none"
                     onClick={e => e.stopPropagation()}
                   >
                     <div className="py-2">
@@ -631,7 +631,7 @@ export default function Navbar({ user }: { user: any }) {
                   </button>
                   
                   {showAdminDropdown && (
-                    <div className="absolute right-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[99999] backdrop-blur-sm">
+                    <div className="absolute right-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                       <div className="py-2">
                         {isAdmin && (
                           <Link 
@@ -712,7 +712,7 @@ export default function Navbar({ user }: { user: any }) {
                 </button>
 
                 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[99999] max-w-[calc(100vw-2rem)] sm:max-w-none">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999] max-w-[calc(100vw-2rem)] sm:max-w-none">
                     <div className="py-2">
                       <Link 
                         href="/dashboard" 
@@ -764,7 +764,7 @@ export default function Navbar({ user }: { user: any }) {
       </div>
 
       {/* Mobile Compact Navigation Bar */}
-      <div className="lg:hidden border-t border-gray-700/50">
+      <div className="lg:hidden border-t border-gray-700/50 relative z-[99999]">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
             {/* Squads */}
@@ -781,7 +781,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileSquadsDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[99999] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                   <div className="py-2">
                     {squadsNavItems.map((item) => (
                       <Link
@@ -816,7 +816,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileStatsDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[99999] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                   <div className="py-2">
                     {statsNavItems.map((item) => (
                       <Link
@@ -851,7 +851,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileCommunityDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[99999] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                   <div className="py-2">
                     {communityNavItems.map((item) => (
                       <Link
@@ -886,7 +886,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileMiscDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[99999] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                   <div className="py-2">
                     {miscNavItems.map((item) => (
                       <Link
@@ -924,7 +924,7 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[99999] backdrop-blur-sm">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
                 <div className="py-3">
                   {squadsNavItems.map((item) => (
                     <Link
@@ -950,7 +950,7 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[99999] backdrop-blur-sm">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
                 <div className="py-3">
                   {statsNavItems.map((item) => (
                     <Link
@@ -976,7 +976,7 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[99999] backdrop-blur-sm">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
                 <div className="py-3">
                   {communityNavItems.map((item) => (
                     <Link
@@ -1002,7 +1002,7 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[99999] backdrop-blur-sm">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
                 <div className="py-3">
                   {miscNavItems.map((item) => (
                     <Link
