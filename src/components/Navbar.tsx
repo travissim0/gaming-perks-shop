@@ -383,7 +383,7 @@ export default function Navbar({ user }: { user: any }) {
 
   if (!user) {
     return (
-      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
+      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl relative z-[9998]">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
@@ -411,7 +411,7 @@ export default function Navbar({ user }: { user: any }) {
   }
 
   return (
-    <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
+    <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl relative z-[9998]">
       {/* Top Utility Bar */}
       <div className="border-b border-gray-700/50">
         <div className="container mx-auto px-4 py-2">
@@ -439,7 +439,7 @@ export default function Navbar({ user }: { user: any }) {
 
                 {showNotificationDropdown && (
                   <div 
-                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[100] max-w-[calc(100vw-2rem)] sm:max-w-none"
+                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[9999] max-w-[calc(100vw-2rem)] sm:max-w-none"
                     onClick={e => e.stopPropagation()}
                   >
                     <div className="py-2">
@@ -631,7 +631,7 @@ export default function Navbar({ user }: { user: any }) {
                   </button>
                   
                   {showAdminDropdown && (
-                    <div className="absolute right-0 top-full mt-1 w-32 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                    <div className="absolute right-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[9999] backdrop-blur-sm">
                       <div className="py-2">
                         {isAdmin && (
                           <Link 
@@ -712,7 +712,7 @@ export default function Navbar({ user }: { user: any }) {
                 </button>
 
                 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[100] max-w-[calc(100vw-2rem)] sm:max-w-none">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[9999] max-w-[calc(100vw-2rem)] sm:max-w-none">
                     <div className="py-2">
                       <Link 
                         href="/dashboard" 
@@ -781,7 +781,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileSquadsDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[9999] backdrop-blur-sm">
                   <div className="py-2">
                     {squadsNavItems.map((item) => (
                       <Link
@@ -816,7 +816,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileStatsDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[9999] backdrop-blur-sm">
                   <div className="py-2">
                     {statsNavItems.map((item) => (
                       <Link
@@ -851,7 +851,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileCommunityDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[9999] backdrop-blur-sm">
                   <div className="py-2">
                     {communityNavItems.map((item) => (
                       <Link
@@ -886,7 +886,7 @@ export default function Navbar({ user }: { user: any }) {
               </button>
               
               {showMobileMiscDropdown && (
-                <div className="absolute top-full left-0 mt-2 w-44 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl z-[100] backdrop-blur-sm">
+                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[9999] backdrop-blur-sm">
                   <div className="py-2">
                     {miscNavItems.map((item) => (
                       <Link
