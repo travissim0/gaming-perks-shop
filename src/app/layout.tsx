@@ -18,6 +18,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CTFPL",
   description: "Capture The Flag Player's League - Free Infantry competitive gaming platform",
+  icons: {
+    icon: [
+      { url: '/images/freeinfantry.png', sizes: '32x32', type: 'image/png' },
+      { url: '/images/freeinfantry.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/images/freeinfantry.png', sizes: '180x180', type: 'image/png' },
+    ],
+    shortcut: '/images/freeinfantry.png',
+  },
   other: {
     'format-detection': 'telephone=no',
   },
