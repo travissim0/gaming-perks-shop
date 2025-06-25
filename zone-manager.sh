@@ -36,7 +36,7 @@ get_zone_directory() {
         "skMini")
             echo "$ZONES_DIR/Skirmish - Minimaps"
             ;;
-        "grav")
+        "grav"|"gb")
             echo "$ZONES_DIR/Sports - GravBall"
             ;;
         "arena")
@@ -193,7 +193,7 @@ get_all_zones_status() {
                 "League - USL Matches") short_name="usl" ;;
                 "League - USL Secondary") short_name="usl2" ;;
                 "Skirmish - Minimaps") short_name="skMini" ;;
-                "Sports - GravBall") short_name="grav" ;;
+                "Sports - GravBall") short_name="gb" ;;
                 "Arcade - The Arena") short_name="arena" ;;
                 *) short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]') ;;
             esac
@@ -209,6 +209,185 @@ get_all_zones_status() {
         fi
     done
     echo "}"
+}
+
+# Function to execute scheduled operations from database
+execute_scheduled_operations() {
+    # Check if we have database connection variables
+    if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+        log_message "ERROR: Missing database configuration (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)"
+        return 1
+    fi
+    
+    # Get current timestamp in ISO format
+    local current_time=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+    
+    # Query for scheduled operations that are due
+    local query_url="${SUPABASE_URL}/rest/v1/scheduled_zone_management?status=eq.scheduled&scheduled_datetime=lte.${current_time}&order=scheduled_datetime.asc"
+    
+    local operations=$(curl -s \
+        -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+        -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+        -H "Content-Type: application/json" \
+        "$query_url")
+    
+    if [ $? -ne 0 ]; then
+        log_message "ERROR: Failed to query scheduled operations"
+        return 1
+    fi
+    
+    # Count operations found
+    local operation_count=$(echo "$operations" | jq '. | length' 2>/dev/null || echo "0")
+    
+    # Only log if there are operations to execute
+    if [ "$operation_count" -gt 0 ]; then
+        log_message "Found $operation_count scheduled operations to execute"
+    fi
+    
+    # Parse and execute each operation
+    echo "$operations" | jq -c '.[]' 2>/dev/null | while read -r operation; do
+        local op_id=$(echo "$operation" | jq -r '.id')
+        local zone_key=$(echo "$operation" | jq -r '.zone_key')
+        local action=$(echo "$operation" | jq -r '.action')
+        local zone_name=$(echo "$operation" | jq -r '.zone_name')
+        
+        if [ "$op_id" = "null" ] || [ "$zone_key" = "null" ] || [ "$action" = "null" ]; then
+            continue
+        fi
+        
+        log_message "Executing scheduled operation $op_id: $action on zone '$zone_key'"
+        
+        # Mark operation as being executed
+        local executed_at=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+        curl -s -X PATCH \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"executed_at\": \"$executed_at\"}" \
+            "${SUPABASE_URL}/rest/v1/scheduled_zone_management?id=eq.$op_id" > /dev/null
+        
+        # Execute the operation
+        local result=""
+        local status="executed"
+        local error_message=""
+        local exit_code=0
+        
+        case "$action" in
+            "start")
+                result=$(start_zone "$zone_key" 2>&1)
+                exit_code=$?
+                ;;
+            "stop")
+                result=$(stop_zone "$zone_key" 2>&1)
+                exit_code=$?
+                ;;
+            "restart")
+                result=$(restart_zone "$zone_key" 2>&1)
+                exit_code=$?
+                ;;
+            *)
+                result="Invalid action: $action"
+                status="failed"
+                error_message="Invalid action specified"
+                exit_code=1
+                ;;
+        esac
+        
+        # Check if operation was successful
+        if [ $exit_code -ne 0 ]; then
+            status="failed"
+            error_message="Operation failed: $result"
+            log_message "ERROR: Scheduled operation $op_id failed with exit code $exit_code: $result"
+        else
+            log_message "SUCCESS: Scheduled operation $op_id completed successfully"
+        fi
+        
+        # Update operation status in database
+        local update_data="{\"status\": \"$status\""
+        if [ -n "$result" ]; then
+            update_data="$update_data, \"execution_result\": \"$(echo "$result" | sed 's/"/\\"/g')\""
+        fi
+        if [ -n "$error_message" ]; then
+            update_data="$update_data, \"error_message\": \"$(echo "$error_message" | sed 's/"/\\"/g')\""
+        fi
+        update_data="$update_data}"
+        
+        curl -s -X PATCH \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$update_data" \
+            "${SUPABASE_URL}/rest/v1/scheduled_zone_management?id=eq.$op_id" > /dev/null
+    done
+    
+    # Only log completion if there were operations to execute
+    if [ "$operation_count" -gt 0 ]; then
+        log_message "Scheduled operations check completed"
+    fi
+}
+
+# Function to add a scheduled operation (called by web interface)
+schedule_operation() {
+    local action=$1
+    local zone=$2
+    local scheduled_time=$3
+    local admin_alias=$4
+    
+    if [ -z "$action" ] || [ -z "$zone" ] || [ -z "$scheduled_time" ]; then
+        echo "ERROR: Missing required parameters for scheduling"
+        exit 1
+    fi
+    
+    log_message "Scheduling $action for zone '$zone' at $scheduled_time by $admin_alias"
+    
+    # Validate the zone exists
+    local zone_dir=$(get_zone_directory "$zone")
+    if [ -z "$zone_dir" ] || [ ! -d "$zone_dir" ]; then
+        echo "ERROR: Zone directory not found for '$zone'"
+        exit 1
+    fi
+    
+    # Validate the action
+    case "$action" in
+        "start"|"stop"|"restart")
+            echo "SUCCESS: Scheduled $action for zone $zone at $scheduled_time"
+            ;;
+        *)
+            echo "ERROR: Invalid action '$action'. Must be start, stop, or restart"
+            exit 1
+            ;;
+    esac
+}
+
+# Function to execute a scheduled operation by ID
+execute_scheduled_operation() {
+    local operation_id=$1
+    local action=$2
+    local zone=$3
+    
+    if [ -z "$operation_id" ] || [ -z "$action" ] || [ -z "$zone" ]; then
+        echo "ERROR: Missing required parameters for execution"
+        exit 1
+    fi
+    
+    log_message "Executing scheduled operation $operation_id: $action on zone '$zone'"
+    
+    case "$action" in
+        "start")
+            start_zone "$zone"
+            ;;
+        "stop")
+            stop_zone "$zone"
+            ;;
+        "restart")
+            restart_zone "$zone"
+            ;;
+        *)
+            log_message "ERROR: Invalid scheduled action '$action'"
+            echo "ERROR: Invalid action"
+            exit 1
+            ;;
+    esac
 }
 
 # Main script logic
@@ -247,6 +426,29 @@ case "$ACTION" in
     "status-all")
         get_all_zones_status
         ;;
+    "schedule")
+        if [ -z "$ZONE_NAME" ]; then
+            echo "ERROR: Usage: $0 schedule <action> <zone_name> <scheduled_time> [admin_alias]"
+            exit 1
+        fi
+        SCHEDULED_ACTION=$2
+        SCHEDULED_TIME=$3
+        ADMIN_ALIAS=${4:-"system"}
+        schedule_operation "$SCHEDULED_ACTION" "$ZONE_NAME" "$SCHEDULED_TIME" "$ADMIN_ALIAS"
+        ;;
+    "execute-scheduled")
+        if [ -z "$ZONE_NAME" ]; then
+            echo "ERROR: Usage: $0 execute-scheduled <operation_id> <action> <zone_name>"
+            exit 1
+        fi
+        OPERATION_ID=$ZONE_NAME
+        SCHEDULED_ACTION=$2
+        ZONE_NAME=$3
+        execute_scheduled_operation "$OPERATION_ID" "$SCHEDULED_ACTION" "$ZONE_NAME"
+        ;;
+    "check-scheduled")
+        execute_scheduled_operations
+        ;;
     "debug")
         if [ -z "$ZONE_NAME" ]; then
             echo "ERROR: Zone name required for debug"
@@ -266,6 +468,13 @@ case "$ACTION" in
     *)
         echo "Usage: $0 <action> [zone_name]"
         echo "Actions: start, stop, restart, status, list, status-all, debug"
+        echo "Scheduled Actions: schedule, execute-scheduled, check-scheduled"
+        echo ""
+        echo "Examples:"
+        echo "  $0 start ctf"
+        echo "  $0 schedule restart ctf \"2024-01-15 14:00:00\" admin_alias"
+        echo "  $0 execute-scheduled 123 restart ctf"
+        echo "  $0 check-scheduled"
         exit 1
         ;;
 esac 

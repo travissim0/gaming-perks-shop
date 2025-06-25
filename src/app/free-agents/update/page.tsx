@@ -38,16 +38,18 @@ const CLASS_COLORS = {
 const CLASS_OPTIONS = ['O INF', 'D INF', 'O HVY', 'D HVY', 'Medic', 'SL', 'Foot JT', 'Pack JT', 'Engineer', 'Infil'];
 
 const TIMEZONE_OPTIONS = [
-  'America/New_York',
-  'America/Chicago', 
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'Europe/London',
-  'Europe/Berlin',
-  'Europe/Paris',
-  'Australia/Sydney',
-  'Asia/Tokyo'
+  { value: 'America/Los_Angeles', label: 'PST - Pacific' },
+  { value: 'America/Denver', label: 'MST - Mountain' },
+  { value: 'America/Phoenix', label: 'MST - Arizona' },
+  { value: 'America/Chicago', label: 'CST - Central' },
+  { value: 'America/New_York', label: 'EST - Eastern' },
+  { value: 'Europe/London', label: 'GMT - London' },
+  { value: 'Europe/Paris', label: 'CET - Central Europe' },
+  { value: 'Europe/Berlin', label: 'CET - Berlin' },
+  { value: 'Asia/Tokyo', label: 'JST - Tokyo' },
+  { value: 'Australia/Sydney', label: 'AEST - Sydney' },
+  { value: 'America/Toronto', label: 'EST - Toronto' },
+  { value: 'America/Vancouver', label: 'PST - Vancouver' }
 ];
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];

@@ -307,6 +307,22 @@ export default function Navbar({ user }: { user: any }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Handle body scroll lock when mobile menu is open
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (isMobileMenuOpen) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = 'unset';
+      }
+      
+      // Cleanup function to restore scroll when component unmounts
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isMobileMenuOpen]);
+
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
@@ -373,6 +389,7 @@ export default function Navbar({ user }: { user: any }) {
   const communityNavItems = [
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
+    { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
   ];
 
   const miscNavItems = [
@@ -383,7 +400,7 @@ export default function Navbar({ user }: { user: any }) {
 
   if (!user) {
     return (
-      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl fixed top-0 left-0 right-0 z-[9999]">
+      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
@@ -411,15 +428,113 @@ export default function Navbar({ user }: { user: any }) {
   }
 
   return (
-    <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl fixed top-0 left-0 right-0 z-[9999]">
-      {/* Top Utility Bar */}
-      <div className="border-b border-gray-700/50">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex items-center justify-between">
-            {/* Left - Logo */}
-            <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-              <img src="/images/ctfpl1.png" alt="CTFPL" className="h-16 w-auto" />
-            </Link>
+    <>
+      {/* Portal for mobile dropdowns to ensure proper z-index */}
+      {typeof window !== 'undefined' && (
+        <>
+          {showMobileSquadsDropdown && (
+            <div className="fixed inset-0 z-[10000] pointer-events-none">
+              <div className="absolute top-[140px] left-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+                <div className="py-2">
+                  {squadsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setShowMobileSquadsDropdown(false);
+                      }}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showMobileStatsDropdown && (
+            <div className="fixed inset-0 z-[10000] pointer-events-none">
+              <div className="absolute top-[140px] left-[25%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+                <div className="py-2">
+                  {statsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setShowMobileStatsDropdown(false);
+                      }}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showMobileCommunityDropdown && (
+            <div className="fixed inset-0 z-[10000] pointer-events-none">
+              <div className="absolute top-[140px] left-[50%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+                <div className="py-2">
+                  {communityNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setShowMobileCommunityDropdown(false);
+                      }}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showMobileMiscDropdown && (
+            <div className="fixed inset-0 z-[10000] pointer-events-none">
+              <div className="absolute top-[140px] right-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+                <div className="py-2">
+                  {miscNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 text-xs"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setShowMobileMiscDropdown(false);
+                      }}
+                    >
+                      <span className="mr-2 text-sm">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
+        {/* Top Utility Bar */}
+        <div className="border-b border-gray-700/50">
+          <div className="container mx-auto px-4 py-2">
+            <div className="flex items-center justify-between">
+              {/* Left - Logo */}
+              <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                <img src="/images/ctfpl1.png" alt="CTFPL" className="h-16 w-auto" />
+              </Link>
 
             {/* Right - Utilities */}
             <div className="flex items-center space-x-3">
@@ -768,144 +883,68 @@ export default function Navbar({ user }: { user: any }) {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
             {/* Squads */}
-            <div className="group relative" ref={mobileSquadsRef}>
-              <button 
-                onClick={() => setShowMobileSquadsDropdown(!showMobileSquadsDropdown)}
-                className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-green-600/20 hover:to-emerald-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-              >
-                <Gamepad2 className="w-3 h-3" />
-                <span className="font-medium">Squads</span>
-                <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileSquadsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {showMobileSquadsDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
-                  <div className="py-2">
-                    {squadsNavItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          setShowMobileSquadsDropdown(false);
-                        }}
-                      >
-                        <span className="mr-2 text-sm">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button 
+              onClick={() => setShowMobileSquadsDropdown(!showMobileSquadsDropdown)}
+              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
+                showMobileSquadsDropdown 
+                  ? 'from-green-600/30 to-emerald-600/30 text-green-400' 
+                  : 'hover:from-green-600/20 hover:to-emerald-600/20'
+              }`}
+            >
+              <Gamepad2 className="w-3 h-3" />
+              <span className="font-medium">Squads</span>
+              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileSquadsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
             {/* Stats */}
-            <div className="group relative" ref={mobileStatsRef}>
-              <button 
-                onClick={() => setShowMobileStatsDropdown(!showMobileStatsDropdown)}
-                className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-blue-600/20 hover:to-indigo-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-              >
-                <BarChart3 className="w-3 h-3" />
-                <span className="font-medium">Stats</span>
-                <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileStatsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {showMobileStatsDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
-                  <div className="py-2">
-                    {statsNavItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          setShowMobileStatsDropdown(false);
-                        }}
-                      >
-                        <span className="mr-2 text-sm">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button 
+              onClick={() => setShowMobileStatsDropdown(!showMobileStatsDropdown)}
+              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
+                showMobileStatsDropdown 
+                  ? 'from-blue-600/30 to-indigo-600/30 text-blue-400' 
+                  : 'hover:from-blue-600/20 hover:to-indigo-600/20'
+              }`}
+            >
+              <BarChart3 className="w-3 h-3" />
+              <span className="font-medium">Stats</span>
+              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileStatsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
             {/* Community */}
-            <div className="group relative" ref={mobileCommunityRef}>
-              <button 
-                onClick={() => setShowMobileCommunityDropdown(!showMobileCommunityDropdown)}
-                className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-              >
-                <Users className="w-3 h-3" />
-                <span className="font-medium">Community</span>
-                <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileCommunityDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {showMobileCommunityDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
-                  <div className="py-2">
-                    {communityNavItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          setShowMobileCommunityDropdown(false);
-                        }}
-                      >
-                        <span className="mr-2 text-sm">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button 
+              onClick={() => setShowMobileCommunityDropdown(!showMobileCommunityDropdown)}
+              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
+                showMobileCommunityDropdown 
+                  ? 'from-purple-600/30 to-pink-600/30 text-purple-400' 
+                  : 'hover:from-purple-600/20 hover:to-pink-600/20'
+              }`}
+            >
+              <Users className="w-3 h-3" />
+              <span className="font-medium">Community</span>
+              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileCommunityDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
             {/* Misc */}
-            <div className="group relative" ref={mobileMiscRef}>
-              <button 
-                onClick={() => setShowMobileMiscDropdown(!showMobileMiscDropdown)}
-                className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-              >
-                <span className="text-sm">🔧</span>
-                <span className="font-medium">Misc</span>
-                <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileMiscDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {showMobileMiscDropdown && (
-                <div className="absolute left-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
-                  <div className="py-2">
-                    {miscNavItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 text-xs"
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          setShowMobileMiscDropdown(false);
-                        }}
-                      >
-                        <span className="mr-2 text-sm">{item.icon}</span>
-                        <span className="font-medium">{item.label}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button 
+              onClick={() => setShowMobileMiscDropdown(!showMobileMiscDropdown)}
+              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
+                showMobileMiscDropdown 
+                  ? 'from-orange-600/30 to-red-600/30 text-orange-400' 
+                  : 'hover:from-orange-600/20 hover:to-red-600/20'
+              }`}
+            >
+              <span className="text-sm">🔧</span>
+              <span className="font-medium">Misc</span>
+              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileMiscDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -1218,5 +1257,6 @@ export default function Navbar({ user }: { user: any }) {
         </div>
       )}
     </nav>
+    </>
   );
 } 

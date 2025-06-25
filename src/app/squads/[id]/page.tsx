@@ -453,7 +453,8 @@ export default function SquadDetailPage() {
       userSquad: userSquad?.id,
       squadId: squad?.id,
       isAlreadyMember: squad?.members.some(member => member.player_id === user?.id),
-      isActive: squad?.is_active
+      isActive: squad?.is_active,
+      isLegacy: squad?.is_legacy
     });
     
     if (!user || !squad) {
@@ -468,17 +469,16 @@ export default function SquadDetailPage() {
       return false;
     }
     
-    // Check if user is already in another active (non-legacy) squad
-    // Legacy squads don't block joining other squads
-    if (userSquad && userSquad.id !== squad.id && !(userSquad.is_legacy === true)) {
-      console.log('❌ User is in another active squad');
+    // BLOCK REQUESTS TO LEGACY SQUADS - They are invitation-only by captain
+    if (squad.is_legacy === true) {
+      console.log('❌ Cannot request to join legacy squad - invitation only');
       return false;
     }
     
-    // If target squad is legacy, can always request to join
-    if (squad.is_legacy === true) {
-      console.log('✅ Can request to join legacy squad');
-      return true;
+    // Check if user is already in another active (non-legacy) squad
+    if (userSquad && userSquad.id !== squad.id && !(userSquad.is_legacy === true)) {
+      console.log('❌ User is in another active squad');
+      return false;
     }
     
     // Can't request to join if user is the captain (shouldn't happen, but safety check)
@@ -487,8 +487,8 @@ export default function SquadDetailPage() {
       return false;
     }
     
-    // Allow requests to both active AND inactive squads
-    console.log('✅ Can request to join');
+    // Allow requests to active squads only (not legacy)
+    console.log('✅ Can request to join active squad');
     return true;
   };
 
@@ -927,6 +927,20 @@ export default function SquadDetailPage() {
                   
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-3 lg:flex-shrink-0">
+                    {/* Legacy Squad Notice - Show if squad is legacy and user can't join */}
+                    {squad?.is_legacy && !isCurrentMember() && (
+                      <div className="bg-amber-600/10 border border-amber-500/20 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-amber-400">🏛️</span>
+                          <span className="text-amber-300 font-medium text-sm">Legacy Squad</span>
+                        </div>
+                        <p className="text-amber-200 text-sm">
+                          This is a historical legacy squad. You can only join by invitation from the captain.
+                          Join requests are not allowed for legacy squads.
+                        </p>
+                      </div>
+                    )}
+                    
                     {/* Join Request Button - Show different states based on request status */}
                     {(canRequestToJoin() || hasExistingRequest) && !isCurrentMember() && (
                       <div className="flex flex-col gap-2">

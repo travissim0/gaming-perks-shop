@@ -72,7 +72,8 @@ supabase_api_call() {
 
 # Function to update zone status in database
 update_zone_status() {
-    log_message " Updating zone status in database..."
+    # Only log errors or zone status changes, not routine updates
+    local debug_mode="${DEBUG_ZONE_CLIENT:-false}"
     
     # Build zones data
     local zones_data=""
@@ -82,15 +83,21 @@ update_zone_status() {
         if [ -d "$dir" ]; then
             zone_name=$(basename "$dir")
             
-            echo "Found directory: $zone_name"
+            if [ "$debug_mode" = "true" ]; then
+                echo "Found directory: $zone_name"
+            fi
             
             # Skip filtered directories
             if is_filtered_directory "$zone_name"; then
-                echo "  -> FILTERED OUT"
+                if [ "$debug_mode" = "true" ]; then
+                    echo "  -> FILTERED OUT"
+                fi
                 continue
             fi
             
-            echo "  -> INCLUDED"
+            if [ "$debug_mode" = "true" ]; then
+                echo "  -> INCLUDED"
+            fi
             
             # Map to short name
             short_name=""
@@ -105,7 +112,9 @@ update_zone_status() {
                 *) short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]') ;;
             esac
             
-            echo "  -> Short name: $short_name"
+            if [ "$debug_mode" = "true" ]; then
+                echo "  -> Short name: $short_name"
+            fi
             
             if is_zone_running "$short_name"; then
                 status="RUNNING"
@@ -113,7 +122,9 @@ update_zone_status() {
                 status="STOPPED"
             fi
             
-            echo "  -> Status: $status"
+            if [ "$debug_mode" = "true" ]; then
+                echo "  -> Status: $status"
+            fi
             
             if [ "$first" = true ]; then
                 first=false
@@ -137,19 +148,23 @@ update_zone_status() {
 EOF
 )
     
-    echo "DEBUG: Final zones_data string: '${zones_data}'"
-    echo "DEBUG: Sending JSON to database:"
-    echo "$status_record"
+    if [ "$debug_mode" = "true" ]; then
+        echo "DEBUG: Final zones_data string: '${zones_data}'"
+        echo "DEBUG: Sending JSON to database:"
+        echo "$status_record"
+    fi
     
     # Upsert to zone_status table
     local response=$(supabase_api_call "POST" "zone_status" "$status_record")
     local exit_code=$?
     
-    echo "DEBUG: API Response: '$response'"
-    echo "DEBUG: Exit code: $exit_code"
+    if [ "$debug_mode" = "true" ]; then
+        echo "DEBUG: API Response: '$response'"
+        echo "DEBUG: Exit code: $exit_code"
+    fi
     
     if [ $exit_code -eq 0 ]; then
-        log_message " Zone status updated in database successfully"
+        # Only log errors, not successful routine updates
         return 0
     else
         log_message " Failed to update zone status: $response"
@@ -346,6 +361,13 @@ case "${1:-daemon}" in
         fi
 
         log_message " Database connectivity confirmed. Starting main loop..."
+        log_message " Zone status updates will run every 5 seconds (silent unless errors occur)"
+        log_message " Set DEBUG_ZONE_CLIENT=true environment variable to enable verbose logging"
+        
+        # Counter for periodic status reports
+        local update_count=0
+        local last_summary_time=$(date +%s)
+        
         # Main loop
         while true; do
             # Update zone status
@@ -353,6 +375,18 @@ case "${1:-daemon}" in
 
             # Check for pending commands
             check_pending_commands
+            
+            # Increment counter and check if we should log a periodic summary
+            update_count=$((update_count + 1))
+            current_time=$(date +%s)
+            
+            # Log summary every 5 minutes (60 updates * 5 seconds = 300 seconds = 5 minutes)
+            if [ $((current_time - last_summary_time)) -ge 300 ]; then
+                log_message " Status: Completed $update_count zone status updates (running normally)"
+                update_count=0
+                last_summary_time=$current_time
+            fi
+            
             sleep 5  # Update every 5 seconds
         done
         ;;

@@ -25,6 +25,7 @@ This document provides the exact database schema for all tables, enums, and type
 | avatar_url | TEXT | | User's profile picture URL |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Account creation timestamp |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | Last profile update |
+| is_zone_admin | BOOLEAN | DEFAULT false | Zone administrator flag |
 
 ### 2. `squads` (Teams)
 **Squad/team information**
@@ -104,6 +105,70 @@ This document provides the exact database schema for all tables, enums, and type
 | reactions | JSONB | DEFAULT '{}' | Post reactions data |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | Post creation timestamp |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | Last post update |
+
+### scheduled_zone_management
+Stores scheduled zone management operations (start, stop, restart).
+
+```sql
+CREATE TABLE scheduled_zone_management (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  zone_key VARCHAR(50) NOT NULL,
+  zone_name VARCHAR(100) NOT NULL,
+  action VARCHAR(20) NOT NULL CHECK (action IN ('start', 'stop', 'restart')),
+  scheduled_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_by UUID REFERENCES auth.users(id),
+  created_by_alias VARCHAR(100),
+  status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'executed', 'failed', 'cancelled', 'expired')),
+  execution_result TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  executed_at TIMESTAMP WITH TIME ZONE,
+  error_message TEXT
+);
+
+-- Add indexes for performance
+CREATE INDEX idx_scheduled_zone_management_zone_key ON scheduled_zone_management(zone_key);
+CREATE INDEX idx_scheduled_zone_management_scheduled_datetime ON scheduled_zone_management(scheduled_datetime);
+CREATE INDEX idx_scheduled_zone_management_status ON scheduled_zone_management(status);
+
+-- Add RLS policies
+ALTER TABLE scheduled_zone_management ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Zone admins can view all scheduled operations
+CREATE POLICY "Zone admins can view scheduled operations" ON scheduled_zone_management
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND (profiles.is_admin = true OR profiles.is_zone_admin = true)
+    )
+  );
+
+-- Policy: Zone admins can create scheduled operations
+CREATE POLICY "Zone admins can create scheduled operations" ON scheduled_zone_management
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND (profiles.is_admin = true OR profiles.is_zone_admin = true)
+    )
+  );
+
+-- Policy: Zone admins can update scheduled operations
+CREATE POLICY "Zone admins can update scheduled operations" ON scheduled_zone_management
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND (profiles.is_admin = true OR profiles.is_zone_admin = true)
+    )
+  );
+```
+
+### zone_interests
+Stores player zone interest data (already exists, updated to use zone_key).
+
+### scheduled_zone_events  
+Stores scheduled zone events for community (already exists, updated to use zone_key).
 
 ---
 

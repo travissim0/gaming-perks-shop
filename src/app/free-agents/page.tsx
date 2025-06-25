@@ -1366,15 +1366,18 @@ function FreeAgentJoinForm({
   // Get timezone abbreviation
   const getTimezoneAbbr = (timezone: string) => {
     const abbreviations: Record<string, string> = {
-      'America/New_York': 'EST/EDT',
-      'America/Chicago': 'CST/CDT',
-      'America/Denver': 'MST/MDT',
-      'America/Los_Angeles': 'PST/PDT',
+      'America/Los_Angeles': 'PST',
+      'America/Denver': 'MST', 
       'America/Phoenix': 'MST',
-      'Europe/London': 'GMT/BST',
-      'Europe/Berlin': 'CET/CEST',
+      'America/Chicago': 'CST',
+      'America/New_York': 'EST',
+      'Europe/London': 'GMT',
+      'Europe/Paris': 'CET',
+      'Europe/Berlin': 'CET',
       'Asia/Tokyo': 'JST',
-      'Australia/Sydney': 'AEST/AEDT'
+      'Australia/Sydney': 'AEST',
+      'America/Toronto': 'EST',
+      'America/Vancouver': 'PST'
     };
     return abbreviations[timezone] || timezone.split('/')[1];
   };
@@ -1999,15 +2002,18 @@ function FreeAgentJoinForm({
                       onChange={(e) => setUserTimezone(e.target.value)}
                       className="bg-gray-700/80 border border-blue-500/30 rounded-lg px-2 sm:px-3 py-1 text-white text-xs sm:text-sm focus:border-blue-400 transition-all duration-300 min-w-0 flex-1 sm:w-auto"
                     >
-                      <option value="America/New_York">EST</option>
-                      <option value="America/Chicago">CST</option>
-                      <option value="America/Denver">MST</option>
-                      <option value="America/Los_Angeles">PST</option>
-                      <option value="America/Phoenix">AZ</option>
-                      <option value="Europe/London">GMT</option>
-                      <option value="Europe/Berlin">CET</option>
-                      <option value="Asia/Tokyo">JST</option>
-                      <option value="Australia/Sydney">AEST</option>
+                      <option value="America/Los_Angeles">PST - Pacific</option>
+                      <option value="America/Denver">MST - Mountain</option>
+                      <option value="America/Phoenix">MST - Arizona</option>
+                      <option value="America/Chicago">CST - Central</option>
+                      <option value="America/New_York">EST - Eastern</option>
+                      <option value="Europe/London">GMT - London</option>
+                      <option value="Europe/Paris">CET - Central Europe</option>
+                      <option value="Europe/Berlin">CET - Berlin</option>
+                      <option value="Asia/Tokyo">JST - Tokyo</option>
+                      <option value="Australia/Sydney">AEST - Sydney</option>
+                      <option value="America/Toronto">EST - Toronto</option>
+                      <option value="America/Vancouver">PST - Vancouver</option>
                     </select>
                   </div>
                 </div>
