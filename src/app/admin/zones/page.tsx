@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -67,6 +67,7 @@ export default function ZoneManagementPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [scheduledOperations, setScheduledOperations] = useState<ScheduledOperation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -89,6 +90,9 @@ export default function ZoneManagementPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showExpiredOperations, setShowExpiredOperations] = useState(false);
   const [serverPlayerData, setServerPlayerData] = useState<{[key: string]: number}>({});
+  
+  // Scroll position preservation
+  const scrollPositionRef = useRef<number>(0);
 
   // Check admin access
   useEffect(() => {
@@ -125,7 +129,7 @@ export default function ZoneManagementPage() {
 
       if (hasAccess) {
         await fetchServerPlayerData();
-        await fetchZoneStatus();
+        await fetchZoneStatus(true); // Initial load
       } else {
         console.log('Access denied - user is not admin or zone admin:', profile);
         toast.error('Access denied: Zone admin privileges required');
@@ -198,9 +202,45 @@ export default function ZoneManagementPage() {
     }
   };
 
+  // Save scroll position before state updates
+  const saveScrollPosition = () => {
+    scrollPositionRef.current = window.scrollY;
+  };
+
+  // Restore scroll position after state updates
+  const restoreScrollPosition = () => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollPositionRef.current);
+    });
+  };
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    saveScrollPosition();
+    try {
+      await Promise.all([
+        fetchServerPlayerData(),
+        fetchZoneStatus(false),
+        fetchScheduledOperations()
+      ]);
+      toast.success('Data refreshed successfully');
+    } catch (error) {
+      toast.error('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+      restoreScrollPosition();
+    }
+  };
+
   // Fetch zone status
-  const fetchZoneStatus = async () => {
-    setLoading(true);
+  const fetchZoneStatus = async (isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setLoading(true);
+    } else {
+      saveScrollPosition();
+    }
+    
     try {
       const response = await fetch('/api/admin/zone-management');
       if (!response.ok) {
@@ -229,7 +269,11 @@ export default function ZoneManagementPage() {
         setMessage({ type: 'error', text: `Failed to fetch zone status: ${errorMessage}` });
       }
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+      } else {
+        restoreScrollPosition();
+      }
     }
   };
 
@@ -255,10 +299,11 @@ export default function ZoneManagementPage() {
       
       if (data.success) {
         setMessage({ type: 'success', text: `Zone ${zoneKey} ${action} successful: ${data.message}` });
-        // Refresh zone status after action (more aggressively)
-        setTimeout(() => fetchZoneStatus(), 1000);
-        setTimeout(() => fetchZoneStatus(), 3000);
-        setTimeout(() => fetchZoneStatus(), 6000);
+        // Single delayed refresh to allow action to take effect
+        setTimeout(() => {
+          fetchZoneStatus(false);
+          fetchScheduledOperations();
+        }, 2000);
       } else {
         throw new Error(data.error || `Failed to ${action} zone`);
       }
@@ -270,15 +315,15 @@ export default function ZoneManagementPage() {
     }
   };
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 60 seconds (reduced from 30s)
   useEffect(() => {
     if (user && hasAdminAccess) {
-      fetchZoneStatus();
+      fetchZoneStatus(false);
       fetchScheduledOperations();
       const interval = setInterval(() => {
-        fetchZoneStatus();
+        fetchZoneStatus(false);
         fetchScheduledOperations();
-      }, 30000);
+      }, 60000); // Changed from 30000 to 60000 (60 seconds)
       return () => clearInterval(interval);
     }
   }, [user, hasAdminAccess]);
@@ -592,11 +637,11 @@ export default function ZoneManagementPage() {
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={fetchZoneStatus}
-              disabled={loading}
+              onClick={handleManualRefresh}
+              disabled={refreshing}
               className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
-              {loading ? (
+              {refreshing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                   Refreshing...
