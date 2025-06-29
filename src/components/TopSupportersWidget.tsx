@@ -329,31 +329,29 @@ function SupporterRow({
         <div className="text-9xl">{supporter.medal}</div>
       </div>
       
-      <div className="relative z-10 flex items-center justify-between">
-        <div className="flex-1 min-w-0">
+      {/* Money amount in top right corner */}
+      <div className="absolute top-2 right-2 z-20">
+        <div className={`font-bold ${rankIndex < 3 ? trophyColors[rankIndex] : 'text-cyan-300'} ${amountTextSizes[rankIndex]}`}>
+          {formatAmount(supporter.amount, supporter.currency)}
+        </div>
+      </div>
+      
+      <div className="relative z-10">
+        <div className="pr-20"> {/* Add right padding to avoid overlap with amount */}
           <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
             {supporter.name}
           </div>
           {supporter.message && (
-            <p className="text-gray-300 text-sm truncate mt-1">
+            <p className="text-gray-300 text-sm mt-1">
               "{supporter.message}"
             </p>
           )}
-          <div className="text-xs text-gray-400 mt-1">
-            #{supporter.rank} • {new Date(supporter.date).toLocaleDateString()}
-          </div>
-        </div>
-        
-        <div className="text-right ml-4">
-          <div className={`font-bold ${rankIndex < 3 ? trophyColors[rankIndex] : 'text-cyan-300'} ${amountTextSizes[rankIndex]}`}>
-            {formatAmount(supporter.amount, supporter.currency)}
-          </div>
         </div>
       </div>
 
       {/* Admin controls overlay */}
       {isAdmin && (
-        <div className="absolute top-2 right-2 flex space-x-1 opacity-60 hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-2 right-2 flex space-x-1 opacity-60 hover:opacity-100 transition-opacity">
           <button
             onClick={onEdit}
             className="px-2 py-1 bg-blue-600/90 text-white text-xs rounded hover:bg-blue-500 transition-colors shadow-lg"

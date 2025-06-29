@@ -20,7 +20,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    const error = new Error('useAuth must be used within an AuthProvider');
+    error.name = 'AuthContextError';
+    throw error;
   }
   return context;
 }
@@ -53,7 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return { session, error };
           } catch (sessionError: any) {
             console.warn('⚠️ AUTH: Session check failed:', sessionError.message);
-            return { session: null, error: sessionError };
+            // Ensure we return a properly structured error
+            const properError = sessionError instanceof Error ? sessionError : new Error(String(sessionError));
+            return { session: null, error: properError };
           }
         })();
 
@@ -61,7 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const timeoutPromise = new Promise<{ session: any, error: any }>((resolve) => {
           authTimeout = setTimeout(() => {
             console.warn('⏰ AUTH: Session check timed out, proceeding without user');
-            resolve({ session: null, error: new Error('Auth timeout') });
+            const timeoutError = new Error('Auth timeout');
+            timeoutError.name = 'AuthTimeoutError';
+            resolve({ session: null, error: timeoutError });
           }, 3000);
         });
 
@@ -86,9 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('✅ AUTH: User session found:', session.user.email, session.user.id);
           
           // Background profile update (non-blocking with retry)
-          updateUserActivity(session.user).catch(err => 
-            console.warn('Profile update failed (non-blocking):', err.message)
-          );
+          updateUserActivity(session.user).catch(err => {
+            console.warn('Profile update failed (non-blocking):', err.message);
+            // Don't throw errors from background operations
+          });
         } else {
           console.log('ℹ️ AUTH: No active session found');
           setUser(null);
@@ -97,15 +104,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         console.log('🏁 AUTH: Initial auth check complete, loading set to false');
       } catch (error: any) {
-        console.warn('⚠️ AUTH: Auth check failed (non-blocking):', error.message);
+        console.warn('⚠️ AUTH: Auth check failed (non-blocking):', error);
+        
+        // Ensure error is properly structured
+        const properError = error instanceof Error ? error : new Error(String(error));
+        
         // Only show critical errors to users
-        if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        if (properError.message?.includes('network') || properError.message?.includes('fetch')) {
           setError('Connection issues detected. Some features may be limited.');
         }
+        
         if (isMounted) {
           setLoading(false);
           console.log('🏁 AUTH: Auth check failed, loading set to false');
         }
+        
+        // Don't rethrow errors from the auth check - let the app continue
       }
     };
 
@@ -118,64 +132,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5000); // 5 second absolute maximum (reduced from 8)
 
     // Start quick check immediately
-    quickAuthCheck();
+    quickAuthCheck().catch(err => {
+      console.error('🚨 AUTH: Unhandled error in quickAuthCheck:', err);
+      // Ensure loading is always set to false even if quickAuthCheck throws
+      if (isMounted) {
+        setLoading(false);
+      }
+    });
 
     // Set up auth state listener for real-time updates
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!isMounted) return;
 
-        console.log('🔄 AUTH: Auth state change:', event, session?.user?.email);
-        
-        // Clear fallback timeout when we get any auth state change
-        if (fallbackTimeout) clearTimeout(fallbackTimeout);
-        
-        switch (event) {
-          case 'SIGNED_IN':
-            if (session?.user) {
-              setUser(session.user);
-              setError(null);
-              setLoading(false);
-              console.log('✅ User signed in:', session.user.email);
+        try {
+          console.log('🔄 AUTH: Auth state change:', event, session?.user?.email);
+          
+          // Clear fallback timeout when we get any auth state change
+          if (fallbackTimeout) clearTimeout(fallbackTimeout);
+          
+          switch (event) {
+            case 'SIGNED_IN':
+              if (session?.user) {
+                setUser(session.user);
+                setError(null);
+                setLoading(false);
+                console.log('✅ User signed in:', session.user.email);
+                
+                // Background profile update with retry - don't throw errors
+                updateUserActivity(session.user).catch(err => {
+                  console.warn('Profile update failed:', err.message);
+                  // Don't throw errors from background operations
+                });
+              }
+              break;
               
-              // Background profile update with retry
-              updateUserActivity(session.user).catch(err => 
-                console.warn('Profile update failed:', err.message)
-              );
-            }
-            break;
-            
-          case 'SIGNED_OUT':
-            setUser(null);
-            setError(null);
-            setLoading(false);
-            console.log('👋 User signed out');
-            break;
-            
-          case 'TOKEN_REFRESHED':
-            if (session?.user) {
-              setUser(session.user);
+            case 'SIGNED_OUT':
+              setUser(null);
               setError(null);
               setLoading(false);
-              console.log('🔄 Token refreshed for:', session.user.email);
-            }
-            break;
-            
-          case 'USER_UPDATED':
-            if (session?.user) {
-              setUser(session.user);
+              console.log('👋 User signed out');
+              break;
+              
+            case 'TOKEN_REFRESHED':
+              if (session?.user) {
+                setUser(session.user);
+                setError(null);
+                setLoading(false);
+                console.log('🔄 Token refreshed for:', session.user.email);
+              }
+              break;
+              
+            case 'USER_UPDATED':
+              if (session?.user) {
+                setUser(session.user);
+                setLoading(false);
+                console.log('👤 User updated:', session.user.email);
+              }
+              break;
+              
+            default:
+              if (session?.user) {
+                setUser(session.user);
+              } else {
+                setUser(null);
+              }
               setLoading(false);
-              console.log('👤 User updated:', session.user.email);
-            }
-            break;
-            
-          default:
-            if (session?.user) {
-              setUser(session.user);
-            } else {
-              setUser(null);
-            }
-            setLoading(false);
+          }
+        } catch (stateChangeError: any) {
+          console.error('🚨 AUTH: Error in auth state change handler:', stateChangeError);
+          
+          // Ensure loading is set to false even if there's an error
+          setLoading(false);
+          
+          // Don't throw errors from the state change handler
         }
       }
     );
@@ -202,7 +232,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         
         if (!response.ok && response.status !== 404) {
-          throw new Error(`Activity update failed: ${response.status}`);
+          const error = new Error(`Activity update failed: ${response.status}`);
+          error.name = 'ActivityUpdateError';
+          throw error;
         }
         
         return response;
@@ -211,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await withRetry(updateOperation, 2, 1000);
     } catch (error: any) {
       console.warn('Activity update error:', error.message);
+      // Don't rethrow - this is a background operation
     }
   };
 
@@ -241,7 +274,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           toast.error(errorMessage);
         }
-        throw signInError;
+        
+        // Ensure we throw a proper Error object
+        const properError = signInError instanceof Error ? signInError : new Error(errorMessage);
+        properError.name = 'SignInError';
+        throw properError;
       }
 
       if (data.user) {
@@ -254,7 +291,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       const message = error.message || 'Failed to sign in';
       setError(message);
-      throw error;
+      
+      // Ensure we throw a proper Error object
+      const properError = error instanceof Error ? error : new Error(message);
+      properError.name = properError.name || 'SignInError';
+      throw properError;
     } finally {
       setLoading(false);
     }
@@ -269,15 +310,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Enhanced validation for mobile
       if (!email || !email.includes('@')) {
-        throw new Error('Please enter a valid email address');
+        const error = new Error('Please enter a valid email address');
+        error.name = 'ValidationError';
+        throw error;
       }
       
       if (!inGameAlias || inGameAlias.length < 2) {
-        throw new Error('Username must be at least 2 characters');
+        const error = new Error('Username must be at least 2 characters');
+        error.name = 'ValidationError';
+        throw error;
       }
       
       if (!password || password.length < 6) {
-        throw new Error('Password must be at least 6 characters');
+        const error = new Error('Password must be at least 6 characters');
+        error.name = 'ValidationError';
+        throw error;
       }
       
       const { data, error: signUpError } = await supabase.auth.signUp({
@@ -309,7 +356,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setError(errorMessage);
-        throw new Error(errorMessage);
+        const properError = new Error(errorMessage);
+        properError.name = 'SignUpError';
+        throw properError;
       }
 
       console.log('✅ Sign up successful');
@@ -331,7 +380,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const message = error.message || 'Failed to create account';
       setError(message);
       console.error('Sign up failed:', message);
-      throw error;
+      
+      // Ensure we throw a proper Error object
+      const properError = error instanceof Error ? error : new Error(message);
+      properError.name = properError.name || 'SignUpError';
+      throw properError;
     } finally {
       setLoading(false);
     }
@@ -355,7 +408,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         // Handle duplicate key error gracefully
-        if (error.message.includes('duplicate key')) {
+        const errorMessage = (error as any)?.message || String(error);
+        if (errorMessage.includes('duplicate key')) {
           console.log('Profile already exists, updating instead...');
           
           // Try to update existing profile
@@ -373,15 +427,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (updateError) {
             console.error('Profile update failed:', updateError);
-            throw updateError;
+            const updateErrorMessage = (updateError as any)?.message || String(updateError);
+            const properError = new Error(updateErrorMessage || 'Profile update failed');
+            properError.name = 'ProfileUpdateError';
+            throw properError;
           }
         } else {
           console.error('Profile creation failed:', error);
-          throw error;
+          const properError = new Error(errorMessage || 'Profile creation failed');
+          properError.name = 'ProfileCreationError';
+          throw properError;
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Profile creation failed:', error);
+      // Ensure error is properly structured before rethrowing
+      const properError = error instanceof Error ? error : new Error(String(error));
+      properError.name = properError.name || 'ProfileError';
+      throw properError;
     }
   };
 
@@ -402,6 +465,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setError(null);
       toast.error('Sign out completed (with warnings)');
+      
+      // Don't throw errors from signOut - user expects to be signed out
     } finally {
       setLoading(false);
     }
@@ -413,17 +478,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
       
       if (session?.user) {
+        setUser(session.user);
         console.log('✅ Auth retry successful');
-        toast.success('Connection restored');
       } else {
+        setUser(null);
         console.log('ℹ️ No session found on retry');
       }
     } catch (error: any) {
-      console.warn('Auth retry failed:', error);
-      toast.error('Connection retry failed');
+      console.error('❌ Auth retry failed:', error);
+      setUser(null);
+      
+      // Ensure error is properly structured
+      const properError = error instanceof Error ? error : new Error(String(error));
+      properError.name = 'AuthRetryError';
+      setError(properError.message);
+      
+      // Don't throw from retry - it's meant to be a recovery operation
     }
   };
 

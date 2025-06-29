@@ -80,9 +80,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Unsupported type ignored' });
     }
 
-    // Convert amount to cents
-    const amountFloat = parseFloat(kofiData.amount);
+    // Convert amount to cents (remove commas first to handle large amounts like "2,500")
+    const cleanAmount = kofiData.amount.replace(/,/g, '');
+    const amountFloat = parseFloat(cleanAmount);
     const amountCents = Math.round(amountFloat * 100);
+
+    console.log('💰 Amount processing:', {
+      original: kofiData.amount,
+      cleaned: cleanAmount,
+      float: amountFloat,
+      cents: amountCents
+    });
 
     // Try to find user by email (if they have an account) using service role
     let userId = null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from "next/link";
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
@@ -60,6 +60,39 @@ interface FeaturedVideo {
   published_at: string;
 }
 
+interface RecordedGamePlayer {
+  player_name: string;
+  main_class: string;
+  side: string;
+  team: string;
+  kills: number;
+  deaths: number;
+  flag_captures?: number;
+  carrier_kills?: number;
+}
+
+interface RecordedGame {
+  gameId: string;
+  gameDate: string;
+  gameMode: string;
+  mapName: string;
+  duration: number;
+  totalPlayers: number;
+  players: RecordedGamePlayer[];
+  videoInfo: {
+    has_video: boolean;
+    youtube_url?: string;
+    vod_url?: string;
+    video_title?: string;
+    thumbnail_url?: string;
+  };
+  winningInfo?: {
+    type: string;
+    side: string;
+    winner: string;
+  };
+}
+
 interface OnlineUser {
   id: string;
   in_game_alias: string;
@@ -114,6 +147,11 @@ export default function Home() {
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   const [recentGames, setRecentGames] = useState<any[]>([]);
+  
+  // Recorded games state
+  const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
+  const [showRecordedGamesTheater, setShowRecordedGamesTheater] = useState(false);
+  const [showVideoEmbed, setShowVideoEmbed] = useState(false);
   
   // Collapsible states for player lists
   const [isSpectatorsCollapsed, setIsSpectatorsCollapsed] = useState(false);
@@ -498,14 +536,85 @@ export default function Home() {
     // Fetch recent games
     const fetchRecentGames = async () => {
       try {
-        const response = await fetch('/api/player-stats/recent-games?limit=5');
+        const response = await fetch('/api/player-stats/recent-games');
         if (response.ok) {
           const data = await response.json();
           setRecentGames(data.games || []);
         }
       } catch (error) {
         console.error('Error fetching recent games:', error);
-        setRecentGames([]);
+      }
+    };
+
+    // Fetch recorded games
+    const fetchRecordedGames = async () => {
+      try {
+        console.log('🎬 Fetching recorded games...');
+        const response = await fetch('/api/player-stats/recent-games?with_recordings=true&limit=10');
+        console.log('🎬 Response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('🎬 Raw API data:', data);
+          
+          // Enhanced null/undefined checks
+          if (!data || typeof data !== 'object') {
+            console.warn('🎬 Invalid API response data:', data);
+            setRecordedGames([]);
+            setShowRecordedGamesTheater(false);
+            return;
+          }
+          
+          const games = Array.isArray(data.games) ? data.games : [];
+          console.log('🎬 Games in response:', games.length);
+          
+          const gamesWithRecordings = games.filter((game: any) => {
+            try {
+              return game && 
+                     typeof game === 'object' &&
+                     game.videoInfo && 
+                     typeof game.videoInfo === 'object' &&
+                     game.videoInfo.has_video === true && 
+                     (game.videoInfo.youtube_url || game.videoInfo.vod_url);
+            } catch (filterError) {
+              console.warn('🎬 Error filtering game:', filterError, game);
+              return false;
+            }
+          }) || [];
+          
+          console.log('🎬 Games with recordings found:', gamesWithRecordings.length);
+          console.log('🎬 Sample game data:', gamesWithRecordings[0]);
+          
+          // Validate the games data structure before setting state
+          const validatedGames = gamesWithRecordings.map((game: any) => {
+            try {
+              return {
+                ...game,
+                players: Array.isArray(game.players) ? game.players : [],
+                videoInfo: game.videoInfo || { has_video: false },
+                winningInfo: game.winningInfo || null
+              };
+            } catch (validationError) {
+              console.warn('🎬 Error validating game data:', validationError, game);
+              return null;
+            }
+          }).filter(Boolean); // Remove null entries
+          
+          setRecordedGames(validatedGames);
+          
+          // Always show theater mode if we have recorded games - this showcases recent activity prominently
+          setShowRecordedGamesTheater(validatedGames.length > 0);
+          console.log('🎬 Theater mode enabled:', validatedGames.length > 0);
+        } else {
+          console.error('🎬 API response not ok:', response.status, response.statusText);
+          setRecordedGames([]);
+          setShowRecordedGamesTheater(false);
+        }
+      } catch (error) {
+        console.error('🎬 Error fetching recorded games:', error);
+        // Ensure we always set safe defaults on error
+        setRecordedGames([]);
+        setShowRecordedGamesTheater(false);
       }
     };
 
@@ -623,6 +732,7 @@ export default function Home() {
     fetchFeaturedVideos();
     fetchOnlineUsers();
     fetchRecentGames();
+    fetchRecordedGames();
     fetchTopSquads();
     fetchUpcomingMatches();
     fetchUserSquad();
@@ -670,15 +780,25 @@ export default function Home() {
 
   // Helper function to get class color
   const getClassColor = (className: string) => {
-    switch (className.toLowerCase()) {
-      case 'infantry': return 'text-red-400';
-      case 'heavy weapons': return 'text-blue-400';
-      case 'jump trooper': return 'text-gray-400';
-      case 'infiltrator': return 'text-purple-400';
-      case 'squad leader': return 'text-green-500';
-      case 'field medic': return 'text-yellow-400';
-      case 'combat engineer': return 'text-amber-600';
-      default: return 'text-gray-300';
+    switch (className?.toLowerCase()) {
+      // Updated class names to match actual game data
+      case 'engineer': return '#f59e0b'; // Amber
+      case 'medic': return '#10b981'; // Green  
+      case 'rifleman': return '#ef4444'; // Red
+      case 'grenadier': return '#f97316'; // Orange
+      case 'rocket': return '#3b82f6'; // Blue
+      case 'mortar': return '#8b5cf6'; // Purple
+      case 'sniper': return '#06b6d4'; // Cyan
+      case 'pilot': return '#84cc16'; // Lime
+      // Legacy class names (fallback)
+      case 'infantry': return '#ef4444'; // Red
+      case 'heavy weapons': return '#3b82f6'; // Blue
+      case 'jump trooper': return '#6b7280'; // Gray
+      case 'infiltrator': return '#8b5cf6'; // Purple
+      case 'squad leader': return '#10b981'; // Green
+      case 'field medic': return '#eab308'; // Yellow
+      case 'combat engineer': return '#f59e0b'; // Amber
+      default: return '#d1d5db'; // Light gray for unknown
     }
   };
 
@@ -824,31 +944,126 @@ export default function Home() {
   // Parse patch notes with Infantry Online colors (simplified for feed)
   const parsePatchNotesFeed = (content: string) => {
     const lines = content.split('\n');
-    
-    return lines.map((line, index) => {
-      let className = 'text-green-400';
-      let processedLine = line;
+    const updates: Array<{ date: string; changes: string[] }> = [];
+    let currentUpdate: { date: string; changes: string[] } | null = null;
 
-      if (line.includes('~6') || /\w{3} \d{1,2}, \d{4}/.test(line)) {
-        processedLine = line.replace(/~6/g, '');
-        className = 'text-cyan-400 font-bold';
-      } else if (line.includes('~5') || /^\s*\w+:/.test(line.trim())) {
-        processedLine = line.replace(/~5/g, '');
-        className = 'text-purple-400 font-bold';
-      } else if (line.includes('~4') || line.includes('~1') || line.includes('~3') || line.includes('~7') || line.trim().startsWith('-')) {
-        processedLine = line.replace(/~[1-7]/g, '');
-        className = 'text-yellow-300';
-      } else {
-        processedLine = line.replace(/~[0-9]/g, '');
-        className = 'text-gray-300';
+    for (const line of lines) {
+      // Check for date pattern (MM/DD/YYYY or similar)
+      const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+      if (dateMatch) {
+        if (currentUpdate) {
+          updates.push(currentUpdate);
+        }
+        currentUpdate = {
+          date: dateMatch[1],
+          changes: []
+        };
+      } else if (currentUpdate && line.trim() && !line.includes('====')) {
+        // Add non-empty lines that aren't separators
+        currentUpdate.changes.push(line.trim());
       }
+    }
 
-      return (
-        <div key={index} className={className}>
-          {processedLine}
-        </div>
-      );
+    // Add the last update
+    if (currentUpdate) {
+      updates.push(currentUpdate);
+    }
+
+    return updates.slice(0, 3); // Return last 3 updates
+  };
+
+  // Helper functions for recorded games theater display
+  const getDefenseClassOrder = (className: string): number => {
+    const order: Record<string, number> = {
+      'Engineer': 1, 'Medic': 2, 'Rifleman': 3, 'Grenadier': 4, 
+      'Rocket': 5, 'Mortar': 6, 'Sniper': 7, 'Pilot': 8
+    };
+    return order[className] || 99;
+  };
+
+  const getOffenseClassOrder = (className: string): number => {
+    const order: Record<string, number> = {
+      'Pilot': 1, 'Rifleman': 2, 'Grenadier': 3, 'Rocket': 4, 
+      'Mortar': 5, 'Sniper': 6, 'Engineer': 7, 'Medic': 8
+    };
+    return order[className] || 99;
+  };
+
+  const getTeamColor = (teamName: string): string => {
+    if (teamName.includes('TI') || teamName.includes('Titan')) return '#3B82F6'; // Blue
+    if (teamName.includes('CO') || teamName.includes('Collective')) return '#EF4444'; // Red
+    return '#6B7280'; // Gray for unknown
+  };
+
+  const getPlayerWinStatus = (player: RecordedGamePlayer, game: RecordedGame): 'win' | 'loss' | 'unknown' => {
+    if (!game.winningInfo) return 'unknown';
+    
+    const playerTeam = player.team;
+    const winnerTeam = game.winningInfo.winner;
+    
+    if (playerTeam === winnerTeam) return 'win';
+    if (playerTeam && winnerTeam && playerTeam !== winnerTeam) return 'loss';
+    return 'unknown';
+  };
+
+  const getGroupedGamePlayers = (game: RecordedGame) => {
+    if (!game?.players) return {};
+    
+    const teamGroups = game.players.reduce((acc, player) => {
+      const team = player.team || 'Unknown';
+      if (!acc[team]) {
+        acc[team] = { defense: [], offense: [] };
+      }
+      
+      const side = player.side || 'N/A';
+      if (side === 'defense') {
+        acc[team].defense.push(player);
+      } else if (side === 'offense') {
+        acc[team].offense.push(player);
+      }
+      
+      return acc;
+    }, {} as Record<string, { defense: RecordedGamePlayer[], offense: RecordedGamePlayer[] }>);
+
+    // Sort within each team/side group
+    Object.keys(teamGroups).forEach(team => {
+      teamGroups[team].defense.sort((a, b) => {
+        const orderA = getDefenseClassOrder(a.main_class || '');
+        const orderB = getDefenseClassOrder(b.main_class || '');
+        if (orderA !== orderB) return orderA - orderB;
+        return b.kills - a.kills;
+      });
+
+      teamGroups[team].offense.sort((a, b) => {
+        const orderA = getOffenseClassOrder(a.main_class || '');
+        const orderB = getOffenseClassOrder(b.main_class || '');
+        if (orderA !== orderB) return orderA - orderB;
+        return b.kills - a.kills;
+      });
     });
+
+    return teamGroups;
+  };
+
+  const formatGameDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+
+  const formatGameDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return `${Math.floor(diffInHours)}h ago`;
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString();
+    }
   };
 
   if (loading) {
@@ -899,8 +1114,8 @@ export default function Home() {
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'orange' ? 'bg-gradient-to-r from-gray-900/90 via-orange-900/60 to-gray-900/90' :
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'indigo' ? 'bg-gradient-to-r from-gray-900/90 via-indigo-900/60 to-gray-900/90' :
                 bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'teal' ? 'bg-gradient-to-r from-gray-900/90 via-teal-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'red' ? 'bg-gradient-to-r from-gray-900/90 via-red-900/60 to-gray-900/90' :
-                'bg-gradient-to-r from-gray-900/90 via-yellow-900/60 to-gray-900/90'
+                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'red' ? 'bg-gradient-to-r from-red-900/90 via-red-900/60 to-gray-900/90' :
+                'bg-gradient-to-r from-yellow-900/60 to-gray-900/90'
               ) : 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90'
             }`}
           ></div>
@@ -1031,6 +1246,8 @@ export default function Home() {
           </div>
         </div>
 
+
+
         {/* CLEAN 3-COLUMN LAYOUT - Videos and News in same container */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
           
@@ -1131,13 +1348,13 @@ export default function Home() {
                               {new Date(game.gameDate).toLocaleDateString()}
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              {game.playerDetails.slice(0, 4).map((player: any, pIndex: number) => (
+                              {(game.playerDetails || game.players || []).slice(0, 4).map((player: any, pIndex: number) => (
                                 <span key={pIndex} className="text-xs text-gray-300">
-                                  {player.name}{pIndex < Math.min(3, game.playerDetails.length - 1) ? ',' : ''}
+                                  {player.name || player.player_name || player.alias}{pIndex < Math.min(3, (game.playerDetails || game.players || []).length - 1) ? ',' : ''}
                                 </span>
                               ))}
-                              {game.playerDetails.length > 4 && (
-                                <span className="text-xs text-gray-500">+{game.playerDetails.length - 4} more</span>
+                              {(game.playerDetails || game.players || []).length > 4 && (
+                                <span className="text-xs text-gray-500">+{(game.playerDetails || game.players || []).length - 4} more</span>
                               )}
                             </div>
                           </div>
@@ -1224,7 +1441,291 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Featured Videos below news */}
+              {/* Recent Recorded Games Theater - Featured prominently */}
+              {showRecordedGamesTheater && recordedGames.length > 0 && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden mb-6">
+                  <div className="bg-gray-700/50 px-4 py-2 border-b border-cyan-500/30">
+                    <h3 className="text-lg font-bold text-cyan-400 tracking-wider">🎬 Most Recent Recorded Games</h3>
+                    <p className="text-gray-300 text-sm">Latest competitive gameplay recordings</p>
+                  </div>
+                  <div className="p-4">
+                    {/* Featured Main Game */}
+                    {recordedGames[0] && recordedGames[0].videoInfo && (
+                      <div className="mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Main Video - 2/3 width */}
+                          <div className="md:col-span-2">
+                            <div className="bg-white/10 backdrop-blur-lg rounded-lg overflow-hidden border border-white/20">
+                              <div className="p-3 bg-white/20 border-b border-white/20 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <span className="text-cyan-400 font-bold">🎮 {recordedGames[0]?.mapName || 'Unknown Map'}</span>
+                                  <span className="text-gray-300">• {recordedGames[0]?.gameMode || 'Unknown Mode'}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {recordedGames[0]?.videoInfo?.youtube_url && (
+                                    <a
+                                      href={recordedGames[0].videoInfo.youtube_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs transition-colors"
+                                    >
+                                      📺 YouTube
+                                    </a>
+                                  )}
+                                  {recordedGames[0]?.gameId && (
+                                    <Link 
+                                      href={`/stats/game/${encodeURIComponent(recordedGames[0].gameId)}`}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs transition-colors"
+                                    >
+                                      📊 Stats
+                                    </Link>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="p-3">
+                                {recordedGames[0]?.videoInfo?.youtube_url && !showVideoEmbed ? (
+                                  <div 
+                                    className="relative cursor-pointer group"
+                                    onClick={() => setShowVideoEmbed(true)}
+                                  >
+                                    <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                                      <img
+                                        src={getYouTubeThumbnail(recordedGames[0].videoInfo.youtube_url, 'hqdefault') || '/placeholder-video.jpg'}
+                                        alt={recordedGames[0]?.videoInfo?.video_title || 'Match Recording'}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                        onError={(e) => {
+                                          try {
+                                            const target = e.target as HTMLImageElement;
+                                            target.src = '/placeholder-video.jpg';
+                                          } catch (imgError) {
+                                            console.warn('Image error handler failed:', imgError);
+                                          }
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-all duration-300">
+                                        <div className="bg-red-600 rounded-full p-4 group-hover:bg-red-500 group-hover:scale-110 transition-all duration-300">
+                                          <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M8 5v14l11-7z"/>
+                                          </svg>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 text-center">
+                                      <p className="text-gray-300 text-sm">🎮 Click to watch full recording</p>
+                                      <p className="text-gray-400 text-xs">
+                                        Duration: {recordedGames[0]?.duration ? formatGameDuration(recordedGames[0].duration) : 'Unknown'} • {recordedGames[0]?.totalPlayers || 0} players
+                                      </p>
+                                    </div>
+                                  </div>
+                                ) : recordedGames[0]?.videoInfo?.youtube_url && showVideoEmbed ? (
+                                  <div className="space-y-3">
+                                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                                      <iframe
+                                        src={`https://www.youtube.com/embed/${getYouTubeVideoId(recordedGames[0].videoInfo.youtube_url)}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&hd=1`}
+                                        title={recordedGames[0]?.videoInfo?.video_title || 'Match Recording'}
+                                        className="w-full h-full border-0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                        loading="eager"
+                                      />
+                                    </div>
+                                    <div className="text-center">
+                                      <button
+                                        onClick={() => setShowVideoEmbed(false)}
+                                        className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors"
+                                      >
+                                        🔙 Back to Thumbnail
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4">
+                                    <p className="text-gray-400 text-sm">Video content not available</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Team Stats Sidebar - 1/3 width */}
+                          <div className="md:col-span-1">
+                            <div className="space-y-2">
+                              {(() => {
+                                try {
+                                  if (!recordedGames[0] || !recordedGames[0].players) {
+                                    return (
+                                      <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
+                                        <p className="text-gray-400 text-center text-sm">Player data not available</p>
+                                      </div>
+                                    );
+                                  }
+
+                                  const groupedPlayers = getGroupedGamePlayers(recordedGames[0]);
+                                  if (!groupedPlayers || Object.keys(groupedPlayers).length === 0) {
+                                    return (
+                                      <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
+                                        <p className="text-gray-400 text-center text-sm">No team data available</p>
+                                      </div>
+                                    );
+                                  }
+
+                                  return Object.entries(groupedPlayers).map(([team, { defense, offense }]) => {
+                                    try {
+                                      const winStatus = defense?.length > 0 ? getPlayerWinStatus(defense[0], recordedGames[0]) : 
+                                                       offense?.length > 0 ? getPlayerWinStatus(offense[0], recordedGames[0]) : 'unknown';
+                                      
+                                      return (
+                                        <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
+                                          {/* Team Header with Win/Loss */}
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-gray-300 font-medium text-sm">{team}</span>
+                                            {winStatus !== 'unknown' && (
+                                              <div className={`px-3 py-1.5 rounded-md text-xs font-bold border-2 ${
+                                                winStatus === 'win' 
+                                                  ? 'bg-green-600/80 text-green-50 border-green-400 shadow-green-500/25 shadow-md' 
+                                                  : 'bg-red-600/80 text-red-50 border-red-400 shadow-red-500/25 shadow-md'
+                                              }`}>
+                                                {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Defense Players */}
+                                          {defense && defense.length > 0 && (
+                                            <div className="mb-2">
+                                              <div className="text-blue-200 text-xs font-medium mb-1">🛡️ Defense</div>
+                                              <div className="space-y-1">
+                                                {defense.map((player, idx) => {
+                                                  if (!player) return null;
+                                                  return (
+                                                    <div key={idx} className="bg-blue-500/10 rounded p-1.5">
+                                                      <div className="flex items-center justify-between">
+                                                        <span 
+                                                          className="font-medium text-xs truncate"
+                                                          style={{ color: getClassColor(player.main_class || '') }}
+                                                          title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
+                                                        >
+                                                          {player.player_name || 'Unknown Player'}
+                                                        </span>
+                                                        <span className="text-gray-300 text-xs ml-1">
+                                                          {player.kills || 0}K/{player.deaths || 0}D
+                                                        </span>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Offense Players */}
+                                          {offense && offense.length > 0 && (
+                                            <div>
+                                              <div className="text-red-200 text-xs font-medium mb-1">⚔️ Offense</div>
+                                              <div className="space-y-1">
+                                                {offense.map((player, idx) => {
+                                                  if (!player) return null;
+                                                  return (
+                                                    <div key={idx} className="bg-red-500/10 rounded p-1.5">
+                                                      <div className="flex items-center justify-between">
+                                                        <span 
+                                                          className="font-medium text-xs truncate"
+                                                          style={{ color: getClassColor(player.main_class || '') }}
+                                                          title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
+                                                        >
+                                                          {player.player_name || 'Unknown Player'}
+                                                        </span>
+                                                        <span className="text-gray-300 text-xs ml-1">
+                                                          {player.kills || 0}K/{player.deaths || 0}D
+                                                        </span>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch (teamError) {
+                                      console.warn('Error rendering team:', teamError, team);
+                                      return (
+                                        <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
+                                          <p className="text-gray-400 text-center text-sm">Error loading team data</p>
+                                        </div>
+                                      );
+                                    }
+                                  });
+                                } catch (renderError) {
+                                  console.warn('Error rendering player stats:', renderError);
+                                  return (
+                                    <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
+                                      <p className="text-gray-400 text-center text-sm">Unable to load player stats</p>
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Recent Games */}
+                    {recordedGames.length > 1 && (
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-300 mb-3">📹 More Recent Recordings</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {recordedGames.slice(1, 7).map((game) => (
+                            <Link key={game.gameId} href={`/stats/game/${encodeURIComponent(game.gameId)}`}>
+                              <div className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-cyan-500/50 transition-all duration-300">
+                                <div className="relative aspect-video overflow-hidden">
+                                  {game.videoInfo.youtube_url ? (
+                                    <img
+                                      src={getYouTubeThumbnail(game.videoInfo.youtube_url, 'hqdefault') || '/placeholder-video.jpg'}
+                                      alt={`${game.mapName} - ${game.gameMode}`}
+                                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                      onError={(e) => {
+                                        e.currentTarget.src = '/placeholder-video.jpg';
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                                      <div className="text-gray-400 text-center">
+                                        <div className="text-lg mb-1">🎮</div>
+                                        <div className="text-xs">Recording</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
+                                    <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                                      <svg className="w-3 h-3 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"/>
+                                      </svg>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="p-2">
+                                  <h5 className="font-medium text-xs text-white group-hover:text-cyan-300 transition-colors truncate">
+                                    {game.mapName} • {game.gameMode}
+                                  </h5>
+                                  <div className="text-xs text-gray-400 mt-1">
+                                    {formatGameDate(game.gameDate)} • {formatGameDuration(game.duration)}
+                                  </div>
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* Featured Videos below theater */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
                   <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>

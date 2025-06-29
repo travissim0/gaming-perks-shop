@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Filter, X } from 'lucide-react';
 
 interface PlayerAggregateStats {
   id: number;
@@ -109,6 +109,9 @@ export default function PlayerStatsPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
+  // NEW: Desktop floating filter panel state - starts collapsed
+  const [desktopFiltersOpen, setDesktopFiltersOpen] = useState(false);
+
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState({
     player: true,
@@ -203,7 +206,7 @@ export default function PlayerStatsPage() {
       const response = await fetch('/api/player-stats/recent-games?limit=15');
       if (response.ok) {
         const data = await response.json();
-        setRecentGames(data.data || []);
+        setRecentGames(data.games || []);
       } else {
         console.error('Failed to fetch recent games:', response.statusText);
       }
@@ -218,6 +221,19 @@ export default function PlayerStatsPage() {
     fetchAllStats();
     fetchRecentGames();
   }, [sortBy, sortOrder, dateFilter, playerName]);
+
+  // Close floating filter panel on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDesktopFiltersOpen(false);
+        setMobileFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
 
   const handleSearch = () => {
     setPlayerName(searchInput);
@@ -491,9 +507,188 @@ export default function PlayerStatsPage() {
         </div>
       )}
       
+      {/* Desktop Filter Toggle Button */}
+      <div className="hidden lg:block fixed top-28 right-6 z-40">
+        <button
+          onClick={() => setDesktopFiltersOpen(!desktopFiltersOpen)}
+          className={`backdrop-blur-sm text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-105 ${
+            desktopFiltersOpen 
+              ? 'bg-cyan-700 ring-2 ring-cyan-400' 
+              : 'bg-cyan-600/90 hover:bg-cyan-700'
+          }`}
+          title="Toggle Filters"
+        >
+          <Filter className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Desktop Floating Filter Panel */}
+      {desktopFiltersOpen && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="hidden lg:block fixed inset-0 z-30 bg-black/20 backdrop-blur-sm" 
+          onClick={() => setDesktopFiltersOpen(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, x: 300, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 300, scale: 0.95 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 300, 
+              damping: 25,
+              duration: 0.3 
+            }}
+            className="absolute top-28 right-6 w-80 bg-gray-800/95 backdrop-blur-md border border-gray-600/50 rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-700/50 flex items-center justify-between">
+              <h3 className="font-medium text-white">Filters & Quick Access</h3>
+              <button
+                onClick={() => setDesktopFiltersOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Filters */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
+                
+                {/* Sort By */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {SORT_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Order */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    <option value="desc">High to Low</option>
+                    <option value="asc">Low to High</option>
+                  </select>
+                </div>
+
+                {/* Date Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {DATE_FILTERS.map(filter => (
+                      <option key={filter.value} value={filter.value}>{filter.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Player Search */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      placeholder="Player name..."
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                    />
+                    <button
+                      onClick={handleSearch}
+                      className="bg-cyan-600 hover:bg-cyan-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                    >
+                      Go
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Access */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_kills');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setDesktopFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
+                >
+                  <div className="text-red-300 font-bold">🎯 Top Killers</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('win_rate');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setDesktopFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
+                >
+                  <div className="text-green-300 font-bold">🏆 Win Rate</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_captures');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setDesktopFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
+                >
+                  <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setSortBy('total_games');
+                    setSortOrder('desc');
+                    setDateFilter('all');
+                    setPlayerName('');
+                    setSearchInput('');
+                    setDesktopFiltersOpen(false);
+                  }}
+                  className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
+                >
+                  <div className="text-purple-300 font-bold">🎮 Most Active</div>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       <div className="flex flex-col lg:flex-row">
-        {/* Recent Games - Left Side (Hidden on mobile) */}
-        <div className="hidden lg:block lg:w-80 p-6 border-r border-gray-700">
+        {/* Recent Games - Left Side (Hidden on mobile) - Expanded to 1.5x width */}
+        <div className="hidden lg:block lg:w-[480px] p-6 border-r border-gray-700">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -538,54 +733,80 @@ export default function PlayerStatsPage() {
                          </div>
                        </div>
                        
-                       {/* Improved player display */}
-                       {game.playerDetails && game.playerDetails.length > 0 && (
+                       {/* Optimized player display - All 5 players with flexible width */}
+                       {game.players && game.players.length > 0 && (
                          <div className="space-y-1.5">
-                           {/* Defense team - more compact */}
-                           <div className="flex items-center gap-1">
-                             <div className="text-blue-400 text-xs font-bold min-w-8">🔵</div>
-                             <div className="flex flex-wrap gap-1 flex-1">
-                               {game.playerDetails
+                           {/* Defense team - flexible grid layout */}
+                           <div className="flex items-start gap-1">
+                             <div className="text-blue-400 text-xs font-bold min-w-8 mt-0.5">🔵</div>
+                             <div className="grid grid-cols-5 gap-1 flex-1 min-w-0">
+                               {game.players
                                  .filter((player: any) => player.side === 'defense')
-                                 .slice(0, 4)
-                                 .map((player: any, pIndex: number) => (
-                                   <span 
-                                     key={pIndex}
-                                     className="text-xs px-1.5 py-0.5 rounded-md font-medium"
-                                     style={{
-                                       color: getClassColor(player.main_class),
-                                       backgroundColor: `${getClassColor(player.main_class)}15`,
-                                       borderLeft: `2px solid ${getClassColor(player.main_class)}`
-                                     }}
-                                     title={`${player.name} (${player.main_class})`}
-                                   >
-                                     {player.name.length > 8 ? player.name.substring(0, 8) + '...' : player.name}
-                                   </span>
-                                 ))}
+                                 .slice(0, 5)
+                                 .map((player: any, pIndex: number) => {
+                                   // Smart truncation based on name length distribution
+                                   const playerName = player.player_name || player.name || 'Unknown';
+                                   const maxLength = playerName.length > 12 ? 10 : playerName.length > 8 ? 12 : playerName.length;
+                                   const displayName = playerName.length > maxLength ? playerName.substring(0, maxLength) + '...' : playerName;
+                                   
+                                   return (
+                                     <span 
+                                       key={pIndex}
+                                       className="text-xs px-1.5 py-0.5 rounded-md font-medium text-center min-w-0 truncate"
+                                       style={{
+                                         color: getClassColor(player.main_class),
+                                         backgroundColor: `${getClassColor(player.main_class)}15`,
+                                         borderLeft: `2px solid ${getClassColor(player.main_class)}`
+                                       }}
+                                       title={`${playerName} (${player.main_class})`}
+                                     >
+                                       {displayName}
+                                     </span>
+                                   );
+                                 })}
+                               {/* Fill empty slots if less than 5 players */}
+                               {Array.from({ length: Math.max(0, 5 - game.players.filter((player: any) => player.side === 'defense').length) }, (_, i) => (
+                                 <div key={`empty-def-${i}`} className="text-xs py-0.5 opacity-30">
+                                   <span className="text-gray-500">—</span>
+                                 </div>
+                               ))}
                              </div>
                            </div>
                            
-                           {/* Offense team - more compact */}
-                           <div className="flex items-center gap-1">
-                             <div className="text-red-400 text-xs font-bold min-w-8">🔴</div>
-                             <div className="flex flex-wrap gap-1 flex-1">
-                               {game.playerDetails
+                           {/* Offense team - flexible grid layout */}
+                           <div className="flex items-start gap-1">
+                             <div className="text-red-400 text-xs font-bold min-w-8 mt-0.5">🔴</div>
+                             <div className="grid grid-cols-5 gap-1 flex-1 min-w-0">
+                               {game.players
                                  .filter((player: any) => player.side === 'offense')
-                                 .slice(0, 4)
-                                 .map((player: any, pIndex: number) => (
-                                   <span 
-                                     key={pIndex + 100}
-                                     className="text-xs px-1.5 py-0.5 rounded-md font-medium"
-                                     style={{
-                                       color: getClassColor(player.main_class),
-                                       backgroundColor: `${getClassColor(player.main_class)}15`,
-                                       borderLeft: `2px solid ${getClassColor(player.main_class)}`
-                                     }}
-                                     title={`${player.name} (${player.main_class})`}
-                                   >
-                                     {player.name.length > 8 ? player.name.substring(0, 8) + '...' : player.name}
-                                   </span>
-                                 ))}
+                                 .slice(0, 5)
+                                 .map((player: any, pIndex: number) => {
+                                   // Smart truncation based on name length distribution
+                                   const playerName = player.player_name || player.name || 'Unknown';
+                                   const maxLength = playerName.length > 12 ? 10 : playerName.length > 8 ? 12 : playerName.length;
+                                   const displayName = playerName.length > maxLength ? playerName.substring(0, maxLength) + '...' : playerName;
+                                   
+                                   return (
+                                     <span 
+                                       key={pIndex + 100}
+                                       className="text-xs px-1.5 py-0.5 rounded-md font-medium text-center min-w-0 truncate"
+                                       style={{
+                                         color: getClassColor(player.main_class),
+                                         backgroundColor: `${getClassColor(player.main_class)}15`,
+                                         borderLeft: `2px solid ${getClassColor(player.main_class)}`
+                                       }}
+                                       title={`${playerName} (${player.main_class})`}
+                                     >
+                                       {displayName}
+                                     </span>
+                                   );
+                                 })}
+                               {/* Fill empty slots if less than 5 players */}
+                               {Array.from({ length: Math.max(0, 5 - game.players.filter((player: any) => player.side === 'offense').length) }, (_, i) => (
+                                 <div key={`empty-off-${i}`} className="text-xs py-0.5 opacity-30">
+                                   <span className="text-gray-500">—</span>
+                                 </div>
+                               ))}
                              </div>
                            </div>
                          </div>
@@ -598,8 +819,8 @@ export default function PlayerStatsPage() {
           </motion.div>
         </div>
 
-        {/* Main Content Area - Statistics with Tabs */}
-        <div className="flex-1 p-3 lg:p-6">
+        {/* Main Content Area - Statistics with Tabs - Now with full available width */}
+        <div className="flex-1 p-3 lg:p-6 lg:pr-20">
           {/* Tab Navigation - Mobile Responsive */}
           <div className="flex items-center gap-1 mb-6 overflow-x-auto">
             <button
@@ -677,137 +898,7 @@ export default function PlayerStatsPage() {
           )}
         </div>
 
-        {/* Desktop Right Sidebar - Filters (Hidden on mobile) */}
-        <div className="hidden lg:block lg:w-80 bg-gray-800/50 border-l border-gray-700 min-h-screen">
-          <div className="p-4 border-b border-gray-700">
-            <h3 className="font-medium text-white">Filters & Quick Access</h3>
-          </div>
-          <div className="p-4 space-y-6">
-            {/* Filters */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
-              
-              {/* Sort By */}
-              <div>
-                <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                >
-                  {SORT_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Sort Order */}
-              <div>
-                <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                >
-                  <option value="desc">High to Low</option>
-                  <option value="asc">Low to High</option>
-                </select>
-              </div>
-
-              {/* Date Filter */}
-              <div>
-                <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                >
-                  {DATE_FILTERS.map(filter => (
-                    <option key={filter.value} value={filter.value}>{filter.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Player Search */}
-              <div>
-                <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
-                <div className="flex gap-1">
-                  <input
-                    type="text"
-                    placeholder="Player name..."
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  />
-                  <button
-                    onClick={handleSearch}
-                    className="bg-cyan-600 hover:bg-cyan-700 px-2 py-1 rounded text-xs font-semibold transition-colors"
-                  >
-                    Go
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Access */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
-              
-              <button 
-                onClick={() => {
-                  setSortBy('total_kills');
-                  setSortOrder('desc');
-                  setDateFilter('all');
-                  setPlayerName('');
-                  setSearchInput('');
-                }}
-                className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
-              >
-                <div className="text-red-300 font-bold">🎯 Top Killers</div>
-              </button>
-              
-              <button 
-                onClick={() => {
-                  setSortBy('win_rate');
-                  setSortOrder('desc');
-                  setDateFilter('all');
-                  setPlayerName('');
-                  setSearchInput('');
-                }}
-                className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
-              >
-                <div className="text-green-300 font-bold">🏆 Win Rate</div>
-              </button>
-              
-              <button 
-                onClick={() => {
-                  setSortBy('total_captures');
-                  setSortOrder('desc');
-                  setDateFilter('all');
-                  setPlayerName('');
-                  setSearchInput('');
-                }}
-                className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
-              >
-                <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
-              </button>
-              
-              <button 
-                onClick={() => {
-                  setSortBy('total_games');
-                  setSortOrder('desc');
-                  setDateFilter('all');
-                  setPlayerName('');
-                  setSearchInput('');
-                }}
-                className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
-              >
-                <div className="text-purple-300 font-bold">🎮 Most Active</div>
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

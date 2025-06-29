@@ -9,7 +9,7 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
+  error?: any; // Changed from Error to any to handle malformed errors
   retryCount: number;
 }
 
@@ -19,54 +19,76 @@ export class AuthErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: any): State {
+    // Enhanced error logging to debug empty error objects
+    console.error('🚨 AuthErrorBoundary caught error - raw error:', error);
+    console.error('🚨 Error type:', typeof error);
+    console.error('🚨 Error constructor:', error?.constructor?.name);
+    console.error('🚨 Error keys:', Object.keys(error || {}));
+    
+    // Handle both Error objects and other thrown values
+    const errorMessage = error?.message || error?.toString?.() || String(error) || 'Unknown error';
+    const errorStack = error?.stack || 'No stack trace available';
+    
     // Check if this is an auth-related error
-    const errorMessage = error.message?.toLowerCase() || '';
     const isAuthError = (
-      errorMessage.includes('refresh token not found') ||
-      errorMessage.includes('invalid refresh token') ||
-      errorMessage.includes('auth') ||
-      errorMessage.includes('token') ||
-      errorMessage.includes('session') ||
-      errorMessage.includes('unauthorized')
+      errorMessage.toLowerCase().includes('refresh token not found') ||
+      errorMessage.toLowerCase().includes('invalid refresh token') ||
+      errorMessage.toLowerCase().includes('auth') ||
+      errorMessage.toLowerCase().includes('token') ||
+      errorMessage.toLowerCase().includes('session') ||
+      errorMessage.toLowerCase().includes('unauthorized')
     );
 
-    console.error('🚨 AuthErrorBoundary caught error:', {
-      message: error.message,
+    console.error('🚨 AuthErrorBoundary processed error:', {
+      originalError: error,
+      message: errorMessage,
       isAuthError,
-      stack: error.stack
+      stack: errorStack,
+      hasMessage: !!error?.message,
+      hasStack: !!error?.stack,
+      errorType: typeof error
     });
 
-    return { hasError: true, error, retryCount: 0 };
+    return { hasError: true, error: { message: errorMessage, stack: errorStack, original: error }, retryCount: 0 };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('🚨 AuthErrorBoundary error details:', {
-      error: error.message,
-      stack: error.stack,
+  componentDidCatch(error: any, errorInfo: React.ErrorInfo) {
+    console.error('🚨 AuthErrorBoundary componentDidCatch:', {
+      error: error,
+      errorType: typeof error,
+      errorKeys: Object.keys(error || {}),
+      message: error?.message || error?.toString?.() || String(error),
+      stack: error?.stack,
       componentStack: errorInfo.componentStack
     });
 
+    // Handle both Error objects and other thrown values
+    const errorMessage = error?.message || error?.toString?.() || String(error) || '';
+    
     // If it's an auth error, clear storage and prepare for redirect
-    const errorMessage = error.message?.toLowerCase() || '';
     const isAuthError = (
-      errorMessage.includes('refresh token not found') ||
-      errorMessage.includes('invalid refresh token') ||
-      errorMessage.includes('auth') ||
-      errorMessage.includes('token') ||
-      errorMessage.includes('session') ||
-      errorMessage.includes('unauthorized')
+      errorMessage.toLowerCase().includes('refresh token not found') ||
+      errorMessage.toLowerCase().includes('invalid refresh token') ||
+      errorMessage.toLowerCase().includes('auth') ||
+      errorMessage.toLowerCase().includes('token') ||
+      errorMessage.toLowerCase().includes('session') ||
+      errorMessage.toLowerCase().includes('unauthorized')
     );
 
     if (isAuthError && typeof window !== 'undefined') {
       console.log('🧹 Clearing auth data due to error boundary');
       
       // Clear all auth-related localStorage
-      Object.keys(localStorage).forEach(key => {
-        if (key.includes('auth-token') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('auth-token') || key.includes('supabase')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (storageError) {
+        console.warn('Failed to clear localStorage:', storageError);
+      }
 
       // Show error for a moment before redirect
       setTimeout(() => {
@@ -89,11 +111,15 @@ export class AuthErrorBoundary extends Component<Props, State> {
     
     // Also clear any auth storage
     if (typeof window !== 'undefined') {
-      Object.keys(localStorage).forEach(key => {
-        if (key.includes('auth-token') || key.includes('supabase')) {
-          localStorage.removeItem(key);
-        }
-      });
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('auth-token') || key.includes('supabase')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (storageError) {
+        console.warn('Failed to clear localStorage during retry:', storageError);
+      }
     }
   };
 
@@ -105,9 +131,10 @@ export class AuthErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const isAuthError = this.state.error?.message?.toLowerCase().includes('auth') ||
-                         this.state.error?.message?.toLowerCase().includes('token') ||
-                         this.state.error?.message?.toLowerCase().includes('session');
+      const errorMessage = this.state.error?.message || 'Unknown error occurred';
+      const isAuthError = errorMessage.toLowerCase().includes('auth') ||
+                         errorMessage.toLowerCase().includes('token') ||
+                         errorMessage.toLowerCase().includes('session');
       
       const shouldAllowRetry = this.state.retryCount < 3;
       
@@ -128,8 +155,16 @@ export class AuthErrorBoundary extends Component<Props, State> {
             {this.state.error && (
               <div className="bg-gray-800/50 border border-gray-600 rounded p-3 mb-6 text-left">
                 <p className="text-xs text-gray-400 font-mono break-all">
-                  {this.state.error.message}
+                  {errorMessage}
                 </p>
+                {this.state.error.original && typeof this.state.error.original === 'object' && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-gray-500 cursor-pointer">Debug Info</summary>
+                    <pre className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">
+                      {JSON.stringify(this.state.error.original, null, 2)}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 

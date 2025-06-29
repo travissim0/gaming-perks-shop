@@ -36,7 +36,7 @@ get_zone_directory() {
         "skMini")
             echo "$ZONES_DIR/Skirmish - Minimaps"
             ;;
-        "grav"|"gb")
+        "grav")
             echo "$ZONES_DIR/Sports - GravBall"
             ;;
         "arena")
