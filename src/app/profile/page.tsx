@@ -10,6 +10,51 @@ import { toast } from 'react-hot-toast';
 import AvatarSelector from '@/components/AvatarSelector';
 import { getDefaultAvatarUrl } from '@/utils/supabaseHelpers';
 
+// Interfaces for recorded games
+interface RecordedGamePlayer {
+  player_name: string;
+  main_class: string;
+  side: string;
+  team: string;
+  kills: number;
+  deaths: number;
+  flag_captures?: number;
+  carrier_kills?: number;
+  result: string;
+}
+
+interface RecordedGame {
+  gameId: string;
+  gameDate: string;
+  gameMode: string;
+  mapName: string;
+  duration: number;
+  totalPlayers: number;
+  players: RecordedGamePlayer[];
+  videoInfo: {
+    has_video: boolean;
+    youtube_url?: string;
+    vod_url?: string;
+    video_title?: string;
+    thumbnail_url?: string;
+  };
+  winningInfo?: {
+    type: string;
+    side: string;
+    winner: string;
+  };
+  userStats?: {
+    kills: number;
+    deaths: number;
+    captures: number;
+    carrier_kills: number;
+    team: string;
+    class: string;
+    result: string;
+    side: string;
+  };
+}
+
 export default function ProfilePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -21,6 +66,15 @@ export default function ProfilePage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [userSquad, setUserSquad] = useState<any>(null);
+  
+  // Game-related state
+  const [userGames, setUserGames] = useState<RecordedGame[]>([]);
+  const [gamesLoading, setGamesLoading] = useState(false);
+  const [showAllGames, setShowAllGames] = useState(false);
+  const [videoModal, setVideoModal] = useState<{ isOpen: boolean; game: RecordedGame | null }>({
+    isOpen: false,
+    game: null
+  });
 
   useEffect(() => {
     if (!loading && !user) {
@@ -53,6 +107,9 @@ export default function ProfilePage() {
 
           // Fetch user's squad information
           await loadUserSquad();
+
+          // Fetch user's recorded games
+          await loadUserGames();
 
           // Set default avatar if none exists
           if (!data.avatar_url) {
@@ -188,6 +245,34 @@ export default function ProfilePage() {
 
 
 
+  const loadUserGames = async () => {
+    if (!user) return;
+    
+    setGamesLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const response = await fetch('/api/player-stats/user-games?limit=20', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.games) {
+          setUserGames(data.games);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user games:', error);
+    } finally {
+      setGamesLoading(false);
+    }
+  };
+
   const loadUserSquad = async () => {
     if (!user) return;
     
@@ -235,6 +320,57 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Error loading user squad:', error);
     }
+  };
+
+  // Helper functions for game display
+  const getClassColor = (className: string) => {
+    const colors: { [key: string]: string } = {
+      'Warrior': 'text-red-400',
+      'Engineer': 'text-yellow-400',
+      'Duelist': 'text-purple-400',
+      'Sniper': 'text-green-400',
+      'Bomber': 'text-orange-400',
+      'Juggernaut': 'text-blue-400',
+      'Spy': 'text-pink-400',
+      'Medic': 'text-emerald-400'
+    };
+    return colors[className] || 'text-gray-400';
+  };
+
+  const formatGameDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatGameDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getYouTubeVideoId = (url: string) => {
+    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    return match ? match[1] : null;
+  };
+
+  const getBestYouTubeThumbnail = (url: string) => {
+    const videoId = getYouTubeVideoId(url);
+    if (!videoId) return null;
+    return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  };
+
+  const openVideoModal = (game: RecordedGame) => {
+    setVideoModal({ isOpen: true, game });
+  };
+
+  const closeVideoModal = () => {
+    setVideoModal({ isOpen: false, game: null });
   };
 
   // Show loading spinner only while checking authentication
@@ -408,6 +544,150 @@ export default function ProfilePage() {
                     </div>
                   )}
                 </div>
+
+                {/* Recorded Games Section */}
+                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <label className="block text-lg font-bold text-cyan-400 tracking-wide">
+                      🎬 My Recorded Games
+                    </label>
+                    {userGames.length > 0 && (
+                      <button
+                        onClick={() => setShowAllGames(!showAllGames)}
+                        className="text-sm text-cyan-400 hover:text-cyan-300 underline"
+                      >
+                        {showAllGames ? 'Show Less' : `View All ${userGames.length} Games`}
+                      </button>
+                    )}
+                  </div>
+
+                  {gamesLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500"></div>
+                      <span className="ml-3 text-cyan-400">Loading your games...</span>
+                    </div>
+                  ) : userGames.length === 0 ? (
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 text-center">
+                      <p className="text-gray-400 mb-3">No recorded games found</p>
+                      <p className="text-sm text-gray-500">Your games will appear here once they've been recorded with video</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {(showAllGames ? userGames : userGames.slice(0, 5)).map((game, index) => (
+                        <div
+                          key={game.gameId}
+                          className="bg-gray-800 border border-gray-600 rounded-lg p-4 hover:border-cyan-500/50 transition-all duration-300"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h4 className="text-lg font-bold text-white">
+                                  {game.gameMode} - {game.mapName}
+                                </h4>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  game.userStats?.result === 'win' 
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : game.userStats?.result === 'loss'
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : 'bg-gray-500/20 text-gray-400'
+                                }`}>
+                                  {game.userStats?.result === 'win' ? '🏆 Win' : 
+                                   game.userStats?.result === 'loss' ? '💀 Loss' : '⚖️ Unknown'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-4 text-sm text-gray-300 mb-2">
+                                <span>📅 {formatGameDate(game.gameDate)}</span>
+                                <span>⏱️ {formatGameDuration(game.duration)}</span>
+                                <span>👥 {game.totalPlayers} players</span>
+                              </div>
+
+                              {game.userStats && (
+                                <div className="flex items-center gap-4 text-sm">
+                                  <span className={`font-medium ${getClassColor(game.userStats.class)}`}>
+                                    {game.userStats.class}
+                                  </span>
+                                  <span className="text-yellow-400">
+                                    ⚔️ {game.userStats.kills}K/{game.userStats.deaths}D
+                                  </span>
+                                  {game.userStats.captures > 0 && (
+                                    <span className="text-blue-400">
+                                      🏃 {game.userStats.captures} caps
+                                    </span>
+                                  )}
+                                  {game.userStats.carrier_kills > 0 && (
+                                    <span className="text-purple-400">
+                                      🎯 {game.userStats.carrier_kills} carrier kills
+                                    </span>
+                                  )}
+                                  <span className="text-gray-400">
+                                    Team: {game.userStats.team}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {game.videoInfo.has_video && (
+                              <div className="flex gap-2 ml-4">
+                                {game.videoInfo.youtube_url && (
+                                  <button
+                                    onClick={() => openVideoModal(game)}
+                                    className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-300 flex items-center gap-1"
+                                  >
+                                    📺 YouTube
+                                  </button>
+                                )}
+                                {game.videoInfo.vod_url && (
+                                  <a
+                                    href={game.videoInfo.vod_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-300 flex items-center gap-1"
+                                  >
+                                    🎥 VOD
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Game Details Toggle */}
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 text-sm font-medium">
+                              👁️ View All Players ({game.players.length})
+                            </summary>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {Object.entries(
+                                game.players.reduce((acc: any, player) => {
+                                  if (!acc[player.team]) acc[player.team] = [];
+                                  acc[player.team].push(player);
+                                  return acc;
+                                }, {})
+                              ).map(([team, players]: [string, any]) => (
+                                <div key={team} className="bg-gray-700 rounded p-3">
+                                  <h5 className="font-bold text-cyan-400 mb-2">{team}</h5>
+                                  <div className="space-y-1">
+                                    {players.map((player: RecordedGamePlayer, idx: number) => (
+                                      <div key={idx} className="flex justify-between text-xs">
+                                        <span className={`${getClassColor(player.main_class)} font-medium`}>
+                                          {player.player_name === inGameAlias ? '⭐ ' : ''}{player.player_name}
+                                        </span>
+                                        <span className="text-gray-300">
+                                          {player.kills}K/{player.deaths}D
+                                          {player.flag_captures ? ` ${player.flag_captures}C` : ''}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 
                 <div className="flex justify-center pt-6">
                   <button
@@ -425,6 +705,90 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Video Modal */}
+      {videoModal.isOpen && videoModal.game && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-xl font-bold text-white">
+                🎬 {videoModal.game.gameMode} - {videoModal.game.mapName}
+              </h3>
+              <button
+                onClick={closeVideoModal}
+                className="text-gray-400 hover:text-white text-xl font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              {videoModal.game.videoInfo.youtube_url && (
+                <div className="aspect-video bg-black rounded-lg overflow-hidden mb-4">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${getYouTubeVideoId(videoModal.game.videoInfo.youtube_url)}`}
+                    title="Game Video"
+                    className="w-full h-full"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <h4 className="font-bold text-cyan-400 mb-2">Game Info</h4>
+                  <div className="space-y-1 text-gray-300">
+                    <p>📅 {formatGameDate(videoModal.game.gameDate)}</p>
+                    <p>⏱️ Duration: {formatGameDuration(videoModal.game.duration)}</p>
+                    <p>👥 Players: {videoModal.game.totalPlayers}</p>
+                    {videoModal.game.winningInfo && (
+                      <p>🏆 Winner: {videoModal.game.winningInfo.winner}</p>
+                    )}
+                  </div>
+                </div>
+                
+                {videoModal.game.userStats && (
+                  <div>
+                    <h4 className="font-bold text-cyan-400 mb-2">Your Performance</h4>
+                    <div className="space-y-1 text-gray-300">
+                      <p className={getClassColor(videoModal.game.userStats.class)}>
+                        Class: {videoModal.game.userStats.class}
+                      </p>
+                      <p>⚔️ K/D: {videoModal.game.userStats.kills}/{videoModal.game.userStats.deaths}</p>
+                      {videoModal.game.userStats.captures > 0 && (
+                        <p>🏃 Flag Captures: {videoModal.game.userStats.captures}</p>
+                      )}
+                      {videoModal.game.userStats.carrier_kills > 0 && (
+                        <p>🎯 Carrier Kills: {videoModal.game.userStats.carrier_kills}</p>
+                      )}
+                      <p>Team: {videoModal.game.userStats.team}</p>
+                      <p className={`font-medium ${
+                        videoModal.game.userStats.result === 'win' ? 'text-green-400' : 
+                        videoModal.game.userStats.result === 'loss' ? 'text-red-400' : 'text-gray-400'
+                      }`}>
+                        Result: {videoModal.game.userStats.result === 'win' ? '🏆 Victory' : 
+                                videoModal.game.userStats.result === 'loss' ? '💀 Defeat' : '⚖️ Unknown'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {videoModal.game.videoInfo.vod_url && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <a
+                    href={videoModal.game.videoInfo.vod_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-medium transition-colors duration-300"
+                  >
+                    🎥 Watch Full VOD
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
+import ImagePicker from '@/components/ImagePicker';
 
 interface NewsPost {
   id: string;
@@ -290,16 +291,13 @@ export default function AdminNewsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Featured Image URL</label>
-                <input
-                  type="url"
-                  value={formData.featured_image_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, featured_image_url: e.target.value }))}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  placeholder="https://example.com/image.jpg"
-                />
-              </div>
+              <ImagePicker
+                selectedImage={formData.featured_image_url}
+                onImageSelect={(url) => setFormData(prev => ({ ...prev, featured_image_url: url }))}
+                bucket="avatars"
+                folder="news-banners"
+                allowUpload={true}
+              />
 
               <div>
                 <label className="block text-sm font-medium mb-2">Content *</label>

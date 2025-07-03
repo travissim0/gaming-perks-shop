@@ -12,7 +12,185 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50);
     const withRecordings = searchParams.get('with_recordings') === 'true';
 
-    // Get recent unique games by fetching player stats and grouping by game_id
+    // If requesting recorded games, query matches with YouTube URLs directly
+    if (withRecordings) {
+      console.log('🎬 Fetching matches with YouTube recordings...');
+      
+      // Get matches that have YouTube URLs, ordered by most recent
+      const { data: matchesWithVideos, error: matchesError } = await supabase
+        .from('matches')
+        .select('game_id, youtube_url, vod_url, title, video_title, video_thumbnail_url, scheduled_at, actual_start_time, actual_end_time')
+        .not('youtube_url', 'is', null)
+        .neq('youtube_url', '')
+        .order('scheduled_at', { ascending: false })
+        .limit(limit * 2); // Get extra to ensure we have enough after filtering
+
+      if (matchesError) {
+        console.error('Error fetching matches with videos:', matchesError);
+        return NextResponse.json({ error: matchesError.message }, { status: 500 });
+      }
+
+      console.log('🎬 Found matches with videos:', matchesWithVideos?.length || 0);
+
+      if (!matchesWithVideos || matchesWithVideos.length === 0) {
+        return NextResponse.json({
+          success: true,
+          games: [],
+          count: 0
+        });
+      }
+
+      // Get player stats for these specific games
+      const gameIds = matchesWithVideos.map(match => match.game_id).filter(Boolean);
+      console.log('🎬 Looking for player stats for game IDs:', gameIds);
+
+      const { data: playerStats, error: statsError } = await supabase
+        .from('player_stats')
+        .select(`
+          game_id,
+          game_date,
+          game_mode,
+          arena_name,
+          player_name,
+          team,
+          side,
+          main_class,
+          result,
+          kills,
+          deaths,
+          captures,
+          carrier_kills
+        `)
+        .in('game_id', gameIds);
+
+      if (statsError) {
+        console.error('Error fetching player stats for recorded games:', statsError);
+        return NextResponse.json({ error: statsError.message }, { status: 500 });
+      }
+
+      console.log('🎬 Found player stats entries:', playerStats?.length || 0);
+
+      // Group player stats by game_id and combine with match video info
+      const gamesMap = new Map();
+      
+      playerStats?.forEach(stat => {
+        if (!gamesMap.has(stat.game_id)) {
+          gamesMap.set(stat.game_id, {
+            gameId: stat.game_id,
+            gameDate: stat.game_date,
+            gameMode: stat.game_mode,
+            mapName: stat.arena_name,
+            players: [{
+              player_name: stat.player_name,
+              team: stat.team,
+              side: stat.side,
+              main_class: stat.main_class,
+              result: stat.result,
+              kills: stat.kills || 0,
+              deaths: stat.deaths || 0,
+              flag_captures: stat.captures || 0,
+              carrier_kills: stat.carrier_kills || 0
+            }],
+            teams: [stat.team].filter(Boolean),
+            totalPlayers: 1
+          });
+        } else {
+          const game = gamesMap.get(stat.game_id);
+          const existingPlayer = game.players.find((p: any) => p.player_name === stat.player_name);
+          if (!existingPlayer) {
+            game.players.push({
+              player_name: stat.player_name,
+              team: stat.team,
+              side: stat.side,
+              main_class: stat.main_class,
+              result: stat.result,
+              kills: stat.kills || 0,
+              deaths: stat.deaths || 0,
+              flag_captures: stat.captures || 0,
+              carrier_kills: stat.carrier_kills || 0
+            });
+            game.totalPlayers = game.players.length;
+          }
+          if (stat.team && !game.teams.includes(stat.team)) {
+            game.teams.push(stat.team);
+          }
+        }
+      });
+
+      // Convert to array and add video information from matches
+      let recordedGames = matchesWithVideos
+        .map(match => {
+          const gameData = gamesMap.get(match.game_id);
+          if (!gameData) {
+            // If no player stats found, create minimal game data
+            return {
+              gameId: match.game_id,
+              gameDate: match.scheduled_at || match.actual_start_time,
+              gameMode: 'Unknown',
+              mapName: 'Unknown',
+              players: [],
+              teams: [],
+              totalPlayers: 0,
+              duration: 1800, // Default 30 minutes
+              videoInfo: {
+                has_video: true,
+                youtube_url: match.youtube_url,
+                vod_url: match.vod_url,
+                video_title: match.video_title || match.title,
+                thumbnail_url: match.video_thumbnail_url
+              },
+              winningInfo: null
+            };
+          }
+
+          // Calculate duration (estimate based on game mode)
+          const estimatedDuration = gameData.gameMode === 'CTF' ? 1800 : 1200; // 30min for CTF, 20min for others
+          
+          // Determine winning info from player results
+          const teamResults = gameData.teams.map((team: string) => {
+            const teamPlayers = gameData.players.filter((p: any) => p.team === team);
+            const wins = teamPlayers.filter((p: any) => p.result === 'win').length;
+            const losses = teamPlayers.filter((p: any) => p.result === 'loss').length;
+            return { team, wins, losses, players: teamPlayers.length };
+          });
+          
+          const winningTeam = teamResults.find((t: any) => t.wins > t.losses);
+          
+          return {
+            ...gameData,
+            duration: estimatedDuration,
+            videoInfo: {
+              has_video: true,
+              youtube_url: match.youtube_url,
+              vod_url: match.vod_url,
+              video_title: match.video_title || match.title,
+              thumbnail_url: match.video_thumbnail_url
+            },
+            winningInfo: winningTeam ? {
+              type: 'team',
+              side: winningTeam.team.includes('TI') ? 'titan' : 'collective',
+              winner: winningTeam.team
+            } : null
+          };
+        })
+        .filter(game => game.gameId) // Remove any null game IDs
+        .sort((a, b) => new Date(b.gameDate).getTime() - new Date(a.gameDate).getTime())
+        .slice(0, limit);
+
+      console.log('🎬 Final recorded games:', recordedGames.length);
+      
+      return NextResponse.json({
+        success: true,
+        games: recordedGames,
+        count: recordedGames.length
+      });
+    }
+
+    // Regular games logic (no recordings filter)
+    const lookbackDays = 30;
+    const lookbackDate = new Date();
+    lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
+    
     const { data: recentStats, error } = await supabase
       .from('player_stats')
       .select(`
@@ -31,8 +209,9 @@ export async function GET(req: NextRequest) {
         carrier_kills
       `)
       .not('game_id', 'is', null)
+      .gte('game_date', lookbackDate.toISOString().split('T')[0])
       .order('game_date', { ascending: false })
-      .limit(limit * 15); // Get more to ensure unique games with recordings
+      .limit(limit * 15);
 
     if (error) {
       console.error('Error fetching recent games:', error);
@@ -85,87 +264,15 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Convert to array and add video information
-    let uniqueGames = Array.from(gamesMap.values());
-
-    // If we need recordings, fetch video information
-    if (withRecordings || uniqueGames.length > 0) {
-      const gameIds = uniqueGames.map(game => game.gameId);
-      console.log('🎬 Looking for videos for game IDs:', gameIds.slice(0, 5)); // Show first 5
-      
-      // Fetch video information from featured_videos table
-      const { data: videosData } = await supabase
-        .from('featured_videos')
-        .select('match_id, youtube_url, vod_url, title, thumbnail_url')
-        .in('match_id', gameIds);
-      
-      console.log('🎬 Videos found in featured_videos:', videosData?.length || 0);
-
-      // Fetch video information from matches table (using game_id field)
-      const { data: matchesData } = await supabase
-        .from('matches')
-        .select('game_id, youtube_url, vod_url, title, video_title, video_thumbnail_url')
-        .in('game_id', gameIds);
-        
-      console.log('🎬 Videos found in matches:', matchesData?.length || 0);
-
-      // Add video information to games
-      uniqueGames = uniqueGames.map(game => {
-        const videoFromFeatured = videosData?.find(v => v.match_id === game.gameId);
-        const videoFromMatches = matchesData?.find(m => m.game_id === game.gameId);
-        
-        const hasVideo = !!(videoFromFeatured?.youtube_url || videoFromFeatured?.vod_url || 
-                           videoFromMatches?.youtube_url || videoFromMatches?.vod_url);
-        
-        // Calculate duration (estimate based on game mode)
-        const estimatedDuration = game.gameMode === 'CTF' ? 1800 : 1200; // 30min for CTF, 20min for others
-        
-        // Determine winning info from player results
-        const teamResults = game.teams.map((team: string) => {
-          const teamPlayers = game.players.filter((p: any) => p.team === team);
-          const wins = teamPlayers.filter((p: any) => p.result === 'win').length;
-          const losses = teamPlayers.filter((p: any) => p.result === 'loss').length;
-          return { team, wins, losses, players: teamPlayers.length };
-        });
-        
-        const winningTeam = teamResults.find((t: any) => t.wins > t.losses);
-        
-        return {
-          ...game,
-          duration: estimatedDuration,
-          videoInfo: {
-            has_video: hasVideo,
-            youtube_url: videoFromFeatured?.youtube_url || videoFromMatches?.youtube_url || null,
-            vod_url: videoFromFeatured?.vod_url || videoFromMatches?.vod_url || null,
-            video_title: videoFromFeatured?.title || videoFromMatches?.video_title || videoFromMatches?.title || null,
-            thumbnail_url: videoFromFeatured?.thumbnail_url || videoFromMatches?.video_thumbnail_url || null
-          },
-          winningInfo: winningTeam ? {
-            type: 'team',
-            side: winningTeam.team.includes('TI') ? 'titan' : 'collective',
-            winner: winningTeam.team
-          } : null
-        };
-      });
-
-      // Filter for recordings if requested
-      if (withRecordings) {
-        const gamesWithVideos = uniqueGames.filter(game => game.videoInfo.has_video);
-        console.log('🎬 Games with videos after filtering:', gamesWithVideos.length);
-        console.log('🎬 Sample video info:', gamesWithVideos[0]?.videoInfo);
-        uniqueGames = gamesWithVideos;
-      }
-    }
-
-    // Sort by date and limit
-    const finalGames = uniqueGames
+    // Convert to array
+    const uniqueGames = Array.from(gamesMap.values())
       .sort((a, b) => new Date(b.gameDate).getTime() - new Date(a.gameDate).getTime())
       .slice(0, limit);
 
     return NextResponse.json({
       success: true,
-      games: finalGames, // Changed from 'data' to 'games' for consistency
-      count: finalGames.length
+      games: uniqueGames,
+      count: uniqueGames.length
     });
 
   } catch (error) {

@@ -605,6 +605,24 @@ export default function Home() {
           // Always show theater mode if we have recorded games - this showcases recent activity prominently
           setShowRecordedGamesTheater(validatedGames.length > 0);
           console.log('🎬 Theater mode enabled:', validatedGames.length > 0);
+          
+          // Temporary debugging: If no recorded games, try to fetch regular recent games to show something
+          if (validatedGames.length === 0) {
+            console.log('🎬 No recorded games found, checking for any recent games...');
+            fetch('/api/player-stats/recent-games?limit=3')
+              .then(res => res.json())
+              .then(data => {
+                console.log('🎬 Recent games without recording filter:', data);
+                if (data.games && data.games.length > 0) {
+                  console.log('🎬 Found', data.games.length, 'recent games without recordings');
+                  // Temporarily enable theater mode to show recent games section
+                  // You can remove this when you have actual recorded content
+                  setRecordedGames(data.games.slice(0, 1)); // Show just the most recent game
+                  setShowRecordedGamesTheater(true);
+                }
+              })
+              .catch(err => console.error('🎬 Error fetching recent games:', err));
+          }
         } else {
           console.error('🎬 API response not ok:', response.status, response.statusText);
           setRecordedGames([]);
@@ -880,7 +898,7 @@ export default function Home() {
     // default (120x90) - always available
     
     const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
-    console.log(`🖼️ Generated thumbnail URL: ${thumbnailUrl}`);
+            // console.log(`🖼️ Generated thumbnail URL: ${thumbnailUrl}`);
     return thumbnailUrl;
   };
 
@@ -1437,7 +1455,7 @@ export default function Home() {
                   <h3 className="text-lg font-bold text-blue-400 tracking-wider">News & Updates</h3>
                 </div>
                 <div className="p-4">
-                  <NewsSection limit={4} showReadState={true} heroLayout={false} allowCollapse={true} />
+                  <NewsSection limit={1} showReadState={true} heroLayout={false} allowCollapse={true} />
                 </div>
               </section>
 
@@ -1676,7 +1694,7 @@ export default function Home() {
                       <div>
                         <h4 className="text-sm font-bold text-gray-300 mb-3">📹 More Recent Recordings</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {recordedGames.slice(1, 7).map((game) => (
+                          {recordedGames.slice(1, 9).map((game) => (
                             <Link key={game.gameId} href={`/stats/game/${encodeURIComponent(game.gameId)}`}>
                               <div className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-cyan-500/50 transition-all duration-300">
                                 <div className="relative aspect-video overflow-hidden">
@@ -1798,10 +1816,50 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR (3 columns) - Top supporters only */}
+          {/* RIGHT SIDEBAR (3 columns) - Recent donations and top supporters */}
           <div className="xl:col-span-3">
             <div className="space-y-3">
               
+              {/* Recent Donations - Compact */}
+              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
+                <div className="bg-gray-700/50 px-3 py-1.5 border-b border-yellow-500/30">
+                  <h3 className="text-sm font-bold text-yellow-400 tracking-wider">💝 Recent Donations</h3>
+                </div>
+                <div className="p-2">
+                  {recentDonations.length > 0 ? (
+                    <div className="space-y-1">
+                      {recentDonations.slice(0, 6).map((donation, index) => (
+                        <div key={donation.id || index} className="flex items-center gap-2 p-1.5 bg-gray-700/30 rounded border border-gray-600/50 hover:border-yellow-500/50 transition-colors">
+                          <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center text-[10px]">
+                            💝
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-medium text-white text-xs truncate">
+                                {donation.customerName || 'Anonymous'}
+                              </div>
+                              <div className="font-bold text-yellow-400 text-xs whitespace-nowrap">
+                                ${donation.amount}
+                              </div>
+                            </div>
+                            {donation.message && (
+                              <div className="text-gray-400 text-[10px] truncate leading-tight">
+                                "{donation.message}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="text-2xl mb-1">💝</div>
+                      <div className="text-gray-500 text-xs">No recent donations</div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Top Supporters */}
               <TopSupportersWidget 
                 showAdminControls={false}

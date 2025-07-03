@@ -3510,4 +3510,385 @@ namespace CTFGameType
         public double AvgExplosiveUnusedPerDeath { get; set; }
         public double GameLengthMinutes { get; set; }
     }
+
+    public class ImprovedWebIntegration
+    {
+        private static readonly HttpClient httpClient = new HttpClient();
+        private const string API_ENDPOINT = "https://freeinf.org/api/game-data";
+        
+        // Track all players who participated in the game, even if they leave
+        private static Dictionary<string, PlayerGameData> gameParticipants = new Dictionary<string, PlayerGameData>();
+        private static DateTime lastDataPrep = DateTime.MinValue;
+        private static readonly TimeSpan dataPrepInterval = TimeSpan.FromMinutes(1); // Poll every minute
+        
+        public class PlayerGameData
+        {
+            public string Alias { get; set; }
+            public string Team { get; set; }
+            public string TeamType { get; set; }
+            public string MostPlayedClass { get; set; }
+            public bool IsOffense { get; set; }
+            public string Weapon { get; set; }
+            public DateTime FirstSeen { get; set; }
+            public DateTime LastActive { get; set; }
+            public bool IsActive { get; set; } // Currently in game
+            public int TotalPlayTimeMs { get; set; }
+            public Dictionary<string, int> ClassPlayTimes { get; set; }
+            
+            public PlayerGameData()
+            {
+                ClassPlayTimes = new Dictionary<string, int>();
+                FirstSeen = DateTime.Now;
+                LastActive = DateTime.Now;
+                IsActive = true;
+            }
+        }
+        
+        /// <summary>
+        /// Periodically prepare game data to ensure we capture stats even if players leave early
+        /// </summary>
+        public static void PrepareGameData(Arena arena, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes, 
+                                         Dictionary<Player, int> playerLastClassSwitch, string baseUsed = "Unknown")
+        {
+            try
+            {
+                // Only prep data once per minute to avoid spam
+                if (DateTime.Now - lastDataPrep < dataPrepInterval)
+                    return;
+                    
+                lastDataPrep = DateTime.Now;
+                
+                // Determine game type and offense team
+                string gameType = DetermineGameType(arena._name);
+                bool titanIsOffense = DetermineOffenseTeam(arena.Players.ToList(), arena);
+                
+                // Update data for currently active players
+                foreach (Player player in arena.Players.ToList())
+                {
+                    if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
+                        continue;
+                        
+                    string playerKey = player._alias.ToLower();
+                    
+                    // Initialize or update player data
+                    if (!gameParticipants.ContainsKey(playerKey))
+                    {
+                        gameParticipants[playerKey] = new PlayerGameData();
+                    }
+                    
+                    var playerData = gameParticipants[playerKey];
+                    playerData.Alias = player._alias;
+                    playerData.Team = player._team._name;
+                    playerData.TeamType = DeterminePlayerTeamType(player);
+                    playerData.IsOffense = DetermineIsOffense(playerData.TeamType, titanIsOffense, gameType);
+                    playerData.Weapon = GetSpecialWeapon(player);
+                    playerData.LastActive = DateTime.Now;
+                    playerData.IsActive = true;
+                    
+                    // Calculate most played class using playerClassPlayTimes
+                    playerData.MostPlayedClass = GetMostPlayedClass(player, playerClassPlayTimes, playerLastClassSwitch);
+                    
+                    // Update class play times from the tracking dictionary
+                    if (playerClassPlayTimes.ContainsKey(player))
+                    {
+                        playerData.ClassPlayTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                        playerData.TotalPlayTimeMs = playerClassPlayTimes[player].Values.Sum();
+                    }
+                }
+                
+                // Mark players who are no longer active as inactive (but keep their data)
+                var activeAliases = arena.Players.Where(p => !p._team.IsSpec && 
+                                                       !(p._baseVehicle != null && p._baseVehicle._type.Name.Contains("Spectator")))
+                                               .Select(p => p._alias.ToLower()).ToHashSet();
+                
+                foreach (var participant in gameParticipants.Values)
+                {
+                    if (!activeAliases.Contains(participant.Alias.ToLower()))
+                    {
+                        participant.IsActive = false;
+                    }
+                }
+                
+                Console.WriteLine(string.Format("[GameStats] Prepared data for {0} participants ({1} active)", gameParticipants.Count, activeAliases.Count));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error preparing game data: {0}", ex.Message));
+            }
+        }
+        
+        /// <summary>
+        /// Get the most played class for a player using playerClassPlayTimes
+        /// </summary>
+        private static string GetMostPlayedClass(Player player, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes, 
+                                               Dictionary<Player, int> playerLastClassSwitch)
+        {
+            try
+            {
+                if (!playerClassPlayTimes.ContainsKey(player))
+                {
+                    // Fallback to current class if no play time data
+                    return player._skills.Count > 0 ? player._skills.First().Value.skill.Name : player._baseVehicle._type.Name;
+                }
+                
+                // Get current time to calculate current class time
+                int currentTick = Environment.TickCount;
+                var playTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                
+                // Add time for current class if player has one
+                string currentSkill = player._skills.Count > 0 ? player._skills.First().Value.skill.Name : null;
+                if (currentSkill != null && playerLastClassSwitch.ContainsKey(player))
+                {
+                    int sessionTime = Math.Max(0, currentTick - playerLastClassSwitch[player]);
+                    if (!playTimes.ContainsKey(currentSkill))
+                        playTimes[currentSkill] = 0;
+                    playTimes[currentSkill] += sessionTime;
+                }
+                
+                // Return the class with the most play time
+                if (playTimes.Count > 0)
+                {
+                    var mostPlayed = playTimes.OrderByDescending(x => x.Value).First();
+                    return mostPlayed.Key;
+                }
+                
+                // Final fallback
+                return player._baseVehicle._type.Name;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error getting most played class for {0}: {1}", player._alias, ex.Message));
+                return player._baseVehicle._type.Name;
+            }
+        }
+        
+        /// <summary>
+        /// Send comprehensive game data to website at game end, including all participants
+        /// </summary>
+        public static async Task SendGameEndDataToWebsite(Arena arena, string baseUsed, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes,
+                                                         Dictionary<Player, int> playerLastClassSwitch, Team winningTeam = null)
+        {
+            try
+            {
+                // First, update with final game state
+                PrepareGameData(arena, playerClassPlayTimes, playerLastClassSwitch, baseUsed);
+                
+                // Determine game type
+                string gameType = DetermineGameType(arena._name);
+                
+                // Filter participants who actually played (had some play time)
+                var validParticipants = gameParticipants.Values
+                    .Where(p => p.TotalPlayTimeMs > 5000) // At least 5 seconds of play time
+                    .ToList();
+                
+                if (validParticipants.Count == 0)
+                {
+                    Console.WriteLine("[GameStats] No valid participants found, skipping stats upload");
+                    return;
+                }
+                
+                // Convert to PlayerData format for the API
+                var gameDataPlayers = validParticipants.Select(p => new PlayerData
+                {
+                    alias = p.Alias,
+                    team = p.Team,
+                    teamType = p.TeamType,
+                    className = p.MostPlayedClass, // Use most played class instead of setup class!
+                    isOffense = p.IsOffense,
+                    weapon = p.Weapon
+                }).ToList();
+                
+                // Build enhanced JSON with additional metadata
+                string jsonData = BuildEnhancedJsonString(arena._name, gameType, baseUsed, gameDataPlayers, 
+                                                        validParticipants, winningTeam._name);
+                
+                // Send to API
+                var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(API_ENDPOINT, content);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine(string.Format("[GameStats] Successfully sent game end data for {0} participants", validParticipants.Count));
+                }
+                else
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(string.Format("[GameStats] Failed to send game data: {0} - {1}", response.StatusCode, errorContent));
+                }
+                
+                // Clear participants for next game
+                gameParticipants.Clear();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error sending game end data: {0}", ex.Message));
+            }
+        }
+        
+        /// <summary>
+        /// Enhanced JSON builder with additional metadata
+        /// </summary>
+        private static string BuildEnhancedJsonString(string arenaName, string gameType, string baseUsed, 
+                                                    List<PlayerData> players, List<PlayerGameData> participantData, 
+                                                    string winningTeam = null)
+        {
+            var json = new System.Text.StringBuilder();
+            json.Append("{");
+            
+            // Basic game information
+            json.AppendFormat("\"arenaName\":\"{0}\",", EscapeJsonString(arenaName));
+            json.AppendFormat("\"gameType\":\"{0}\",", EscapeJsonString(gameType));
+            json.AppendFormat("\"baseUsed\":\"{0}\",", EscapeJsonString(baseUsed));
+            json.AppendFormat("\"gameEndTime\":\"{0}\",", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            
+            if (!string.IsNullOrEmpty(winningTeam))
+            {
+                json.AppendFormat("\"winningTeam\":\"{0}\",", EscapeJsonString(winningTeam));
+            }
+            
+            // Enhanced player data
+            json.Append("\"players\":[");
+            for (int i = 0; i < players.Count; i++)
+            {
+                var player = players[i];
+                var participantInfo = participantData.FirstOrDefault(p => p.Alias.Equals(player.alias, StringComparison.OrdinalIgnoreCase));
+                
+                json.Append("{");
+                json.AppendFormat("\"alias\":\"{0}\",", EscapeJsonString(player.alias));
+                json.AppendFormat("\"team\":\"{0}\",", EscapeJsonString(player.team));
+                json.AppendFormat("\"teamType\":\"{0}\",", EscapeJsonString(player.teamType));
+                json.AppendFormat("\"class\":\"{0}\",", EscapeJsonString(player.className));
+                json.AppendFormat("\"isOffense\":{0},", player.isOffense.ToString().ToLower());
+                
+                // Add enhanced statistics
+                if (participantInfo != null)
+                {
+                    json.AppendFormat("\"totalPlayTimeMs\":{0},", participantInfo.TotalPlayTimeMs);
+                    json.AppendFormat("\"playTimeSeconds\":{0:F1},", participantInfo.TotalPlayTimeMs / 1000.0);
+                    
+                    // Add class breakdown
+                    if (participantInfo.ClassPlayTimes.Count > 0)
+                    {
+                        json.Append("\"classBreakdown\":{");
+                        var classEntries = participantInfo.ClassPlayTimes.ToList();
+                        for (int j = 0; j < classEntries.Count; j++)
+                        {
+                            json.AppendFormat("\"{0}\":{1:F1}", EscapeJsonString(classEntries[j].Key), 
+                                            classEntries[j].Value / 1000.0);
+                            if (j < classEntries.Count - 1) json.Append(",");
+                        }
+                        json.Append("},");
+                    }
+                }
+                
+                // Add weapon info
+                if (string.IsNullOrEmpty(player.weapon))
+                {
+                    json.Append("\"weapon\":null");
+                }
+                else
+                {
+                    json.AppendFormat("\"weapon\":\"{0}\"", EscapeJsonString(player.weapon));
+                }
+                
+                json.Append("}");
+                if (i < players.Count - 1) json.Append(",");
+            }
+            json.Append("]");
+            
+            json.Append("}");
+            return json.ToString();
+        }
+        
+        // Helper methods (reused from original WebIntegration)
+        private static string DetermineGameType(string arenaName)
+        {
+            if (arenaName.Contains("OvD"))
+                return "OvD";
+            else if (arenaName.Contains("Arena 1"))
+                return "Pub";
+            else if (arenaName.Contains("Mix"))
+                return "Mix";
+            else if (arenaName.Contains("Duel"))
+                return "Dueling";
+            else if (arenaName.Contains("CTF"))
+                return "CTF";
+            else
+                return "Unknown";
+        }
+        
+        private static string DeterminePlayerTeamType(Player player)
+        {
+            if (player._team._name.Contains(" T"))
+                return "Titan";
+            else if (player._team._name.Contains(" C"))
+                return "Collective";
+            else
+                return "Unknown";
+        }
+        
+        private static bool DetermineOffenseTeam(List<Player> players, Arena arena)
+        {
+            // First, try to find the team with a Squad Leader - that team is offense
+            foreach (Player player in players)
+            {
+                string className = player._baseVehicle._type.Name;
+                if (className == "Squad Leader")
+                {
+                    return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
+                }
+            }
+            
+            // If no Squad Leader found, use team balance logic
+            int titanCount = 0;
+            int collectiveCount = 0;
+            
+            foreach (Player player in players)
+            {
+                if (player._team._name.Contains(" T"))
+                    titanCount++;
+                else if (player._team._name.Contains(" C"))
+                    collectiveCount++;
+            }
+            
+            // Make the larger team defense, smaller team offense
+            if (titanCount > collectiveCount)
+                return false; // Titan = defense
+            else
+                return true;  // Titan = offense
+        }
+        
+        private static bool DetermineIsOffense(string teamType, bool titanIsOffense, string gameType)
+        {
+            if (teamType == "Titan")
+                return titanIsOffense;
+            else
+                return !titanIsOffense;
+        }
+        
+        private static string GetSpecialWeapon(Player player)
+        {
+            if (player._baseVehicle != null && player._baseVehicle._type != null)
+            {
+                string vehicleType = player._baseVehicle._type.Name;
+                if (vehicleType.Contains("CAW"))
+                    return "CAW";
+                else if (vehicleType.Contains("SG"))
+                    return "SG";
+            }
+            return null;
+        }
+        
+        private static string EscapeJsonString(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+                
+            return input.Replace("\\", "\\\\")
+                       .Replace("\"", "\\\"")
+                       .Replace("\n", "\\n")
+                       .Replace("\r", "\\r")
+                       .Replace("\t", "\\t");
+        }
+    }
 } 

@@ -64,7 +64,19 @@ const NewsSection = ({
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch posts');
+        // Get more detailed error information
+        let errorMessage = `Failed to fetch posts (${response.status}: ${response.statusText})`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = `Failed to fetch posts: ${errorData.error}`;
+          }
+        } catch (parseError) {
+          console.error('Could not parse error response:', parseError);
+        }
+        
+        console.error('API Error:', errorMessage);
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
@@ -749,34 +761,44 @@ const NewsSection = ({
         return (
           <article
             key={post.id}
-            className={`bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700 hover:border-blue-500/50 transition-all duration-300 ${
+            className={`bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden border border-gray-700 hover:border-blue-500/50 transition-all duration-300 ${
               showReadState ? (post.is_read ? 'news-post-read' : 'news-post-unread') : ''
             }`}
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">
-                  {new Date(post.published_at).toLocaleDateString()}
+            {/* Featured image banner at the top */}
+            {post.featured_image_url && (
+              <img
+                src={post.featured_image_url}
+                alt={post.title}
+                className="w-full max-h-64 object-contain bg-gray-800"
+              />
+            )}
+            
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-400">
+                    {new Date(post.published_at).toLocaleDateString()}
+                  </span>
+                  {post.featured && (
+                    <span className="bg-yellow-600 text-white px-2 py-1 rounded text-xs font-medium">
+                      FEATURED
+                    </span>
+                  )}
+                  {showReadState && (
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      post.is_read 
+                        ? 'bg-green-600/20 text-green-400 border border-green-600/30' 
+                        : 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
+                    }`}>
+                      {post.is_read ? 'READ' : 'NEW'}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm text-gray-500">
+                  By {post.author_alias || post.author_name}
                 </span>
-                {post.featured && (
-                  <span className="bg-yellow-600 text-white px-2 py-1 rounded text-xs font-medium">
-                    FEATURED
-                  </span>
-                )}
-                {showReadState && (
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    post.is_read 
-                      ? 'bg-green-600/20 text-green-400 border border-green-600/30' 
-                      : 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                  }`}>
-                    {post.is_read ? 'READ' : 'NEW'}
-                  </span>
-                )}
               </div>
-              <span className="text-sm text-gray-500">
-                By {post.author_alias || post.author_name}
-              </span>
-            </div>
 
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xl font-bold text-white hover:text-blue-400 transition-colors">
@@ -807,19 +829,9 @@ const NewsSection = ({
             )}
 
             {isExpanded && (
-              <>
-                {post.featured_image_url && (
-                  <img
-                    src={post.featured_image_url}
-                    alt={post.title}
-                    className="w-full max-h-64 object-contain rounded-lg mb-4 bg-gray-800"
-                  />
-                )}
-
-                <div className="prose prose-invert max-w-none mb-4">
-                  {renderContent(post.content)}
-                </div>
-              </>
+              <div className="prose prose-invert max-w-none mb-4">
+                {renderContent(post.content)}
+              </div>
             )}
 
             {!isExpanded && (
@@ -875,6 +887,7 @@ const NewsSection = ({
                   Read more →
                 </Link>
               </div>
+            </div>
             </div>
           </article>
         );

@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
@@ -52,6 +52,7 @@ interface PendingRequest {
 export default function SquadDetailPage() {
   const { user, loading } = useAuth();
   const params = useParams();
+  const router = useRouter();
   const squadId = params.id as string;
   const [squad, setSquad] = useState<Squad | null>(null);
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
@@ -68,6 +69,9 @@ export default function SquadDetailPage() {
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [bannerUrl, setBannerUrl] = useState('');
   const [bannerFile, setBannerFile] = useState<File | null>(null);
+  
+  // Mobile-friendly confirmation modal state
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
 
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
@@ -528,14 +532,17 @@ export default function SquadDetailPage() {
     return true;
   };
 
-  const leaveSquad = async () => {
+  const initiateLeaveSquad = () => {
     if (!user || !squad || !canLeaveSquad()) return;
+    setShowLeaveConfirmation(true);
+  };
 
-    const confirmMessage = 'Are you sure you want to leave this squad? This action cannot be undone.';
-    if (!confirm(confirmMessage)) return;
-
+  const leaveSquad = async () => {
+    if (!user || !squad) return;
+    
     try {
       setIsRequesting(true);
+      setShowLeaveConfirmation(false);
       
       // Use API route to ensure proper permissions and logging
       const response = await fetch('/api/squads/leave', {
@@ -560,8 +567,8 @@ export default function SquadDetailPage() {
       // Clear user squad state immediately
       setUserSquad(null);
       
-      // Navigate away from squad page after successful leave
-      window.location.href = '/squads';
+      // Use Next.js router for more reliable navigation on mobile
+      router.push('/squads');
       
     } catch (error: any) {
       console.error('Error leaving squad:', error);

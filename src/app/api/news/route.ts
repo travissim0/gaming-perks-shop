@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '5');
+    const offset = parseInt(searchParams.get('offset') || '0');
     const featured_only = searchParams.get('featured') === 'true';
     const postId = searchParams.get('postId');
     
@@ -162,62 +163,102 @@ export async function GET(request: NextRequest) {
     try {
       const result = await supabase.rpc('get_news_posts_with_read_status', {
         user_uuid: user?.id || null,
-        limit_count: limit
+        limit_count: limit,
+        offset_count: offset
       });
       posts = result.data;
       error = result.error;
     } catch (functionError) {
-      console.log('Function not available, using fallback approach');
+      console.log('Function not available, using fallback approach. Error:', functionError);
       
       // Fallback: Direct query approach
-      const { data: postsData, error: postsError } = await supabase
-        .from('news_posts')
-        .select(`
-          id,
-          title,
-          subtitle,
-          content,
-          featured_image_url,
-          author_name,
-          status,
-          featured,
-          priority,
-          view_count,
-          created_at,
-          published_at,
-          tags,
-          metadata
-        `)
-        .eq('status', 'published')
-        .lte('published_at', new Date().toISOString())
-        .order('featured', { ascending: false })
-        .order('priority', { ascending: false })
-        .order('published_at', { ascending: false })
-        .limit(limit);
+      try {
+        const { data: postsData, error: postsError } = await supabase
+          .from('news_posts')
+          .select(`
+            id,
+            title,
+            subtitle,
+            content,
+            featured_image_url,
+            author_name,
+            status,
+            featured,
+            priority,
+            view_count,
+            created_at,
+            published_at,
+            tags,
+            metadata
+          `)
+          .eq('status', 'published')
+          .lte('published_at', new Date().toISOString())
+          .order('featured', { ascending: false })
+          .order('priority', { ascending: false })
+          .order('published_at', { ascending: false })
+          .range(offset, offset + limit - 1);
 
-      if (postsError) {
-        error = postsError;
-      } else if (postsData) {
-        // Get reaction counts for all posts
-        const postIds = postsData.map(p => p.id);
-        const { data: reactions } = await supabase
-          .from('news_post_reactions')
-          .select('post_id, reaction_type')
-          .in('post_id', postIds);
+        if (postsError) {
+          console.error('Error in fallback query:', postsError);
+          error = postsError;
+        } else if (postsData) {
+          // Get reaction counts for all posts
+          const postIds = postsData.map(p => p.id);
+          
+          let reactions: any[] = [];
+          if (postIds.length > 0) {
+            const { data: reactionsData, error: reactionsError } = await supabase
+              .from('news_post_reactions')
+              .select('post_id, reaction_type')
+              .in('post_id', postIds);
+              
+            if (reactionsError) {
+              console.error('Error fetching reactions:', reactionsError);
+              // Continue without reactions
+            } else {
+              reactions = reactionsData || [];
+            }
+          }
 
-        const reactionsByPost = reactions?.reduce((acc: any, r: any) => {
-          if (!acc[r.post_id]) acc[r.post_id] = {};
-          acc[r.post_id][r.reaction_type] = (acc[r.post_id][r.reaction_type] || 0) + 1;
-          return acc;
-        }, {}) || {};
+          const reactionsByPost = reactions.reduce((acc: any, r: any) => {
+            if (!acc[r.post_id]) acc[r.post_id] = {};
+            acc[r.post_id][r.reaction_type] = (acc[r.post_id][r.reaction_type] || 0) + 1;
+            return acc;
+          }, {});
 
-        posts = postsData.map(post => ({
-          ...post,
-          author_alias: post.author_name, // Fallback
-          is_read: false, // Can't determine without user context in fallback
-          read_at: null,
-          reaction_counts: reactionsByPost[post.id] || {}
-        }));
+          // Get read status for user if available
+          let readPosts: any[] = [];
+          if (user && postIds.length > 0) {
+            const { data: readData, error: readError } = await supabase
+              .from('news_post_reads')
+              .select('post_id, read_at')
+              .eq('user_id', user.id)
+              .in('post_id', postIds);
+              
+            if (readError) {
+              console.error('Error fetching read status:', readError);
+              // Continue without read status
+            } else {
+              readPosts = readData || [];
+            }
+          }
+
+          const readPostsMap = readPosts.reduce((acc: any, read: any) => {
+            acc[read.post_id] = read.read_at;
+            return acc;
+          }, {});
+
+          posts = postsData.map(post => ({
+            ...post,
+            author_alias: post.author_name, // Fallback
+            is_read: !!readPostsMap[post.id],
+            read_at: readPostsMap[post.id] || null,
+            reaction_counts: reactionsByPost[post.id] || {}
+          }));
+        }
+      } catch (fallbackError) {
+        console.error('Error in fallback approach:', fallbackError);
+        error = fallbackError;
       }
     }
 
@@ -229,7 +270,25 @@ export async function GET(request: NextRequest) {
     // Filter featured posts if requested
     const filteredPosts = featured_only ? posts?.filter((post: NewsPost) => post.featured) : posts;
 
-    return NextResponse.json({ posts: filteredPosts || [] });
+    // Get total count for pagination
+    let totalCount = 0;
+    try {
+      const { count } = await supabase
+        .from('news_posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .lte('published_at', new Date().toISOString());
+      totalCount = count || 0;
+    } catch (countError) {
+      console.error('Error getting total count:', countError);
+    }
+
+    return NextResponse.json({ 
+      posts: filteredPosts || [], 
+      total: totalCount,
+      offset,
+      limit 
+    });
   } catch (error) {
     console.error('Error in news API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
