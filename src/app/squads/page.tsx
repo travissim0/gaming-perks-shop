@@ -827,8 +827,21 @@ export default function SquadsPage() {
       });
 
       if (data) {
-        // Include both self-requests AND invitations sent by captains
-        const formattedRequests = data.map((request: any) => {
+        // Filter out the current user's own join requests to prevent them from approving their own requests
+        const filteredData = data.filter((request: any) => {
+          const isJoinRequest = request.invited_by === request.invited_player_id;
+          const isInvitation = request.invited_by !== request.invited_player_id;
+          
+          // For join requests: exclude requests where the current user is the one requesting to join
+          // For invitations: include all invitations sent by captains to other players
+          if (isJoinRequest) {
+            return request.invited_player_id !== user.id;
+          } else {
+            return true; // Keep all invitations
+          }
+        });
+
+        const formattedRequests = filteredData.map((request: any) => {
           const isJoinRequest = request.invited_by === request.invited_player_id;
           const isInvitation = request.invited_by !== request.invited_player_id;
           
@@ -848,6 +861,8 @@ export default function SquadsPage() {
           joinRequests: formattedRequests.filter((r: any) => r.is_join_request).length,
           invitations: formattedRequests.filter((r: any) => r.is_invitation).length,
           squadIsLegacy: userSquad.is_legacy,
+          currentUserId: user.id,
+          filteredOut: data.length - filteredData.length,
           details: formattedRequests.map(r => ({
             type: r.request_type,
             invitedPlayer: r.invited_alias,

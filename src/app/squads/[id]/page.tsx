@@ -238,9 +238,10 @@ export default function SquadDetailPage() {
     );
 
     if (success && data) {
-      // Filter to only show self-requests (where invited_by = invited_player_id)
+      // Filter to only show self-requests from OTHER players (not the current user)
       const selfRequests = data.filter((request: any) => 
-        request.invited_by === request.invited_player_id
+        request.invited_by === request.invited_player_id && 
+        request.invited_player_id !== user?.id // Exclude current user's own requests
       );
       
       const formattedRequests: PendingRequest[] = selfRequests.map((request: any) => ({
