@@ -671,7 +671,7 @@ export default function ZoneInterestPage() {
         event_name: eventForm.event_name,
         scheduled_datetime: scheduledDatetime,
         duration_minutes: eventForm.duration_minutes,
-        organizer_alias: user?.user_metadata?.in_game_alias || 'Unknown',
+                  organizer_alias: user?.user_metadata?.in_game_alias || 'Anonymous Organizer',
         participants: [],
         auto_start_zone: eventForm.auto_start_zone,
         status: 'scheduled' as const
@@ -816,7 +816,7 @@ export default function ZoneInterestPage() {
       const event = scheduledEvents.find(e => e.id === eventId);
       if (!event) return;
 
-      const playerAlias = user.user_metadata?.in_game_alias || user.email;
+      const playerAlias = user.user_metadata?.in_game_alias || 'Anonymous Player';
       const updatedParticipants = [...event.participants, playerAlias];
 
       const { error } = await supabase
@@ -839,7 +839,7 @@ export default function ZoneInterestPage() {
       const event = scheduledEvents.find(e => e.id === eventId);
       if (!event) return;
 
-      const playerAlias = user.user_metadata?.in_game_alias || user.email;
+      const playerAlias = user.user_metadata?.in_game_alias || 'Anonymous Player';
       const updatedParticipants = event.participants.filter(p => p !== playerAlias);
 
       const { error } = await supabase
@@ -1131,7 +1131,7 @@ export default function ZoneInterestPage() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {scheduledEvents.map((event) => {
-                const userParticipating = user && event.participants.includes(user.user_metadata?.in_game_alias || user.email);
+                const userParticipating = user && user.user_metadata?.in_game_alias && event.participants.includes(user.user_metadata.in_game_alias);
                 
                 return (
                   <div key={event.id} className="bg-gray-800/50 border border-gray-600/50 rounded-lg p-6">

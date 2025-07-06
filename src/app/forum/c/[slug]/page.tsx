@@ -47,7 +47,7 @@ const ThreadRow = ({ thread }: { thread: ForumThread }) => {
           <div className="flex items-center text-sm text-gray-400 mt-3 space-x-6">
             <div className="flex items-center space-x-2">
               <span className="text-green-400">👤</span>
-              <span>By {thread.author?.in_game_alias || thread.author?.email || 'Unknown'}</span>
+                              <span>By {thread.author?.in_game_alias || 'Anonymous'}</span>
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-blue-400">🕒</span>

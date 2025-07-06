@@ -442,7 +442,7 @@ export default function SquadsPage() {
         members: allMembersData?.map((member: any) => ({
           id: member.id,
           player_id: member.player_id,
-          in_game_alias: member.profiles?.in_game_alias || 'Unknown',
+          in_game_alias: member.profiles?.in_game_alias || 'Anonymous User',
           role: member.role,
           joined_at: member.joined_at
         })) || []

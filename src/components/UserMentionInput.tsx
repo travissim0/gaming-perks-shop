@@ -89,10 +89,9 @@ const UserMentionInput = forwardRef<UserMentionInputRef, UserMentionInputProps>(
         setMentionQuery(query);
         setMentionStart(atIndex);
         
-        // Filter users based on query
+        // Filter users based on query (only search by alias for privacy)
         const filtered = users.filter(user => 
-          user.in_game_alias?.toLowerCase().includes(query) ||
-          user.email?.toLowerCase().includes(query)
+          user.in_game_alias?.toLowerCase().includes(query)
         ).slice(0, 5); // Limit to 5 suggestions
         
         setFilteredUsers(filtered);
@@ -111,7 +110,7 @@ const UserMentionInput = forwardRef<UserMentionInputRef, UserMentionInputProps>(
     
     const beforeMention = value.slice(0, mentionStart);
     const afterMention = value.slice(mentionStart + mentionQuery.length + 1);
-    const mentionText = `@${user.in_game_alias || user.email}`;
+    const mentionText = `@${user.in_game_alias || 'Anonymous'}`;
     
     const newValue = beforeMention + mentionText + ' ' + afterMention;
     onChange(newValue);
@@ -227,13 +226,9 @@ const UserMentionInput = forwardRef<UserMentionInputRef, UserMentionInputProps>(
               <UserAvatar user={user} size="sm" />
               <div className="flex-1 min-w-0">
                 <div className="text-cyan-400 font-medium truncate">
-                  {user.in_game_alias || user.email}
+                  {user.in_game_alias || 'Anonymous'}
                 </div>
-                {user.in_game_alias && user.email && (
-                  <div className="text-gray-500 text-xs truncate">
-                    {user.email}
-                  </div>
-                )}
+                {/* Never display email for privacy */}
               </div>
               <div className="text-gray-500 text-xs">
                 @

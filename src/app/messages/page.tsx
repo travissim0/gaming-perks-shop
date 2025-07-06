@@ -359,7 +359,7 @@ export default function MessagesPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-1">
                                 <h3 className="font-bold text-cyan-400 truncate">
-                                  {conversation.user?.in_game_alias || conversation.user?.email || 'Unknown User'}
+                                  {conversation.user?.in_game_alias || 'Anonymous User'}
                                 </h3>
                                 <div className="flex items-center space-x-2">
                                   {conversation.unreadCount > 0 && (
@@ -545,7 +545,7 @@ function ConversationView({
         <UserAvatar user={otherUser || {}} size="md" />
         <div>
           <h2 className="text-xl font-bold text-cyan-400">
-            {otherUser?.in_game_alias || otherUser?.email || 'Unknown User'}
+                                {otherUser?.in_game_alias || 'Anonymous User'}
           </h2>
           <p className="text-gray-500 text-sm">{messages.length} messages</p>
         </div>

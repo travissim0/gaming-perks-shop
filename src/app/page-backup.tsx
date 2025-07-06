@@ -221,12 +221,13 @@ export default function Home() {
           
         if (error && error.code === 'PGRST116') {
           // Profile doesn't exist, create it quickly
+          // NEVER use email prefix as alias for privacy reasons
           await supabase
             .from('profiles')
             .insert([{
               id: user.id,
               email: user.email,
-              in_game_alias: user.email?.split('@')[0] || 'User',
+              in_game_alias: null, // Leave null to be set by user later
               last_seen: new Date().toISOString()
             }]);
         }
@@ -419,10 +420,10 @@ export default function Home() {
         if (onlineData) {
           // Filter and format users, prioritizing those with in_game_alias but including others
           const formattedUsers = onlineData
-            .filter(user => user.in_game_alias || user.email) // Include if they have either alias or email
+            .filter(user => user.in_game_alias) // Only include users with proper aliases (no email fallbacks)
             .map((user: any) => ({
               id: user.id,
-              in_game_alias: user.in_game_alias || user.email?.split('@')[0] || 'Unknown User',
+              in_game_alias: user.in_game_alias || 'Anonymous User', // Never use email parts for privacy
               last_seen: user.last_seen,
               squad_name: undefined, // We'll add squad info back later as an enhancement
               squad_tag: undefined,

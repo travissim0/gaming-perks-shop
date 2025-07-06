@@ -33,7 +33,7 @@ export default function UserAvatar({ user, size = 'md', className = '' }: UserAv
   };
 
   const getInitials = () => {
-    const name = user.in_game_alias || user.email || 'Anonymous';
+    const name = user.in_game_alias || 'Anonymous'; // Never use email for privacy
     if (name === 'Anonymous') return '?';
     
     const parts = name.split(' ');

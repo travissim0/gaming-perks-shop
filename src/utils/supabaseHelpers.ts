@@ -438,4 +438,56 @@ export function getDefaultAvatarUrl(): string {
 export {
   withRetry,
   isConnectionError
+};
+
+/**
+ * Privacy safeguard: ensures display names never contain email parts or other private information
+ * @param profile - User profile object
+ * @returns Safe display name that doesn't leak private information
+ */
+export const getSafeDisplayName = (profile: {
+  in_game_alias?: string | null;
+  email?: string | null;
+}): string => {
+  // Only return the alias if it exists and is not an email or email part
+  if (profile.in_game_alias && 
+      profile.in_game_alias.trim() !== '' &&
+      !profile.in_game_alias.includes('@') &&
+      !profile.in_game_alias.includes('.')) {
+    return profile.in_game_alias;
+  }
+  
+  // Never return email or email parts for privacy
+  return 'Anonymous User';
+};
+
+/**
+ * Privacy safeguard: ensures display names are safe for public display
+ * @param name - Name to check
+ * @returns Safe name or fallback
+ */
+export const validateDisplayName = (name: string | null | undefined): string => {
+  if (!name || name.trim() === '') {
+    return 'Anonymous User';
+  }
+  
+  // Check if the name looks like an email or email part
+  if (name.includes('@') || (name.includes('.') && name.length > 3)) {
+    return 'Anonymous User';
+  }
+  
+  return name;
+};
+
+/**
+ * Privacy safeguard: ensures squad member names are safe for public display
+ * @param member - Squad member object
+ * @returns Safe display name
+ */
+export const getSafeSquadMemberName = (member: {
+  in_game_alias?: string | null;
+  profiles?: { in_game_alias?: string | null } | null;
+}): string => {
+  const alias = member.in_game_alias || member.profiles?.in_game_alias;
+  return validateDisplayName(alias);
 }; 

@@ -441,7 +441,7 @@ export default function ZoneManagementPage() {
           action: scheduleForm.action,
           scheduled_datetime: scheduledDatetime.toISOString(),
           created_by: user?.id,
-          created_by_alias: user?.user_metadata?.in_game_alias || user?.email || 'Unknown',
+          created_by_alias: user?.user_metadata?.in_game_alias || 'Admin User',
           status: 'scheduled'
         });
 

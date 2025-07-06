@@ -312,12 +312,13 @@ export default function Home() {
           
         if (error && error.code === 'PGRST116') {
           // Profile doesn't exist, create it quickly
+          // NEVER use email prefix as alias for privacy reasons
           await supabase
             .from('profiles')
             .insert([{
               id: user.id,
               email: user.email,
-              in_game_alias: user.email?.split('@')[0] || 'User',
+              in_game_alias: null, // Leave null to be set by user later
               last_seen: new Date().toISOString()
             }]);
         }
