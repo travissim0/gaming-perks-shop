@@ -561,20 +561,34 @@ namespace CTFGameType
             // First, try to find the team with a Squad Leader - that team is offense
             foreach (Player player in players)
             {
-                string className = player._baseVehicle._type.Name;
-                if (className == "Squad Leader")
+                // Get the player's primary skill name instead of vehicle type
+                string primarySkill = "";
+                if (player._skills.Count > 0)
+                {
+                    primarySkill = player._skills.First().Value.skill.Name;
+                }
+                
+                if (primarySkill == "Squad Leader")
                 {
                     return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
                 }
             }
             
             // If no Squad Leader found, use a consistent fallback based on team balance
-            // Count players on each team type
+            // Count players on each team type (excluding Dueler players)
             int titanCount = 0;
             int collectiveCount = 0;
             
             foreach (Player player in players)
             {
+                // Skip Dueler players from team counting
+                string primarySkill = "";
+                if (player._skills.Count > 0)
+                {
+                    primarySkill = player._skills.First().Value.skill.Name;
+                }
+                if (primarySkill == "Dueler") continue;
+                
                 if (player._team._name.Contains(" T"))
                     titanCount++;
                 else if (player._team._name.Contains(" C"))
@@ -3567,6 +3581,14 @@ namespace CTFGameType
                 {
                     if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
                         continue;
+                    
+                    // Skip Dueler players entirely from stats
+                    string primarySkill = "";
+                    if (player._skills.Count > 0)
+                    {
+                        primarySkill = player._skills.First().Value.skill.Name;
+                    }
+                    if (primarySkill == "Dueler") continue;
                         
                     string playerKey = player._alias.ToLower();
                     
@@ -3670,11 +3692,51 @@ namespace CTFGameType
         {
             try
             {
-                // First, update with final game state
-                PrepareGameData(arena, playerClassPlayTimes, playerLastClassSwitch, baseUsed);
-                
-                // Determine game type
+                // Update ALL participants with final game state and fresh most played class calculation
+                // Determine game type and offense team
                 string gameType = DetermineGameType(arena._name);
+                bool titanIsOffense = DetermineOffenseTeam(arena.Players.ToList(), arena);
+                
+                // Clear existing participants to rebuild with fresh data
+                gameParticipants.Clear();
+                
+                // Process all players with their final playtime data
+                foreach (Player player in arena.Players.ToList())
+                {
+                    if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
+                        continue;
+                    
+                    // Skip Dueler players entirely from stats
+                    string primarySkill = "";
+                    if (player._skills.Count > 0)
+                    {
+                        primarySkill = player._skills.First().Value.skill.Name;
+                    }
+                    if (primarySkill == "Dueler") continue;
+                        
+                    string playerKey = player._alias.ToLower();
+                    
+                    var playerData = new PlayerGameData();
+                    playerData.Alias = player._alias;
+                    playerData.Team = player._team._name;
+                    playerData.TeamType = DeterminePlayerTeamType(player);
+                    playerData.IsOffense = DetermineIsOffense(playerData.TeamType, titanIsOffense, gameType);
+                    playerData.Weapon = GetSpecialWeapon(player);
+                    playerData.LastActive = DateTime.Now;
+                    playerData.IsActive = true;
+                    
+                    // Calculate fresh most played class using final playerClassPlayTimes
+                    playerData.MostPlayedClass = GetMostPlayedClass(player, playerClassPlayTimes, playerLastClassSwitch);
+                    
+                    // Update class play times from the tracking dictionary
+                    if (playerClassPlayTimes.ContainsKey(player))
+                    {
+                        playerData.ClassPlayTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                        playerData.TotalPlayTimeMs = playerClassPlayTimes[player].Values.Sum();
+                    }
+                    
+                    gameParticipants[playerKey] = playerData;
+                }
                 
                 // Filter participants who actually played (had some play time)
                 var validParticipants = gameParticipants.Values
@@ -3700,7 +3762,7 @@ namespace CTFGameType
                 
                 // Build enhanced JSON with additional metadata
                 string jsonData = BuildEnhancedJsonString(arena._name, gameType, baseUsed, gameDataPlayers, 
-                                                        validParticipants, winningTeam._name);
+                                                        validParticipants, winningTeam != null ? winningTeam._name : null);
                 
                 // Send to API
                 var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");

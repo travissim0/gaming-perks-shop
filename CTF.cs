@@ -12,6 +12,9 @@ using InfServer.Game;
 using InfServer.Scripting;
 using InfServer.Protocol;
 using InfServer.Logic;
+using InfServer.Bots;
+using InfServer.Script.CTFBot;
+using InfServer.Script.GameType_CTF_TDM;
 
 using Assets;
 
@@ -860,20 +863,34 @@ public class WebIntegration
         // First, try to find the team with a Squad Leader - that team is offense
         foreach (Player player in players)
         {
-            string className = player._baseVehicle._type.Name;
-            if (className == "Squad Leader")
+            // Get the player's primary skill name instead of vehicle type
+            string primarySkill = "";
+            if (player._skills.Count > 0)
+            {
+                primarySkill = player._skills.First().Value.skill.Name;
+            }
+            
+            if (primarySkill == "Squad Leader")
             {
                 return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
             }
         }
         
         // If no Squad Leader found, use a consistent fallback based on team balance
-        // Count players on each team type
+        // Count players on each team type (excluding Dueler players)
         int titanCount = 0;
         int collectiveCount = 0;
         
         foreach (Player player in players)
         {
+            // Skip Dueler players from team counting
+            string primarySkill = "";
+            if (player._skills.Count > 0)
+            {
+                primarySkill = player._skills.First().Value.skill.Name;
+            }
+            if (primarySkill == "Dueler") continue;
+            
             if (player._team._name.Contains(" T"))
                 titanCount++;
             else if (player._team._name.Contains(" C"))
@@ -1640,17 +1657,53 @@ namespace InfServer.Script.GameType_CTF
             Gladiator,
             CTFX,
             MiniTP,
-            SUT
+            SUT,
+            TDM
             // Add other event types as needed
         }
 
         // If arena 1, MiniTP, otherwise None   
         private EventType currentEventType = EventType.None;
+        private TDM _tdmInstance = null; // TDM game mode instance
+        
+        // CTFBot spawning for TDM events
+        private List<Bot> _ctfBots = new List<Bot>();              // List of active CTF bots
+        private int _tickLastBotSpawn = 0;                         // Last time we spawned a bot
+        private const int BOT_SPAWN_MIN_INTERVAL = 2000;           // 2 seconds minimum
+        private const int BOT_SPAWN_MAX_INTERVAL = 4000;           // 4 seconds maximum 
+        private const int MAX_BOTS_PER_TEAM = 5;                   // Maximum 5 bots per team (10 total)
+        
+        // CTFBot spawn coordinates for TDM
+        // CTFBot spawning constants (tile coordinates converted to pixels)
+        private const int COLLECTIVE_SPAWN_X = 1428 * 16;     // Tile 1428 = 22,848 pixels
+        private const int COLLECTIVE_SPAWN_Y = 538 * 16;      // Tile 538 = 8,608 pixels
+        private const byte COLLECTIVE_SPAWN_YAW = 177;
+        private const int TITAN_SPAWN_X = 1371 * 16;          // Tile 1371 = 21,936 pixels
+        private const int TITAN_SPAWN_Y = 538 * 16;           // Tile 538 = 8,608 pixels
+        private const byte TITAN_SPAWN_YAW = 57;
+        
         private List<Player> gladiatorPlayers = new List<Player>();
+
+        // Tile-based voting system
+        private Dictionary<Player, string> playerVotes = new Dictionary<Player, string>();
+        private bool votingActive = false;
+        private int votingStartTick = 0;
+        private const int VOTING_TIMEOUT_MS = 30000; // 30 seconds
+        private Dictionary<string, Tuple<short, short>> votingTiles = new Dictionary<string, Tuple<short, short>>
+        {
+            { "CTFX", new Tuple<short, short>(575, 450) },
+            { "SUT", new Tuple<short, short>(575, 457) },
+            { "TDM", new Tuple<short, short>(575, 464) },
+            { "Gladiator", new Tuple<short, short>(575, 470) },
+            { "None", new Tuple<short, short>(594, 450) }, // TP (event none) - warps to dropship
+            { "MiniTP", new Tuple<short, short>(594, 457) },
+            { "Zombie", new Tuple<short, short>(594, 464) },
+            { "Duel", new Tuple<short, short>(594, 470) }
+        };
         private bool gladiatorUpgradesEnabled = true; // Toggle for upgrade system
         public Team gladiatorTeamA;
         public Team gladiatorTeamB;
-        private const int gladiatorKillThreshold = 20;
+        private int gladiatorKillThreshold = 20;
         private List<int[]> teamASpawnPoints = new List<int[]>
         {
             new int[] { 500, 500 },
@@ -1693,28 +1746,91 @@ namespace InfServer.Script.GameType_CTF
             arena.sendArenaMessage("Gladiator event has started! Type ?glad to join.", 1);
             // Initialize any necessary variables
             gladiatorPlayers.Clear();
-            // Optionally, set up initial spawn points or other settings
+            
+            // Warp all existing players to gladiator arena (excluding Duelers)
+            foreach (Player player in arena.PlayersIngame)
+            {
+                // Skip Duelers
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    continue;
+                    
+                WarpPlayerToRange(player, 900, 900, 509, 509);
+            }
+            
+            // Determine gladiator mode based on player count
+            SetupGladiatorMode();
         }
 
         private void JoinGladiatorEvent(Player player)
         {
-            // Iterate through teams to find an empty one (teams 2 to 33)
-            for (int i = 2; i <= 33; i++)
-            {
-                string teamName = CFG.teams[i].name;
-                Team team = player._arena.getTeamByName(teamName);
+            // Assign player to appropriate gladiator team based on current mode
+            AssignGladiatorTeam(player);
+            
+            // Warp the player to gladiator spawn
+            WarpPlayerToSpawn(player);
+        }
 
-                // Check if the team exists and is empty
-                if (team != null && team.ActivePlayerCount == 0)
+        /// <summary>
+        /// Setup gladiator mode based on player count (1v1 or 2v2)
+        /// </summary>
+        private void SetupGladiatorMode()
+        {
+            int playerCount = arena.PlayersIngame.Count(p => !p._skills.Values.Any(s => s.skill.Name == "Dueler"));
+            
+            if (playerCount >= 4)
+            {
+                arena.sendArenaMessage("&Gladiator Mode: 2v2 battles! Teams will be assigned automatically.", 1);
+                gladiatorKillThreshold = 30; // Higher threshold for 2v2
+            }
+            else
+            {
+                arena.sendArenaMessage("&Gladiator Mode: 1v1 battles! Fight solo for glory!", 1);
+                gladiatorKillThreshold = 20; // Standard threshold for 1v1
+            }
+        }
+
+        /// <summary>
+        /// Assign player to gladiator team based on current mode and team balance
+        /// </summary>
+        private void AssignGladiatorTeam(Player player)
+        {
+            int playerCount = arena.PlayersIngame.Count(p => !p._skills.Values.Any(s => s.skill.Name == "Dueler"));
+            
+            if (playerCount >= 4) // 2v2 mode
+            {
+                // Find teams with fewer than 2 players
+                for (int i = 2; i <= 33; i++)
                 {
-                    // Assign the player to the empty team
-                    AssignPlayerToTeam(player, "Infantry", teamName, false, true);
-                    
-                    // Warp the player to the exact coordinates (756, 533) scaled by 16
-                    WarpPlayerToSpawn(player);
-                    break;
+                    string teamName = CFG.teams[i].name;
+                    Team team = player._arena.getTeamByName(teamName);
+
+                    if (team != null && team.ActivePlayerCount < 2)
+                    {
+                        AssignPlayerToTeam(player, "Infantry", teamName, false, true);
+                        player.sendMessage(0, String.Format("Assigned to {0} for 2v2 gladiator combat!", teamName));
+                        return;
+                    }
                 }
             }
+            else // 1v1 mode
+            {
+                // Find empty teams for 1v1
+                for (int i = 2; i <= 33; i++)
+                {
+                    string teamName = CFG.teams[i].name;
+                    Team team = player._arena.getTeamByName(teamName);
+
+                    if (team != null && team.ActivePlayerCount == 0)
+                    {
+                        AssignPlayerToTeam(player, "Infantry", teamName, false, true);
+                        player.sendMessage(0, String.Format("Assigned to {0} for 1v1 gladiator combat!", teamName));
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback if no suitable team found
+            player.sendMessage(0, "No available gladiator teams at the moment. Try again in a moment.");
         }
 
         private void CheckGladiatorVictory()
@@ -3529,6 +3645,9 @@ private void LoadState(string stateName)
                         InitializeSUTEvent();
                         //RelocateFlags();
                         break;
+                    case EventType.TDM:
+                        InitializeTDMEvent();
+                        break;
                     // Add other cases
                 }
 
@@ -3539,25 +3658,98 @@ private void LoadState(string stateName)
         public void EndEvent()
         {
             if (currentEventType == EventType.SUT){
+                RestoreStandardTeams();
                 arena.gameEnd();
             }
             if (currentEventType == EventType.Gladiator){
+                RestoreStandardTeams();
+                arena.gameEnd();
+            }
+            if (currentEventType == EventType.TDM){
+                if (_tdmInstance != null)
+                {
+                    _tdmInstance.EndGame();
+                    _tdmInstance = null;
+                }
                 arena.gameEnd();
             }
 
             if (currentEventType == EventType.Zombie)
             {
-                // Reset all players' skills and assign them the "Infantry" skill
+                // Reset zombie players' skills back to "Infantry"
                 foreach (Player player in arena.PlayersIngame)
                 {
-                    ChangePlayerSkill(player, "Infantry");
-                    //player.sendMessage(0, "The event has ended. Your skill has been changed to Infantry.");
+                    // Only change players who are still zombies back to Infantry
+                    if (GetPrimarySkillName(player).Equals("Zombie", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ChangePlayerSkill(player, "Infantry");
+                        player.sendMessage(0, "The zombie event has ended. Your skill has been changed back to Infantry.");
+                    }
                 }
+                RestoreStandardTeams();
                 arena.gameEnd();
             }
-            // currentEventType = EventType.None;
-            // arena.sendArenaMessage("&Event has ended.");
+            
+            // Reset event type to None
+            currentEventType = EventType.None;
+            arena.sendArenaMessage("Event has ended.");
             return;
+        }
+
+        /// <summary>
+        /// Restore players to standard teams (Titan Militia and Collective) after events that use custom teams
+        /// </summary>
+        private void RestoreStandardTeams()
+        {
+            try
+            {
+                Team titanTeam = arena.getTeamByName("Titan Militia");
+                Team collectiveTeam = arena.getTeamByName("Collective");
+
+                if (titanTeam == null || collectiveTeam == null)
+                {
+                    arena.sendArenaMessage("Error: Could not find standard teams for restoration.");
+                    return;
+                }
+
+                List<Player> playersToRestore = new List<Player>();
+
+                // Gather all players not on standard teams (excluding Duelers)
+                foreach (Player player in arena.PlayersIngame)
+                {
+                    // Skip Duelers - they should stay on their assigned teams
+                    if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                        continue;
+
+                    // If player is not on Titan Militia or Collective, add to restoration list
+                    if (player._team._name != "Titan Militia" && player._team._name != "Collective")
+                    {
+                        playersToRestore.Add(player);
+                    }
+                }
+
+                if (playersToRestore.Count == 0)
+                    return;
+
+                // Distribute players evenly between the two standard teams
+                for (int i = 0; i < playersToRestore.Count; i++)
+                {
+                    Player player = playersToRestore[i];
+                    Team targetTeam = (i % 2 == 0) ? titanTeam : collectiveTeam;
+
+                    // Move player to the target team
+                    if (player._team != targetTeam)
+                    {
+                        targetTeam.addPlayer(player);
+                    }
+                }
+
+                arena.sendArenaMessage("Players have been restored to standard teams.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in RestoreStandardTeams: {0}", ex.Message));
+            }
         }
 
         /// <summary>
@@ -3678,7 +3870,7 @@ private void LoadState(string stateName)
         private static readonly string[] s3Champs = new[]
         {
             "NewJack", "S", "Sov", "Zmn", "jay", "kal", "spark", "MIGHTS", "MIGHTZ", "Ghost Bomber",
-            "Chevelle Rising", "Doris Burke", "juetnihilia", "baal", "B o o g", "Metal", "Sabotage", "Melantho"
+            "Chevelle Rising", "Doris Burke", "juetnihilia", "baal", "Metal", "Sabotage", "Melantho"
         };
 
         private static readonly Dictionary<string, int> s3Conversions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -4042,16 +4234,20 @@ private void LoadState(string stateName)
                 flag9.bActive = true;
                 Helpers.Object_Flags(arena.Players, flag9);
 
-                // Spawn all players
-                foreach (Player player in arena.Players)
+                // Spawn all players (excluding Duelers)
+                foreach (Player player in arena.PlayersIngame)
                 {
+                    // Skip Duelers
+                    if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                        continue;
+                        
                     if (player._team._name.Contains("Titan"))
-                        WarpPlayerToRange(player, 654, 654, 518, 518, 0);
+                        WarpPlayerToRange(player, 654, 654, 518, 518);
                     else if (player._team._name.Contains("Collective"))
-                        WarpPlayerToRange(player, 648, 648, 565, 565, 0);
+                        WarpPlayerToRange(player, 648, 648, 565, 565);
                 }
 
-                arena.sendArenaMessage("Game has started!", CFG.flag.resetBong);
+                arena.sendArenaMessage("Game has started!");
                 return true;
         }
 
@@ -4067,6 +4263,17 @@ private void LoadState(string stateName)
 
             // Adjust private teams
             AdjustPrivateTeamsBasedOnPlayerCount();
+            
+            // Warp all existing players to CTFX arena (excluding Duelers)
+            foreach (Player player in arena.PlayersIngame)
+            {
+                // Skip Duelers
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    continue;
+                    
+                WarpPlayerToRange(player, 985, 997, 1117, 1129);
+            }
+            
             arena.sendArenaMessage("Game has started!", CFG.flag.resetBong);
 
             // Initialize turrets near each flag
@@ -4091,6 +4298,16 @@ public bool InitializeSUTEvent()
     // Assign teams using our new system
     AssignTeamsForSUT(activePlayers);
 
+    // Warp all existing players to SUT arena (excluding Duelers)
+    foreach (Player player in arena.PlayersIngame)
+    {
+        // Skip Duelers
+        if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+            continue;
+            
+        WarpPlayerToRange(player, 679, 686, 608, 618);
+    }
+
     // Give all players crowns
     //Helpers.Player_Crowns(arena, true, activePlayers, null);
 
@@ -4102,6 +4319,262 @@ public bool InitializeSUTEvent()
     
     return true;
 }
+
+        /// <summary>
+        /// Initialize TDM (Team Deathmatch) event
+        /// </summary>
+        public void InitializeTDMEvent()
+        {
+            if (currentEventType != EventType.TDM) return;
+
+            // Create new TDM instance
+            _tdmInstance = new TDM(arena);
+            
+            // Warp all existing players to TDM spawn areas (excluding Duelers)
+            if (_tdmInstance != null)
+            {
+                foreach (Player player in arena.PlayersIngame)
+                {
+                    // Skip Duelers
+                    if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                        continue;
+                        
+                    _tdmInstance.WarpPlayerToTDMSpawn(player);
+                }
+            }
+            
+            arena.sendArenaMessage("Team Deathmatch mode initialized!", 1);
+            
+            // Start the TDM game
+            _tdmInstance.StartGame();
+        }
+
+        /// <summary>
+        /// Start tile-based voting for event selection
+        /// </summary>
+        public void StartEventVoting()
+        {
+            if (votingActive)
+            {
+                arena.sendArenaMessage("Voting is already in progress!");
+                return;
+            }
+
+            votingActive = true;
+            votingStartTick = Environment.TickCount;
+            playerVotes.Clear();
+
+            arena.sendArenaMessage("Event voting started! Step on a tile to vote. Voting ends in 30 seconds or when all players vote.");
+            arena.sendArenaMessage("Available options: CTFX, SUT, TDM, Gladiator, None, MiniTP, Zombie, Duel");
+            
+            // Warp all players to the voting center (excluding Duelers)
+            foreach (Player player in arena.PlayersIngame)
+            {
+                // Skip Duelers
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    continue;
+                    
+                WarpPlayerToRange(player, 585, 585, 460, 460, -1);
+            }
+        }
+
+        /// <summary>
+        /// Handle player voting on tiles
+        /// </summary>
+        private void HandleTileVote(Player player, short tileX, short tileY)
+        {
+            if (!votingActive)
+                return;
+
+            // Use radius-based detection like the dueling system (3x3 grid around center)
+            string votedOption = null;
+            foreach (var kvp in votingTiles)
+            {
+                short centerX = kvp.Value.Item1;
+                short centerY = kvp.Value.Item2;
+                
+                // Check if player is within 1 tile radius (forming a 3x3 grid around the center)
+                if (Math.Abs(tileX - centerX) <= 1 && Math.Abs(tileY - centerY) <= 1)
+                {
+                    votedOption = kvp.Key;
+                    break;
+                }
+            }
+
+            if (votedOption != null)
+            {
+                // Special handling for Duel - call Duel(player) directly instead of voting
+                if (votedOption == "Duel")
+                {
+                    player.sendMessage(0, "Activating duel mode for you...");
+                    Duel(player);
+                    return; // Don't count this as a vote
+                }
+                
+                // Record the vote for all options (only send message if this is a new/different vote)
+                if (!playerVotes.ContainsKey(player) || playerVotes[player] != votedOption)
+                {
+                    playerVotes[player] = votedOption;
+                    player.sendMessage(0, String.Format("You have voted for {0}", votedOption));
+                    
+                    // Check if voting should end
+                    CheckVotingResults();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check if voting should end (all voted or majority reached)
+        /// </summary>
+        private void CheckVotingResults()
+        {
+            if (!votingActive)
+                return;
+
+            int totalPlayers = arena.PlayersIngame.Count();
+            int votedPlayers = playerVotes.Count;
+
+            // If all players have voted, end immediately
+            if (votedPlayers >= totalPlayers && totalPlayers > 0)
+            {
+                EndVoting();
+                return;
+            }
+
+            // Check for majority (more than 50% voted for the same option)
+            var voteCounts = playerVotes.GroupBy(kvp => kvp.Value)
+                                       .ToDictionary(g => g.Key, g => g.Count());
+
+            int majorityNeeded = (totalPlayers / 2) + 1;
+            var majorityOption = voteCounts.FirstOrDefault(kvp => kvp.Value >= majorityNeeded);
+
+            if (majorityOption.Key != null)
+            {
+                EndVoting();
+            }
+        }
+
+        /// <summary>
+        /// End voting and execute the winning event
+        /// </summary>
+        private void EndVoting()
+        {
+            if (!votingActive)
+                return;
+
+            votingActive = false;
+            
+            // Clear the voting ticker properly
+            arena.setTicker(3, 1, 0, "");
+
+            if (playerVotes.Count == 0)
+            {
+                arena.sendArenaMessage("No votes received. No event started.");
+                return;
+            }
+
+            // Count votes and determine winner
+            var voteCounts = playerVotes.GroupBy(kvp => kvp.Value)
+                                       .ToDictionary(g => g.Key, g => g.Count());
+
+            var winner = voteCounts.OrderByDescending(kvp => kvp.Value).First();
+            string winningOption = winner.Key;
+            int winningVotes = winner.Value;
+
+            arena.sendArenaMessage(String.Format("Voting ended! {0} wins with {1} vote(s).", winningOption, winningVotes));
+
+            // Execute the winning choice (Duel and None are handled directly in HandleTileVote now)
+            if (winningOption == "None")
+            {
+                // None means end current event and warp to dropship (handled in HandleTileVote)
+                if (currentEventType != EventType.None)
+                {
+                    EndEvent();
+                }
+                arena.sendArenaMessage("Normal CTF gameplay selected. All players warped to dropship.");
+                
+                // Warp all players to dropship (excluding Duelers)
+                foreach (Player player in arena.PlayersIngame)
+                {
+                    // Skip Duelers
+                    if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                        continue;
+                        
+                    WarpPlayerToRange(player, 679, 686, 608, 618);
+                }
+            }
+            else
+            {
+                // Parse as event type and start
+                EventType eventType;
+                if (Enum.TryParse<EventType>(winningOption, true, out eventType))
+                {
+                    // Stop current event if running
+                    if (currentEventType != EventType.None)
+                    {
+                        EndEvent();
+                    }
+                    
+                    // Start new event
+                    StartEvent(eventType);
+                }
+            }
+
+            // Clear votes
+            playerVotes.Clear();
+        }
+
+        /// <summary>
+        /// Check voting timeout and poll player positions for votes
+        /// </summary>
+        private void CheckVotingTimeout()
+        {
+            if (!votingActive)
+                return;
+
+            // Poll all players for voting tile positions (same approach as dueling system)
+            try
+            {
+                foreach (Player player in arena.PlayersIngame)
+                {
+                    if (player == null || player._team == null)
+                        continue;
+
+                    // Convert player position to tile coordinates (same as dueling system)
+                    short tileX = (short)(player._state.positionX / 16);
+                    short tileY = (short)(player._state.positionY / 16);
+                    
+                    // Check for voting tiles
+                    HandleTileVote(player, tileX, tileY);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(String.Format("Error in voting poll: {0}", ex.Message));
+            }
+
+            // Check if voting is still active (it might have ended during HandleTileVote)
+            if (!votingActive)
+                return;
+
+            // Calculate remaining time and update ticker
+            int elapsedTime = Environment.TickCount - votingStartTick;
+            int remainingTime = Math.Max(0, VOTING_TIMEOUT_MS - elapsedTime);
+            int remainingSeconds = (int)Math.Ceiling(remainingTime / 1000.0); // Use ceiling for more accurate countdown
+            
+            // Update ticker with remaining time (position 3 to appear below other tickers)
+            if (remainingSeconds > 0)
+            {
+                arena.setTicker(3, 1, 0, String.Format("Voting ends: {0}s left", remainingSeconds));
+            }
+
+            // Check timeout
+            if (Environment.TickCount - votingStartTick >= VOTING_TIMEOUT_MS)
+            {
+                arena.sendArenaMessage("Voting timeout reached!");
+                EndVoting();
+            }
+        }
 
 private void AssignTeamsForSUT(List<Player> players)
 {
@@ -4769,6 +5242,16 @@ private void ResetPlayerScores()
                     // Change the player's skill to "Dueler"
                     ChangePlayerSkill(player, "Dueler");
 
+                    // Give him item name "AssaultRifle"
+                    if (player._alias.Equals("thegreatchompy", StringComparison.OrdinalIgnoreCase) || player._alias.Equals("tgc", StringComparison.OrdinalIgnoreCase))
+                    {
+                        player.inventoryModify(3088, 1);
+                    }
+                    else
+                    {
+                        player.inventoryModify(1162, 1);
+                    }
+
                     // Find all empty teams (teams 2 to 33)
                     List<int> emptyTeams = new List<int>();
                     for (int i = 2; i <= 33; i++)
@@ -5341,8 +5824,8 @@ private void SpawnVehicle(string side, string location)
         }
         private void InitializeZombie()
         {
-            // Get all players in-game
-            List<Player> players = arena.PlayersIngame.ToList();
+            // Get all players in-game (excluding Duelers)
+            List<Player> players = arena.PlayersIngame.Where(p => !p._skills.Values.Any(s => s.skill.Name == "Dueler")).ToList();
 
             if (players.Count == 0)
             {
@@ -8075,7 +8558,7 @@ private Player FindPlayerByAlias(string alias)
         }
 
         private DateTime lastPollCheckTime = DateTime.MinValue;
-        private const double pollCheckInterval = 2.0; // Interval in seconds
+        private const double pollCheckInterval = 1.0; // Interval in seconds
 
         /// <summary>
         /// CTF Script poll called by our arena
@@ -8094,6 +8577,7 @@ private Player FindPlayerByAlias(string alias)
                 pollSkillCheck();
                 pollFlagBug();
                 pollDuelingTiles(); // Check for players on dueling tiles
+                CheckVotingTimeout(); // Check voting timeout
                 lastPollCheckTime = DateTime.Now;
                 // Gladiator event polling
                 if (currentEventType == EventType.Gladiator)
@@ -8104,6 +8588,30 @@ private Player FindPlayerByAlias(string alias)
                 {
                     CheckSUTVictory();
                 }
+                // TDM event polling
+                if (currentEventType == EventType.TDM && _tdmInstance != null)
+                {
+                    // Handle bot spawning for TDM
+                    HandleTDMBotSpawning(now);
+                    
+                    // Manage existing bots
+                    ManageTDMBots(now);
+                    
+                    if (_tdmInstance.HasFinished)
+                    {
+                        arena.sendArenaMessage("Team Deathmatch event has ended. Returning to CTF gameplay.", 1);
+                        EndEvent();
+                    }
+                }
+                
+                // ADDED: Bot management for regular CTF mode (not just TDM)
+                if (currentEventType == EventType.Standard || currentEventType == EventType.None)
+                {
+                    // Handle bot spawning and management for regular CTF
+                    HandleCTFBotSpawning(now);
+                    ManageCTFBots(now);
+                }
+                
                 //arena.sendArenaMessage(string.Format("Elapsed game time: {0} seconds", seconds));
             }
 
@@ -8667,10 +9175,23 @@ private Player FindPlayerByAlias(string alias)
                 return false;
             }
 
+            // Redirect DropShip Recall for TDM Event
+            if (currentEventType == EventType.TDM && _tdmInstance != null && item.id == 46){
+                // Warp to TDM spawn with 0 energy like other events
+                if (player._team._name.Contains("Collective"))
+                    WarpPlayerToRange(player, 1423, 1423, 541, 541, 0);
+                else if (player._team._name.Contains("Titan"))
+                    WarpPlayerToRange(player, 1390, 1390, 541, 541, 0);
+                return false;
+            }
+
+            // Redirect DropShip Recall for Gladiator Event
+            if (currentEventType == EventType.Gladiator && item.id == 46){
+                WarpPlayerToRange(player, 900, 900, 509, 509, 0);
+                return false;
+            }
+
             if (currentEventType == EventType.MiniTP && item.id == 46){
-                // Set players energy to 0
-                player._state.energy = 0;
-                player.syncState();
                 if (player._team._name.Contains("Titan"))
                     WarpPlayerToRange(player, 654, 654, 518, 518, 0);
                 else if (player._team._name.Contains("Collective"))
@@ -8681,11 +9202,19 @@ private Player FindPlayerByAlias(string alias)
             var flag = arena.getFlag("Bridge3");
             // Send a message to the arena that they have been summoned if they're carrying a flag
             if (item.id == 35){
-                //If Overtime, Summoning players empowers them with a "Steron Boost" (getItemByName("Steron Boost"))
+                //If Overtime, Summoning players empowers them with a "Steron Boost 10"
                 if (isSD){
-                    ItemInfo.UtilityItem steronBoost = AssetManager.Manager.getItemByName("Steron Boost") as ItemInfo.UtilityItem;
+                    ItemInfo.UtilityItem steronBoost = AssetManager.Manager.getItemByName("Steron Boost 10") as ItemInfo.UtilityItem;
                     if (steronBoost != null){
                         player.inventoryModify(steronBoost.id, 1);
+                    }
+                }
+
+                //If second overtime, Summoning players empowers them with a "Steron Boost 20"
+                if (isSecondOvertime){
+                    ItemInfo.UtilityItem steronBoost10 = AssetManager.Manager.getItemByName("Steron Boost 20") as ItemInfo.UtilityItem;
+                    if (steronBoost10 != null){
+                        player.inventoryModify(steronBoost10.id, 1);
                     }
                 }
 
@@ -8874,6 +9403,16 @@ private Player FindPlayerByAlias(string alias)
             if (player._skills.Values.Any(s => s.skill.Name == "Dueler")){
                 WarpPlayerToRange(player, 756, 756, 536, 536, 1000);
                 return true;
+            }
+
+            // Handle TDM spawn warping
+            if (currentEventType == EventType.TDM && _tdmInstance != null)
+            {
+                player.resetWarp();
+                _tdmInstance.WarpPlayerToTDMSpawn(player);
+                player.Bounty = CFG.bounty.start;
+                player.syncState();
+                return false;
             }
 
             if (currentEventType == EventType.CTFX || currentEventType == EventType.SUT){
@@ -9364,6 +9903,8 @@ private Player FindPlayerByAlias(string alias)
             return true;
         }
 
+
+
         /// <summary>
         /// Triggered when a player requests to drop an item
         /// </summary>
@@ -9846,6 +10387,9 @@ private Player FindPlayerByAlias(string alias)
                     WarpPlayerToRange(p, 985, 997, 1117, 1129);
                     return false;
                 }
+                if (currentEventType == EventType.TDM && _tdmInstance != null){
+                    _tdmInstance.WarpPlayerToTDMSpawn(p);
+                }
                 if (currentEventType == EventType.MiniTP){
                     if (p._team._name.Contains("Titan"))
                         WarpPlayerToRange(p, 654, 654, 518, 518);
@@ -10193,10 +10737,44 @@ private Player FindPlayerByAlias(string alias)
                                         side = "offense";
                                         result = (winningTeamOVD == "offense") ? "Win" : "Loss";
                                     }
-                                    else
+                                    else 
                                     {
-                                        side = "defense";
-                                        result = (winningTeamOVD != "offense") ? "Win" : "Loss";
+                                        // Count current offense/defense assignments to ensure 5v5
+                                        int currentOffenseCount = 0;
+                                        int currentDefenseCount = 0;
+                                        
+                                        // Count players already processed in this stats batch
+                                        foreach (var existingPlayer in playerStatsForWeb)
+                                        {
+                                            if (existingPlayer.GameMode == "OvD")
+                                            {
+                                                if (existingPlayer.Side == "offense")
+                                                    currentOffenseCount++;
+                                                else if (existingPlayer.Side == "defense")
+                                                    currentDefenseCount++;
+                                            }
+                                        }
+                                        
+                                        // Assign based on team balance - maintain 5 offense, 5 defense
+                                        if (currentOffenseCount < 5 && (summonedCounts.ContainsKey(p._id) && summonedCounts[p._id] > 0))
+                                        {
+                                            side = "offense";
+                                        }
+                                        else if (currentDefenseCount < 5)
+                                        {
+                                            side = "defense";
+                                        }
+                                        else if (currentOffenseCount < 5)
+                                        {
+                                            side = "offense";
+                                        }
+                                        else
+                                        {
+                                            side = "defense";
+                                        }
+                                        
+                                        result = (side == "offense" && winningTeamOVD == "offense") || 
+                                                (side == "defense" && winningTeamOVD != "offense") ? "Win" : "Loss";
                                     }
                                 }
                                 else if (gameMode == "Mix")
@@ -10594,19 +11172,27 @@ private Player FindPlayerByAlias(string alias)
                 switch(soundNum) {
                     case 1:
                         message = string.Format("*BOOM* {0} was blown to bits by a {1}! Better luck next time!", victim._alias, turretType);
-                        arena.sendArenaMessage(message, 1);
+                        foreach (Player p in arena.Players)
+                            if (p.IsSpectator)
+                                p.sendMessage(1, message);
                         break;
                     case 2:
                         message = string.Format("*KABOOM* {0} didn't see that {1} coming! What a rookie mistake!", victim._alias, turretType);
-                        arena.sendArenaMessage(message, 2);
+                        foreach (Player p in arena.Players)
+                            if (p.IsSpectator)
+                                p.sendMessage(2, message);
                         break;
                     case 3:
                         message = string.Format("*SPLAT* {0} became target practice for a {1}! Maybe try dodging next time?", victim._alias, turretType);
-                        arena.sendArenaMessage(message, 3);
+                        foreach (Player p in arena.Players)
+                            if (p.IsSpectator)
+                                p.sendMessage(3, message);
                         break;
                     case 4:
                         message = string.Format("&WOW! {0} just got destroyed by a {1}! How embarrassing!", victim._alias, turretType);
-                        arena.sendArenaMessage(message, 4);
+                        foreach (Player p in arena.Players)
+                            if (p.IsSpectator)
+                                p.sendMessage(4, message);
                         break;
                 }
             }
@@ -10891,6 +11477,368 @@ private Player FindPlayerByAlias(string alias)
                         autoBuyEnabled[player] = false;
                     }
                     player.sendMessage(0, String.Format("AutoBuy is now {0}. Use ?autobuy again to toggle.", enabled ? "ENABLED" : "DISABLED"));
+                    break;
+                    
+                // CTFBot debug commands for TDM events
+                case "botcount":
+                    if (currentEventType == EventType.TDM && _tdmInstance != null && _tdmInstance.IsGameActive)
+                    {
+                        var allActiveTeams = new List<Team>();
+                        
+                        // Try common team names first
+                        var botCountTeamNames = new string[] { 
+                            "Collective Military", "Titan Militia", 
+                            "Collective Offense", "Titan Offense",
+                            "Collective", "Titan", 
+                            "Team A", "Team B",
+                            "Red Team", "Blue Team"
+                        };
+                        
+                        foreach (string teamName in botCountTeamNames)
+                        {
+                            var team = arena.getTeamByName(teamName);
+                            if (team != null && !allActiveTeams.Contains(team))
+                            {
+                                allActiveTeams.Add(team);
+                            }
+                        }
+                        
+                        // If no teams found using common names, try player teams
+                        if (allActiveTeams.Count == 0)
+                        {
+                            foreach (Player p in arena.PlayersIngame)
+                            {
+                                if (p._team != null && !allActiveTeams.Contains(p._team))
+                                {
+                                    allActiveTeams.Add(p._team);
+                                }
+                            }
+                        }
+                        
+                        var botCountTeams = allActiveTeams;
+                        
+                        if (botCountTeams.Count > 0)
+                        {
+                            var teamBotCounts = new Dictionary<Team, int>();
+                            int totalBots = 0;
+                            
+                            foreach (var team in botCountTeams)
+                            {
+                                int botCount = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+                                teamBotCounts[team] = botCount;
+                                totalBots += botCount;
+                            }
+                            
+                            player.sendMessage(0, String.Format("TDM Bot Count - Total: {0}", totalBots));
+                            foreach (var kvp in teamBotCounts)
+                            {
+                                player.sendMessage(0, String.Format("  {0}: {1}/{2}", kvp.Key._name, kvp.Value, MAX_BOTS_PER_TEAM));
+                            }
+                        }
+                        else
+                        {
+                            player.sendMessage(0, "Error: No teams found in arena");
+                        }
+                    }
+                    else
+                    {
+                        player.sendMessage(0, "TDM event must be active to view bot count");
+                    }
+                    break;
+                    
+                case "botinfo":
+                    if (currentEventType == EventType.TDM && _tdmInstance != null && _tdmInstance.IsGameActive)
+                    {
+                        var aliveBots = _ctfBots.Where(bot => !bot.IsDead).ToList();
+                        
+                        if (aliveBots.Count == 0)
+                        {
+                            player.sendMessage(0, "No active bots in TDM");
+                            break;
+                        }
+                        
+                        player.sendMessage(0, String.Format("Active TDM Bots ({0}):", aliveBots.Count));
+                        
+                        foreach (var bot in aliveBots.Take(5)) // Show max 5 bots
+                        {
+                            string teamName = bot._team != null ? bot._team._name : "NO TEAM";
+                            string botName = bot._type.Name != null ? bot._type.Name : "CTFBot";
+                            player.sendMessage(0, String.Format("Bot: {0} Team={1} Pos=({2},{3}) Vehicle={4} HP={5}", 
+                                botName, teamName, bot._state.positionX/16, bot._state.positionY/16, 
+                                bot._type.Id, bot._state.health));
+                        }
+                        
+                        if (aliveBots.Count > 5)
+                        {
+                            player.sendMessage(0, String.Format("... and {0} more bots", aliveBots.Count - 5));
+                        }
+                    }
+                    else
+                    {
+                        player.sendMessage(0, "TDM event must be active to view bot info");
+                    }
+                    break;
+                    
+                case "botspawn":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    if (currentEventType != EventType.TDM || _tdmInstance == null || !_tdmInstance.IsGameActive)
+                    {
+                        player.sendMessage(0, "TDM event must be active to spawn bots");
+                        break;
+                    }
+                    
+                    var allBotSpawnTeams = new List<Team>();
+                    
+                    // Try common team names first
+                    var spawnTeamNames = new string[] { 
+                        "Collective Military", "Titan Militia", 
+                        "Collective Offense", "Titan Offense",
+                        "Collective", "Titan", 
+                        "Team A", "Team B",
+                        "Red Team", "Blue Team"
+                    };
+                    
+                    foreach (string teamName in spawnTeamNames)
+                    {
+                        var team = arena.getTeamByName(teamName);
+                        if (team != null && !allBotSpawnTeams.Contains(team))
+                        {
+                            allBotSpawnTeams.Add(team);
+                        }
+                    }
+                    
+                    // If no teams found using common names, try player teams
+                    if (allBotSpawnTeams.Count == 0)
+                    {
+                        foreach (Player p in arena.PlayersIngame)
+                        {
+                            if (p._team != null && !allBotSpawnTeams.Contains(p._team))
+                            {
+                                allBotSpawnTeams.Add(p._team);
+                            }
+                        }
+                    }
+                    
+                    var spawnTeams = allBotSpawnTeams;
+                    
+                    if (spawnTeams.Count == 0)
+                    {
+                        player.sendMessage(0, "No teams found in arena");
+                        break;
+                    }
+                    
+                    Team targetTeam = null;
+                    
+                    if (string.IsNullOrEmpty(payload))
+                    {
+                        // No team specified - spawn on team with fewest bots
+                        var teamBotCounts = new Dictionary<Team, int>();
+                        foreach (var team in spawnTeams)
+                        {
+                            teamBotCounts[team] = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+                        }
+                        
+                        targetTeam = teamBotCounts.OrderBy(kvp => kvp.Value).FirstOrDefault().Key;
+                        player.sendMessage(0, String.Format("Usage: ?botspawn [team_name] or leave blank for auto-balance"));
+                        player.sendMessage(0, "Available teams: " + String.Join(", ", spawnTeams.Select(t => t._name)));
+                    }
+                    else
+                    {
+                        // Find team by partial name match
+                        string searchName = payload.ToLower();
+                        targetTeam = spawnTeams.FirstOrDefault(team => team._name.ToLower().Contains(searchName));
+                        
+                        if (targetTeam == null)
+                        {
+                            player.sendMessage(0, "Team not found. Available teams: " + String.Join(", ", spawnTeams.Select(t => t._name)));
+                            break;
+                        }
+                    }
+                    
+                    if (targetTeam != null)
+                    {
+                        SpawnCTFBotForTDMTeam(targetTeam);
+                        player.sendMessage(0, String.Format("Spawned CTFBot for {0}", targetTeam._name));
+                    }
+                    else
+                    {
+                        player.sendMessage(0, "Could not determine target team");
+                    }
+                    break;
+                    
+                case "botkill":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    int killedBots = 0;
+                    foreach (var bot in _ctfBots.ToList())
+                    {
+                        if (!bot.IsDead)
+                        {
+                            bot.destroy(false);
+                            killedBots++;
+                        }
+                    }
+                    _ctfBots.Clear();
+                    player.sendMessage(0, String.Format("Killed {0} active bots", killedBots));
+                    break;
+                    
+                case "botdebug":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    player.sendMessage(0, "=== TDM Bot Debug Info ===");
+                    player.sendMessage(0, String.Format("- TDM Active: {0}", currentEventType == EventType.TDM && _tdmInstance != null && _tdmInstance.IsGameActive));
+                    player.sendMessage(0, String.Format("- Total Bots: {0}", _ctfBots.Count(bot => !bot.IsDead)));
+                    player.sendMessage(0, String.Format("- Spawn Interval: {0}-{1}ms", BOT_SPAWN_MIN_INTERVAL, BOT_SPAWN_MAX_INTERVAL));
+                    player.sendMessage(0, String.Format("- Last Spawn: {0}ms ago", Environment.TickCount - _tickLastBotSpawn));
+                    
+                    var debugAllTeams = new List<Team>();
+                    
+                    // Try common team names first
+                    var debugTeamNames = new string[] { 
+                        "Collective Military", "Titan Militia", 
+                        "Collective Offense", "Titan Offense",
+                        "Collective", "Titan", 
+                        "Team A", "Team B",
+                        "Red Team", "Blue Team"
+                    };
+                    
+                    foreach (string teamName in debugTeamNames)
+                    {
+                        var team = arena.getTeamByName(teamName);
+                        if (team != null && !debugAllTeams.Contains(team))
+                        {
+                            debugAllTeams.Add(team);
+                        }
+                    }
+                    
+                    // If no teams found using common names, try player teams
+                    if (debugAllTeams.Count == 0)
+                    {
+                        foreach (Player p in arena.PlayersIngame)
+                        {
+                            if (p._team != null && !debugAllTeams.Contains(p._team))
+                            {
+                                debugAllTeams.Add(p._team);
+                            }
+                        }
+                    }
+                    player.sendMessage(0, String.Format("- Teams Found: {0}", debugAllTeams.Count));
+                    
+                    foreach (var team in debugAllTeams)
+                    {
+                        int teamBots = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+                        player.sendMessage(0, String.Format("  {0}: {1}/{2} bots (ID: {3})", team._name, teamBots, MAX_BOTS_PER_TEAM, team._id));
+                    }
+                    
+                    player.sendMessage(0, String.Format("- Spawn A: ({0},{1})", COLLECTIVE_SPAWN_X/16, COLLECTIVE_SPAWN_Y/16));
+                    player.sendMessage(0, String.Format("- Spawn B: ({0},{1})", TITAN_SPAWN_X/16, TITAN_SPAWN_Y/16));
+                    
+                    // Check vehicle availability
+                    var vehicle301 = AssetManager.Manager.getVehicleByID(301);
+                    var vehicle129 = AssetManager.Manager.getVehicleByID(129);
+                    player.sendMessage(0, String.Format("- Vehicle 301: {0}", vehicle301 != null ? "Available" : "NOT FOUND"));
+                    player.sendMessage(0, String.Format("- Vehicle 129: {0}", vehicle129 != null ? "Available" : "NOT FOUND"));
+                    break;
+                    
+                // NEW: Enhanced bot commands for regular CTF mode
+                case "ctfbots":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    player.sendMessage(0, "=== CTF Bot System Status ===");
+                    player.sendMessage(0, String.Format("- Current Event: {0}", currentEventType));
+                    player.sendMessage(0, String.Format("- Game State: {0}", gameState));
+                    player.sendMessage(0, String.Format("- Total Active Bots: {0}", _ctfBots.Count(bot => !bot.IsDead)));
+                    player.sendMessage(0, String.Format("- Last Bot Spawn: {0}ms ago", Environment.TickCount - _tickLastBotSpawn));
+                    
+                    var ctfTeams = new List<Team>();
+                    foreach (Player p in arena.PlayersIngame)
+                    {
+                        if (p._team != null && !ctfTeams.Contains(p._team))
+                        {
+                            ctfTeams.Add(p._team);
+                        }
+                    }
+                    
+                    player.sendMessage(0, String.Format("- Teams with Players: {0}", ctfTeams.Count));
+                    foreach (var team in ctfTeams)
+                    {
+                        int teamBots = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+                        int teamPlayers = arena.PlayersIngame.Count(p => p._team == team && !(p._baseVehicle is Bot));
+                        player.sendMessage(0, String.Format("  {0}: {1} bots, {2} players", team._name, teamBots, teamPlayers));
+                    }
+                    break;
+                    
+                case "spawnctfbot":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    // Manual bot spawn for regular CTF mode
+                    var playerTeams = new List<Team>();
+                    foreach (Player p in arena.PlayersIngame)
+                    {
+                        if (p._team != null && !playerTeams.Contains(p._team))
+                        {
+                            playerTeams.Add(p._team);
+                        }
+                    }
+                    
+                    if (playerTeams.Count == 0)
+                    {
+                        player.sendMessage(0, "No active player teams found");
+                        break;
+                    }
+                    
+                    // Spawn bot on team with fewest bots
+                    Team ctfTargetTeam = playerTeams
+                        .OrderBy(team => _ctfBots.Count(bot => !bot.IsDead && bot._team == team))
+                        .FirstOrDefault();
+                    
+                    if (ctfTargetTeam != null)
+                    {
+                        SpawnCTFBotForTDMTeam(ctfTargetTeam);
+                        _tickLastBotSpawn = Environment.TickCount;
+                        player.sendMessage(0, String.Format("Spawned Enhanced CTFBot for {0}", ctfTargetTeam._name));
+                    }
+                    break;
+                    
+                case "killctfbots":
+                    if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    {
+                        player.sendMessage(0, "Insufficient permissions");
+                        break;
+                    }
+                    
+                    int killedCTFBots = 0;
+                    foreach (var bot in _ctfBots.ToList())
+                    {
+                        if (!bot.IsDead)
+                        {
+                            bot.destroy(false);
+                            killedCTFBots++;
+                        }
+                    }
+                    _ctfBots.Clear();
+                    player.sendMessage(0, String.Format("Destroyed {0} CTF bots", killedCTFBots));
                     break;
 
                 return false;
@@ -11491,6 +12439,17 @@ private Player FindPlayerByAlias(string alias)
                 }
             }
 
+            //JACKIE's G9
+            if (from._alias == "Axidus" && usedWep.name == "Maklov g9 Sniper" && isChampEnabled){
+                // Track Jackie's G9 shots for hit detection
+                _lastExplosionTick = Environment.TickCount;
+                _lastExplosionShooter = from;
+                _lastExplosionWeaponId = usedWep.id;
+                _lastExplosionX = posX;
+                _lastExplosionY = posY;
+                _lastExplosionZ = posZ;
+            }
+
             // Joe's Caw
             if ((from._alias == "NewJack") && usedWep.id == 5050 && isChampEnabled)
             {
@@ -11579,43 +12538,43 @@ private Player FindPlayerByAlias(string alias)
             }
 
             // B o o g's RPG
-            if (from._alias.Equals("B o o g", StringComparison.OrdinalIgnoreCase) && usedWep.name.Equals("RPG", StringComparison.OrdinalIgnoreCase) && isChampEnabled)
-            {
-                // Get players within 20 pixels of explosion
-                List<Player> playersInRange = arena.getPlayersInRange(posX, posY, 55);
+            // if (from._alias.Equals("B o o g", StringComparison.OrdinalIgnoreCase) && usedWep.name.Equals("RPG", StringComparison.OrdinalIgnoreCase) && isChampEnabled)
+            // {
+            //     // Get players within 20 pixels of explosion
+            //     List<Player> playersInRange = arena.getPlayersInRange(posX, posY, 55);
                 
-                if (playersInRange.Count > 0) {
-                    // First display "BRRRT!!"
-                    string firstWord = "BRRRT!";
-                    int xOffset = 10;
-                    for (int i = 0; i < firstWord.Length; i++)
-                    {
-                        char letter = firstWord[i];
-                        ItemInfo.Projectile letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
-                        if (letterWep != null)
-                        {
-                            short newPosX = (short)(posX + (i * xOffset));
-                            HandleExplosionProjectile(newPosX, posY, 40, letterWep.id, from._id, from._state.yaw);
-                        }
-                    }
+            //     if (playersInRange.Count > 0) {
+            //         // First display "BRRRT!!"
+            //         string firstWord = "BRRRT!";
+            //         int xOffset = 10;
+            //         for (int i = 0; i < firstWord.Length; i++)
+            //         {
+            //             char letter = firstWord[i];
+            //             ItemInfo.Projectile letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
+            //             if (letterWep != null)
+            //             {
+            //                 short newPosX = (short)(posX + (i * xOffset));
+            //                 HandleExplosionProjectile(newPosX, posY, 40, letterWep.id, from._id, from._state.yaw);
+            //             }
+            //         }
 
-                    // Schedule "POWWW!!" after 0.5 seconds
-                    Task.Delay(500).ContinueWith(_ =>
-                    {
-                        string secondWord = "POWWW!";
-                        for (int i = 0; i < secondWord.Length; i++)
-                        {
-                            char letter = secondWord[i];
-                            ItemInfo.Projectile letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
-                            if (letterWep != null)
-                            {
-                                short newPosX = (short)(posX + (i * xOffset));
-                                HandleExplosionProjectile(newPosX, posY, 40, letterWep.id, from._id, from._state.yaw);
-                            }
-                        }
-                    });
-                }
-            }
+            //         // Schedule "POWWW!!" after 0.5 seconds
+            //         Task.Delay(500).ContinueWith(_ =>
+            //         {
+            //             string secondWord = "POWWW!";
+            //             for (int i = 0; i < secondWord.Length; i++)
+            //             {
+            //                 char letter = secondWord[i];
+            //                 ItemInfo.Projectile letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
+            //                 if (letterWep != null)
+            //                 {
+            //                     short newPosX = (short)(posX + (i * xOffset));
+            //                     HandleExplosionProjectile(newPosX, posY, 40, letterWep.id, from._id, from._state.yaw);
+            //                 }
+            //             }
+            //         });
+            //     }
+            // }
 
             // albert's EMP Grenade
             if ((usedWep.name == "EMP Grenade" || usedWep.name == "Haywire Grenade") && (from._alias == "albert") && isChampEnabled)
@@ -11801,6 +12760,12 @@ private Player FindPlayerByAlias(string alias)
         [Scripts.Event("Player.PlayerKill")]
         public bool playerPlayerKill(Player victim, Player killer)
         {
+            // Handle TDM kill if TDM is active
+            if (currentEventType == EventType.TDM && _tdmInstance != null)
+            {
+                _tdmInstance.HandleKill(victim, killer);
+            }
+
             if (gameState != GameState.ActiveGame)
             {
                 return true;
@@ -12110,6 +13075,38 @@ private Player FindPlayerByAlias(string alias)
                             weaponStats.Value.AverageDistance);
                     }
                     // arena.sendArenaMessage(statsMessage);
+                }
+            }
+
+            // Jackie's G9 hit effect - display random onomatopoeia near Jackie's head when G9 hits
+            if (_lastExplosionShooter != null && _lastExplosionShooter._alias == "Axidus" && 
+                weapon.name == "Maklov g9 Sniper" && isChampEnabled)
+            {
+                // Use a tick-based threshold to match the last explosion event
+                int currentTick = Environment.TickCount;
+                int tickThreshold = 200; // Acceptable difference in milliseconds
+                
+                if (weapon.id == _lastExplosionWeaponId && (currentTick - _lastExplosionTick) <= tickThreshold)
+                {
+                    // Random onomatopoeia for sniper hits
+                    string[] sniperSounds = { "CRACK!", "THWACK!", "BANG!", "SNAP!", "WHACK!", "POW!", "BOOM!" };
+                    Random random = new Random();
+                    string selectedSound = sniperSounds[random.Next(sniperSounds.Length)];
+                    
+                    // Display the onomatopoeia near Jackie's head (similar positioning to Joe's CAW)
+                    int xOffset = 10;
+                    for (int i = 0; i < selectedSound.Length; i++)
+                    {
+                        char letter = selectedSound[i];
+                        ItemInfo.Projectile letterWep = AssetManager.Manager.getItemByName(letter.ToString()) as ItemInfo.Projectile;
+                        if (letterWep != null)
+                        {
+                            short newPosX = (short)(_lastExplosionShooter._state.positionX + (i * xOffset));
+                            HandleExplosionProjectile(newPosX, (short)(_lastExplosionShooter._state.positionY - 20), 
+                                                    (short)(_lastExplosionShooter._state.positionZ + 48), letterWep.id, 
+                                                    _lastExplosionShooter._id, _lastExplosionShooter._state.yaw);
+                        }
+                    }
                 }
             }
                 
@@ -12564,6 +13561,10 @@ private Player FindPlayerByAlias(string alias)
 
             if (currentEventType == EventType.SUT)
             {
+                // Skip warping if player is a Dueler
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    return true;
+                    
                 for (int i = 2; i <= 33; i++)
                 {
                     string teamName = CFG.teams[i].name;
@@ -12586,8 +13587,22 @@ private Player FindPlayerByAlias(string alias)
                 JoinGladiatorEvent(player);
             }
 
+            if (currentEventType == EventType.TDM && _tdmInstance != null)
+            {
+                // Skip warping if player is a Dueler
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    return true;
+                    
+                _tdmInstance.WarpPlayerToTDMSpawn(player);
+                return false;
+            }
+
             if (currentEventType == EventType.CTFX)
             {
+                // Skip warping if player is a Dueler
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    return true;
+                    
                 var teamA = arena.getTeamByName(currentMap.TeamNames[0]);
                 var teamB = arena.getTeamByName(currentMap.TeamNames[1]);
 
@@ -12612,6 +13627,10 @@ private Player FindPlayerByAlias(string alias)
 
             if (currentEventType == EventType.MiniTP)
             {
+                // Skip warping if player is a Dueler
+                if (player._skills.Values.Any(s => s.skill.Name == "Dueler"))
+                    return true;
+                    
                 var teamA = arena.getTeamByName(currentMap.TeamNames[0]);
                 var teamB = arena.getTeamByName(currentMap.TeamNames[1]);
 
@@ -13332,6 +14351,15 @@ private Player FindPlayerByAlias(string alias)
                 return true;
             }
 
+            if (command.Equals("vote", StringComparison.OrdinalIgnoreCase))
+            {
+                if (player.PermissionLevelLocal < Data.PlayerPermission.ArenaMod)
+                    return false;
+
+                StartEventVoting();
+                return true;
+            }
+
             if (command.Equals("event", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrWhiteSpace(payload))
@@ -13345,15 +14373,16 @@ private Player FindPlayerByAlias(string alias)
                 EventType eventType;
                 if (Enum.TryParse<EventType>(payload, true, out eventType))
                 {
-                    // If an event is already running, stop it
-                    if (currentEventType != default(EventType))
+                    // If an event is already running, stop it first
+                    if (currentEventType != default(EventType) && currentEventType != EventType.None)
                     {
                         EndEvent();
                         player.sendMessage(0, string.Format("Event '{0}' has been stopped.", currentEventType));
                     }
-                    else
+                    
+                    // Now start the new event (regardless of whether we stopped one)
+                    if (eventType != EventType.None)
                     {
-                        // Start the new event
                         StartEvent(eventType);
                         player.sendMessage(0, string.Format("Event '{0}' has been started.", eventType));
                     }
@@ -13963,6 +14992,391 @@ private Player FindPlayerByAlias(string alias)
                 }
             }
         }
+        #endregion
+
+        #region CTFBot Spawning for TDM Events
+        
+        /// <summary>
+        /// Handle bot spawning for TDM events
+        /// </summary>
+        private void HandleTDMBotSpawning(int now)
+        {
+            // Check spawn cooldown
+            if (now - _tickLastBotSpawn < BOT_SPAWN_MIN_INTERVAL)
+                return;
+
+            // Check if TDM is active
+            if (currentEventType != EventType.TDM || _tdmInstance == null || !_tdmInstance.IsGameActive)
+                return;
+
+            // Get all available teams (using public interface)
+            var allTeams = new List<Team>();
+            
+            // Try common team names first
+            var possibleTeamNames = new string[] { 
+                "Collective Military", "Titan Militia", 
+                "Collective Offense", "Titan Offense",
+                "Collective", "Titan", 
+                "Team A", "Team B",
+                "Red Team", "Blue Team"
+            };
+            
+            foreach (string teamName in possibleTeamNames)
+            {
+                var team = arena.getTeamByName(teamName);
+                if (team != null && !allTeams.Contains(team))
+                {
+                    allTeams.Add(team);
+                }
+            }
+            
+            // If no teams found using common names, try spec team workaround
+            if (allTeams.Count == 0)
+            {
+                // Look for any active players and get their teams
+                foreach (Player p in arena.PlayersIngame)
+                {
+                    if (p._team != null && !allTeams.Contains(p._team))
+                    {
+                        allTeams.Add(p._team);
+                    }
+                }
+            }
+            
+            if (allTeams.Count == 0)
+            {
+                Console.WriteLine("[CTF TDM BOT ERROR] No teams found in arena");
+                return;
+            }
+
+            // Count bots per team
+            var teamBotCounts = new Dictionary<Team, int>();
+            foreach (var team in allTeams)
+            {
+                teamBotCounts[team] = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+            }
+
+            // Find team with fewest bots (or any team if all are below max)
+            Team targetTeam = null;
+            int minBotCount = int.MaxValue;
+            string reason = "";
+            
+            foreach (var team in allTeams)
+            {
+                int botCount = teamBotCounts[team];
+                if (botCount < MAX_BOTS_PER_TEAM && botCount < minBotCount)
+                {
+                    targetTeam = team;
+                    minBotCount = botCount;
+                    reason = String.Format("Team {0} has fewest bots ({1})", team._name, botCount);
+                }
+            }
+
+            // If no team found or only one team exists, just pick the first available team that's not at max
+            if (targetTeam == null && allTeams.Count > 0)
+            {
+                // Check if all teams are at max capacity
+                bool allTeamsAtMax = allTeams.All(team => teamBotCounts[team] >= MAX_BOTS_PER_TEAM);
+                if (allTeamsAtMax)
+                {
+                    return;
+                }
+                
+                // Pick first team that's not at max (spawn bots even on teams with no players)
+                targetTeam = allTeams.FirstOrDefault(team => teamBotCounts[team] < MAX_BOTS_PER_TEAM);
+                if (targetTeam != null)
+                {
+                    reason = String.Format("Picked first available team {0} (has {1} bots)", targetTeam._name, teamBotCounts[targetTeam]);
+                }
+            }
+
+            if (targetTeam != null)
+            {
+                SpawnCTFBotForTDMTeam(targetTeam);
+                _tickLastBotSpawn = now;
+                
+                var botCountsStr = String.Join(", ", teamBotCounts.Select(kvp => 
+                    String.Format("{0}={1}", kvp.Key._name, kvp.Value + (kvp.Key == targetTeam ? 1 : 0))));
+                
+            }
+        }
+
+        /// <summary>
+        /// Spawn a CTFBot for the specified team in TDM
+        /// </summary>
+        // Wrapper function for backward compatibility
+        private void SpawnCTFBotForTeam(Team targetTeam)
+        {
+            SpawnCTFBotForTDMTeam(targetTeam);
+        }
+        
+        private void SpawnCTFBotForTDMTeam(Team targetTeam)
+        {
+            if (targetTeam == null)
+                return;
+
+            try
+            {
+                // Determine vehicle type based on team (alternate between 301 and 129)
+                int vehicleId;
+                int existingBots = _ctfBots.Count(bot => !bot.IsDead && bot._team == targetTeam);
+                if (existingBots % 2 == 0)
+                    vehicleId = 301; // Even bots use vehicle 301
+                else
+                    vehicleId = 129; // Odd bots use vehicle 129
+
+                VehInfo.Car botVehicle = AssetManager.Manager.getVehicleByID(vehicleId) as VehInfo.Car;
+                if (botVehicle == null)
+                {
+                    Console.WriteLine("[CTF TDM BOT ERROR] Could not find vehicle ID " + vehicleId);
+                    return;
+                }
+
+                // Create bot spawn state with team-specific coordinates
+                InfServer.Protocol.Helpers.ObjectState botState = new InfServer.Protocol.Helpers.ObjectState();
+                
+                // Use flexible team-based spawn logic
+                if (targetTeam._name.Contains("Collective") || targetTeam._name.Contains("Military"))
+                {
+                    // Collective-style spawn coordinates with randomization (±2 tiles)
+                    int randomX = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    int randomY = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    botState.positionX = (short)(COLLECTIVE_SPAWN_X + randomX);
+                    botState.positionY = (short)(COLLECTIVE_SPAWN_Y + randomY);
+                    botState.yaw = COLLECTIVE_SPAWN_YAW;
+
+                }
+                else if (targetTeam._name.Contains("Titan") || targetTeam._name.Contains("Militia"))
+                {
+                    // Titan-style spawn coordinates with randomization (±2 tiles)
+                    int randomX = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    int randomY = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    botState.positionX = (short)(TITAN_SPAWN_X + randomX);
+                    botState.positionY = (short)(TITAN_SPAWN_Y + randomY);
+                    botState.yaw = TITAN_SPAWN_YAW;
+
+                }
+                else
+                {
+                    // Generic spawn logic for unknown team names
+                    // Alternate between the two spawn locations based on team ID
+                    bool useCollectiveSpawn = (targetTeam._id % 2) == 0;
+                    
+                    int randomX = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    int randomY = arena._rand.Next(-2, 3) * 16; // ±2 tiles in pixels
+                    
+                    if (useCollectiveSpawn)
+                    {
+                        botState.positionX = (short)(COLLECTIVE_SPAWN_X + randomX);
+                        botState.positionY = (short)(COLLECTIVE_SPAWN_Y + randomY);
+                        botState.yaw = COLLECTIVE_SPAWN_YAW;
+                    }
+                    else
+                    {
+                        botState.positionX = (short)(TITAN_SPAWN_X + randomX);
+                        botState.positionY = (short)(TITAN_SPAWN_Y + randomY);
+                        botState.yaw = TITAN_SPAWN_YAW;
+                    }
+
+                }
+
+                // Set bot health and energy
+                botState.health = (short)botVehicle.Hitpoints;
+                botState.energy = 600; // Default energy
+
+                // Create a simple bot instead of using the CTFBot script directly
+                // The CTFBot script will be applied through the vehicle's script settings
+                
+                Bot newBot = arena.newBot(typeof(InfServer.Script.CTFBot.CTFBot), botVehicle, targetTeam, null, botState, this) as Bot;
+                
+                if (newBot != null)
+                {
+                    // FIXED: CTFBot now handles weapon equipping from inventory in constructor
+                    // No need to override with hardcoded weapons
+
+                    // Add to our bot list
+                    _ctfBots.Add(newBot);
+
+                    Console.WriteLine(String.Format("[CTF BOT SPAWN] Enhanced CTFBot spawned for {0}", targetTeam._name));
+                }
+                else
+                {
+                    Console.WriteLine("[CTF TDM BOT ERROR] Failed to create bot - newBot is null. Check vehicle configuration.");
+                    Console.WriteLine(String.Format("[CTF TDM BOT ERROR] Vehicle details - ID: {0}, Name: {1}", 
+                        vehicleId, botVehicle.Name));
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[CTF TDM BOT ERROR] Exception spawning bot: " + e.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Get a suitable vehicle type for CTF bots
+        /// </summary>
+        private VehInfo.Car GetCTFBotVehicleType()
+        {
+            // Try vehicle 301 first
+            VehInfo.Car vehicle = AssetManager.Manager.getVehicleByID(301) as VehInfo.Car;
+            if (vehicle != null)
+                return vehicle;
+                
+            // Fallback to vehicle 129
+            vehicle = AssetManager.Manager.getVehicleByID(129) as VehInfo.Car;
+            if (vehicle != null)
+                return vehicle;
+                
+            // Last resort - try any basic infantry vehicle
+            vehicle = AssetManager.Manager.getVehicleByID(100) as VehInfo.Car;
+            if (vehicle != null)
+                return vehicle;
+                
+            Console.WriteLine("[CTF TDM BOT ERROR] No suitable vehicle types found (301, 129, or 100)");
+            return null;
+        }
+
+        /// <summary>
+        /// Manage existing bots and remove dead ones
+        /// </summary>
+        private void ManageTDMBots(int now)
+        {
+            if (currentEventType != EventType.TDM || _tdmInstance == null)
+            {
+                // Clear all bots if TDM is not active
+                foreach (var bot in _ctfBots.ToList())
+                {
+                    if (!bot.IsDead)
+                        bot.destroy(false);
+                }
+                _ctfBots.Clear();
+                return;
+            }
+
+            // Remove dead bots from our list
+            var deadBots = _ctfBots.Where(bot => bot.IsDead).ToList();
+            foreach (var deadBot in deadBots)
+            {
+                _ctfBots.Remove(deadBot);
+            }
+        }
+
+        /// <summary>
+        /// Equip bot with default weapon
+        /// </summary>
+        private void EquipBotWithDefaultWeapon(Bot bot)
+        {
+            try
+            {
+                // Try to equip Maklov AR mk 606 (assault rifle)
+                ItemInfo ar = AssetManager.Manager.getItemByID(1096);
+                if (ar != null)
+                {
+                    bot._weapon.equip(ar);
+                    return;
+                }
+
+                // Fallback to any available weapon from bot's inventory
+                if (bot._type.InventoryItems.Count() > 0)
+                {
+                    ItemInfo fallbackWeapon = AssetManager.Manager.getItemByID(bot._type.InventoryItems[0]);
+                    if (fallbackWeapon != null)
+                    {
+                        bot._weapon.equip(fallbackWeapon);
+                        return;
+                    }
+                }
+
+                Console.WriteLine("[CTF TDM BOT ERROR] No suitable weapon found for bot");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[CTF TDM BOT ERROR] Failed to equip bot with default weapons: " + e.Message);
+            }
+        }
+
+        /// <summary>
+        /// Handle CTF bot spawning for regular CTF mode (adapted from TheArena)
+        /// </summary>
+        private void HandleCTFBotSpawning(int now)
+        {
+            // Don't spawn too frequently
+            if (now - _tickLastBotSpawn < BOT_SPAWN_MIN_INTERVAL)
+                return;
+
+            // Only spawn if game is active
+            if (gameState != GameState.ActiveGame)
+                return;
+
+            // Get human players for reference
+            var humanPlayers = arena.PlayersIngame.Where(p => !(p._baseVehicle is Bot)).ToList();
+            if (humanPlayers.Count == 0)
+                return;
+
+            // Check if we need more bots
+            int currentBots = _ctfBots.Count(b => !b.IsDead);
+            int maxBots = humanPlayers.Count * MAX_BOTS_PER_TEAM;
+
+            if (currentBots >= maxBots)
+                return;
+
+            // Get teams that need bots
+            var allTeams = new List<Team>();
+            
+            // Find active teams from players
+            foreach (Player p in arena.PlayersIngame)
+            {
+                if (p._team != null && !allTeams.Contains(p._team))
+                {
+                    allTeams.Add(p._team);
+                }
+            }
+            
+            if (allTeams.Count == 0)
+                return;
+
+            // Count bots per team
+            var teamBotCounts = new Dictionary<Team, int>();
+            foreach (var team in allTeams)
+            {
+                teamBotCounts[team] = _ctfBots.Count(bot => !bot.IsDead && bot._team == team);
+            }
+
+            // Find team with fewest bots
+            Team targetTeam = allTeams
+                .Where(team => teamBotCounts[team] < MAX_BOTS_PER_TEAM)
+                .OrderBy(team => teamBotCounts[team])
+                .FirstOrDefault();
+
+                         if (targetTeam != null)
+             {
+                 SpawnCTFBotForTDMTeam(targetTeam);
+                 _tickLastBotSpawn = now;
+             }
+        }
+
+        /// <summary>
+        /// Manage existing CTF bots (adapted from TheArena)
+        /// </summary>
+        private void ManageCTFBots(int now)
+        {
+            // Always allow bots in regular CTF mode - don't destroy them like TDM does
+            
+            // Remove dead bots from our list
+            var deadBots = _ctfBots.Where(bot => bot.IsDead).ToList();
+            foreach (var deadBot in deadBots)
+            {
+                _ctfBots.Remove(deadBot);
+            }
+            
+            // Optional: Log bot status occasionally
+            if (now % 30000 == 0 && _ctfBots.Count > 0) // Every 30 seconds
+            {
+                int aliveBots = _ctfBots.Count(b => !b.IsDead);
+                Console.WriteLine(String.Format("[CTF BOT] {0} active bots in CTF mode", aliveBots));
+            }
+        }
+
         #endregion
 
         private void HealAll()
