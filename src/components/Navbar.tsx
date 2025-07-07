@@ -434,7 +434,7 @@ export default function Navbar({ user }: { user: any }) {
         <>
           {showMobileSquadsDropdown && (
             <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[140px] left-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+              <div className="absolute top-[120px] left-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
                 <div className="py-2">
                   {squadsNavItems.map((item) => (
                     <Link
@@ -457,7 +457,7 @@ export default function Navbar({ user }: { user: any }) {
 
           {showMobileStatsDropdown && (
             <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[140px] left-[25%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+              <div className="absolute top-[120px] left-[25%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
                 <div className="py-2">
                   {statsNavItems.map((item) => (
                     <Link
@@ -480,7 +480,7 @@ export default function Navbar({ user }: { user: any }) {
 
           {showMobileCommunityDropdown && (
             <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[140px] left-[50%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+              <div className="absolute top-[120px] left-[50%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
                 <div className="py-2">
                   {communityNavItems.map((item) => (
                     <Link
@@ -503,7 +503,7 @@ export default function Navbar({ user }: { user: any }) {
 
           {showMobileMiscDropdown && (
             <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[140px] right-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto">
+              <div className="absolute top-[120px] right-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
                 <div className="py-2">
                   {miscNavItems.map((item) => (
                     <Link
