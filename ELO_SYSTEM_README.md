@@ -100,6 +100,9 @@ node import-remote-stats.js
 ### New View: `elo_leaderboard`
 Comprehensive view combining player stats with ELO rankings and tier information.
 
+### New View: `elo_leaderboard_agg`
+Comprehensive view combining player stats with ELO rankings and tier information, but contains an aggregate of similar player names (case sensitivity and caps duplicates) and combines data together
+
 ## 🌐 API Endpoints
 
 ### GET `/api/player-stats/elo-leaderboard`

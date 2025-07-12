@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Build the base query
     let query = supabase
-      .from('player_aggregate_stats')
+      .from('player_stats_normalized_by_mode')
       .select('*');
 
     // Apply game mode filter
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     // Get total count for pagination (separate query for performance)
     let totalCountQuery = supabase
-      .from('player_aggregate_stats')
+      .from('player_stats_normalized_by_mode')
       .select('*', { count: 'exact', head: true });
 
     if (gameMode && gameMode !== 'all') {
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     // Get available game modes for filter dropdown
     const { data: gameModes, error: gameModesError } = await supabase
-      .from('player_aggregate_stats')
+      .from('player_stats_normalized_by_mode')
       .select('game_mode')
       .order('game_mode');
 
