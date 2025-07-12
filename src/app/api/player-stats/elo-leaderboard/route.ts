@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     // Build the query
     let query = supabase
-      .from('elo_leaderboard')
+      .from('elo_leaderboard_agg')
       .select('*');
 
     // Apply filters
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     // Get total count for pagination
     let countQuery = supabase
-      .from('elo_leaderboard')
+      .from('elo_leaderboard_agg')
       .select('*', { count: 'exact', head: true });
 
     if (gameMode !== 'all') {
@@ -94,18 +94,14 @@ export async function GET(request: NextRequest) {
     // Format the response data
     const formattedData = data?.map((player, index) => ({
       ...player,
-      // Add display rank based on current page
       display_rank: offset + index + 1,
-      // Format ELO ratings
-      elo_rating: parseFloat(player.elo_rating || 0).toFixed(0),
-      weighted_elo: parseFloat(player.weighted_elo || 0).toFixed(0),
-      elo_peak: parseFloat(player.elo_peak || 0).toFixed(0),
-      elo_confidence: parseFloat(player.elo_confidence || 0).toFixed(3),
-      // Format other stats
-      win_rate: parseFloat(player.win_rate || 0).toFixed(3),
-      kill_death_ratio: parseFloat(player.kill_death_ratio || 0).toFixed(2),
-      // Add ELO tier
-      elo_tier: getEloTier(parseFloat(player.weighted_elo || 1200))
+      elo_rating: Math.round(Number(player.elo_rating || 0)),
+      weighted_elo: Math.round(Number(player.weighted_elo || 0)),
+      elo_peak: Math.round(Number(player.elo_peak || 0)),
+      elo_confidence: Number(player.elo_confidence || 0).toFixed(3), // keep as string with 3 decimals
+      win_rate: Number(player.win_rate || 0).toFixed(3),
+      kill_death_ratio: Number(player.kill_death_ratio || 0).toFixed(2),
+      elo_tier: getEloTier(Math.round(Number(player.weighted_elo)))
     })) || [];
 
     return NextResponse.json({

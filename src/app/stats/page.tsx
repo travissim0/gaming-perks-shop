@@ -185,6 +185,7 @@ export default function PlayerStatsPage() {
   };
 
   const fetchAllStats = async () => {
+    console.log('Fetching all stats...');
     setLoading(true);
     setError(null);
     
@@ -218,6 +219,7 @@ export default function PlayerStatsPage() {
   };
 
   useEffect(() => {
+    console.log("user effect", user);
     fetchAllStats();
     fetchRecentGames();
   }, [sortBy, sortOrder, dateFilter, playerName]);

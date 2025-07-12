@@ -23,7 +23,7 @@ export async function GET(
 
     // Get aggregate stats for the player - using case-insensitive comparison
     let aggregateQuery = supabase
-      .from('player_aggregate_stats')
+      .from('player_stats_normalized_by_mode')
       .select('*')
       .ilike('player_name', playerName);
 
@@ -92,7 +92,7 @@ export async function GET(
 
     // Get game mode breakdown - using case-insensitive comparison
     const { data: gameModeStats, error: gameModeError } = await supabase
-      .from('player_aggregate_stats')
+      .from('player_stats_normalized_by_mode')
       .select('*')
       .ilike('player_name', playerName);
 
