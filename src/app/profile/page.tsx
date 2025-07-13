@@ -10,6 +10,19 @@ import { toast } from 'react-hot-toast';
 import AvatarSelector from '@/components/AvatarSelector';
 import { getDefaultAvatarUrl } from '@/utils/supabaseHelpers';
 
+// Interfaces for squad data
+interface Squad {
+  id: string;
+  name: string;
+  tag: string;
+  description: string | null;
+  is_legacy: boolean;
+}
+
+interface SquadMember {
+  squads: Squad;
+}
+
 // Interfaces for recorded games
 interface RecordedGamePlayer {
   player_name: string;
@@ -65,7 +78,9 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [userSquad, setUserSquad] = useState<any>(null);
+  const [userSquad, setUserSquad] = useState<Squad[]>([]);
+  const [aliases, setAliases] = useState<string[]>([]);
+  const [aliasInput, setAliasInput] = useState('');
   
   // Game-related state
   const [userGames, setUserGames] = useState<RecordedGame[]>([]);
@@ -101,6 +116,19 @@ export default function ProfilePage() {
             setInGameAlias(data.in_game_alias || '');
             setAvatarUrl(data.avatar_url || null);
           }
+
+          // Fetch aliases from profile_aliases
+          const { data: aliasData, error: aliasError } = await supabase
+            .from('profile_aliases')
+            .select('alias')
+            .eq('profile_id', user.id);
+        
+          if (aliasError) {
+            toast.error('Error loading aliases: ' + aliasError.message);
+            setAliases([]);
+          } else {
+            setAliases(aliasData?.map(a => a.alias) || []);
+          }
           
           // Get current email from user object
           setEmail(user.email || '');
@@ -127,10 +155,30 @@ export default function ProfilePage() {
     fetchProfile();
   }, [user]);
 
+  const handleAliasInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === ' ' || e.key === 'Enter') && aliasInput.trim()) {
+      e.preventDefault();
+      if (!aliases.includes(aliasInput.trim())) {
+        setAliases([...aliases, aliasInput.trim()]);
+      }
+      setAliasInput('');
+    }
+  };
+
+  const removeAlias = (alias: string) => {
+    setAliases(aliases.filter(a => a !== alias));
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user) return;
+
+    // Prevent blank display name
+    if (!inGameAlias.trim()) {
+      toast.error('Display Name / Main Alias cannot be blank.');
+      return;
+    }
     
     setUpdateLoading(true);
     
@@ -176,6 +224,31 @@ export default function ProfilePage() {
           }
         }
       }
+
+      await supabase
+      .from('profile_aliases')
+      .delete()
+      .eq('profile_id', user.id);
+
+      // Before inserting aliases, ensure main alias is included
+      let allAliases = [...aliases];
+      if (
+        inGameAlias.trim() &&
+        !allAliases.some(a => a.trim().toLowerCase() === inGameAlias.trim().toLowerCase())
+      ) {
+        allAliases.unshift(inGameAlias.trim());
+      }
+      
+      // Remove duplicates just in case
+      allAliases = Array.from(new Set(allAliases.map(a => a.trim())));
+      
+      const aliasRows = allAliases.map(alias => ({
+        profile_id: user.id,
+        alias,
+        is_primary: alias.toLowerCase() === inGameAlias.trim().toLowerCase(),
+        added_by: 'system' // Optionally mark as primary
+      }));
+      await supabase.from('profile_aliases').insert(aliasRows);
       
       // Update the profile
       const { error } = await supabase
@@ -277,46 +350,57 @@ export default function ProfilePage() {
     if (!user) return;
     
     try {
-      // First try to find an active squad membership
-      const { data: activeData, error: activeError } = await supabase
+      console.log('Loading squad for user:', user.id);
+      // Fetch all active squads for the user (could be more than one)
+      const { data: activeSquads, error: activeSquadsError } = await supabase
         .from('squad_members')
         .select(`
           squads!inner(
             id,
             name,
             tag,
-            description
+            description,
+            is_legacy
           )
         `)
         .eq('player_id', user.id)
         .eq('status', 'active')
-        .limit(1)
-        .maybeSingle();
-
-      if (activeData?.squads) {
-        setUserSquad(activeData.squads);
-        return;
-      }
-
-      // If no active membership, try to find any membership (including inactive)
-      const { data: anyData, error: anyError } = await supabase
+        .eq('squads.is_legacy', false)
+        .limit(1) as { data: SquadMember[] | null; error: any };
+      
+      // Fetch all legacy squads for the user (could be more than one)
+      const { data: legacySquads, error: legacySquadsError } = await supabase
         .from('squad_members')
         .select(`
           squads!inner(
             id,
             name,
             tag,
-            description
+            description,
+            is_legacy
           )
         `)
         .eq('player_id', user.id)
-        .order('joined_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (anyData?.squads) {
-        setUserSquad(anyData.squads);
+        .eq('squads.is_legacy', true)
+        .limit(1) as { data: SquadMember[] | null; error: any };
+      
+      console.log('Active squads data:', activeSquads);
+      console.log('Legacy squads data:', legacySquads);
+      
+      // Merge results, filter out duplicates (by squad id)
+      const squadsProfile = [];
+      if (activeSquads && activeSquads.length > 0 && activeSquads[0].squads) {
+        squadsProfile.push(activeSquads[0].squads);
       }
+      if (
+        legacySquads && legacySquads.length > 0 && legacySquads[0].squads 
+        && (!activeSquads || !activeSquads[0].squads || legacySquads[0].squads.id !== activeSquads[0].squads.id)
+      ) {
+        squadsProfile.push(legacySquads[0].squads);
+      }
+      setUserSquad(squadsProfile);
+      console.log('Squads for rendering:', squadsProfile);
+      
     } catch (error) {
       console.error('Error loading user squad:', error);
     }
@@ -496,7 +580,7 @@ export default function ProfilePage() {
                   
                   <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
                     <label htmlFor="inGameAlias" className="block text-lg font-bold text-cyan-400 mb-3 tracking-wide">
-                      🎮 Alias
+                      🎮 Display Name / Main Alias
                     </label>
                     <input
                       id="inGameAlias"
@@ -509,29 +593,71 @@ export default function ProfilePage() {
                     />
                   </div>
                 </div>
-                
+
+                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6 mt-6">
+                  <label className="block text-lg font-bold text-cyan-400 mb-3 tracking-wide">
+                    🏷️ Also Known As (AKA)
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {aliases
+                      .filter(alias => alias.trim().toLowerCase() !== inGameAlias.trim().toLowerCase())
+                      .map(alias => (
+                        <span
+                          key={alias}
+                          className="flex items-center bg-cyan-800 text-cyan-100 px-3 py-1 rounded-full font-mono text-sm"
+                        >
+                          {alias}
+                          <button
+                            type="button"
+                            onClick={() => removeAlias(alias)}
+                            className="ml-2 text-cyan-300 hover:text-red-400 font-bold focus:outline-none"
+                          >
+                            ×
+                          </button>
+                        </span>
+                    ))}
+                    <input
+                      type="text"
+                      value={aliasInput}
+                      onChange={e => setAliasInput(e.target.value)}
+                      onKeyDown={handleAliasInput}
+                      className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white font-mono focus:outline-none"
+                      placeholder="Add alias and press space…"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 font-mono">
+                    Add all your known aliases. Press space or enter to add each one.
+                    <br />(Main Alias will be excluded from this list, but is a part of your aliases list.)
+                  </p>
+                </div>
+              
                 {/* Squad Information */}
                 <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
                   <label className="block text-lg font-bold text-cyan-400 mb-3 tracking-wide">
                     🏆 Squad
                   </label>
-                  {userSquad ? (
-                    <div className="bg-gray-800 border border-cyan-500/30 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xl font-bold text-cyan-400">
-                          [{userSquad.tag}] {userSquad.name}
-                        </h3>
-                        <Link
-                          href={`/squads/${userSquad.id}`}
-                          className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded text-sm font-medium transition-colors duration-300"
-                        >
-                          Manage Squad
-                        </Link>
+                  {userSquad.length > 0 ? (
+                    userSquad.filter(squad => squad && squad.id).map((squad) => (
+                      <div key={squad.id} className="bg-gray-800 border border-cyan-500/30 rounded-lg p-4 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-xl font-bold text-cyan-400">
+                            [{squad.tag || 'N/A'}] {squad.name || 'Unknown Squad'}
+                          </h3>
+                          <Link
+                            href={`/squads/${squad.id}`}
+                            className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded text-sm font-medium transition-colors duration-300"
+                          >
+                            Manage Squad
+                          </Link>
+                        </div>
+                        {squad.description && (
+                          <p className="text-gray-300 text-sm">{squad.description}</p>
+                        )}
+                        {squad.is_legacy && (
+                          <span className="text-xs text-yellow-400 font-mono">Legacy Squad</span>
+                        )}
                       </div>
-                      {userSquad.description && (
-                        <p className="text-gray-300 text-sm">{userSquad.description}</p>
-                      )}
-                    </div>
+                    ))
                   ) : (
                     <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 text-center">
                       <p className="text-gray-400 mb-3">You are not currently in a squad</p>
