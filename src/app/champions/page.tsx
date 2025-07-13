@@ -14,6 +14,20 @@ const ChampionArchives = () => {
     setIsClient(true);
   }, []);
   
+  const seasonRecords = {
+    'Season 3': { winner: 'BDS', runnerUp: null },
+    'Season 4': { winner: 'BDS', runnerUp: null },
+    'Season 5': { winner: 'BDS', runnerUp: 'Smurfs' },
+    'Season 6': { winner: 'BDS', runnerUp: null },
+    'Season 7': { winner: '--', runnerUp: null },
+    'Season 8': { winner: 'Smurfs', runnerUp: null },
+    'Season 9': { winner: '---', runnerUp: null },
+    'Season 10': { winner: 'BDS', runnerUp: null },
+    'Season 13': { winner: 'BDS', runnerUp: null },
+    'Season 16': { winner: 'BDS', runnerUp: null },
+    'Season 17': { winner: 'BDS', runnerUp: null }
+  };
+
   const championSquads = [
     {
       id: 'bds',
@@ -25,6 +39,19 @@ const ChampionArchives = () => {
       image: '/images/champion squads/BDS/BDS_S10_Champions.jpg',
       theme: 'dragon',
       established: '2024'
+    },
+    {
+      id: 'smurfs',
+      name: 'Smurfs',
+      abbreviation: 'SMURF',
+      seasons: ['Season 8'],
+      runnerUpSeasons: ['Season 5'],
+      participatedSeasons: ['Season 5', 'Season 6', 'Season 7', 'Season 8', 'Season 9'],
+      titles: 1,
+      description: 'Legendary squad from nobodies and never quit attitude to PL Champions that shocked the league.',
+      image: 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/squads/champions/smurfs/Smurfs_S8_Champions.jpg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJzcXVhZHMvY2hhbXBpb25zL3NtdXJmcy9TbXVyZnNfUzhfQ2hhbXBpb25zLmpwZyIsImlhdCI6MTc1MjQzMDQyNiwiZXhwIjoyMzgzMTUwNDI2fQ.gjobokvIF6tD-ruk3U1BE3-Au59Yj5A9b9a7L68L4bY',
+      theme: 'dragon',
+      established: '2003'
     }
   ];
 
@@ -132,15 +159,33 @@ const ChampionArchives = () => {
                     {squad.description}
                   </p>
                   
-                  <div className="flex items-center justify-between text-xs text-gray-400">
-                    <span className="flex items-center gap-1">
-                      <Shield size={12} />
-                      Est. {squad.established}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Sword size={12} />
-                      {squad.seasons.join(', ')}
-                    </span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <Shield size={12} />
+                        Est. {squad.established}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Sword size={12} />
+                        {squad.titles} Championships
+                      </span>
+                    </div>
+                    
+                    <div className="text-xs">
+                      <div className="text-yellow-400 mb-1">
+                        🏆 Champions: {squad.seasons.join(', ')}
+                      </div>
+                      {squad.runnerUpSeasons && (
+                        <div className="text-gray-300 mb-1">
+                          🥈 Runner-up: {squad.runnerUpSeasons.join(', ')}
+                        </div>
+                      )}
+                      {squad.participatedSeasons && (
+                        <div className="text-gray-400">
+                          📋 Participated: {squad.participatedSeasons.join(', ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
