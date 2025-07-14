@@ -50,7 +50,7 @@ const SmurfsPage = () => {
     seasonRecord: {
       overall: { wins: 0, losses: 0, draws: 0 },
       championships: 1,
-      runnerUps: 1,
+      runnerUps: 2,
       championshipSeasons: [8],
       runnerUpSeasons: [5],
       seasonRecords: [
@@ -58,7 +58,7 @@ const SmurfsPage = () => {
         { season: 6, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false },
         { season: 7, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false },
         { season: 8, wins: 0, losses: 0, draws: 0, champion: true, runnerUp: false },
-        { season: 9, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false }
+        { season: 9, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true }
       ]
     },
     players: [
@@ -77,7 +77,7 @@ const SmurfsPage = () => {
       { alias: 'Waldo/Magic 8 Ball', rings: 1 },
       { alias: 'Yushiz~', rings: 1 },
       { alias: 'aircanada', rings: 0},
-      { alias: 'angel1ca (Original Captain)', rings: 0 },
+      { alias: 'angel1ca (OG Capts)', rings: 0 },
       { alias: 'angelus', rings: 0 },
       { alias: 'Badz-Maru', rings: 0},
       { alias: 'Bole.', rings: 0 },
@@ -86,7 +86,7 @@ const SmurfsPage = () => {
       { alias: 'Fordie\'', rings: 0 },
       { alias: 'John Woo', rings: 0 },
       { alias: 'Jrinx', rings: 0 },
-      { alias: 'Kaizer.', rings: 0 },
+      { alias: 'Kaizer./Reziak (OG Capts)', rings: 0 },
       { alias: 'Killer4Hire', rings: 0 },
       { alias: 'Killiptos', rings: 0 },
       { alias: 'MisticFusion', rings: 0 },
@@ -94,11 +94,9 @@ const SmurfsPage = () => {
       { alias: 'Ooi', rings: 0 },
       { alias: 'Raiden...', rings: 0 },
       { alias: 'RamboGurlie', rings: 0 },
-      { alias: 'Reziak', rings: 0 },
       { alias: 'Rose\'', rings: 0 },
       { alias: 'sauciness', rings: 0 },
       { alias: 'Skunky', rings: 0 },
-      { alias: 'SnowBooze.', rings: 0 },
       { alias: 'Snowbooze', rings: 0 },
       { alias: 'superD.', rings: 0 },
       { alias: 'The |<orean', rings: 0},
@@ -229,7 +227,7 @@ const SmurfsPage = () => {
                 </span>
                 <span className="flex items-center gap-2">
                   <Award size={20} />
-                  1x Runner-up
+                  2x Runner-up
                 </span>
                 <span className="flex items-center gap-2">
                   <Trophy size={20} />
@@ -285,7 +283,7 @@ const SmurfsPage = () => {
                 <img 
                   src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/squads/champions/smurfs/ai_smurfs_battle.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJzcXVhZHMvY2hhbXBpb25zL3NtdXJmcy9haV9zbXVyZnNfYmF0dGxlLnBuZyIsImlhdCI6MTc1MjQzMTM2NCwiZXhwIjoyMzgzMTUxMzY0fQ.T-M1lKBdcze2tyqUtRMJ2_4jcC5_vhgwLTxn6yyITZI"
                   alt="AI-generated Smurfs charging into Infantry battle"
-                  className="w-full h-48 md:h-64 object-cover"
+                  className="w-full h-32 md:h-40 object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
               </div>
@@ -319,7 +317,7 @@ const SmurfsPage = () => {
           </div>
           <h2 className="text-4xl font-bold text-cyan-400 mb-6">The Smurfs' Legacy</h2>
           <p className="text-xl text-cyan-200 max-w-4xl mx-auto leading-relaxed">
-            From nobodies to champions. What began as a core squad of underdogs transformed into one of the most respected teams in Infantry history. Their journey was anything but easy—grinding through the brutal gauntlet of BDS, CC, and more. Its history dates back all the way to 2003, with ange1ica and Duffman starting RAWR that converted into Smurfs. The lengthy history Season 8 didn't just crown them 1x champions—it proved that with a strong leader and unwavering brotherhood, greatness was earned, not given. The Smurfs may not be the most decorated, but their rise became a symbol: respect is forged through the climb, not the count.
+            From nobodies to champions. What began as a core squad of underdogs transformed into one of the most respected teams in Infantry history. Their journey was anything but easy—grinding through the brutal gauntlet of BDS, CC, and more. Its history dates back all the way to 2003, with ange1ica and Duffman starting RWAR that converted into Smurfs. The lengthy history Season 8 didn't just crown them 1x champions—it proved that with a strong leader and unwavering brotherhood, greatness was earned, not given. The Smurfs may not be the most decorated, but their rise became a symbol: respect is forged through the climb, not the count.
           </p>
           <div className="mt-8">
             <div className="flex justify-center items-center gap-2">
@@ -336,11 +334,11 @@ const SmurfsPage = () => {
         <h2 className="text-4xl font-bold text-center text-cyan-400 mb-12">Championship Statistics</h2>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           {[
+            { label: 'Championships', value: smurfsData.seasonRecord.championships, icon: Crown },
+            { label: 'Runner-ups', value: smurfsData.seasonRecord.runnerUps, icon: Star },
             { label: 'Total Wins', value: smurfsData.seasonRecord.overall.wins, icon: Trophy },
             { label: 'Total Losses', value: smurfsData.seasonRecord.overall.losses, icon: Target },
-            { label: 'Total Draws', value: smurfsData.seasonRecord.overall.draws, icon: Award },
-            { label: 'Championships', value: smurfsData.seasonRecord.championships, icon: Crown },
-            { label: 'Runner-ups', value: smurfsData.seasonRecord.runnerUps, icon: Star }
+            { label: 'Total Draws', value: smurfsData.seasonRecord.overall.draws, icon: Award }
           ].map((stat, index) => (
             <div
               key={index}
@@ -527,19 +525,19 @@ const SmurfsPage = () => {
       <div className="relative z-10 max-w-7xl mx-auto px-6 mb-16">
         <h2 className="text-4xl font-bold text-center text-cyan-400 mb-12">Historical Archives</h2>
 
-        <div className="text-center mb-12">
-          <div className="flex justify-center items-center gap-2 mb-6">
+        <div className="text-center mt-8">
+          <div className="flex justify-center items-center gap-2 mb-4">
             <span className="text-xl animate-pulse">⏳</span>
             <p className="text-cyan-300 text-lg">Preserved history from Infantry-Sector.com</p>
             <span className="text-xl animate-pulse">📚</span>
           </div>
-          <p className="text-gray-400 text-sm max-w-2xl mx-auto leading-relaxed">
+          <p className="text-gray-400 text-sm max-w-2xl mx-auto">
             These archived links preserve the original Infantry community websites and tournament records. 
             Links open via Wayback Machine to show historical content as it appeared during the Smurfs' era.
           </p>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {[
             {
               title: "RWAR History Archive",
