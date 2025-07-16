@@ -35,6 +35,7 @@ interface PlayerAggregateStats {
   last_game_date: string;
   updated_at: string;
   most_played_class?: string;
+  all_aliases?: string;
 }
 
 interface LeaderboardResponse {
@@ -77,6 +78,17 @@ const DATE_FILTERS = [
   { value: 'year', label: 'Last Year' }
 ];
 
+const MIN_GAMES_OPTIONS = [
+  { value: 1, label: '1+ Games' },
+  { value: 3, label: '3+ Games' },
+  { value: 5, label: '5+ Games' },
+  { value: 10, label: '10+ Games' },
+  { value: 15, label: '15+ Games' },
+  { value: 25, label: '25+ Games' },
+  { value: 50, label: '50+ Games' },
+  { value: 100, label: '100+ Games' }
+];
+
 export default function PlayerStatsPage() {
   const { user } = useAuth();
   const [ovdStats, setOvdStats] = useState<PlayerAggregateStats[]>([]);
@@ -88,6 +100,7 @@ export default function PlayerStatsPage() {
   const [dateFilter, setDateFilter] = useState('all');
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [minGames, setMinGames] = useState(10);
   const [availableGameModes, setAvailableGameModes] = useState<string[]>([]);
   const [ovdPagination, setOvdPagination] = useState({
     total: 0,
@@ -152,17 +165,24 @@ export default function PlayerStatsPage() {
     return classes[Math.floor(Math.random() * classes.length)];
   };
 
-  // Mock function to get player aliases (placeholder until API provides them)
-  const getPlayerAliases = (playerName: string): string[] => {
-    // This will be replaced with actual API data
-    const mockAliases: { [key: string]: string[] } = {
-      'bes': ['bes','Beso', 'water'],
-      'CT': ['CT','cara tank'],
-      'bt': ['bt','BigTymer', 'ron'],
-      'Penguin': ['Penguin', 'IceBird', 'Waddle'],
-      // Add more mock data as needed
-    };
-    return mockAliases[playerName] || [playerName];
+  // Get player aliases from API data
+  const getPlayerAliases = (player: PlayerAggregateStats): string[] => {
+    if (!player.all_aliases) {
+      return [player.player_name];
+    }
+    
+    // Split comma-separated aliases and trim whitespace
+    const aliases = player.all_aliases.split(',').map(alias => alias.trim());
+    
+    // Ensure the primary player name is included and comes first
+    const uniqueAliases = [player.player_name];
+    aliases.forEach(alias => {
+      if (alias && alias !== player.player_name && !uniqueAliases.includes(alias)) {
+        uniqueAliases.push(alias);
+      }
+    });
+    
+    return uniqueAliases;
   };
 
   // Toggle row expansion
@@ -183,7 +203,7 @@ export default function PlayerStatsPage() {
   };
 
 
-  const fetchStats = async (gameMode: 'OvD' | 'Mix' | 'Overall', offset = 0) => {
+  const fetchStats = async (gameMode: 'OvD' | 'Mix' | 'Combined', offset = 0) => {
     try {
       const params = new URLSearchParams({
         gameMode,
@@ -191,6 +211,7 @@ export default function PlayerStatsPage() {
         sortOrder,
         dateFilter,
         playerName,
+        minGames: minGames.toString(),
         limit: '25',
         offset: offset.toString()
       });
@@ -210,13 +231,25 @@ export default function PlayerStatsPage() {
         }));
 
         if (gameMode === 'OvD') {
-          setOvdStats(playersWithClass);
+          if (offset === 0) {
+            setOvdStats(playersWithClass);
+          } else {
+            setOvdStats(prev => [...prev, ...playersWithClass]);
+          }
           setOvdPagination(data.pagination);
         } else if (gameMode === 'Mix') {
-          setMixStats(playersWithClass);
+          if (offset === 0) {
+            setMixStats(playersWithClass);
+          } else {
+            setMixStats(prev => [...prev, ...playersWithClass]);
+          }
           setMixPagination(data.pagination);
-        } else if (gameMode === 'Overall') {
-          setOverallStats(playersWithClass);
+        } else if (gameMode === 'Combined') {
+          if (offset === 0) {
+            setOverallStats(playersWithClass);
+          } else {
+            setOverallStats(prev => [...prev, ...playersWithClass]);
+          }
           setOverallPagination(data.pagination);
         }
         setAvailableGameModes(data.filters.availableGameModes);
@@ -235,7 +268,7 @@ export default function PlayerStatsPage() {
     
     try {
       await Promise.all([
-        fetchStats('Overall', 0),
+        fetchStats('Combined', 0),
         fetchStats('OvD', 0),
         fetchStats('Mix', 0)
       ]);
@@ -267,7 +300,7 @@ export default function PlayerStatsPage() {
     console.log("user effect", user);
     fetchAllStats();
     fetchRecentGames();
-  }, [sortBy, sortOrder, dateFilter, playerName]);
+  }, [sortBy, sortOrder, dateFilter, playerName, minGames]);
 
 
   // Close mobile filter panel on escape key
@@ -336,7 +369,7 @@ export default function PlayerStatsPage() {
             {stats.map((player, index) => {
               const playerId = player.id || `temp-${index}`;
               const isExpanded = expandedRows.has(playerId);
-              const aliases = getPlayerAliases(player.player_name);
+              const aliases = getPlayerAliases(player);
               const hasAliases = aliases.length > 1;
               
               return (
@@ -457,7 +490,7 @@ export default function PlayerStatsPage() {
             onClick={() => {
               if (activeTab === 'OvD') fetchStats('OvD', pagination.offset + pagination.limit);
               else if (activeTab === 'Mix') fetchStats('Mix', pagination.offset + pagination.limit);
-              else if (activeTab === 'Overall') fetchStats('Overall', pagination.offset + pagination.limit);
+              else if (activeTab === 'Overall') fetchStats('Combined', pagination.offset + pagination.limit);
             }}
             disabled={loading}
             className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-semibold transition-all duration-200 hover:scale-105"
@@ -544,6 +577,20 @@ export default function PlayerStatsPage() {
                   </select>
                 </div>
 
+                {/* Minimum Games Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Minimum Games</label>
+                  <select
+                    value={minGames}
+                    onChange={(e) => {setMinGames(parseInt(e.target.value)); setMobileFiltersOpen(false);}}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {MIN_GAMES_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Player Search */}
                 <div>
                   <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
@@ -577,6 +624,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
                   className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
@@ -591,6 +639,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
                   className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
@@ -605,6 +654,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
                   className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
@@ -619,6 +669,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
                   className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
@@ -802,6 +853,24 @@ export default function PlayerStatsPage() {
               <span className="hidden sm:inline">🏆 Mix Statistics</span>
               <span className="sm:hidden">🏆 Mix</span>
             </button>
+            
+            {/* Reset Filters Button */}
+            <button
+              onClick={() => {
+                setSortBy('total_kills');
+                setSortOrder('desc');
+                setDateFilter('all');
+                setPlayerName('');
+                setSearchInput('');
+                setMinGames(10);
+                setExpandedRows(new Set());
+              }}
+              className="ml-auto px-3 py-2 lg:px-4 lg:py-3 bg-cyan-600 hover:bg-cyan-700 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap shadow-lg"
+              title="Reset all filters to default (keeps pagination)"
+            >
+              <span className="hidden sm:inline">🔄 Reset Filters</span>
+              <span className="sm:hidden">🔄</span>
+            </button>
           </div>
 
           {/* Error State */}
@@ -933,6 +1002,20 @@ export default function PlayerStatsPage() {
                   </select>
                 </div>
 
+                {/* Minimum Games Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-blue-200 mb-1">Minimum Games</label>
+                  <select
+                    value={minGames}
+                    onChange={(e) => setMinGames(parseInt(e.target.value))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                  >
+                    {MIN_GAMES_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Player Search */}
                 <div>
                   <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
@@ -966,6 +1049,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                   }}
                   className="w-full p-2 bg-red-900/30 border border-red-500/30 rounded hover:bg-red-800/40 transition-colors text-xs"
                 >
@@ -979,6 +1063,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                   }}
                   className="w-full p-2 bg-green-900/30 border border-green-500/30 rounded hover:bg-green-800/40 transition-colors text-xs"
                 >
@@ -992,6 +1077,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                   }}
                   className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
                 >
@@ -1005,6 +1091,7 @@ export default function PlayerStatsPage() {
                     setDateFilter('all');
                     setPlayerName('');
                     setSearchInput('');
+                    setMinGames(10);
                   }}
                   className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
                 >
