@@ -15,17 +15,24 @@ const ChampionArchives = () => {
   }, []);
   
   const seasonRecords = {
-    'Season 3': { winner: 'BDS', runnerUp: null },
-    'Season 4': { winner: 'BDS', runnerUp: null },
-    'Season 5': { winner: 'BDS', runnerUp: 'Smurfs' },
-    'Season 6': { winner: 'BDS', runnerUp: null },
-    'Season 7': { winner: '--', runnerUp: null },
-    'Season 8': { winner: 'Smurfs', runnerUp: null },
-    'Season 9': { winner: '---', runnerUp: null },
-    'Season 10': { winner: 'BDS', runnerUp: null },
-    'Season 13': { winner: 'BDS', runnerUp: null },
-    'Season 16': { winner: 'BDS', runnerUp: null },
-    'Season 17': { winner: 'BDS', runnerUp: null }
+    'Season 1': { goldenFlag: 'Darkslayers',            silverFlag: 'Epidemic',             bronzeFlag: 'Aoi', date: null },
+    'Season 2': { goldenFlag: 'N/A',                    silverFlag: 'N/A',                  bronzeFlag: 'N/A', date: null },
+    'Season 3': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Martyr',               bronzeFlag: 'Epidemic', date: null },
+    'Season 4': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Shadow Syndicate',     bronzeFlag: 'Darkslayers', date: null },
+    'Season 5': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Smurfs',               bronzeFlag: 'Shadow Syndicate', date: null },
+    'Season 6': { goldenFlag: 'Black Dragon Society',   silverFlag: 'N/A',                  bronzeFlag: 'Ephemera', date: null },
+    'Season 7': { goldenFlag: 'Camp Chaos',             silverFlag: 'Black Dragon Society', bronzeFlag: '(TIE) Martyr, Murderous Plush Toys', date: null },
+    'Season 8': { goldenFlag: 'Smurfs',                 silverFlag: 'Camp Chaos',           bronzeFlag: '(TIE) Black Dragon Society, Emi', date: '07-17-2005' },
+    'Season 9': { goldenFlag: 'kuk',                    silverFlag: 'Smurfs',               bronzeFlag: 'Redemption', date: null },
+    'Season 10': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Memento',              bronzeFlag: '(TIE) Asceension, Sunday School', date: '09-03-2006' },
+    'Season 11': { goldenFlag: 'Newfie',                silverFlag: 'Black Dragon Society', bronzeFlag: 'Bingo', date: null },
+    'Season 12': { goldenFlag: 'Newfie',                silverFlag: 'Martyr',               bronzeFlag: '(TIE) Black Dragon Society, kuk', date: null },
+    'Season 13': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Pure Talent',          bronzeFlag: '(TIE) kuk, Phoenix Down', date: null },
+    'Season 14': { goldenFlag: 'Halogen',               silverFlag: 'Phoenix Down',         bronzeFlag: null, date: null },
+    'Season 16': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Moon Shine',           bronzeFlag: null, date: null },
+    'Season 17': { goldenFlag: 'Black Dragon Society',  silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 20': { goldenFlag: 'Pure Talent',           silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 21': { goldenFlag: 'Pure Talent',           silverFlag: 'Camp Kill Yourself',   bronzeFlag: null, date: null }
   };
 
   const championSquads = [
@@ -38,19 +45,19 @@ const ChampionArchives = () => {
       description: 'Legendary dynasty that conquered eight CTFPL championships, the most dominant squad in Infantry history.',
       image: '/images/champion squads/BDS/BDS_S10_Champions.jpg',
       theme: 'dragon',
-      established: '2024'
+      established: '2001'
     },
     {
       id: 'smurfs',
       name: 'Smurfs',
       abbreviation: 'SMURF',
       seasons: ['Season 8'],
-      runnerUpSeasons: ['Season 5'],
+      runnerUpSeasons: ['Season 5', 'Season 9'],
       participatedSeasons: ['Season 5', 'Season 6', 'Season 7', 'Season 8', 'Season 9'],
       titles: 1,
       description: 'Legendary squad from nobodies and never quit attitude to PL Champions that shocked the league.',
       image: 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/squads/champions/smurfs/Smurfs_S8_Champions.jpg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJzcXVhZHMvY2hhbXBpb25zL3NtdXJmcy9TbXVyZnNfUzhfQ2hhbXBpb25zLmpwZyIsImlhdCI6MTc1MjQzMDQyNiwiZXhwIjoyMzgzMTUwNDI2fQ.gjobokvIF6tD-ruk3U1BE3-Au59Yj5A9b9a7L68L4bY',
-      theme: 'dragon',
+      theme: 'smurfs',
       established: '2003'
     }
   ];
@@ -206,6 +213,68 @@ const ChampionArchives = () => {
             <p className="text-gray-500">
               The halls echo with anticipation for future champions to claim their throne...
             </p>
+          </div>
+        </div>
+
+        {/* Season Records */}
+        <div className="mt-16 mb-12">
+          <h2 className="text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-200 to-yellow-400 mb-8 tracking-wider">
+            SEASON RECORDS
+          </h2>
+          <div className="w-24 h-1 bg-gradient-to-r from-transparent via-yellow-400 to-transparent mx-auto mb-8"></div>
+          
+          <div className="bg-gradient-to-br from-gray-800/60 via-gray-900/60 to-black/60 backdrop-blur-sm border border-yellow-500/20 rounded-xl p-6 max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(seasonRecords).map(([season, record]) => (
+                <div 
+                  key={season}
+                  className="bg-gradient-to-br from-gray-700/40 to-gray-800/40 rounded-lg p-4 border border-gray-600/30 hover:border-yellow-400/40 transition-all duration-300"
+                >
+                  <h3 className="text-lg font-bold text-yellow-400 mb-3 text-center border-b border-gray-600/50 pb-2">
+                    {season}
+                  </h3>
+                  
+                  <div className="space-y-2 text-sm">
+                    {/* Gold */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Trophy className="text-yellow-400" size={16} />
+                        <span className="text-yellow-400 font-semibold">Gold:</span>
+                      </div>
+                      <span className="text-gray-200 flex-1">{record.goldenFlag}</span>
+                    </div>
+                    
+                    {/* Silver */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Trophy className="text-gray-400" size={16} />
+                        <span className="text-gray-400 font-semibold">Silver:</span>
+                      </div>
+                      <span className="text-gray-200 flex-1">{record.silverFlag}</span>
+                    </div>
+                    
+                    {/* Bronze */}
+                    {record.bronzeFlag && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <Trophy className="text-amber-600" size={16} />
+                          <span className="text-amber-600 font-semibold">Bronze:</span>
+                        </div>
+                        <span className="text-gray-200 flex-1">{record.bronzeFlag}</span>
+                      </div>
+                    )}
+                    
+                    {/* Date */}
+                    {record.date && (
+                      <div className="flex items-center gap-2 pt-1 border-t border-gray-600/30">
+                        <span className="text-gray-500 text-xs">Date:</span>
+                        <span className="text-gray-400 text-xs">{record.date}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

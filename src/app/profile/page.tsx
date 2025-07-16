@@ -316,8 +316,6 @@ export default function ProfilePage() {
     }
   };
 
-
-
   const loadUserGames = async () => {
     if (!user) return;
     

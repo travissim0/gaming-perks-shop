@@ -11,30 +11,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Parse query parameters
-    const gameMode = searchParams.get('gameMode') || 'all';
+    const gameMode = searchParams.get('gameMode') || 'Combined';
     const sortBy = searchParams.get('sortBy') || 'total_kills';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 1000);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
     const dateFilter = searchParams.get('dateFilter') || 'all';
     const playerName = searchParams.get('playerName');
+    const minGames = Math.max(parseInt(searchParams.get('minGames') || '1'), 1);
 
-    console.log('Leaderboard query:', { gameMode, sortBy, sortOrder, limit, offset, dateFilter, playerName });
+    console.log('Leaderboard query:', { gameMode, sortBy, sortOrder, limit, offset, dateFilter, playerName, minGames });
 
     // Build the base query
     let query = supabase
-      .from('player_stats_normalized_by_mode')
+      .from('player_stats_normalized_by_mode_all_aliases')
       .select('*');
 
     // Apply game mode filter
-    if (gameMode && gameMode !== 'all') {
+    if (gameMode && gameMode !== 'Combined') {
       query = query.eq('game_mode', gameMode);
+    } else if (gameMode === 'Combined') {
+      query = query.eq('game_mode', 'Combined');
     }
 
     // Apply player name search filter
     if (playerName && playerName.trim()) {
       query = query.ilike('player_name', `%${playerName.trim()}%`);
     }
+
+    // Apply minimum games filter
+    query = query.gte('total_games', minGames);
 
     // Apply date filter
     if (dateFilter && dateFilter !== 'all') {
@@ -89,15 +95,18 @@ export async function GET(request: NextRequest) {
 
     // Get total count for pagination (separate query for performance)
     let totalCountQuery = supabase
-      .from('player_stats_normalized_by_mode')
+      .from('player_stats_normalized_by_mode_all_aliases')
       .select('*', { count: 'exact', head: true });
 
-    if (gameMode && gameMode !== 'all') {
+    if (gameMode && gameMode !== 'Combined') {
       totalCountQuery = totalCountQuery.eq('game_mode', gameMode);
+    } else if (gameMode === 'Combined') {
+      totalCountQuery = totalCountQuery.eq('game_mode', 'Combined');
     }
     if (playerName && playerName.trim()) {
       totalCountQuery = totalCountQuery.ilike('player_name', `%${playerName.trim()}%`);
     }
+    totalCountQuery = totalCountQuery.gte('total_games', minGames);
 
     const { count: totalCount, error: countError } = await totalCountQuery;
 
@@ -107,7 +116,7 @@ export async function GET(request: NextRequest) {
 
     // Get available game modes for filter dropdown
     const { data: gameModes, error: gameModesError } = await supabase
-      .from('player_stats_normalized_by_mode')
+      .from('player_stats_normalized_by_mode_all_aliases')
       .select('game_mode')
       .order('game_mode');
 
