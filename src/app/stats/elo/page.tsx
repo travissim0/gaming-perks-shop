@@ -272,94 +272,110 @@ export default function EloLeaderboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8 border border-white/20"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-            {/* Game Mode Filter */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Game Mode</label>
-              <select
-                value={gameMode}
-                onChange={(e) => setGameMode(e.target.value)}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                {availableGameModes.map(mode => (
-                  <option key={mode} value={mode}>
-                    {mode === 'Combined' ? 'Combined (OvD + Mix)' : 
-                     mode === 'OvD' ? 'OvD (Offense vs Defense 5v5)' :
-                     mode === 'Mix' ? 'Mix (10v10)' : mode}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Game Mode Buttons Row */}
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Combined' ? 'bg-cyan-600 border-cyan-400 text-white scale-105' : 'bg-white/10 border-cyan-700 text-cyan-200 hover:bg-cyan-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('Combined')}
+            >
+              Combined<br /><span className="text-xs font-normal">OvD + Mix</span>
+            </button>
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'OvD' ? 'bg-blue-600 border-blue-400 text-white scale-105' : 'bg-white/10 border-blue-700 text-blue-200 hover:bg-blue-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('OvD')}
+            >
+              OvD<br /><span className="text-xs font-normal">Offense vs Defense</span>
+            </button>
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Mix' ? 'bg-purple-600 border-purple-400 text-white scale-105' : 'bg-white/10 border-purple-700 text-purple-200 hover:bg-purple-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('Mix')}
+            >
+              Mix<br /><span className="text-xs font-normal">10v10</span>
+            </button>
+          </div>
 
-            {/* Sort By */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                {SORT_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sort Order */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                <option value="desc">Highest First</option>
-                <option value="asc">Lowest First</option>
-              </select>
-            </div>
-
-            {/* Minimum Games */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Min Games</label>
-              <select
-                value={minGames}
-                onChange={(e) => setMinGames(parseInt(e.target.value))}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                {MIN_GAMES_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Player Search */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Search Player</label>
-              <div className="flex">
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Player name..."
-                  className="flex-1 bg-white/20 border border-white/30 rounded-l-lg px-3 py-2 text-white placeholder-white/50"
-                />
-                <button
-                  onClick={handleSearch}
-                  className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-r-lg transition-colors"
+          {/* Filters Grid */}
+          <div className="flex justify-center w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 gap-x-6 mb-4 w-full max-w-2xl min-w-0">
+              {/* Sort By */}
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full min-w-[200px] max-w-xs bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
                 >
-                  🔍
-                </button>
+                  {SORT_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sort Order */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                >
+                  <option value="desc">Highest First</option>
+                  <option value="asc">Lowest First</option>
+                </select>
+              </div>
+
+              {/* Minimum Games */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Min Games</label>
+                <select
+                  value={minGames}
+                  onChange={(e) => setMinGames(parseInt(e.target.value))}
+                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                >
+                  {MIN_GAMES_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Player Search */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Search Player</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Player name..."
+                    className="flex-1 bg-white/20 border border-white/30 rounded-l-lg px-3 py-2 h-[42px] text-white placeholder-white/50"
+                  />
+                  <button
+                    onClick={handleSearch}
+                    className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 h-[42px] transition-colors"
+                  >
+                    🔍
+                  </button>
+                  {playerName && (
+                    <button
+                      onClick={() => { setSearchInput(''); setPlayerName(''); }}
+                      className="bg-red-600 hover:bg-red-700 px-3 py-2 h-[42px] rounded-r-lg transition-colors text-white ml-1"
+                      title="Clear search"
+                    >
+                      ❌
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Results Summary */}
-          <div className="text-sm text-blue-200">
+          <div className="text-sm text-blue-200 text-center mt-2">
             Showing {players.length} of {pagination.total} players
             {minGames > 0 && ` with ${minGames}+ games`}
             {playerName && ` matching "${playerName}"`}
@@ -376,7 +392,9 @@ export default function EloLeaderboardPage() {
             <table className="w-full text-sm">
               <thead className="bg-white/20">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Rank</th>
+                  {(!playerName || playerName.trim() === '') && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Rank</th>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Player</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Tier</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">ELO</th>
@@ -398,13 +416,15 @@ export default function EloLeaderboardPage() {
                     transition={{ duration: 0.3 }}
                     className="border-b border-white/10 hover:bg-white/5 transition-colors"
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center">
-                        <span className="text-lg font-bold text-cyan-400">
-                          #{player.display_rank}
-                        </span>
-                      </div>
-                    </td>
+                    {(!playerName || playerName.trim() === '') && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center">
+                          <span className="text-lg font-bold text-cyan-400">
+                            #{player.display_rank}
+                          </span>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {player.all_aliases && player.all_aliases !== player.player_name && (
