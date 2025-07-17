@@ -10,6 +10,8 @@ This system provides comprehensive player performance tracking with both local f
   - `player_stats`: Individual game records with detailed stats
   - `player_aggregate_stats`: Calculated totals and averages per player/game mode
   - `player_stats_normalized_by_mode`: Calculated totals and averages per player/game mode WITH duplicate case-sensitive names grouped together with all stats combined.
+  - `player_stats_normalized_by_mode`: Calculated totals and averages per player/game mode WITH duplicate case-sensitive names grouped together with all stats combined AND all player aliases.
+  ----includes combined game mode (OvD + Mix)
 - **Features**: Automatic aggregate calculation via triggers, RLS policies
 
 ### 2. Game Server Integration (CTF.cs)

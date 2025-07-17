@@ -5,9 +5,13 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface EloPlayer {
   player_name: string;
+  player_name_normalized: string;
+  profile_id: string;
+  all_aliases: string;
   game_mode: string;
   elo_rating: string;
   weighted_elo: string;
@@ -19,8 +23,8 @@ interface EloPlayer {
   win_rate: string;
   kill_death_ratio: string;
   last_game_date: string;
-  elo_rank: number;
-  overall_elo_rank: number;
+  elo_rank?: number;
+  overall_elo_rank?: number;
   display_rank: number;
   elo_tier: {
     name: string;
@@ -44,6 +48,7 @@ interface EloLeaderboardResponse {
     sortOrder: string;
     minGames: number;
     playerName: string;
+    availableGameModes: string[];
   };
 }
 
@@ -70,13 +75,16 @@ export default function EloLeaderboardPage() {
   const { user } = useAuth();
   const [players, setPlayers] = useState<EloPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gameMode, setGameMode] = useState('all');
+  const [gameMode, setGameMode] = useState('Combined');
+  const [availableGameModes, setAvailableGameModes] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('weighted_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minGames, setMinGames] = useState(3);
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [pagination, setPagination] = useState({
     total: 0,
     offset: 0,
@@ -86,7 +94,12 @@ export default function EloLeaderboardPage() {
 
   const fetchEloLeaderboard = async (offset = 0) => {
     try {
-      setLoading(true);
+      // Use different loading states for initial load vs load more
+      if (offset === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       setError(null);
 
       const params = new URLSearchParams({
@@ -105,12 +118,46 @@ export default function EloLeaderboardPage() {
       }
 
       const data: EloLeaderboardResponse = await response.json();
-      setPlayers(data.data);
+      
+      // If offset is 0, replace the data (refresh/filter change)
+      // If offset > 0, append the data (load more)
+      if (offset === 0) {
+        setPlayers(data.data);
+        setLoading(false);
+      } else {
+        setPlayers(prevPlayers => [...prevPlayers, ...data.data]);
+        // Short delay to ensure smooth transition from skeleton to real data
+        setTimeout(() => {
+          setLoadingMore(false);
+        }, 300);
+      }
+      
       setPagination(data.pagination);
+      setAvailableGameModes(data.filters.availableGameModes || []);
+
+      // Auto-expand rows when searching for aliases (not main names)
+      if (offset === 0 && playerName && playerName.trim()) {
+        const searchTerm = playerName.trim().toLowerCase();
+        const newExpandedRows = new Set<string>();
+        
+        data.data.forEach(player => {
+          const playerNameLower = player.player_name.toLowerCase();
+          const hasAliases = player.all_aliases && player.all_aliases !== player.player_name;
+          
+          if (hasAliases && !playerNameLower.includes(searchTerm) && 
+              player.all_aliases.toLowerCase().includes(searchTerm)) {
+            newExpandedRows.add(`${player.player_name_normalized}-${player.game_mode}`);
+          }
+        });
+        
+        setExpandedRows(newExpandedRows);
+      } else if (offset === 0) {
+        setExpandedRows(new Set());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -129,7 +176,7 @@ export default function EloLeaderboardPage() {
   };
 
   const loadMore = () => {
-    if (pagination.hasMore && !loading) {
+    if (pagination.hasMore && !loading && !loadingMore) {
       fetchEloLeaderboard(pagination.offset + pagination.limit);
     }
   };
@@ -150,6 +197,22 @@ export default function EloLeaderboardPage() {
     if (conf >= 0.8) return 'High';
     if (conf >= 0.5) return 'Medium';
     return 'Low';
+  };
+
+  const toggleRowExpansion = (playerId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(playerId)) {
+        newSet.delete(playerId);
+      } else {
+        newSet.add(playerId);
+      }
+      return newSet;
+    });
+  };
+
+  const isRowExpanded = (playerId: string) => {
+    return expandedRows.has(playerId);
   };
 
   if (loading && players.length === 0) {
@@ -209,90 +272,110 @@ export default function EloLeaderboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8 border border-white/20"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-            {/* Game Mode Filter */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Game Mode</label>
-              <select
-                value={gameMode}
-                onChange={(e) => setGameMode(e.target.value)}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                <option value="all">All Modes</option>
-                <option value="OvD">Offense vs Defense</option>
-                <option value="Mix">Mixed Mode</option>
-              </select>
-            </div>
+          {/* Game Mode Buttons Row */}
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Combined' ? 'bg-cyan-600 border-cyan-400 text-white scale-105' : 'bg-white/10 border-cyan-700 text-cyan-200 hover:bg-cyan-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('Combined')}
+            >
+              Combined<br /><span className="text-xs font-normal">OvD + Mix</span>
+            </button>
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'OvD' ? 'bg-blue-600 border-blue-400 text-white scale-105' : 'bg-white/10 border-blue-700 text-blue-200 hover:bg-blue-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('OvD')}
+            >
+              OvD<br /><span className="text-xs font-normal">Offense vs Defense</span>
+            </button>
+            <button
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Mix' ? 'bg-purple-600 border-purple-400 text-white scale-105' : 'bg-white/10 border-purple-700 text-purple-200 hover:bg-purple-700/30 hover:text-white'}`}
+              onClick={() => setGameMode('Mix')}
+            >
+              Mix<br /><span className="text-xs font-normal">10v10</span>
+            </button>
+          </div>
 
-            {/* Sort By */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                {SORT_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sort Order */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                <option value="desc">Highest First</option>
-                <option value="asc">Lowest First</option>
-              </select>
-            </div>
-
-            {/* Minimum Games */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Min Games</label>
-              <select
-                value={minGames}
-                onChange={(e) => setMinGames(parseInt(e.target.value))}
-                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
-              >
-                {MIN_GAMES_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Player Search */}
-            <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">Search Player</label>
-              <div className="flex">
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Player name..."
-                  className="flex-1 bg-white/20 border border-white/30 rounded-l-lg px-3 py-2 text-white placeholder-white/50"
-                />
-                <button
-                  onClick={handleSearch}
-                  className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-r-lg transition-colors"
+          {/* Filters Grid */}
+          <div className="flex justify-center w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 gap-x-6 mb-4 w-full max-w-2xl min-w-0">
+              {/* Sort By */}
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full min-w-[200px] max-w-xs bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
                 >
-                  🔍
-                </button>
+                  {SORT_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sort Order */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                >
+                  <option value="desc">Highest First</option>
+                  <option value="asc">Lowest First</option>
+                </select>
+              </div>
+
+              {/* Minimum Games */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Min Games</label>
+                <select
+                  value={minGames}
+                  onChange={(e) => setMinGames(parseInt(e.target.value))}
+                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                >
+                  {MIN_GAMES_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Player Search */}
+              <div>
+                <label className="block text-sm font-medium text-blue-200 mb-2">Search Player</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Player name..."
+                    className="flex-1 bg-white/20 border border-white/30 rounded-l-lg px-3 py-2 h-[42px] text-white placeholder-white/50"
+                  />
+                  <button
+                    onClick={handleSearch}
+                    className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 h-[42px] transition-colors"
+                  >
+                    🔍
+                  </button>
+                  {playerName && (
+                    <button
+                      onClick={() => { setSearchInput(''); setPlayerName(''); }}
+                      className="bg-red-600 hover:bg-red-700 px-3 py-2 h-[42px] rounded-r-lg transition-colors text-white ml-1"
+                      title="Clear search"
+                    >
+                      ❌
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Results Summary */}
-          <div className="text-sm text-blue-200">
+          <div className="text-sm text-blue-200 text-center mt-2">
             Showing {players.length} of {pagination.total} players
             {minGames > 0 && ` with ${minGames}+ games`}
             {playerName && ` matching "${playerName}"`}
@@ -309,7 +392,9 @@ export default function EloLeaderboardPage() {
             <table className="w-full text-sm">
               <thead className="bg-white/20">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Rank</th>
+                  {(!playerName || playerName.trim() === '') && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Rank</th>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Player</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Tier</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">ELO</th>
@@ -328,26 +413,46 @@ export default function EloLeaderboardPage() {
                     key={`${player.player_name}-${player.game_mode}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ duration: 0.3 }}
                     className="border-b border-white/10 hover:bg-white/5 transition-colors"
                   >
+                    {(!playerName || playerName.trim() === '') && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center">
+                          <span className="text-lg font-bold text-cyan-400">
+                            #{player.display_rank}
+                          </span>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
-                      <div className="flex items-center">
-                        <span className="text-lg font-bold text-cyan-400">
-                          #{player.display_rank}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        {player.all_aliases && player.all_aliases !== player.player_name && (
+                          <button
+                            onClick={() => toggleRowExpansion(`${player.player_name_normalized}-${player.game_mode}`)}
+                            className="text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) ? 
+                              <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        )}
+                        <div>
+                          <Link 
+                            href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                            className="text-white hover:text-cyan-400 transition-colors font-medium"
+                          >
+                            {player.player_name}
+                          </Link>
+                          {player.game_mode !== 'Combined' && (
+                            <div className="text-xs text-blue-300">{player.game_mode}</div>
+                          )}
+                          {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) && player.all_aliases && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              <strong>Aliases:</strong> {player.all_aliases}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link 
-                        href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                        className="text-white hover:text-cyan-400 transition-colors font-medium"
-                      >
-                        {player.player_name}
-                      </Link>
-                      {player.game_mode !== 'all' && (
-                        <div className="text-xs text-blue-300">{player.game_mode}</div>
-                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center">
@@ -402,6 +507,55 @@ export default function EloLeaderboardPage() {
                     </td>
                   </motion.tr>
                 ))}
+                
+                {/* Loading skeleton rows when loading more data */}
+                {loadingMore && Array.from({ length: 5 }).map((_, index) => (
+                  <tr
+                    key={`loading-${index}`}
+                    className="border-b border-white/10 animate-pulse"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="h-4 bg-white/20 rounded w-8"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 bg-white/20 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-12"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-white/20 rounded-full mr-2"></div>
+                        <div className="h-4 bg-white/20 rounded w-16"></div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-12 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-8 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-12 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-8 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-6 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-6 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-12 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-8 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-6 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-3 bg-white/20 rounded w-16 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="h-6 bg-white/20 rounded w-16 mx-auto"></div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -411,10 +565,10 @@ export default function EloLeaderboardPage() {
             <div className="p-4 text-center border-t border-white/20">
               <button
                 onClick={loadMore}
-                disabled={loading}
+                disabled={loadingMore}
                 className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 px-6 py-2 rounded transition-colors"
               >
-                {loading ? 'Loading...' : 'Load More'}
+                {loadingMore ? 'Loading...' : 'Load More'}
               </button>
             </div>
           )}

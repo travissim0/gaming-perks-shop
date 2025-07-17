@@ -1054,9 +1054,9 @@ export default function SquadDetailPage() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Squad Members */}
-          <div className="lg:col-span-2">
+        {/* Squad Members - Centered */}
+        <div className="flex justify-center">
+          <div className="w-full max-w-4xl">
             <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
               <h2 className="text-2xl font-bold text-cyan-400 mb-6 flex items-center gap-2">
                 👥 Squad Members ({squad.members.length})
@@ -1064,7 +1064,20 @@ export default function SquadDetailPage() {
               
               {/* Mobile-optimized compact member list */}
               <div className="space-y-2 md:space-y-3">
-                {squad.members.map((member) => (
+                {squad.members
+                  .sort((a, b) => {
+                    // 1. Captain first
+                    if (a.role === 'captain' && b.role !== 'captain') return -1;
+                    if (a.role !== 'captain' && b.role === 'captain') return 1;
+                    
+                    // 2. Co-captains second, in alphabetical order
+                    if (a.role === 'co_captain' && b.role === 'player') return -1;
+                    if (a.role === 'player' && b.role === 'co_captain') return 1;
+                    
+                    // 3. Both same role, sort alphabetically by name
+                    return a.in_game_alias.localeCompare(b.in_game_alias);
+                  })
+                  .map((member) => (
                   <div
                     key={member.id}
                     className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-lg p-3 md:p-4 border border-slate-600/30"
@@ -1081,7 +1094,7 @@ export default function SquadDetailPage() {
                       </div>
                       
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                        <div className="text-xs text-gray-400 sm:text-right">
+                        <div className="text-sm text-gray-400 sm:text-right">
                           Joined {new Date(member.joined_at).toLocaleDateString()}
                         </div>
                         
@@ -1138,10 +1151,12 @@ export default function SquadDetailPage() {
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Pending Requests Section (Captain/Co-Captain Only) */}
-          {isUserCaptainOrCoCaptain() && (
-            <div>
+        {/* Pending Requests Section (Captain/Co-Captain Only) - Centered */}
+        {isUserCaptainOrCoCaptain() && (
+          <div className="flex justify-center mt-8">
+            <div className="w-full max-w-4xl">
               <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
                 <h3 className="text-xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
                   📥 Join Requests ({pendingRequests.length})
@@ -1187,8 +1202,8 @@ export default function SquadDetailPage() {
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Back Button */}
         <div className="mt-8 text-center">

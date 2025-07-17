@@ -1616,75 +1616,9 @@ export default function SquadsPage() {
       
       <main className="container mx-auto py-8 px-4">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">🛡️ Squad Management</h1>
+          <h1 className="text-5xl font-bold text-cyan-400 mb-4 tracking-wider">🛡️ Squads</h1>
           <p className="text-gray-400 text-lg">Form teams, compete together, dominate the battlefield</p>
         </div>
-
-        {/* Prominent Join Requests Notification for Captains/Co-Captains */}
-        {!dataLoading && userSquad && canManageSquad && joinRequests.length > 0 && (
-          <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/50 rounded-xl p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-yellow-500 text-black p-2 rounded-full">
-                  <span className="text-xl">🛡️</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-yellow-400">
-                    {joinRequests.length} Pending Join Request{joinRequests.length !== 1 ? 's' : ''}
-                  </h3>
-                  <p className="text-yellow-300/80 text-sm">
-                    Players want to join your squad [{userSquad.tag}] {userSquad.name}
-                  </p>
-                </div>
-              </div>
-              <span className="bg-yellow-500 text-black font-bold px-3 py-1 rounded-full text-sm">
-                {joinRequests.length}
-              </span>
-            </div>
-            
-            <div className="space-y-3">
-              {joinRequests.map((request) => (
-                <div key={request.id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-bold text-white text-lg">{request.invited_alias}</span>
-                        <span className="bg-green-600/20 text-green-400 px-2 py-1 rounded text-xs font-medium">
-                          WANTS TO JOIN
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-400 mb-2">
-                        Requested {new Date(request.created_at).toLocaleDateString()} • 
-                        Expires {new Date(request.expires_at).toLocaleDateString()}
-                      </div>
-                      {request.message && (
-                        <div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded mb-3 border-l-4 border-yellow-500">
-                          <span className="font-medium text-yellow-400">Message:</span> "{request.message}"
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 sm:flex-shrink-0">
-                      <button
-                        onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
-                        className="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                      >
-                        <span>✅</span>
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => denyJoinRequest(request.id)}
-                        className="flex-1 sm:flex-none bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                      >
-                        <span>❌</span>
-                        Deny
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* User's Squad Section - Only show for authenticated users */}
         {user && (dataLoading || loading ? (
@@ -1697,168 +1631,62 @@ export default function SquadsPage() {
           </div>
         ) : userSquad ? (
           <div className="bg-gray-800 rounded-lg p-6 mb-8">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">
-                  [{userSquad.tag}] {userSquad.name}
-                </h2>
-                <p className="text-gray-300 mb-4">{userSquad.description}</p>
-                <div className="flex gap-4 text-sm text-gray-400">
-                  <span>Members: {userSquad.member_count}</span>
-                  <span>Captain: {userSquad.captain_alias}</span>
-                  <span>Created: {new Date(userSquad.created_at).toLocaleDateString()}</span>
-                </div>
-                {userSquad.discord_link && (
-                  <a href={userSquad.discord_link} target="_blank" rel="noopener noreferrer" 
-                     className="text-blue-400 hover:text-blue-300 mr-4">
-                    Discord
-                  </a>
-                )}
-                {userSquad.website_link && (
-                  <a href={userSquad.website_link} target="_blank" rel="noopener noreferrer" 
-                     className="text-blue-400 hover:text-blue-300">
-                    Website
-                  </a>
-                )}
-              </div>
-              {/* Squad Management Actions - Mobile Optimized */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                {/* Primary Actions Group */}
-                {canManageSquad && (
-                  <div className="flex flex-col sm:flex-row gap-2">
+            {/* Squad Management Actions - Mobile Optimized */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-6">
+              {/* Primary Actions Group */}
+              {canManageSquad && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => setShowInviteForm(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    <span>👥</span>
+                    Invite Player
+                  </button>
+                  
+                  {canEditSquadPhotos && (
                     <button
-                      onClick={() => setShowInviteForm(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                      onClick={() => setShowBannerForm(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
-                      <span>👥</span>
-                      Invite Player
-                    </button>
-                    
-                    {canEditSquadPhotos && (
-                      <button
-                        onClick={() => setShowBannerForm(true)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                      >
-                        <span>🖼️</span>
-                        {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
-                      </button>
-                    )}
-                    
-                    {isCaptain && (
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          onClick={openEditForm}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                        >
-                          <span>✏️</span>
-                          Edit Details
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Danger Zone Actions */}
-                <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto">
-                  {isCaptain ? (
-                    <button
-                      onClick={disbandSquad}
-                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-red-500"
-                    >
-                      <span>💥</span>
-                      Disband Squad
-                    </button>
-                  ) : (
-                    <button
-                      onClick={leaveSquad}
-                      className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-orange-500"
-                    >
-                      <span>🚪</span>
-                      Leave Squad
+                      <span>🖼️</span>
+                      {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
                     </button>
                   )}
-                </div>
-              </div>
-            </div>
-
-            {/* Squad Members */}
-            <div className="mb-6">
-              <h3 className="text-xl font-semibold mb-4 text-cyan-400 flex items-center gap-2">
-                <span>👥</span>
-                Members ({userSquad.member_count})
-              </h3>
-              <div className="flex gap-6">
-                {/* Large Squad Banner */}
-                {userSquad.banner_url && (
-                  <div className="w-48 h-48 flex-shrink-0">
-                    <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                      <img 
-                        src={userSquad.banner_url} 
-                        alt={`${userSquad.name} banner`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.parentElement!.style.display = 'none';
-                        }}
-                      />
+                  
+                  {isCaptain && (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        onClick={openEditForm}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                      >
+                        <span>✏️</span>
+                        Edit Details
+                      </button>
                     </div>
-                  </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Danger Zone Actions */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto">
+                {isCaptain ? (
+                  <button
+                    onClick={disbandSquad}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-red-500"
+                  >
+                    <span>💥</span>
+                    Disband Squad
+                  </button>
+                ) : (
+                  <button
+                    onClick={leaveSquad}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg border border-orange-500"
+                  >
+                    <span>🚪</span>
+                    Leave Squad
+                  </button>
                 )}
-                {/* Members List */}
-                <div className="flex-1 grid gap-3">
-                  {userSquad.members.map((member) => (
-                  <div key={member.id} className="bg-gradient-to-r from-gray-700/80 to-gray-600/60 rounded-lg p-4 border border-gray-600/30">
-                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{getRoleIcon(member.role)}</span>
-                        <div>
-                          <span className={`font-semibold text-lg ${getRoleColor(member.role)}`}>
-                            {member.in_game_alias}
-                          </span>
-                          <div className="text-sm text-gray-400">
-                            {member.role.replace('_', ' ').toUpperCase()} • Joined {new Date(member.joined_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                      {isCaptain && member.player_id !== user?.id && (
-                        <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 w-full lg:w-auto">
-                          {member.role === 'player' && (
-                            <button
-                              onClick={() => promoteMember(member.id, 'co_captain')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
-                            >
-                              <span>⬆️</span>
-                              Promote
-                            </button>
-                          )}
-                          {member.role === 'co_captain' && (
-                            <button
-                              onClick={() => promoteMember(member.id, 'player')}
-                              className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
-                            >
-                              <span>⬇️</span>
-                              Demote
-                            </button>
-                          )}
-                          <button
-                            onClick={() => transferOwnership(member.player_id)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 shadow-sm"
-                          >
-                            <span>👑</span>
-                            Make Captain
-                          </button>
-                          <button
-                            onClick={() => kickMember(member.id)}
-                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all duration-200 border border-red-500 shadow-sm"
-                          >
-                            <span>🚫</span>
-                            Kick
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                </div>
               </div>
             </div>
 
@@ -2127,6 +1955,7 @@ export default function SquadsPage() {
             </div>
           </div>
         ))}
+        {/* END OF USER SQUAD SECTION */}
 
         {/* Anonymous user notice */}
         {!user && (
@@ -2141,7 +1970,7 @@ export default function SquadsPage() {
 
         {/* All Squads Section */}
         <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-2xl font-bold mb-6">All Squads</h2>
+          <h2 className="text-3xl font-bold mb-6 text-cyan-400 tracking-wider">All Squads</h2>
           
           {/* Active Squads */}
           {dataLoading ? (

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Parse query parameters
-    const gameMode = searchParams.get('gameMode') || 'all';
+    const gameMode = searchParams.get('gameMode') || 'Combined';
     const sortBy = searchParams.get('sortBy') || 'weighted_elo';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -29,22 +29,27 @@ export async function GET(request: NextRequest) {
       playerName
     });
 
-    // Build the query
+    // Build the query using the new view with aliases
     let query = supabase
-      .from('elo_leaderboard_agg')
+      .from('elo_leaderboard_agg_with_aliases')
       .select('*');
 
-    // Apply filters
-    if (gameMode !== 'all') {
+    // Apply game mode filter
+    if (gameMode && gameMode !== 'Combined') {
       query = query.eq('game_mode', gameMode);
+    } else if (gameMode === 'Combined') {
+      query = query.eq('game_mode', 'Combined');
     }
 
+    // Apply minimum games filter
     if (minGames > 0) {
       query = query.gte('total_games', minGames);
     }
 
-    if (playerName) {
-      query = query.ilike('player_name', `%${playerName}%`);
+    // Apply player name search filter (search both main name and aliases)
+    if (playerName && playerName.trim()) {
+      const searchTerm = playerName.trim();
+      query = query.or(`player_name.ilike.%${searchTerm}%,all_aliases.ilike.%${searchTerm}%`);
     }
 
     // Apply sorting
@@ -76,20 +81,31 @@ export async function GET(request: NextRequest) {
 
     // Get total count for pagination
     let countQuery = supabase
-      .from('elo_leaderboard_agg')
+      .from('elo_leaderboard_agg_with_aliases')
       .select('*', { count: 'exact', head: true });
 
-    if (gameMode !== 'all') {
+    if (gameMode && gameMode !== 'Combined') {
       countQuery = countQuery.eq('game_mode', gameMode);
+    } else if (gameMode === 'Combined') {
+      countQuery = countQuery.eq('game_mode', 'Combined');
     }
     if (minGames > 0) {
       countQuery = countQuery.gte('total_games', minGames);
     }
-    if (playerName) {
-      countQuery = countQuery.ilike('player_name', `%${playerName}%`);
+    if (playerName && playerName.trim()) {
+      const searchTerm = playerName.trim();
+      countQuery = countQuery.or(`player_name.ilike.%${searchTerm}%,all_aliases.ilike.%${searchTerm}%`);
     }
 
     const { count } = await countQuery;
+
+    // Get available game modes for filter dropdown
+    const { data: gameModes } = await supabase
+      .from('elo_leaderboard_agg_with_aliases')
+      .select('game_mode')
+      .order('game_mode');
+
+    const uniqueGameModes = gameModes ? [...new Set(gameModes.map(gm => gm.game_mode))] : [];
 
     // Format the response data
     const formattedData = data?.map((player, index) => ({
@@ -117,7 +133,8 @@ export async function GET(request: NextRequest) {
         sortBy,
         sortOrder,
         minGames,
-        playerName
+        playerName,
+        availableGameModes: uniqueGameModes
       }
     });
 
