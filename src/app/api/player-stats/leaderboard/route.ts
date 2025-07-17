@@ -34,9 +34,10 @@ export async function GET(request: NextRequest) {
       query = query.eq('game_mode', 'Combined');
     }
 
-    // Apply player name search filter
+    // Apply player name search filter (search both main name and aliases)
     if (playerName && playerName.trim()) {
-      query = query.ilike('player_name', `%${playerName.trim()}%`);
+      const searchTerm = playerName.trim();
+      query = query.or(`player_name.ilike.%${searchTerm}%,all_aliases.ilike.%${searchTerm}%`);
     }
 
     // Apply minimum games filter
@@ -104,7 +105,8 @@ export async function GET(request: NextRequest) {
       totalCountQuery = totalCountQuery.eq('game_mode', 'Combined');
     }
     if (playerName && playerName.trim()) {
-      totalCountQuery = totalCountQuery.ilike('player_name', `%${playerName.trim()}%`);
+      const searchTerm = playerName.trim();
+      totalCountQuery = totalCountQuery.or(`player_name.ilike.%${searchTerm}%,all_aliases.ilike.%${searchTerm}%`);
     }
     totalCountQuery = totalCountQuery.gte('total_games', minGames);
 

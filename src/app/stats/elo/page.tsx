@@ -5,9 +5,13 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface EloPlayer {
   player_name: string;
+  player_name_normalized: string;
+  profile_id: string;
+  all_aliases: string;
   game_mode: string;
   elo_rating: string;
   weighted_elo: string;
@@ -19,8 +23,8 @@ interface EloPlayer {
   win_rate: string;
   kill_death_ratio: string;
   last_game_date: string;
-  elo_rank: number;
-  overall_elo_rank: number;
+  elo_rank?: number;
+  overall_elo_rank?: number;
   display_rank: number;
   elo_tier: {
     name: string;
@@ -44,6 +48,7 @@ interface EloLeaderboardResponse {
     sortOrder: string;
     minGames: number;
     playerName: string;
+    availableGameModes: string[];
   };
 }
 
@@ -70,13 +75,16 @@ export default function EloLeaderboardPage() {
   const { user } = useAuth();
   const [players, setPlayers] = useState<EloPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gameMode, setGameMode] = useState('all');
+  const [gameMode, setGameMode] = useState('Combined');
+  const [availableGameModes, setAvailableGameModes] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('weighted_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minGames, setMinGames] = useState(3);
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [pagination, setPagination] = useState({
     total: 0,
     offset: 0,
@@ -86,7 +94,12 @@ export default function EloLeaderboardPage() {
 
   const fetchEloLeaderboard = async (offset = 0) => {
     try {
-      setLoading(true);
+      // Use different loading states for initial load vs load more
+      if (offset === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       setError(null);
 
       const params = new URLSearchParams({
@@ -105,12 +118,46 @@ export default function EloLeaderboardPage() {
       }
 
       const data: EloLeaderboardResponse = await response.json();
-      setPlayers(data.data);
+      
+      // If offset is 0, replace the data (refresh/filter change)
+      // If offset > 0, append the data (load more)
+      if (offset === 0) {
+        setPlayers(data.data);
+        setLoading(false);
+      } else {
+        setPlayers(prevPlayers => [...prevPlayers, ...data.data]);
+        // Short delay to ensure smooth transition from skeleton to real data
+        setTimeout(() => {
+          setLoadingMore(false);
+        }, 300);
+      }
+      
       setPagination(data.pagination);
+      setAvailableGameModes(data.filters.availableGameModes || []);
+
+      // Auto-expand rows when searching for aliases (not main names)
+      if (offset === 0 && playerName && playerName.trim()) {
+        const searchTerm = playerName.trim().toLowerCase();
+        const newExpandedRows = new Set<string>();
+        
+        data.data.forEach(player => {
+          const playerNameLower = player.player_name.toLowerCase();
+          const hasAliases = player.all_aliases && player.all_aliases !== player.player_name;
+          
+          if (hasAliases && !playerNameLower.includes(searchTerm) && 
+              player.all_aliases.toLowerCase().includes(searchTerm)) {
+            newExpandedRows.add(`${player.player_name_normalized}-${player.game_mode}`);
+          }
+        });
+        
+        setExpandedRows(newExpandedRows);
+      } else if (offset === 0) {
+        setExpandedRows(new Set());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -129,7 +176,7 @@ export default function EloLeaderboardPage() {
   };
 
   const loadMore = () => {
-    if (pagination.hasMore && !loading) {
+    if (pagination.hasMore && !loading && !loadingMore) {
       fetchEloLeaderboard(pagination.offset + pagination.limit);
     }
   };
@@ -150,6 +197,22 @@ export default function EloLeaderboardPage() {
     if (conf >= 0.8) return 'High';
     if (conf >= 0.5) return 'Medium';
     return 'Low';
+  };
+
+  const toggleRowExpansion = (playerId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(playerId)) {
+        newSet.delete(playerId);
+      } else {
+        newSet.add(playerId);
+      }
+      return newSet;
+    });
+  };
+
+  const isRowExpanded = (playerId: string) => {
+    return expandedRows.has(playerId);
   };
 
   if (loading && players.length === 0) {
@@ -218,9 +281,13 @@ export default function EloLeaderboardPage() {
                 onChange={(e) => setGameMode(e.target.value)}
                 className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
               >
-                <option value="all">All Modes</option>
-                <option value="OvD">Offense vs Defense</option>
-                <option value="Mix">Mixed Mode</option>
+                {availableGameModes.map(mode => (
+                  <option key={mode} value={mode}>
+                    {mode === 'Combined' ? 'Combined (OvD + Mix)' : 
+                     mode === 'OvD' ? 'OvD (Offense vs Defense 5v5)' :
+                     mode === 'Mix' ? 'Mix (10v10)' : mode}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -328,7 +395,7 @@ export default function EloLeaderboardPage() {
                     key={`${player.player_name}-${player.game_mode}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ duration: 0.3 }}
                     className="border-b border-white/10 hover:bg-white/5 transition-colors"
                   >
                     <td className="px-4 py-3">
@@ -339,15 +406,33 @@ export default function EloLeaderboardPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Link 
-                        href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                        className="text-white hover:text-cyan-400 transition-colors font-medium"
-                      >
-                        {player.player_name}
-                      </Link>
-                      {player.game_mode !== 'all' && (
-                        <div className="text-xs text-blue-300">{player.game_mode}</div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {player.all_aliases && player.all_aliases !== player.player_name && (
+                          <button
+                            onClick={() => toggleRowExpansion(`${player.player_name_normalized}-${player.game_mode}`)}
+                            className="text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) ? 
+                              <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        )}
+                        <div>
+                          <Link 
+                            href={`/stats/player/${encodeURIComponent(player.player_name)}`}
+                            className="text-white hover:text-cyan-400 transition-colors font-medium"
+                          >
+                            {player.player_name}
+                          </Link>
+                          {player.game_mode !== 'Combined' && (
+                            <div className="text-xs text-blue-300">{player.game_mode}</div>
+                          )}
+                          {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) && player.all_aliases && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              <strong>Aliases:</strong> {player.all_aliases}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center">
@@ -402,6 +487,55 @@ export default function EloLeaderboardPage() {
                     </td>
                   </motion.tr>
                 ))}
+                
+                {/* Loading skeleton rows when loading more data */}
+                {loadingMore && Array.from({ length: 5 }).map((_, index) => (
+                  <tr
+                    key={`loading-${index}`}
+                    className="border-b border-white/10 animate-pulse"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="h-4 bg-white/20 rounded w-8"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 bg-white/20 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-12"></div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center">
+                        <div className="w-3 h-3 bg-white/20 rounded-full mr-2"></div>
+                        <div className="h-4 bg-white/20 rounded w-16"></div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-12 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-8 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-12 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-8 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-6 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-6 ml-auto mb-1"></div>
+                      <div className="h-3 bg-white/10 rounded w-12 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-8 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-4 bg-white/20 rounded w-6 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="h-3 bg-white/20 rounded w-16 ml-auto"></div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="h-6 bg-white/20 rounded w-16 mx-auto"></div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -411,10 +545,10 @@ export default function EloLeaderboardPage() {
             <div className="p-4 text-center border-t border-white/20">
               <button
                 onClick={loadMore}
-                disabled={loading}
+                disabled={loadingMore}
                 className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 px-6 py-2 rounded transition-colors"
               >
-                {loading ? 'Loading...' : 'Load More'}
+                {loadingMore ? 'Loading...' : 'Load More'}
               </button>
             </div>
           )}

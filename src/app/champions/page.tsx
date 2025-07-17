@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Trophy, Crown, Star, Sword, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import SeasonWinnersModal from '@/components/SeasonWinnersModal';
 
 const ChampionArchives = () => {
   const { user } = useAuth();
@@ -20,17 +21,20 @@ const ChampionArchives = () => {
     'Season 3': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Martyr',               bronzeFlag: 'Epidemic', date: null },
     'Season 4': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Shadow Syndicate',     bronzeFlag: 'Darkslayers', date: null },
     'Season 5': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Smurfs',               bronzeFlag: 'Shadow Syndicate', date: null },
-    'Season 6': { goldenFlag: 'Black Dragon Society',   silverFlag: 'N/A',                  bronzeFlag: 'Ephemera', date: null },
+    'Season 6': { goldenFlag: 'Black Dragon Society',   silverFlag: 'Martyr',               bronzeFlag: 'Ephemera', date: null },
     'Season 7': { goldenFlag: 'Camp Chaos',             silverFlag: 'Black Dragon Society', bronzeFlag: '(TIE) Martyr, Murderous Plush Toys', date: null },
     'Season 8': { goldenFlag: 'Smurfs',                 silverFlag: 'Camp Chaos',           bronzeFlag: '(TIE) Black Dragon Society, Emi', date: '07-17-2005' },
     'Season 9': { goldenFlag: 'kuk',                    silverFlag: 'Smurfs',               bronzeFlag: 'Redemption', date: null },
-    'Season 10': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Memento',              bronzeFlag: '(TIE) Asceension, Sunday School', date: '09-03-2006' },
+    'Season 10': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Memento',              bronzeFlag: '(TIE) Ascension, Sunday School', date: '09-03-2006' },
     'Season 11': { goldenFlag: 'Newfie',                silverFlag: 'Black Dragon Society', bronzeFlag: 'Bingo', date: null },
     'Season 12': { goldenFlag: 'Newfie',                silverFlag: 'Martyr',               bronzeFlag: '(TIE) Black Dragon Society, kuk', date: null },
-    'Season 13': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Pure Talent',          bronzeFlag: '(TIE) kuk, Phoenix Down', date: null },
-    'Season 14': { goldenFlag: 'Halogen',               silverFlag: 'Phoenix Down',         bronzeFlag: null, date: null },
-    'Season 16': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Moon Shine',           bronzeFlag: null, date: null },
-    'Season 17': { goldenFlag: 'Black Dragon Society',  silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 13': { goldenFlag: 'Black Dragon Society',  silverFlag: 'ASAP',                 bronzeFlag: '(TIE) kuk, Phoenix Down', date: null },
+    'Season 14': { goldenFlag: 'Halogen',               silverFlag: 'Phoenix Down',         bronzeFlag: '(TIE) Black Dragon Society, kuk', date: null },
+    'Season 15': { goldenFlag: 'Redemption',            silverFlag: 'Black Dragon Society', bronzeFlag: '(TIE) Wartortle, Phoenix Down', date: null },
+    'Season 16': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Cobra Kai',            bronzeFlag: '(TIE) MONSTERHOUSE, Thunder Cunts', date: null },
+    'Season 17': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Fracture',             bronzeFlag: '(TIE) MONSTERHOUSE, Camp Kill Yourself', date: null },
+    'Season 18': { goldenFlag: 'N/A',                   silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 19': { goldenFlag: 'N/A',                   silverFlag: 'N/A',                  bronzeFlag: null, date: null },
     'Season 20': { goldenFlag: 'Pure Talent',           silverFlag: 'N/A',                  bronzeFlag: null, date: null },
     'Season 21': { goldenFlag: 'Pure Talent',           silverFlag: 'Camp Kill Yourself',   bronzeFlag: null, date: null }
   };
@@ -78,6 +82,28 @@ const ChampionArchives = () => {
     return stars;
   };
 
+  const [modalSeason, setModalSeason] = useState<number | null>(null);
+
+  const seasonWinners: Record<number, string[]> = {
+    17: ["Aborter", "Dro", "Flair", "Gallet", "Goliath", "Keyser", "LiNgo", "Mighty Mouse", "Nac", "panT", "Plaps", "Polo", "Revenge", "Rhylic", "shadow", "Smoka", "Terminator", "Thor", "Tyrael", "Whirlwind", "Seifer"],
+    16: ["Angela", "Boss", "Dilatory", "Flair", "FlyMolo", "Goliath", "Gravity", "Kev", "LiNgo", "Nac", "panT", "Plaps", "Price Tag", "Prisoner", "Rhylic", "Smoka", "Thor", "Whirlwind", "Seifer"],
+    15: ["Aborter", "An RR User", "anjro", "aqua", "Bango", "Daventry", "District", "Eggrolls", "Ghost Dance", "Got Tsolvy?", "Jerrett", "Les Savy Fav", "Silly Wanker", "sor", "The Korean", "Verb", "Waldo", "Whirlwind", "WolveN"],
+    14: ["An RR User", "Big Fat Noob", "Chuckie", "Croix de Guerre", "Dilatory", "District", "Dodge", "Goliath", "Iron Monkey", "Kiss", "Mamba", "nox", "Playstation", "shadow", "shaw", "Sov", "Whirlwind", "Yah"],
+    13: ["Angelus", "Blackchaoz", "Emp", "Flair", "Matt", "Nothing", "panT", "Prisoner", "Rhylic", "Rocky", "Thor", "WolveN", "Seifer"],
+    12: ["Dank", "Alaris", "albert", "Designer", "Doug", "Emp", "Force", "hans", "mugi", "nac", "Nemesis", "Nothing", "Pintsize", "Polaris", "Rocky", "Shawnv", "SMEG", "Taylor", "WolveN", "Yeh"],
+    11: ["albert", "dcman", "Designer", "Dilatory", "Doug", "Emp", "Force", "Nothing", "Polaris", "Primal", "Rocky", "Ron", "SMEG", "Taylor", "WolveN"],
+    10: ["Mights", "albert", "Angelus", "Designer", "Flair", "FlyMolo", "Lingo", "Moon Shine", "Mugi", "Penguin", "Plaps", "Polo", "Prisoner", "Rhylic", "The Korean", "Thor", "Seifer"],
+    9: ["Homsar", "Flave", "aqua", "Blackchaoz", "Daventry", "Defect", "destiny", "funk", "Itsuken", "Nothing", "Pheer", "platinum", "Rambo", "ron", "Soup", "tyson", "Zard"],
+    8: ["Kal", "NickGonzo", "noob", "Aborter", "Armor", "Beso", "Eaglestriker", "Hawkstriker", "Jono!", "Mant", "Mugi", "Pistor", "r", "Streaming", "tyson", "Waldo", "Yushiz"],
+    7: ["br0od", "hotman homsar", "blissid", "Angelus", "Chuckie", "Herthbul", "Jaxis", "Jericho", "John", "Les Savy Fav", "Penguind", "ron", "RuFo", "Strike", "Verb", "Yak"],
+    6: ["Amplifier", "Emp", "Forcer", "funk", "Plaps", "Prisoner", "Rhylic", "Strike", "Thor", "Seifer"],
+    5: ["An RR User", "Angelus", "Emp", "Herthbal", "Plaps", "Prisoner", "Rhylic", "Strike", "Thor", "Seifer"],
+    4: ["Amplifier", "An RR User", "Angelus", "Carrilion", "Emp", "funk", "Herthbul", "John", "Plaps", "Prisoner", "Rhylic", "Strike", "Thor", "Seifer"],
+    3: ["An RR User", "Carnillion", "Emp", "Pheer", "Plaps", "Prisoner", "Rhylic", "Thor", "Seifer"],
+    2: [],
+    1: ["Dr@gon", "Wen", "Shugotenshi", "TurboFrog", "Captain Ax", "SilentDrum", "FishBrain", "BaBo-", "DrkCloudXX", "Cyrus Alexander", "Daventry", "Mr. Mackaveli", "Pinkyz-Head", "vicks minty", "XXXXX"]
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-black relative overflow-hidden">
       <div className="relative z-50">
@@ -116,6 +142,8 @@ const ChampionArchives = () => {
           </p>
         </div>
       </div>
+
+
 
       {/* Champions Grid */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 pb-20">
@@ -222,14 +250,23 @@ const ChampionArchives = () => {
             SEASON RECORDS
           </h2>
           <div className="w-24 h-1 bg-gradient-to-r from-transparent via-yellow-400 to-transparent mx-auto mb-8"></div>
+          <div className="text-center mb-4">
+            <span className="inline-block bg-cyan-900/60 text-cyan-200 px-4 py-2 rounded-full text-sm shadow border border-cyan-700">
+              Tip: Click any season record tile to view the full list of player champions for that season!
+            </span>
+          </div>
           
           <div className="bg-gradient-to-br from-gray-800/60 via-gray-900/60 to-black/60 backdrop-blur-sm border border-yellow-500/20 rounded-xl p-6 max-w-6xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(seasonRecords).map(([season, record]) => (
-                <div 
-                  key={season}
-                  className="bg-gradient-to-br from-gray-700/40 to-gray-800/40 rounded-lg p-4 border border-gray-600/30 hover:border-yellow-400/40 transition-all duration-300"
-                >
+              {Object.entries(seasonRecords).map(([season, record]) => {
+                // Extract season number from "Season X" format
+                const seasonNumber = parseInt(season.replace('Season ', ''));
+                return (
+                  <div 
+                    key={season}
+                    className="bg-gradient-to-br from-gray-700/40 to-gray-800/40 rounded-lg p-4 border border-gray-600/30 hover:border-yellow-400/40 transition-all duration-300 cursor-pointer"
+                    onClick={() => setModalSeason(seasonNumber)}
+                  >
                   <h3 className="text-lg font-bold text-yellow-400 mb-3 text-center border-b border-gray-600/50 pb-2">
                     {season}
                   </h3>
@@ -273,11 +310,22 @@ const ChampionArchives = () => {
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         </div>
       </div>
+      <SeasonWinnersModal
+        open={!!modalSeason}
+        onClose={() => setModalSeason(null)}
+        season={modalSeason}
+        winners={
+          modalSeason && seasonWinners[modalSeason]
+            ? [...seasonWinners[modalSeason]].sort((a, b) => a.localeCompare(b))
+            : []
+        }
+      />
     </div>
   );
 };

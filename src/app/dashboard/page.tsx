@@ -74,17 +74,9 @@ export default function Dashboard() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   
-  // Email editing states
-  const [editingEmail, setEditingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-
   // Phrase editing states
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUserProduct, setEditingUserProduct] = useState<UserProduct | null>(null);
-
-  // Alias editing states
-  const [editingAlias, setEditingAlias] = useState(false);
-  const [tempAlias, setTempAlias] = useState('');
 
   useEffect(() => {
     if (!loading && !user) {
@@ -108,7 +100,6 @@ export default function Dashboard() {
           } else {
             setProfile(profileData);
             setAvatarUrl(profileData?.avatar_url || null);
-            setNewEmail(profileData?.email || user.email || '');
           }
 
           // Fetch user products
@@ -305,65 +296,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleSaveEmail = async () => {
-    if (!user || newEmail === (profile?.email || user.email)) {
-      setEditingEmail(false);
-      return;
-    }
-    
-    try {
-      // Update email in auth
-      const { error: emailError } = await supabase.auth.updateUser({
-        email: newEmail
-      });
-      
-      if (emailError) throw emailError;
-      
-      // Update email in profiles
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ 
-          email: newEmail,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-        
-      if (profileError) throw profileError;
-      
-      setProfile((prev: any) => ({ ...prev, email: newEmail }));
-      setEditingEmail(false);
-      toast.success('Email updated successfully! Please check your new email for a confirmation link.');
-    } catch (error: any) {
-      toast.error('Error updating email: ' + error.message);
-    }
-  };
-
-  const handleSaveAlias = async () => {
-    if (!user || tempAlias === (profile?.in_game_alias || '')) {
-      setEditingAlias(false);
-      return;
-    }
-    
-    try {
-      // Update alias in profiles
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          in_game_alias: tempAlias,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-        
-      if (error) throw error;
-      
-      setProfile((prev: any) => ({ ...prev, in_game_alias: tempAlias }));
-      setEditingAlias(false);
-      setTempAlias('');
-      toast.success('Alias updated successfully!');
-    } catch (error: any) {
-      toast.error('Error updating alias: ' + error.message);
-    }
-  };
 
   const toggleFreeAgentVisibility = async () => {
     if (!user || !profile) return;
@@ -461,222 +393,181 @@ export default function Dashboard() {
           <div className="space-y-4 sm:space-y-6">
             {/* Dashboard Header + User Profile Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-              {/* Dashboard Header - 1/3 width */}
+              {/* Dashboard Header + Avatar - 1/3 width */}
               <div className="lg:col-span-1">
                 <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl h-full">
-                  <div className="text-center">
+                  <div className="text-center mb-6">
                     <h1 className="text-2xl sm:text-3xl font-bold text-cyan-400 mb-2 tracking-wider">📊 Dashboard</h1>
                     <p className="text-sm sm:text-base text-gray-300">Your personal account overview</p>
                   </div>
-                </div>
-              </div>
-
-              {/* User Profile Section - 2/3 width */}
-              <div className="lg:col-span-2">
-                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl">
-                  <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 mb-4 tracking-wider">🎖️ User Profile</h2>
                   
+                  {/* User Avatar Section */}
                   {loadingData ? (
                     <div className="animate-pulse space-y-4">
                       <div className="h-16 sm:h-24 w-16 sm:w-24 bg-gray-700 rounded-lg mx-auto mb-4"></div>
-                      <div className="h-4 bg-gray-700 rounded"></div>
-                      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
                     </div>
                   ) : profile ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-4">
-                        {/* User Avatar - Increased size and editable */}
-                        <div className="flex justify-center">
-                          <div className="relative">
-                            <UserAvatar 
-                              user={{
-                                avatar_url: avatarUrl,
-                                in_game_alias: profile.in_game_alias,
-                                email: profile.email
-                              }} 
-                              size="2xl"
-                              className="ring-4 ring-cyan-500/30 shadow-2xl"
-                            />
-                            {!editingAvatar && (
-                              <button
-                                onClick={() => setEditingAvatar(true)}
-                                className="absolute -bottom-1 -right-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full p-1 shadow-lg transition-all duration-300 text-xs"
-                                title="Edit Avatar"
-                              >
-                                ✏️
-                              </button>
-                            )}
-                          </div>
+                    <div className="space-y-4">
+                      {/* User Avatar - Increased size and editable */}
+                      <div className="flex justify-center">
+                        <div className="relative">
+                          <UserAvatar 
+                            user={{
+                              avatar_url: avatarUrl,
+                              in_game_alias: profile.in_game_alias,
+                              email: profile.email
+                            }} 
+                            size="2xl"
+                            className="ring-4 ring-cyan-500/30 shadow-2xl"
+                          />
+                          {!editingAvatar && (
+                            <button
+                              onClick={() => setEditingAvatar(true)}
+                              className="absolute -bottom-1 -right-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-full p-1 shadow-lg transition-all duration-300 text-xs"
+                              title="Edit Avatar"
+                            >
+                              ✏️
+                            </button>
+                          )}
                         </div>
-                        
-                        {editingAvatar && (
-                          <div className="bg-gray-700/50 border border-cyan-500/30 rounded-lg p-3">
-                            <label className="block text-cyan-400 font-bold mb-2 text-sm">Upload New Avatar</label>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleAvatarFileChange}
-                              className="hidden"
-                              id="avatar-upload"
-                            />
-                            <div className="flex gap-2">
-                              <label
-                                htmlFor="avatar-upload"
-                                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded cursor-pointer text-center transition-all duration-300 text-sm"
-                              >
-                                Choose File
-                              </label>
-                              <button
-                                onClick={handleSaveAvatar}
-                                disabled={!avatarFile}
-                                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded transition-all duration-300 text-sm"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingAvatar(false);
-                                  setAvatarFile(null);
-                                  setAvatarUrl(profile.avatar_url);
-                                }}
-                                className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded transition-all duration-300 text-sm"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                            {avatarFile && (
-                              <p className="mt-2 text-sm text-cyan-300">📁 {avatarFile.name}</p>
-                            )}
-                          </div>
-                        )}
                       </div>
                       
-                      <div className="space-y-4">
-                        {/* Email - Editable */}
-                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <span className="font-bold text-cyan-400 text-sm">Email:</span> 
-                              {editingEmail ? (
-                                <div className="mt-2">
-                                  <input
-                                    type="email"
-                                    value={newEmail}
-                                    onChange={(e) => setNewEmail(e.target.value)}
-                                    className="w-full bg-gray-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm"
-                                  />
-                                  <div className="flex gap-2 mt-2">
-                                    <button
-                                      onClick={handleSaveEmail}
-                                      className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setEditingEmail(false);
-                                        setNewEmail(profile.email || user.email || '');
-                                      }}
-                                      className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm transition-all duration-300"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="ml-2 text-white font-mono text-sm">{profile.email}</span>
-                              )}
+                      {editingAvatar && (
+                        <div className="bg-gray-700/50 border border-cyan-500/30 rounded-lg p-3">
+                          <label className="block text-cyan-400 font-bold mb-2 text-sm">Upload New Avatar</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarFileChange}
+                            className="hidden"
+                            id="avatar-upload"
+                          />
+                          <div className="flex gap-2">
+                            <label
+                              htmlFor="avatar-upload"
+                              className="flex-1 bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded cursor-pointer text-center transition-all duration-300 text-sm"
+                            >
+                              Choose File
+                            </label>
+                            <button
+                              onClick={handleSaveAvatar}
+                              disabled={!avatarFile}
+                              className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-3 py-2 rounded transition-all duration-300 text-sm"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAvatar(false);
+                                setAvatarFile(null);
+                                setAvatarUrl(profile.avatar_url);
+                              }}
+                              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded transition-all duration-300 text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {avatarFile && (
+                            <p className="mt-2 text-sm text-cyan-300">📁 {avatarFile.name}</p>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Profile Button */}
+                      <div className="flex justify-center mt-4">
+                        <Link
+                          href="/profile"
+                          className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-2 px-4 rounded-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-blue-500/25 text-center text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>👤</span>
+                            <span>Edit Profile</span>
+                          </div>
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-700/50 border border-red-500/50 rounded-lg p-4">
+                      <p className="text-red-400 font-bold text-sm">⚠️ Profile data unavailable</p>
+                      <p className="text-gray-300 mt-2 text-sm">Please check your connection and try again.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* User Information Section - 2/3 width */}
+              <div className="lg:col-span-2">
+                <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4 sm:p-6 shadow-2xl">
+                  <h2 className="text-xl sm:text-2xl font-bold text-cyan-400 mb-4 tracking-wider">🎖️ User Information</h2>
+                  
+                  {loadingData ? (
+                    <div className="animate-pulse space-y-4">
+                      <div className="h-4 bg-gray-700 rounded"></div>
+                      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-700 rounded w-1/2"></div>
+                    </div>
+                  ) : profile ? (
+                    <div className="space-y-4">
+                      {/* Three columns layout for Email, In-Game Alias, and Alternate Aliases */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Email - Read Only */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                          <div className="text-center">
+                            <h3 className="font-bold text-cyan-400 text-sm mb-2">📧 Email</h3>
+                            <div className="text-white font-mono text-sm break-all">
+                              {profile.email}
                             </div>
-                            {!editingEmail && (
-                              <button
-                                onClick={() => setEditingEmail(true)}
-                                className="text-cyan-400 hover:text-cyan-300 ml-2"
-                                title="Edit Email"
-                              >
-                                ✏️
-                              </button>
-                            )}
                           </div>
                         </div>
                         
-                        {/* In-Game Alias - Editable */}
-                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <span className="font-bold text-cyan-400">In-Game Alias:</span>
-                              {editingAlias ? (
-                                <input
-                                  type="text"
-                                  value={tempAlias}
-                                  onChange={(e) => setTempAlias(e.target.value)}
-                                  onKeyPress={(e) => e.key === 'Enter' && handleSaveAlias()}
-                                  className="ml-2 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-yellow-400 font-mono text-sm"
-                                  autoFocus
-                                />
-                              ) : (
-                                <span className="ml-2 text-yellow-400 font-mono">{profile.in_game_alias || 'Not Set'}</span>
-                              )}
+                        {/* In-Game Alias - Read Only */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                          <div className="text-center">
+                            <h3 className="font-bold text-cyan-400 text-sm mb-2">🎮 In-Game Alias</h3>
+                            <div className="text-yellow-400 font-mono text-sm">
+                              {profile.in_game_alias || 'Not Set'}
                             </div>
-                            {!editingAlias ? (
-                              <button
-                                onClick={() => {
-                                  setEditingAlias(true);
-                                  setTempAlias(profile.in_game_alias || '');
-                                }}
-                                className="text-cyan-400 hover:text-cyan-300 ml-2"
-                                title="Edit Alias"
-                              >
-                                ✏️
-                              </button>
-                            ) : (
-                              <div className="flex gap-2 ml-2">
-                                <button
-                                  onClick={handleSaveAlias}
-                                  className="text-green-400 hover:text-green-300"
-                                  title="Save"
-                                >
-                                  ✅
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setEditingAlias(false);
-                                    setTempAlias('');
-                                  }}
-                                  className="text-red-400 hover:text-red-300"
-                                  title="Cancel"
-                                >
-                                  ❌
-                                </button>
-                              </div>
-                            )}
                           </div>
                         </div>
 
-                        {/* Free Agent Visibility */}
-                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <span className="font-bold text-cyan-400 text-sm">Free Agent Visibility:</span>
-                              <span className="ml-2 text-sm text-gray-300">
-                                {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
-                              </span>
+                        {/* Alternate Aliases - Placeholder */}
+                        <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                          <div className="text-center">
+                            <h3 className="font-bold text-cyan-400 text-sm mb-2">👥 Alternate Aliases</h3>
+                            <div className="text-purple-400 font-mono text-sm">
+                              Coming Soon
                             </div>
-                            <button
-                              onClick={toggleFreeAgentVisibility}
-                              className={`relative w-10 h-5 rounded-full transition-all duration-300 ${
-                                !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
-                              } shadow-sm flex-shrink-0`}
-                              title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
-                            >
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${
-                                !profile.hide_from_free_agents ? 'translate-x-5' : 'translate-x-0.5'
-                              }`}></div>
-                            </button>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Alternative names will appear here
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-400 mt-1">
-                            Control whether you appear on the free agents page for squad recruitment
-                          </p>
                         </div>
+                      </div>
+
+                      {/* Free Agent Visibility - Full width below */}
+                      <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-cyan-400 text-sm mb-1">🔍 Free Agent Visibility</h3>
+                            <span className="text-sm text-gray-300">
+                              {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={toggleFreeAgentVisibility}
+                            className={`relative w-10 h-5 rounded-full transition-all duration-300 ${
+                              !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
+                            } shadow-sm flex-shrink-0`}
+                            title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
+                          >
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${
+                              !profile.hide_from_free_agents ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}></div>
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2">
+                          Control whether you appear on the free agents page for squad recruitment
+                        </p>
                       </div>
                     </div>
                   ) : (
