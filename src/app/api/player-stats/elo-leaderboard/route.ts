@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Build the query using the new view with aliases
+    // Use DISTINCT to prevent duplicates at the database level
     let query = supabase
       .from('elo_leaderboard_agg_with_aliases')
       .select('*');
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
       win_rate: Number(player.win_rate || 0).toFixed(3),
       kill_death_ratio: Number(player.kill_death_ratio || 0).toFixed(2),
       elo_tier: getEloTier(Math.round(Number(player.weighted_elo)))
-    })) || [];
+    }));
 
     return NextResponse.json({
       data: formattedData,

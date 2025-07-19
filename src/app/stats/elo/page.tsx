@@ -85,6 +85,7 @@ export default function EloLeaderboardPage() {
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [currentRequestGameMode, setCurrentRequestGameMode] = useState('Combined');
   const [pagination, setPagination] = useState({
     total: 0,
     offset: 0,
@@ -92,18 +93,25 @@ export default function EloLeaderboardPage() {
     hasMore: false
   });
 
-  const fetchEloLeaderboard = async (offset = 0) => {
+  const fetchEloLeaderboard = async (offset = 0, abortController?: AbortController) => {
     try {
+      // Track which game mode this request is for
+      const requestGameMode = gameMode;
+      
       // Use different loading states for initial load vs load more
       if (offset === 0) {
         setLoading(true);
+        setCurrentRequestGameMode(requestGameMode);
+        // Clear existing data immediately when starting a fresh load (tab switch)
+        setPlayers([]);
+        setExpandedRows(new Set());
       } else {
         setLoadingMore(true);
       }
       setError(null);
 
       const params = new URLSearchParams({
-        gameMode,
+        gameMode: requestGameMode,
         sortBy,
         sortOrder,
         minGames: minGames.toString(),
@@ -112,12 +120,20 @@ export default function EloLeaderboardPage() {
         offset: offset.toString()
       });
 
-      const response = await fetch(`/api/player-stats/elo-leaderboard?${params}`);
+      const response = await fetch(`/api/player-stats/elo-leaderboard?${params}`, {
+        signal: abortController?.signal
+      });
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data: EloLeaderboardResponse = await response.json();
+      
+      // Check if request was aborted or if the game mode has changed since this request started
+      if (abortController?.signal.aborted || requestGameMode !== gameMode) {
+        return;
+      }
       
       // If offset is 0, replace the data (refresh/filter change)
       // If offset > 0, append the data (load more)
@@ -155,6 +171,10 @@ export default function EloLeaderboardPage() {
         setExpandedRows(new Set());
       }
     } catch (err) {
+      // Don't show error if request was aborted (normal behavior when switching tabs)
+      if (abortController?.signal.aborted) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'An error occurred');
       setLoading(false);
       setLoadingMore(false);
@@ -162,7 +182,21 @@ export default function EloLeaderboardPage() {
   };
 
   useEffect(() => {
-    fetchEloLeaderboard(0);
+    const abortController = new AbortController();
+    
+    // Reset pagination when filters change
+    setPagination(prev => ({
+      ...prev,
+      offset: 0,
+      hasMore: false
+    }));
+    
+    fetchEloLeaderboard(0, abortController);
+    
+    // Cleanup: abort any in-flight request when dependencies change
+    return () => {
+      abortController.abort();
+    };
   }, [gameMode, sortBy, sortOrder, minGames, playerName]);
 
   const handleSearch = () => {
@@ -410,7 +444,7 @@ export default function EloLeaderboardPage() {
               <tbody>
                 {players.map((player, index) => (
                   <motion.tr
-                    key={`${player.player_name}-${player.game_mode}`}
+                    key={`${gameMode}-${player.player_name_normalized}-${player.game_mode}-${index}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3 }}

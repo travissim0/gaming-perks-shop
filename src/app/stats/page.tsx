@@ -185,21 +185,6 @@ export default function PlayerStatsPage() {
     return uniqueAliases;
   };
 
-  // Check if search term matches an alias (but not the main player name)
-  const searchMatchesAlias = (player: PlayerAggregateStats, searchTerm: string): boolean => {
-    if (!searchTerm || !player.all_aliases) return false;
-    
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    const lowerPlayerName = player.player_name.toLowerCase();
-    
-    // If search matches main player name, don't auto-expand
-    if (lowerPlayerName.includes(lowerSearchTerm)) return false;
-    
-    // Check if search matches any alias
-    const aliases = player.all_aliases.split(',').map(alias => alias.trim().toLowerCase());
-    return aliases.some(alias => alias.includes(lowerSearchTerm) && alias !== lowerPlayerName);
-  };
-
   // Toggle row expansion
   const toggleRowExpansion = (playerId: number | string, event: React.MouseEvent) => {
     event.preventDefault();
@@ -244,23 +229,6 @@ export default function PlayerStatsPage() {
           ...player,
           most_played_class: getMostPlayedClass(player.player_name)
         }));
-
-        // Auto-expand rows if search matches aliases (only on fresh search, not load more)
-        if (offset === 0) {
-          if (playerName && playerName.trim()) {
-            const newExpandedRows = new Set<number | string>();
-            playersWithClass.forEach((player, index) => {
-              if (searchMatchesAlias(player, playerName)) {
-                const playerId = player.id || `temp-${index}`;
-                newExpandedRows.add(playerId);
-              }
-            });
-            setExpandedRows(newExpandedRows);
-          } else {
-            // Clear expanded rows when no search term
-            setExpandedRows(new Set());
-          }
-        }
 
         if (gameMode === 'OvD') {
           if (offset === 0) {
@@ -629,7 +597,7 @@ export default function PlayerStatsPage() {
                   <div className="flex gap-1">
                     <input
                       type="text"
-                      placeholder="Player name or alias..."
+                      placeholder="Player name..."
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       onKeyPress={handleKeyPress}
@@ -1054,10 +1022,10 @@ export default function PlayerStatsPage() {
                   <div className="flex gap-1">
                     <input
                       type="text"
-                      placeholder="Player name or alias..."
+                      placeholder="Player name..."
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
+                      onKeyDown={handleKeyPress}
                       className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
                     />
                     <button

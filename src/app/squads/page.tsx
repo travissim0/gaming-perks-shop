@@ -532,7 +532,8 @@ export default function SquadsPage() {
         banner_url: squad.banner_url,
         member_count: memberCounts?.filter(m => m.squad_id === squad.id).length || 0,
         members: [], // Not needed for list view
-        is_active: squad.is_active
+        is_active: squad.is_active,
+        is_legacy: squad.is_legacy
       }));
 
       console.log('🔍 loadAllSquads: Setting formatted squads state');
@@ -1986,7 +1987,7 @@ export default function SquadsPage() {
           ) : (
             <>
               <div className="grid gap-4">
-                {allSquads.filter(squad => squad.is_active !== false).map((squad) => (
+                {allSquads.filter(squad => squad.is_active === true && !squad.is_legacy).map((squad) => (
                 <Link key={squad.id} href={`/squads/${squad.id}`}>
                   <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
                     <div className="p-4">
@@ -2034,7 +2035,7 @@ export default function SquadsPage() {
                   </div>
                 </Link>
               ))}
-              {!dataLoading && allSquads.filter(squad => squad.is_active !== false).length === 0 && (
+              {!dataLoading && allSquads.filter(squad => squad.is_active === true && !squad.is_legacy).length === 0 && (
                 <div className="text-center py-8 text-gray-400">
                   No active squads found. Be the first to create one!
                 </div>

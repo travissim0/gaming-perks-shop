@@ -26,17 +26,17 @@ const ChampionArchives = () => {
     'Season 8': { goldenFlag: 'Smurfs',                 silverFlag: 'Camp Chaos',           bronzeFlag: '(TIE) Black Dragon Society, Emi', date: '07-17-2005' },
     'Season 9': { goldenFlag: 'kuk',                    silverFlag: 'Smurfs',               bronzeFlag: 'Redemption', date: null },
     'Season 10': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Memento',              bronzeFlag: '(TIE) Ascension, Sunday School', date: '09-03-2006' },
-    'Season 11': { goldenFlag: 'Newfie',                silverFlag: 'Black Dragon Society', bronzeFlag: 'Bingo', date: null },
+    'Season 11': { goldenFlag: 'Newfie',                silverFlag: 'Black Dragon Society', bronzeFlag: 'Bingo', date: '05-27-2007' },
     'Season 12': { goldenFlag: 'Newfie',                silverFlag: 'Martyr',               bronzeFlag: '(TIE) Black Dragon Society, kuk', date: null },
     'Season 13': { goldenFlag: 'Black Dragon Society',  silverFlag: 'ASAP',                 bronzeFlag: '(TIE) kuk, Phoenix Down', date: null },
     'Season 14': { goldenFlag: 'Halogen',               silverFlag: 'Phoenix Down',         bronzeFlag: '(TIE) Black Dragon Society, kuk', date: null },
     'Season 15': { goldenFlag: 'Redemption',            silverFlag: 'Black Dragon Society', bronzeFlag: '(TIE) Wartortle, Phoenix Down', date: null },
     'Season 16': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Cobra Kai',            bronzeFlag: '(TIE) MONSTERHOUSE, Thunder Cunts', date: null },
     'Season 17': { goldenFlag: 'Black Dragon Society',  silverFlag: 'Fracture',             bronzeFlag: '(TIE) MONSTERHOUSE, Camp Kill Yourself', date: null },
-    'Season 18': { goldenFlag: 'N/A',                   silverFlag: 'N/A',                  bronzeFlag: null, date: null },
-    'Season 19': { goldenFlag: 'N/A',                   silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 18': { goldenFlag: 'Canucks',               silverFlag: 'N/A',                  bronzeFlag: null, date: null },
+    'Season 19': { goldenFlag: 'Canucks',               silverFlag: 'N/A',                  bronzeFlag: null, date: null },
     'Season 20': { goldenFlag: 'Pure Talent',           silverFlag: 'N/A',                  bronzeFlag: null, date: null },
-    'Season 21': { goldenFlag: 'Pure Talent',           silverFlag: 'Camp Kill Yourself',   bronzeFlag: null, date: null }
+    'Season 21': { goldenFlag: 'Pure Talent',           silverFlag: 'Camp Kill Yourself',   bronzeFlag: null, date: '08-30-2015' }
   };
 
   const championSquads = [
