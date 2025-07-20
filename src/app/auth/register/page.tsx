@@ -32,13 +32,13 @@ export default function Register() {
 
     // Username validation
     if (!inGameAlias) {
-      errors.inGameAlias = 'Username is required';
-    } else if (inGameAlias.length < 2) {
-      errors.inGameAlias = 'Username must be at least 2 characters';
-    } else if (inGameAlias.length > 20) {
-      errors.inGameAlias = 'Username must be less than 20 characters';
+      errors.inGameAlias = 'Username/Main Alias is required';
+    } else if (inGameAlias.length < 1) {
+      errors.inGameAlias = 'Username/Main Alias must be at least 1 character';
+    } else if (inGameAlias.length > 30) {
+      errors.inGameAlias = 'Username/Main Alias must be less than 30 characters';
     } else if (!/^[a-zA-Z0-9_-]+$/.test(inGameAlias)) {
-      errors.inGameAlias = 'Username can only contain letters, numbers, underscores, and hyphens';
+      errors.inGameAlias = 'Username/Main Alias can only contain letters, numbers, underscores, and hyphens';
     }
 
     // Password validation
@@ -196,7 +196,7 @@ export default function Register() {
 
             <div>
               <label htmlFor="inGameAlias" className="block text-base sm:text-lg font-bold text-cyan-400 mb-2 sm:mb-3 tracking-wide">
-                🎮 Username
+                🎮 Username/Main Alias
               </label>
               <div className="mt-1">
                 <input
@@ -217,14 +217,14 @@ export default function Register() {
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-gray-600 focus:border-cyan-500'
                   }`}
-                  placeholder="Choose your username..."
-                  maxLength={20}
+                  placeholder="Choose your username/main alias..."
+                  maxLength={30}
                 />
                 {formErrors.inGameAlias && (
                   <p className="mt-1 text-sm text-red-400">{formErrors.inGameAlias}</p>
                 )}
                 <p className="text-xs text-gray-400 mt-1 font-mono">
-                  ⚡ This will be your display name (2-20 characters)
+                  ⚡ This will be your display name (1-30 characters)
                 </p>
               </div>
             </div>
@@ -347,7 +347,7 @@ export default function Register() {
                   <ul className="text-blue-300 text-xs space-y-1">
                     <li>• Ensure stable internet connection</li>
                     <li>• Use a valid email address</li>
-                    <li>• Choose a unique username</li>
+                    <li>• Choose a unique username/main alias</li>
                     <li>• Password must be 6+ characters</li>
                   </ul>
                 </div>

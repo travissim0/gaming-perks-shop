@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
 import CTFAdminPanel from '@/components/CTFAdminPanel';
+import AliasAssociationModal from '@/components/AliasAssociationModal';
+import SeasonManagementModal from '@/components/admin/SeasonManagementModal';
+import SquadMaintenanceModal from '@/components/admin/SquadMaintenanceModal';
 import { toast } from 'react-hot-toast';
 
 export type CTFRoleType = 
@@ -328,6 +331,12 @@ export default function CTFAdminPage() {
                     >
                       🏆 View Matches
                     </button>
+
+                    <AliasAssociationModal />
+
+                    <SeasonManagementModal />
+
+                    <SquadMaintenanceModal />
 
                     <div className="pt-2 border-t border-gray-600">
                       <div className="text-xs text-gray-400 text-center">

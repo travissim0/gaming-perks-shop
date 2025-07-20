@@ -31,17 +31,8 @@ export default function Navbar({ user }: { user: any }) {
   const adminDropdownRef = useRef<HTMLDivElement>(null);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   
-  // Mobile dropdown states
-  const [showMobileSquadsDropdown, setShowMobileSquadsDropdown] = useState(false);
-  const [showMobileStatsDropdown, setShowMobileStatsDropdown] = useState(false);
-  const [showMobileCommunityDropdown, setShowMobileCommunityDropdown] = useState(false);
-  const [showMobileMiscDropdown, setShowMobileMiscDropdown] = useState(false);
-  
-  // Refs for mobile dropdowns
-  const mobileSquadsRef = useRef<HTMLDivElement>(null);
-  const mobileStatsRef = useRef<HTMLDivElement>(null);
-  const mobileCommunityRef = useRef<HTMLDivElement>(null);
-  const mobileMiscRef = useRef<HTMLDivElement>(null);
+  // Mobile dropdown states - simplified to one active dropdown at a time
+  const [activeMobileDropdown, setActiveMobileDropdown] = useState<string | null>(null);
 
   // Function to check pending squad requests for captain/co-captain
   const checkPendingSquadRequests = async () => {
@@ -278,33 +269,30 @@ export default function Navbar({ user }: { user: any }) {
 
   // Click outside to close dropdowns
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
         setShowNotificationDropdown(false);
       }
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(target)) {
         setShowUserDropdown(false);
       }
-      if (adminDropdownRef.current && !adminDropdownRef.current.contains(event.target as Node)) {
+      if (adminDropdownRef.current && !adminDropdownRef.current.contains(target)) {
         setShowAdminDropdown(false);
       }
-      // Mobile dropdowns
-      if (mobileSquadsRef.current && !mobileSquadsRef.current.contains(event.target as Node)) {
-        setShowMobileSquadsDropdown(false);
-      }
-      if (mobileStatsRef.current && !mobileStatsRef.current.contains(event.target as Node)) {
-        setShowMobileStatsDropdown(false);
-      }
-      if (mobileCommunityRef.current && !mobileCommunityRef.current.contains(event.target as Node)) {
-        setShowMobileCommunityDropdown(false);
-      }
-      if (mobileMiscRef.current && !mobileMiscRef.current.contains(event.target as Node)) {
-        setShowMobileMiscDropdown(false);
-      }
+      // Close mobile dropdown when clicking outside
+      setActiveMobileDropdown(null);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleMouseDown = (event: MouseEvent) => handleClickOutside(event);
+    const handleTouchStart = (event: TouchEvent) => handleClickOutside(event);
+
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('touchstart', handleTouchStart);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('touchstart', handleTouchStart);
+    };
   }, []);
 
   // Handle body scroll lock when mobile menu is open
@@ -373,6 +361,7 @@ export default function Navbar({ user }: { user: any }) {
   };
 
   // Navigation groups
+  
   const squadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
     { href: '/free-agents', label: 'Players', icon: '🎯' },
@@ -429,101 +418,79 @@ export default function Navbar({ user }: { user: any }) {
 
   return (
     <>
-      {/* Portal for mobile dropdowns to ensure proper z-index */}
-      {typeof window !== 'undefined' && (
-        <>
-          {showMobileSquadsDropdown && (
-            <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[120px] left-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
-                <div className="py-2">
-                  {squadsNavItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        setShowMobileSquadsDropdown(false);
-                      }}
-                    >
-                      <span className="mr-2 text-sm">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
+      {/* Mobile dropdown overlay */}
+      {activeMobileDropdown && (
+        <div 
+          className="fixed inset-0 z-[10000] bg-black/20 backdrop-blur-sm"
+          onClick={() => setActiveMobileDropdown(null)}
+        >
+          <div 
+            className="absolute top-[120px] left-1/2 transform -translate-x-1/2 w-[90vw] max-w-sm bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="py-2">
+              <div className="px-4 py-2 border-b border-gray-600/50">
+                <h3 className="text-sm font-medium text-white capitalize">{activeMobileDropdown}</h3>
               </div>
+              {activeMobileDropdown === 'squads' && squadsNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
+                  onClick={() => {
+                    setActiveMobileDropdown(null);
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ))}
+              {activeMobileDropdown === 'stats' && statsNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
+                  onClick={() => {
+                    setActiveMobileDropdown(null);
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ))}
+              {activeMobileDropdown === 'community' && communityNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
+                  onClick={() => {
+                    setActiveMobileDropdown(null);
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ))}
+              {activeMobileDropdown === 'misc' && miscNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center px-4 py-3 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 active:bg-orange-600/20"
+                  onClick={() => {
+                    setActiveMobileDropdown(null);
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ))}
             </div>
-          )}
-
-          {showMobileStatsDropdown && (
-            <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[120px] left-[25%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
-                <div className="py-2">
-                  {statsNavItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        setShowMobileStatsDropdown(false);
-                      }}
-                    >
-                      <span className="mr-2 text-sm">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showMobileCommunityDropdown && (
-            <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[120px] left-[50%] min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
-                <div className="py-2">
-                  {communityNavItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 text-xs"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        setShowMobileCommunityDropdown(false);
-                      }}
-                    >
-                      <span className="mr-2 text-sm">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showMobileMiscDropdown && (
-            <div className="fixed inset-0 z-[10000] pointer-events-none">
-              <div className="absolute top-[120px] right-4 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto mobile-dropdown-enter">
-                <div className="py-2">
-                  {miscNavItems.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 text-xs"
-                      onClick={() => {
-                        setIsMobileMenuOpen(false);
-                        setShowMobileMiscDropdown(false);
-                      }}
-                    >
-                      <span className="mr-2 text-sm">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
 
       <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
@@ -882,66 +849,85 @@ export default function Navbar({ user }: { user: any }) {
       <div className="lg:hidden border-t border-gray-700/50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
+            {/* News */}
+            <Link 
+              href="/"
+              className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="text-sm">📰</span>
+              <span className="font-medium">News</span>
+            </Link>
+
+            {/* League - Note: Mobile doesn't support hover dropdowns, so link to CTFPL */}
+            <Link 
+              href="/league/ctfpl"
+              className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
+            >
+              <span className="text-sm">🏆</span>
+              <span className="font-medium">League</span>
+            </Link>
+
             {/* Squads */}
             <button 
-              onClick={() => setShowMobileSquadsDropdown(!showMobileSquadsDropdown)}
+              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'squads' ? null : 'squads')}
               className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                showMobileSquadsDropdown 
+                activeMobileDropdown === 'squads'
                   ? 'from-green-600/30 to-emerald-600/30 text-green-400' 
                   : 'hover:from-green-600/20 hover:to-emerald-600/20'
               }`}
             >
               <Gamepad2 className="w-3 h-3" />
               <span className="font-medium">Squads</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileSquadsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'squads' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             {/* Stats */}
             <button 
-              onClick={() => setShowMobileStatsDropdown(!showMobileStatsDropdown)}
+              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'stats' ? null : 'stats')}
               className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                showMobileStatsDropdown 
+                activeMobileDropdown === 'stats'
                   ? 'from-blue-600/30 to-indigo-600/30 text-blue-400' 
                   : 'hover:from-blue-600/20 hover:to-indigo-600/20'
               }`}
             >
               <BarChart3 className="w-3 h-3" />
               <span className="font-medium">Stats</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileStatsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'stats' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             {/* Community */}
             <button 
-              onClick={() => setShowMobileCommunityDropdown(!showMobileCommunityDropdown)}
+              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'community' ? null : 'community')}
               className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                showMobileCommunityDropdown 
+                activeMobileDropdown === 'community'
                   ? 'from-purple-600/30 to-pink-600/30 text-purple-400' 
                   : 'hover:from-purple-600/20 hover:to-pink-600/20'
               }`}
             >
               <Users className="w-3 h-3" />
               <span className="font-medium">Community</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileCommunityDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'community' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             {/* Misc */}
             <button 
-              onClick={() => setShowMobileMiscDropdown(!showMobileMiscDropdown)}
+              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'misc' ? null : 'misc')}
               className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                showMobileMiscDropdown 
+                activeMobileDropdown === 'misc'
                   ? 'from-orange-600/30 to-red-600/30 text-orange-400' 
                   : 'hover:from-orange-600/20 hover:to-red-600/20'
               }`}
             >
               <span className="text-sm">🔧</span>
               <span className="font-medium">Misc</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${showMobileMiscDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'misc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -953,6 +939,48 @@ export default function Navbar({ user }: { user: any }) {
       <div className="hidden lg:block">
         <div className="container mx-auto px-4">
           <div className="flex items-center space-x-8 py-3">
+            {/* News Section */}
+            <div className="relative">
+              <a 
+                href="/"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-yellow-500/30 hover:shadow-lg hover:shadow-yellow-500/20"
+              >
+                <span className="text-lg">📰</span>
+                <span className="font-semibold">News</span>
+              </a>
+            </div>
+
+            {/* League Section */}
+            <div className="group relative">
+              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-cyan-500/30 group-hover:shadow-lg group-hover:shadow-cyan-500/20">
+                <span className="text-lg">🏆</span>
+                <span className="font-semibold">League</span>
+                <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
+                <div className="py-3">
+                  <Link
+                    href="/league/ctfpl"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">⚔️</span>
+                    <span className="font-medium">CTFPL</span>
+                  </Link>
+                  <Link
+                    href="/"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">🛡️</span>
+                    <span className="font-medium">CTFDL</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
             {/* Squads Section */}
             <div className="group relative">
               <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-green-600/20 hover:to-emerald-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-green-500/30 group-hover:shadow-lg group-hover:shadow-green-500/20">
@@ -1077,6 +1105,36 @@ export default function Navbar({ user }: { user: any }) {
 
               {/* Navigation Sections */}
               <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">External Links</h4>
+                  <div className="space-y-1">
+                    <Link
+                      href="/"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📰</span>
+                      News
+                    </Link>
+                    <Link
+                      href="/league/ctfpl"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">⚔️</span>
+                      CTFPL
+                    </Link>
+                    <Link
+                      href="/"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🛡️</span>
+                      CTFDL
+                    </Link>
+                  </div>
+                </div>
+
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Squads</h4>
                   <div className="space-y-1">
