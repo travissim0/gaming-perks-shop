@@ -161,7 +161,7 @@ const SeasonManagementModal = () => {
     
     for (const name of names) {
       // First try to find existing squad
-      let squad = squads.find(s => 
+      const squad = squads.find(s => 
         s.name.toLowerCase() === name.toLowerCase() ||
         s.tag.toLowerCase() === name.toLowerCase() ||
         `${s.name} [${s.tag}]`.toLowerCase() === name.toLowerCase()
@@ -172,7 +172,7 @@ const SeasonManagementModal = () => {
       } else {
         // Create a new historical squad entry
         try {
-          let baseTag = name.slice(0, 4).toUpperCase();
+          const baseTag = name.slice(0, 4).toUpperCase();
           let finalTag = baseTag;
           let attemptCount = 0;
           

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 
-export default function Navbar({ user }: { user: any }) {
+export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobileMenuChange?: (isOpen: boolean) => void }) {
   const router = useRouter();
   const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -31,8 +31,31 @@ export default function Navbar({ user }: { user: any }) {
   const adminDropdownRef = useRef<HTMLDivElement>(null);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   
+  // Top navigation sidebar state
+  const [activeTopNavSidebar, setActiveTopNavSidebar] = useState<'notifications' | 'admin' | 'profile' | null>(null);
+  
+  // Navigation dropdown states
+  const [showLeagueDropdown, setShowLeagueDropdown] = useState(false);
+  const [showSquadsDropdown, setShowSquadsDropdown] = useState(false);
+  const [showStatsDropdown, setShowStatsDropdown] = useState(false);
+  const [showCommunityDropdown, setShowCommunityDropdown] = useState(false);
+  const [showMiscDropdown, setShowMiscDropdown] = useState(false);
+  
+  // Refs for navigation dropdowns
+  const leagueDropdownRef = useRef<HTMLDivElement>(null);
+  const squadsDropdownRef = useRef<HTMLDivElement>(null);
+  const statsDropdownRef = useRef<HTMLDivElement>(null);
+  const communityDropdownRef = useRef<HTMLDivElement>(null);
+  const miscDropdownRef = useRef<HTMLDivElement>(null);
+  
   // Mobile dropdown states - simplified to one active dropdown at a time
   const [activeMobileDropdown, setActiveMobileDropdown] = useState<string | null>(null);
+  
+  // Fix hydration mismatch by tracking when component has mounted
+  const [hasMounted, setHasMounted] = useState(false);
+  
+  // Device detection for better tablet/mobile handling
+  const [isTablet, setIsTablet] = useState(false);
 
   // Function to check pending squad requests for captain/co-captain
   const checkPendingSquadRequests = async () => {
@@ -280,6 +303,21 @@ export default function Navbar({ user }: { user: any }) {
       if (adminDropdownRef.current && !adminDropdownRef.current.contains(target)) {
         setShowAdminDropdown(false);
       }
+      if (leagueDropdownRef.current && !leagueDropdownRef.current.contains(target)) {
+        setShowLeagueDropdown(false);
+      }
+      if (squadsDropdownRef.current && !squadsDropdownRef.current.contains(target)) {
+        setShowSquadsDropdown(false);
+      }
+      if (statsDropdownRef.current && !statsDropdownRef.current.contains(target)) {
+        setShowStatsDropdown(false);
+      }
+      if (communityDropdownRef.current && !communityDropdownRef.current.contains(target)) {
+        setShowCommunityDropdown(false);
+      }
+      if (miscDropdownRef.current && !miscDropdownRef.current.contains(target)) {
+        setShowMiscDropdown(false);
+      }
       // Close mobile dropdown when clicking outside
       setActiveMobileDropdown(null);
     };
@@ -299,17 +337,72 @@ export default function Navbar({ user }: { user: any }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (isMobileMenuOpen) {
+        // Store current scroll position
+        const scrollY = window.scrollY;
         document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = '100%';
       } else {
-        document.body.style.overflow = 'unset';
+        // Restore scroll position
+        const scrollY = document.body.style.top;
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        if (scrollY) {
+          window.scrollTo(0, parseInt(scrollY || '0') * -1);
+        }
       }
       
       // Cleanup function to restore scroll when component unmounts
       return () => {
-        document.body.style.overflow = 'unset';
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
       };
     }
   }, [isMobileMenuOpen]);
+
+  // Notify parent component when mobile menu state changes
+  useEffect(() => {
+    if (onMobileMenuChange) {
+      onMobileMenuChange(isMobileMenuOpen);
+    }
+  }, [isMobileMenuOpen, onMobileMenuChange]);
+
+  // Set mounted state and detect device type to prevent hydration mismatch
+  useEffect(() => {
+    setHasMounted(true);
+    
+    // Detect tablet/iPad more reliably
+    const detectTablet = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isIPad = /ipad/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroidTablet = /android/.test(userAgent) && !/mobile/.test(userAgent);
+      
+      // iPad Pro and tablets should use tablet navigation layout
+      // Desktop navigation (1024px+) is too complex for touch devices
+      return isIPad || isAndroidTablet;
+    };
+    
+    setIsTablet(detectTablet());
+    
+    // Listen for resize events to update tablet detection
+    const handleResize = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isIPad = /ipad/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroidTablet = /android/.test(userAgent) && !/mobile/.test(userAgent);
+      
+      // iPad Pro and tablets should use tablet navigation layout
+      // Desktop navigation is too complex for touch devices
+      setIsTablet(isIPad || isAndroidTablet);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -387,141 +480,807 @@ export default function Navbar({ user }: { user: any }) {
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
   ];
 
-  if (!user) {
-    return (
-      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-              <img src="/images/ctfpl1.png" alt="CTFPL" className="h-10 w-auto" />
-            </Link>
-            
-            <div className="flex items-center space-x-4">
-              <Link 
-                href="/auth/login" 
-                className="px-4 py-2 text-sm text-gray-400 hover:text-cyan-400 transition-colors rounded-lg border border-gray-600/40 hover:border-cyan-500/50"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/auth/register"
-                className="px-4 py-2 text-sm bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-medium transition-all"
-              >
-                Register
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-    );
-  }
 
   return (
     <>
-      {/* Mobile dropdown overlay */}
+      {/* Mobile slide-out panel overlay */}
       {activeMobileDropdown && (
         <div 
           className="fixed inset-0 z-[10000] bg-black/20 backdrop-blur-sm"
           onClick={() => setActiveMobileDropdown(null)}
         >
           <div 
-            className="absolute top-[120px] left-1/2 transform -translate-x-1/2 w-[90vw] max-w-sm bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm"
+            className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-800 border-l border-gray-600/50 shadow-2xl transform transition-transform duration-300 ease-out ${
+              activeMobileDropdown ? 'translate-x-0' : 'translate-x-full'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="py-2">
-              <div className="px-4 py-2 border-b border-gray-600/50">
-                <h3 className="text-sm font-medium text-white capitalize">{activeMobileDropdown}</h3>
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-600/50">
+                <h3 className="text-lg font-medium text-white capitalize">{activeMobileDropdown}</h3>
+                <button
+                  onClick={() => setActiveMobileDropdown(null)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              {activeMobileDropdown === 'squads' && squadsNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
-                  onClick={() => {
-                    setActiveMobileDropdown(null);
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <span className="mr-3 text-lg">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              ))}
-              {activeMobileDropdown === 'stats' && statsNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
-                  onClick={() => {
-                    setActiveMobileDropdown(null);
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <span className="mr-3 text-lg">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              ))}
-              {activeMobileDropdown === 'community' && communityNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20"
-                  onClick={() => {
-                    setActiveMobileDropdown(null);
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <span className="mr-3 text-lg">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              ))}
-              {activeMobileDropdown === 'misc' && miscNavItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center px-4 py-3 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 active:bg-orange-600/20"
-                  onClick={() => {
-                    setActiveMobileDropdown(null);
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  <span className="mr-3 text-lg">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              ))}
+              
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                {activeMobileDropdown === 'league' && (
+                  <div className="py-2">
+                    <Link
+                      href="/league/ctfpl"
+                      className="flex items-center px-6 py-4 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20 border-l-2 border-transparent hover:border-cyan-400"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setActiveMobileDropdown(null);
+                        setIsMobileMenuOpen(false);
+                        // Use Next.js router to navigate
+                        window.location.href = '/league/ctfpl';
+                      }}
+                    >
+                      <span className="mr-4 text-xl">⚔️</span>
+                      <span className="font-medium text-base">CTFPL</span>
+                    </Link>
+                    <Link
+                      href="/"
+                      className="flex items-center px-6 py-4 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20 border-l-2 border-transparent hover:border-cyan-400"
+                      onClick={() => {
+                        setActiveMobileDropdown(null);
+                        setIsMobileMenuOpen(false);
+                      }}
+                    >
+                      <span className="mr-4 text-xl">🛡️</span>
+                      <span className="font-medium text-base">CTFDL</span>
+                    </Link>
+                  </div>
+                )}
+                {activeMobileDropdown === 'squads' && (
+                  <div className="py-2">
+                    {squadsNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20 border-l-2 border-transparent hover:border-cyan-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl">{item.icon}</span>
+                        <span className="font-medium text-base">{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {activeMobileDropdown === 'stats' && (
+                  <div className="py-2">
+                    {statsNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20 border-l-2 border-transparent hover:border-cyan-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl">{item.icon}</span>
+                        <span className="font-medium text-base">{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {activeMobileDropdown === 'community' && (
+                  <div className="py-2">
+                    {communityNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-cyan-600/20 border-l-2 border-transparent hover:border-cyan-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl">{item.icon}</span>
+                        <span className="font-medium text-base">{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {activeMobileDropdown === 'misc' && (
+                  <div className="py-2">
+                    {miscNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-red-600/10 transition-all duration-200 active:bg-orange-600/20 border-l-2 border-transparent hover:border-orange-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl">{item.icon}</span>
+                        <span className="font-medium text-base">{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {activeMobileDropdown === 'admin' && (
+                  <div className="py-2">
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 active:bg-red-600/20 border-l-2 border-transparent hover:border-red-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl text-red-400">🛡️</span>
+                        <span className="font-medium text-base">Site</span>
+                      </Link>
+                    )}
+                    {isSiteAdmin && !isAdmin && (
+                      <Link
+                        href="/site-admin"
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 active:bg-blue-600/20 border-l-2 border-transparent hover:border-blue-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl text-blue-400">👤</span>
+                        <span className="font-medium text-base">Site</span>
+                      </Link>
+                    )}
+                    {(isAdmin || isZoneAdmin) && (
+                      <Link
+                        href="/admin/zones"
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 active:bg-orange-600/20 border-l-2 border-transparent hover:border-orange-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl text-orange-400">🖥️</span>
+                        <span className="font-medium text-base">Zones</span>
+                      </Link>
+                    )}
+                    {isCtfAdmin && (
+                      <Link
+                        href="/admin/ctf"
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-indigo-400 hover:bg-gradient-to-r hover:from-indigo-600/10 hover:to-indigo-600/10 transition-all duration-200 active:bg-indigo-600/20 border-l-2 border-transparent hover:border-indigo-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl text-indigo-400">⚔️</span>
+                        <span className="font-medium text-base">CTF</span>
+                      </Link>
+                    )}
+                    {(isAdmin || isMediaManager || isSiteAdmin) && (
+                      <Link
+                        href="/admin/videos"
+                        className="flex items-center px-6 py-4 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 active:bg-pink-600/20 border-l-2 border-transparent hover:border-pink-400"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-4 text-xl text-pink-400">🎬</span>
+                        <span className="font-medium text-base">Media</span>
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
+      {/* Top Navigation Sidebar */}
+      {activeTopNavSidebar && (
+        <div 
+          className="fixed inset-0 z-[100000] bg-black/20 backdrop-blur-sm"
+          onClick={() => setActiveTopNavSidebar(null)}
+        >
+          <div 
+            className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-800 border-l border-gray-600/50 shadow-2xl transform transition-transform duration-300 ease-out ${
+              activeTopNavSidebar ? 'translate-x-0' : 'translate-x-full'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-600/50">
+                <h3 className="text-lg font-medium text-white capitalize">
+                  {activeTopNavSidebar === 'notifications' && 'Notifications'}
+                  {activeTopNavSidebar === 'admin' && 'Admin Functions'}
+                  {activeTopNavSidebar === 'profile' && 'Profile Menu'}
+                </h3>
+                <button
+                  onClick={() => setActiveTopNavSidebar(null)}
+                  className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto">
+                {activeTopNavSidebar === 'notifications' && (
+                  <div className="py-2">
+                    {/* Squad Requests */}
+                    {squadRequests.length > 0 && (
+                      <div className="border-b border-gray-600/30">
+                        <div className="px-4 py-2 bg-gray-700/50">
+                          <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Squad Requests</h4>
+                        </div>
+                        {squadRequests.map((request) => (
+                          <div key={request.id} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="text-sm font-medium text-white">
+                                    {request.profiles?.in_game_alias || 'Unknown Player'}
+                                  </p>
+                                  <span className="text-xs text-gray-400">wants to join</span>
+                                  <span className="text-xs font-medium text-cyan-400">
+                                    {request.squads?.name || 'Squad'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-400">
+                                  {request.message || 'No message provided'}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {new Date(request.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRequestAction(request.id, 'approve')}
+                                disabled={processingRequest === request.id}
+                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {processingRequest === request.id ? 'Processing...' : 'Accept'}
+                              </button>
+                              <button
+                                onClick={() => handleRequestAction(request.id, 'deny')}
+                                disabled={processingRequest === request.id}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-md transition-colors disabled:opacity-50"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Messages */}
+                    {unreadMessageCount > 0 && (
+                      <div className="border-b border-gray-600/30">
+                        <div className="px-4 py-2 bg-gray-700/50">
+                          <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Messages</h4>
+                        </div>
+                        <Link 
+                          href="/messages"
+                          className="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors"
+                          onClick={() => setActiveTopNavSidebar(null)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-600/20 rounded-lg">
+                              <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{unreadMessageCount} Unread Messages</p>
+                              <p className="text-xs text-gray-400">Click to view all messages</p>
+                            </div>
+                          </div>
+                          <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            {unreadMessageCount}
+                          </span>
+                        </Link>
+                      </div>
+                    )}
+
+                    {/* Admin Notifications */}
+                    {isAxidus && (orderNotifications.length > 0 || donationNotifications.length > 0) && (
+                      <div>
+                        <div className="px-4 py-2 bg-gray-700/50">
+                          <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Admin</h4>
+                        </div>
+                        {orderNotifications.slice(0, 3).map((order) => (
+                          <Link 
+                            key={order.id}
+                            href="/admin/orders"
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors border-b border-gray-600/20 last:border-b-0"
+                            onClick={() => setActiveTopNavSidebar(null)}
+                          >
+                            <div className="p-2 bg-green-600/20 rounded-lg">
+                              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">New Order</p>
+                              <p className="text-xs text-gray-400">${order.total_amount}</p>
+                            </div>
+                          </Link>
+                        ))}
+                        {donationNotifications.slice(0, 3).map((donation) => (
+                          <Link 
+                            key={donation.id}
+                            href="/admin/donations"
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors border-b border-gray-600/20 last:border-b-0"
+                            onClick={() => setActiveTopNavSidebar(null)}
+                          >
+                            <div className="p-2 bg-yellow-600/20 rounded-lg">
+                              <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">New Donation</p>
+                              <p className="text-xs text-gray-400">${donation.amount}</p>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No Notifications */}
+                    {squadRequests.length === 0 && unreadMessageCount === 0 && (!isAxidus || (orderNotifications.length === 0 && donationNotifications.length === 0)) && (
+                      <div className="px-4 py-8 text-center">
+                        <svg className="w-12 h-12 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-gray-400 text-sm">No notifications</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTopNavSidebar === 'admin' && (
+                  <div className="py-2">
+                    {isAdmin && (
+                      <Link 
+                        href="/admin"
+                        className="flex items-center px-4 py-3 text-gray-300 hover:text-red-400 hover:bg-gray-700/50 transition-colors"
+                        onClick={() => setActiveTopNavSidebar(null)}
+                      >
+                        <span className="mr-3 text-red-400">🛡️</span>
+                        <span>Site Administration</span>
+                      </Link>
+                    )}
+                    {(isAdmin || isZoneAdmin) && (
+                      <Link 
+                        href="/admin/zones"
+                        className="flex items-center px-4 py-3 text-gray-300 hover:text-orange-400 hover:bg-gray-700/50 transition-colors"
+                        onClick={() => setActiveTopNavSidebar(null)}
+                      >
+                        <span className="mr-3 text-orange-400">🖥️</span>
+                        <span>Zone Management</span>
+                      </Link>
+                    )}
+                    {isCtfAdmin && (
+                      <Link 
+                        href="/admin/ctf"
+                        className="flex items-center px-4 py-3 text-gray-300 hover:text-indigo-400 hover:bg-gray-700/50 transition-colors"
+                        onClick={() => setActiveTopNavSidebar(null)}
+                      >
+                        <span className="mr-3 text-indigo-400">⚔️</span>
+                        <span>CTF Administration</span>
+                      </Link>
+                    )}
+                    {(isAdmin || isMediaManager) && (
+                      <Link 
+                        href="/admin/videos"
+                        className="flex items-center px-4 py-3 text-gray-300 hover:text-pink-400 hover:bg-gray-700/50 transition-colors"
+                        onClick={() => setActiveTopNavSidebar(null)}
+                      >
+                        <span className="mr-3 text-pink-400">📽️</span>
+                        <span>Video Management</span>
+                      </Link>
+                    )}
+                  </div>
+                )}
+
+                {activeTopNavSidebar === 'profile' && (
+                  <div className="py-2">
+                    <Link 
+                      href="/dashboard" 
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-colors"
+                      onClick={() => setActiveTopNavSidebar(null)}
+                    >
+                      <span className="mr-3">📊</span>
+                      Dashboard
+                    </Link>
+                    <Link 
+                      href="/profile" 
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-colors"
+                      onClick={() => setActiveTopNavSidebar(null)}
+                    >
+                      <span className="mr-3">⚙️</span>
+                      Profile
+                    </Link>
+                    <Link 
+                      href="/perks" 
+                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-colors"
+                      onClick={() => setActiveTopNavSidebar(null)}
+                    >
+                      <span className="mr-3">🛍️</span>
+                      Perks
+                    </Link>
+                    <button 
+                      onClick={handleSignOut}
+                      className="w-full flex items-center px-4 py-3 text-gray-300 hover:text-red-400 hover:bg-gray-700/50 transition-colors text-left"
+                    >
+                      <span className="mr-3">🚪</span>
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="sticky top-0 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl z-[50000]">
         {/* Top Utility Bar */}
         <div className="border-b border-gray-700/50">
           <div className="container mx-auto px-4 py-2">
-            <div className="flex items-center justify-between">
+            {/* Mobile Layout - Logo on its own line */}
+            <div className="block lg:hidden">
+              <div className="flex justify-center mb-3">
+                <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                  <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-14 w-auto" />
+                </Link>
+              </div>
+              {/* Mobile - Utilities below logo */}
+              <div className="flex items-center justify-center space-x-3">
+                {/* Notifications - Only show for authenticated users */}
+                {user && (
+                  <div className="relative" ref={notificationRef}>
+                    <button
+                      onClick={() => setActiveTopNavSidebar('notifications')}
+                      className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                    >
+                      <Bell className="w-4 h-4" />
+                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                          {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0))}
+                        </span>
+                      )}
+                    </button>
+
+                    {showNotificationDropdown && (
+                      <div 
+                        className="fixed xl:absolute top-4 xl:top-full xl:mt-1 left-1/2 xl:left-0 transform -translate-x-1/2 xl:translate-x-0 w-80 xl:w-72 max-w-[calc(100vw-2rem)] xl:max-w-none bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999]"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className="py-2">
+                          <div className="px-4 py-2 border-b border-gray-600/50">
+                            <h3 className="text-sm font-medium text-white">Notifications</h3>
+                          </div>
+                          {/* Squad Requests */}
+                          {squadRequests.length > 0 && (
+                            <div className="border-b border-gray-600/30">
+                              <div className="px-4 py-2 bg-gray-700/50">
+                                <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Squad Requests</h4>
+                              </div>
+                              {squadRequests.map((request) => (
+                                <div key={request.id} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p className="text-sm font-medium text-white">
+                                          {request.profiles?.in_game_alias || 'Unknown Player'}
+                                        </p>
+                                        <span className="text-xs text-gray-400">
+                                          wants to join
+                                        </span>
+                                        <span className="text-xs font-medium text-cyan-400">
+                                          {request.squads?.name || 'Squad'}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-400">
+                                        {request.message || 'No message provided'}
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {new Date(request.created_at).toLocaleDateString()}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleRequestAction(request.id, 'approve')}
+                                      disabled={processingRequest === request.id}
+                                      className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded-md transition-colors disabled:opacity-50"
+                                    >
+                                      {processingRequest === request.id ? 'Processing...' : 'Accept'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleRequestAction(request.id, 'deny')}
+                                      disabled={processingRequest === request.id}
+                                      className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-md transition-colors disabled:opacity-50"
+                                    >
+                                      Decline
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Messages */}
+                          {unreadMessageCount > 0 && (
+                            <div className="border-b border-gray-600/30">
+                              <div className="px-4 py-2 bg-gray-700/50">
+                                <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Messages</h4>
+                              </div>
+                              <Link 
+                                href="/messages"
+                                className="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors"
+                                onClick={() => setShowNotificationDropdown(false)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-blue-600/20 rounded-lg">
+                                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{unreadMessageCount} Unread Messages</p>
+                                    <p className="text-xs text-gray-400">Click to view all messages</p>
+                                  </div>
+                                </div>
+                                <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                  {unreadMessageCount}
+                                </span>
+                              </Link>
+                            </div>
+                          )}
+                          {/* Admin Notifications */}
+                          {isAxidus && (orderNotifications.length > 0 || donationNotifications.length > 0) && (
+                            <div>
+                              <div className="px-4 py-2 bg-gray-700/50">
+                                <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Admin</h4>
+                              </div>
+                              {orderNotifications.slice(0, 3).map((order) => (
+                                <Link 
+                                  key={order.id}
+                                  href="/admin/orders"
+                                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors border-b border-gray-600/20 last:border-b-0"
+                                  onClick={() => setShowNotificationDropdown(false)}
+                                >
+                                  <div className="p-2 bg-green-600/20 rounded-lg">
+                                    <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-white">New Order</p>
+                                    <p className="text-xs text-gray-400">${order.total_amount}</p>
+                                  </div>
+                                </Link>
+                              ))}
+                              {donationNotifications.slice(0, 3).map((donation) => (
+                                <Link 
+                                  key={donation.id}
+                                  href="/admin/donations"
+                                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors border-b border-gray-600/20 last:border-b-0"
+                                  onClick={() => setShowNotificationDropdown(false)}
+                                >
+                                  <div className="p-2 bg-yellow-600/20 rounded-lg">
+                                    <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                    </svg>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-white">New Donation</p>
+                                    <p className="text-xs text-gray-400">${donation.amount}</p>
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                          {/* No Notifications */}
+                          {squadRequests.length === 0 && unreadMessageCount === 0 && (!isAxidus || (orderNotifications.length === 0 && donationNotifications.length === 0)) && (
+                            <div className="px-4 py-8 text-center">
+                              <svg className="w-12 h-12 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <p className="text-gray-400 text-sm">No notifications</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Donate Button */}
+                <Link 
+                  href="/donate"
+                  className="px-2 py-1 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white text-xs font-medium rounded-lg transition-all hover:scale-105"
+                >
+                  💰
+                </Link>
+
+                {/* Admin Functions - Mobile */}
+                {(isAdmin || isCtfAdmin || isMediaManager || isZoneAdmin) && (
+                  <div className="relative" ref={adminDropdownRef}>
+                    <button 
+                      onClick={() => setActiveTopNavSidebar('admin')}
+                      className="flex items-center space-x-1 px-2 py-1 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold rounded-lg transition-all duration-300 border border-red-500/30"
+                    >
+                      <span>⚙️</span>
+                    </button>
+
+                    {showAdminDropdown && (
+                      <div className="fixed xl:absolute top-4 xl:top-full xl:mt-1 left-1/2 xl:left-0 transform -translate-x-1/2 xl:translate-x-0 w-80 xl:w-64 max-w-[calc(100vw-2rem)] xl:max-w-none bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
+                        <div className="py-2">
+                          {isAdmin && (
+                            <Link 
+                              href="/admin"
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-red-400 hover:bg-gradient-to-r hover:from-red-600/10 hover:to-red-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-red-400 text-sm font-medium"
+                              title="Site Administration"
+                              onClick={() => setShowAdminDropdown(false)}
+                            >
+                              <span className="mr-3 text-red-400">🛡️</span>
+                              <span>Site</span>
+                            </Link>
+                          )}
+                          {(isAdmin || isZoneAdmin) && (
+                            <Link 
+                              href="/admin/zones"
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-sm font-medium"
+                              title="Zone Management"
+                              onClick={() => setShowAdminDropdown(false)}
+                            >
+                              <span className="mr-3 text-orange-400">🖥️</span>
+                              <span>Zones</span>
+                            </Link>
+                          )}
+                          {isCtfAdmin && (
+                            <Link 
+                              href="/admin/ctf"
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-indigo-400 hover:bg-gradient-to-r hover:from-indigo-600/10 hover:to-indigo-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-indigo-400 text-sm font-medium"
+                              title="CTF Administration"
+                              onClick={() => setShowAdminDropdown(false)}
+                            >
+                              <span className="mr-3 text-indigo-400">⚔️</span>
+                              <span>CTF</span>
+                            </Link>
+                          )}
+                          {(isAdmin || isMediaManager) && (
+                            <Link 
+                              href="/admin/videos"
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-pink-400 hover:bg-gradient-to-r hover:from-pink-600/10 hover:to-pink-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-pink-400 text-sm font-medium"
+                              title="Video Management"
+                              onClick={() => setShowAdminDropdown(false)}
+                            >
+                              <span className="mr-3 text-pink-400">📽️</span>
+                              <span>Videos</span>
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* User Menu - Mobile */}
+                {hasMounted ? (
+                  user ? (
+                    <div className="relative" ref={userDropdownRef}>
+                      <button
+                        onClick={() => setActiveTopNavSidebar('profile')}
+                        className="flex items-center space-x-2 p-1 hover:bg-gray-800/50 rounded-lg transition-colors"
+                      >
+                        {userAvatar ? (
+                          <img src={userAvatar} alt="Avatar" className="w-8 h-8 rounded-full" />
+                        ) : (
+                          <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">
+                              {user.email?.charAt(0).toUpperCase() || '?'}
+                            </span>
+                          </div>
+                        )}
+                      </button>
+
+                      {showUserDropdown && (
+                        <div className="fixed xl:absolute top-4 xl:top-full xl:mt-1 right-1/2 xl:right-0 transform translate-x-1/2 xl:translate-x-0 w-80 xl:w-48 max-w-[calc(100vw-2rem)] xl:max-w-none bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999]">
+                          <div className="py-2">
+                            <Link 
+                              href="/dashboard" 
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                              onClick={() => setShowUserDropdown(false)}
+                            >
+                              <span className="mr-3">📊</span>
+                              Dashboard
+                            </Link>
+                            <Link 
+                              href="/profile" 
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                              onClick={() => setShowUserDropdown(false)}
+                            >
+                              <span className="mr-3">⚙️</span>
+                              Profile
+                            </Link>
+                            <Link 
+                              href="/perks" 
+                              className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                              onClick={() => setShowUserDropdown(false)}
+                            >
+                              <span className="mr-3">🛍️</span>
+                              Perks
+                            </Link>
+                            <button 
+                              onClick={handleSignOut}
+                              className="w-full flex items-center px-4 py-2 text-gray-300 hover:text-red-400 hover:bg-gray-700 transition-colors text-left"
+                            >
+                              <span className="mr-3">🚪</span>
+                              Sign Out
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Link
+                      href="/auth/login"
+                      className="px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-medium rounded-lg transition-all"
+                    >
+                      Sign In
+                    </Link>
+                  )
+                ) : (
+                  <div className="w-8 h-8 bg-gray-700 rounded-full animate-pulse"></div>
+                )}
+              </div>
+            </div>
+            
+            {/* Desktop Layout - Logo on left, utilities on right */}
+            <div className="hidden lg:flex items-center justify-between">
               {/* Left - Logo */}
               <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-                <img src="/images/ctfpl1.png" alt="CTFPL" className="h-16 w-auto" />
+                <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-16 w-auto" />
               </Link>
 
-            {/* Right - Utilities */}
-            <div className="flex items-center space-x-3">
-              {/* Notifications */}
-              <div className="relative" ref={notificationRef}>
-                <button
-                  onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
-                  className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
-                >
-                  <Bell className="w-5 h-5" />
-                  {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0))}
-                    </span>
-                  )}
-                </button>
+              {/* Right - Utilities */}
+              <div className="flex items-center space-x-3">
+              {/* Notifications - Only show for authenticated users */}
+              {user && (
+                <div className="relative" ref={notificationRef}>
+                  <button
+                    onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                    className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0))}
+                      </span>
+                    )}
+                  </button>
 
                 {showNotificationDropdown && (
                   <div 
-                    className="absolute left-0 sm:right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none"
+                    className="fixed lg:absolute left-0 top-20 lg:top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999] max-w-[calc(100vw-2rem)] sm:max-w-none"
                     onClick={e => e.stopPropagation()}
                   >
                     <div className="py-2">
@@ -688,7 +1447,8 @@ export default function Navbar({ user }: { user: any }) {
                     </div>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
 
               {/* Donate Button */}
               <Link 
@@ -713,7 +1473,7 @@ export default function Navbar({ user }: { user: any }) {
                   </button>
                   
                   {showAdminDropdown && (
-                    <div className="absolute right-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
+                    <div className="fixed lg:absolute right-0 top-20 lg:top-full mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl z-[999999] backdrop-blur-sm">
                       <div className="py-2">
                         {isAdmin && (
                           <Link 
@@ -777,24 +1537,26 @@ export default function Navbar({ user }: { user: any }) {
               )}
 
               {/* User Menu */}
-              <div className="relative" ref={userDropdownRef}>
-                <button
-                  onClick={() => setShowUserDropdown(!showUserDropdown)}
-                  className="flex items-center space-x-2 p-1.5 hover:bg-gray-800/50 rounded-lg transition-colors"
-                >
-                  {userAvatar ? (
-                    <img src={userAvatar} alt="Avatar" className="w-12 h-12 sm:w-14 sm:h-14 rounded-full" />
-                  ) : (
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">
-                        {user.email?.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                </button>
+              {hasMounted ? (
+                user ? (
+                  <div className="relative" ref={userDropdownRef}>
+                  <button
+                    onClick={() => setShowUserDropdown(!showUserDropdown)}
+                    className="flex items-center space-x-2 p-1.5 hover:bg-gray-800/50 rounded-lg transition-colors"
+                  >
+                    {userAvatar ? (
+                      <img src={userAvatar} alt="Avatar" className="w-12 h-12 sm:w-14 sm:h-14 rounded-full" />
+                    ) : (
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          {user.email?.charAt(0).toUpperCase() || '?'}
+                        </span>
+                      </div>
+                    )}
+                  </button>
 
                 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 max-w-[calc(100vw-2rem)] sm:max-w-none">
+                  <div className="fixed lg:absolute right-0 top-20 lg:top-full mt-1 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-[999999] max-w-[calc(100vw-2rem)] sm:max-w-none">
                     <div className="py-2">
                       <Link 
                         href="/dashboard" 
@@ -831,129 +1593,391 @@ export default function Navbar({ user }: { user: any }) {
                     </div>
                   </div>
                 )}
-              </div>
+                  </div>
+                ) : (
+                  /* Login/Register Button for non-authenticated users */
+                  <Link
+                    href="/auth/login"
+                    className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-medium rounded-lg transition-all"
+                  >
+                    Sign In
+                  </Link>
+                )
+              ) : (
+                /* Placeholder during hydration to prevent layout shift */
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-700 rounded-full animate-pulse"></div>
+              )}
 
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 text-gray-400 hover:text-cyan-400 transition-colors"
-              >
-                {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </button>
+              {/* Mobile Menu Button - Only show on small screens */}
+              {hasMounted && !isTablet && (
+                <button
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className="p-2 text-gray-400 hover:text-cyan-400 transition-colors"
+                >
+                  {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+              )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Mobile Compact Navigation Bar */}
-      <div className="lg:hidden border-t border-gray-700/50">
+      {/* Tablet Navigation - Show on tablets only */}
+      {hasMounted && isTablet && (
+      <div className="border-t border-gray-700/50">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between py-2 overflow-x-auto">
+          <div className="flex items-center justify-center py-3 space-x-4 overflow-x-auto">
             {/* News */}
             <Link 
               href="/"
-              className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-              onClick={() => setIsMobileMenuOpen(false)}
+              className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-yellow-600/10 text-yellow-400 hover:text-yellow-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-yellow-500 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20 whitespace-nowrap"
             >
-              <span className="text-sm">📰</span>
+              <span className="text-base">📰</span>
               <span className="font-medium">News</span>
             </Link>
 
-            {/* League - Note: Mobile doesn't support hover dropdowns, so link to CTFPL */}
-            <Link 
-              href="/league/ctfpl"
-              className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
-            >
-              <span className="text-sm">🏆</span>
-              <span className="font-medium">League</span>
-            </Link>
+            {/* League */}
+            <div className="relative" ref={leagueDropdownRef}>
+              <button 
+                onClick={() => setShowLeagueDropdown(!showLeagueDropdown)}
+                className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-cyan-600/10 text-cyan-400 hover:text-cyan-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 whitespace-nowrap"
+              >
+                <span className="text-base">🏆</span>
+                <span className="font-medium">League</span>
+                <svg className={`w-3 h-3 transition-transform duration-300 ${showLeagueDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showLeagueDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                <div className="py-2">
+                  <Link
+                    href="/league/ctfpl"
+                    className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
+                  >
+                    <span className="mr-2 text-cyan-400">⚔️</span>
+                    <span>CTFPL</span>
+                  </Link>
+                  <Link
+                    href="/"
+                    className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
+                  >
+                    <span className="mr-2 text-cyan-400">🛡️</span>
+                    <span>CTFDL</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
 
             {/* Squads */}
-            <button 
-              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'squads' ? null : 'squads')}
-              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                activeMobileDropdown === 'squads'
-                  ? 'from-green-600/30 to-emerald-600/30 text-green-400' 
-                  : 'hover:from-green-600/20 hover:to-emerald-600/20'
-              }`}
-            >
-              <Gamepad2 className="w-3 h-3" />
-              <span className="font-medium">Squads</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'squads' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <div className="relative" ref={squadsDropdownRef}>
+              <button 
+                onClick={() => setShowSquadsDropdown(!showSquadsDropdown)}
+                className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-green-600/10 text-green-400 hover:text-green-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-green-500 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/20 whitespace-nowrap"
+              >
+                <span className="text-base">🛡️</span>
+                <span className="font-medium">Squads</span>
+                <svg className={`w-3 h-3 transition-transform duration-300 ${showSquadsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showSquadsDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                <div className="py-2">
+                  {squadsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-green-400 hover:bg-gradient-to-r hover:from-green-600/10 hover:to-green-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-green-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-green-400">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Stats */}
-            <button 
-              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'stats' ? null : 'stats')}
-              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                activeMobileDropdown === 'stats'
-                  ? 'from-blue-600/30 to-indigo-600/30 text-blue-400' 
-                  : 'hover:from-blue-600/20 hover:to-indigo-600/20'
-              }`}
-            >
-              <BarChart3 className="w-3 h-3" />
-              <span className="font-medium">Stats</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'stats' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <div className="relative" ref={statsDropdownRef}>
+              <button 
+                onClick={() => setShowStatsDropdown(!showStatsDropdown)}
+                className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-blue-500 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20 whitespace-nowrap"
+              >
+                <span className="text-base">📊</span>
+                <span className="font-medium">Stats</span>
+                <svg className={`w-3 h-3 transition-transform duration-300 ${showStatsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showStatsDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                <div className="py-2">
+                  {statsNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-blue-400">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Community */}
-            <button 
-              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'community' ? null : 'community')}
-              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                activeMobileDropdown === 'community'
-                  ? 'from-purple-600/30 to-pink-600/30 text-purple-400' 
-                  : 'hover:from-purple-600/20 hover:to-pink-600/20'
-              }`}
-            >
-              <Users className="w-3 h-3" />
-              <span className="font-medium">Community</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'community' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <div className="relative" ref={communityDropdownRef}>
+              <button 
+                onClick={() => setShowCommunityDropdown(!showCommunityDropdown)}
+                className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-purple-600/10 text-purple-400 hover:text-purple-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-purple-500 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20 whitespace-nowrap"
+              >
+                <span className="text-base">👥</span>
+                <span className="font-medium">Community</span>
+                <svg className={`w-3 h-3 transition-transform duration-300 ${showCommunityDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showCommunityDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                <div className="py-2">
+                  {communityNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-purple-400 hover:bg-gradient-to-r hover:from-purple-600/10 hover:to-purple-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-purple-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-purple-400">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Misc */}
-            <button 
-              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'misc' ? null : 'misc')}
-              className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                activeMobileDropdown === 'misc'
-                  ? 'from-orange-600/30 to-red-600/30 text-orange-400' 
-                  : 'hover:from-orange-600/20 hover:to-red-600/20'
-              }`}
-            >
-              <span className="text-sm">🔧</span>
-              <span className="font-medium">Misc</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'misc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+            <div className="relative" ref={miscDropdownRef}>
+              <button 
+                onClick={() => setShowMiscDropdown(!showMiscDropdown)}
+                className="flex items-center space-x-2 px-3 py-2 bg-transparent hover:bg-orange-600/10 text-orange-400 hover:text-orange-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-orange-500 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-500/20 whitespace-nowrap"
+              >
+                <span className="text-base">🔧</span>
+                <span className="font-medium">Misc</span>
+                <svg className={`w-3 h-3 transition-transform duration-300 ${showMiscDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showMiscDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                <div className="py-2">
+                  {miscNavItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-orange-400">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
+      )}
 
-      {/* Main Navigation Bar */}
+      {/* Mobile Navigation Bar - Show on small screens only (not tablets, not desktop) */}
+      {hasMounted && !isTablet && (
+        <div className="border-t border-gray-700/50 lg:hidden">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center justify-between py-2 overflow-x-auto">
+              {/* News */}
+              <Link 
+                href="/"
+                className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-yellow-600/10 text-yellow-400 hover:text-yellow-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-yellow-500 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <span className="text-sm">📰</span>
+                <span className="font-medium">News</span>
+              </Link>
+
+              {/* League */}
+              <div className="relative" ref={leagueDropdownRef}>
+                <button 
+                  onClick={() => setShowLeagueDropdown(!showLeagueDropdown)}
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-cyan-600/10 text-cyan-400 hover:text-cyan-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20"
+                >
+                  <span className="text-sm">🏆</span>
+                  <span className="font-medium">League</span>
+                  <svg className={`w-3 h-3 transition-transform duration-300 ${showLeagueDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showLeagueDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="py-2">
+                    <Link
+                      href="/league/ctfpl"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-cyan-400">⚔️</span>
+                      <span>CTFPL</span>
+                    </Link>
+                    <Link
+                      href="/"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
+                    >
+                      <span className="mr-2 text-cyan-400">🛡️</span>
+                      <span>CTFDL</span>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Squads */}
+              <div className="relative" ref={squadsDropdownRef}>
+                <button 
+                  onClick={() => setShowSquadsDropdown(!showSquadsDropdown)}
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-green-600/10 text-green-400 hover:text-green-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-green-500 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/20"
+                >
+                  <Gamepad2 className="w-3 h-3" />
+                  <span className="font-medium">Squads</span>
+                  <svg className={`w-3 h-3 transition-transform duration-300 ${showSquadsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showSquadsDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="py-2">
+                    {squadsNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-2 py-1.5 text-gray-300 hover:text-green-400 hover:bg-gradient-to-r hover:from-green-600/10 hover:to-green-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-green-400 text-xs font-medium"
+                      >
+                        <span className="mr-2 text-green-400">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="relative" ref={statsDropdownRef}>
+                <button 
+                  onClick={() => setShowStatsDropdown(!showStatsDropdown)}
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-blue-500 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20"
+                >
+                  <BarChart3 className="w-3 h-3" />
+                  <span className="font-medium">Stats</span>
+                  <svg className={`w-3 h-3 transition-transform duration-300 ${showStatsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showStatsDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="py-2">
+                    {statsNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-2 py-1.5 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-xs font-medium"
+                      >
+                        <span className="mr-2 text-blue-400">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Community */}
+              <div className="relative" ref={communityDropdownRef}>
+                <button 
+                  onClick={() => setShowCommunityDropdown(!showCommunityDropdown)}
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-purple-600/10 text-purple-400 hover:text-purple-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-purple-500 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20"
+                >
+                  <Users className="w-3 h-3" />
+                  <span className="font-medium">Community</span>
+                  <svg className={`w-3 h-3 transition-transform duration-300 ${showCommunityDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showCommunityDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="py-2">
+                    {communityNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-2 py-1.5 text-gray-300 hover:text-purple-400 hover:bg-gradient-to-r hover:from-purple-600/10 hover:to-purple-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-purple-400 text-xs font-medium"
+                      >
+                        <span className="mr-2 text-purple-400">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Misc */}
+              <div className="relative" ref={miscDropdownRef}>
+                <button 
+                  onClick={() => setShowMiscDropdown(!showMiscDropdown)}
+                  className="flex items-center space-x-1 px-2 py-1.5 bg-transparent hover:bg-orange-600/10 text-orange-400 hover:text-orange-300 text-xs font-bold rounded-lg transition-all duration-300 border-2 border-orange-500 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-500/20"
+                >
+                  <span className="text-sm">🔧</span>
+                  <span className="font-medium">Misc</span>
+                  <svg className={`w-3 h-3 transition-transform duration-300 ${showMiscDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                <div className={`fixed xl:absolute top-20 xl:top-full xl:mt-1 left-0 mt-1 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl transition-all duration-300 z-[999999] backdrop-blur-sm ${showMiscDropdown ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+                  <div className="py-2">
+                    {miscNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-2 py-1.5 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-xs font-medium"
+                      >
+                        <span className="mr-2 text-orange-400">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Navigation Bar - Desktop only (not tablets) */}
+      {hasMounted && !isTablet && (
       <div className="hidden lg:block">
         <div className="container mx-auto px-4">
           <div className="flex items-center space-x-8 py-3">
             {/* News Section */}
             <div className="relative">
-              <a 
+              <Link 
                 href="/"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-yellow-500/30 hover:shadow-lg hover:shadow-yellow-500/20"
+                className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-yellow-600/10 text-yellow-400 hover:text-yellow-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-yellow-500 hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/20"
               >
                 <span className="text-lg">📰</span>
                 <span className="font-semibold">News</span>
-              </a>
+              </Link>
             </div>
 
             {/* League Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-cyan-500/30 group-hover:shadow-lg group-hover:shadow-cyan-500/20">
+              <button className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-cyan-600/10 text-cyan-400 hover:text-cyan-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20">
                 <span className="text-lg">🏆</span>
                 <span className="font-semibold">League</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -961,21 +1985,21 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
+                <div className="py-2">
                   <Link
                     href="/league/ctfpl"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                    className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
                   >
-                    <span className="mr-3 text-lg">⚔️</span>
-                    <span className="font-medium">CTFPL</span>
+                    <span className="mr-2 text-cyan-400">⚔️</span>
+                    <span>CTFPL</span>
                   </Link>
                   <Link
                     href="/"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                    className="flex items-center px-2 py-1.5 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-cyan-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-xs font-medium"
                   >
-                    <span className="mr-3 text-lg">🛡️</span>
-                    <span className="font-medium">CTFDL</span>
+                    <span className="mr-2 text-cyan-400">🛡️</span>
+                    <span>CTFDL</span>
                   </Link>
                 </div>
               </div>
@@ -983,24 +2007,24 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Squads Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-green-600/20 hover:to-emerald-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-green-500/30 group-hover:shadow-lg group-hover:shadow-green-500/20">
-                <Gamepad2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <button className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-green-600/10 text-green-400 hover:text-green-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-green-500 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/20">
+                <Gamepad2 className="w-4 h-4" />
                 <span className="font-semibold">Squads</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
+                <div className="py-2">
                   {squadsNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-green-400 hover:bg-gradient-to-r hover:from-green-600/10 hover:to-green-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-green-400 text-xs font-medium"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
+                      <span className="mr-2 text-green-400">{item.icon}</span>
+                      <span>{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -1009,24 +2033,24 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Stats Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-blue-600/20 hover:to-indigo-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-blue-500/30 group-hover:shadow-lg group-hover:shadow-blue-500/20">
-                <BarChart3 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <button className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-blue-600/10 text-blue-400 hover:text-blue-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-blue-500 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/20">
+                <BarChart3 className="w-4 h-4" />
                 <span className="font-semibold">Stats</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
+                <div className="py-2">
                   {statsNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-blue-400 hover:bg-gradient-to-r hover:from-blue-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-blue-400 text-xs font-medium"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
+                      <span className="mr-2 text-blue-400">{item.icon}</span>
+                      <span>{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -1035,24 +2059,24 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Community Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-purple-500/30 group-hover:shadow-lg group-hover:shadow-purple-500/20">
-                <Users className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <button className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-purple-600/10 text-purple-400 hover:text-purple-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-purple-500 hover:border-purple-400 hover:shadow-lg hover:shadow-purple-500/20">
+                <Users className="w-4 h-4" />
                 <span className="font-semibold">Community</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
+                <div className="py-2">
                   {communityNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-purple-400 hover:bg-gradient-to-r hover:from-purple-600/10 hover:to-purple-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-purple-400 text-xs font-medium"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
+                      <span className="mr-2 text-purple-400">{item.icon}</span>
+                      <span>{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -1061,7 +2085,7 @@ export default function Navbar({ user }: { user: any }) {
 
             {/* Misc Section */}
             <div className="group relative">
-              <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-orange-500/30 group-hover:shadow-lg group-hover:shadow-orange-500/20">
+              <button className="flex items-center space-x-2 px-4 py-2.5 bg-transparent hover:bg-orange-600/10 text-orange-400 hover:text-orange-300 text-sm font-bold rounded-lg transition-all duration-300 border-2 border-orange-500 hover:border-orange-400 hover:shadow-lg hover:shadow-orange-500/20">
                 <span className="text-lg">🔧</span>
                 <span className="font-semibold">Misc</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1069,16 +2093,16 @@ export default function Navbar({ user }: { user: any }) {
                 </svg>
               </button>
               
-              <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-gray-800/95 max-w-[calc(100vw-2rem)] sm:max-w-xs border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[999999] backdrop-blur-sm">
+                <div className="py-2">
                   {miscNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                      className="flex items-center px-2 py-1.5 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-xs font-medium"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
+                      <span className="mr-2 text-orange-400">{item.icon}</span>
+                      <span>{item.label}</span>
                     </Link>
                   ))}
                 </div>
@@ -1087,12 +2111,33 @@ export default function Navbar({ user }: { user: any }) {
           </div>
         </div>
       </div>
+      )}
+    </nav>
 
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden bg-gray-800 border-t border-gray-700">
-          <div className="container mx-auto px-4 py-4">
+    {/* Mobile Menu Modal - Only show on small screens */}
+      {isMobileMenuOpen && hasMounted && !isTablet && (
+        <div className="fixed inset-0 z-[999999] flex flex-col" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsMobileMenuOpen(false)}
+          ></div>
+          
+          {/* Menu Content */}
+          <div className="relative bg-gray-800 border-b border-gray-700 max-h-screen overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="container mx-auto px-4 py-4">
             <div className="space-y-4">
+              {/* Close Button */}
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-white">Navigation</h3>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -1106,7 +2151,7 @@ export default function Navbar({ user }: { user: any }) {
               {/* Navigation Sections */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">External Links</h4>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Main</h4>
                   <div className="space-y-1">
                     <Link
                       href="/"
@@ -1116,6 +2161,12 @@ export default function Navbar({ user }: { user: any }) {
                       <span className="mr-3">📰</span>
                       News
                     </Link>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">League</h4>
+                  <div className="space-y-1">
                     <Link
                       href="/league/ctfpl"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
@@ -1311,10 +2362,10 @@ export default function Navbar({ user }: { user: any }) {
                 )}
               </div>
             </div>
+            </div>
           </div>
         </div>
       )}
-    </nav>
     </>
   );
 } 

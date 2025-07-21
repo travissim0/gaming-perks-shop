@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Trophy, Crown, Flame, Star, Shield, Sword, Target, Award, ArrowLeft } from 'lucide-react';
+import { Trophy, Crown, Flame, Star, Shield, Sword, Target, Award, ArrowLeft, Medal } from 'lucide-react';
 import Link from 'next/link';
 
 const BDSPage = () => {
@@ -21,18 +21,26 @@ const BDSPage = () => {
     seasonRecord: {
       overall: { wins: 221, losses: 17, draws: 7 },
       championships: 8,
+      runnerUps: 2,
+      thirdPlace: 3,
       championshipSeasons: [3, 4, 5, 6, 10, 13, 16, 17],
+      runnerUpSeasons: [7, 8],
+      thirdPlaceSeasons: [8, 12, 14],
       seasonRecords: [
-        { season: 3, wins: 21, losses: 0, draws: 1, champion: true },
-        { season: 4, wins: 30, losses: 0, draws: 1, champion: true },
-        { season: 5, wins: 17, losses: 1, draws: 1, champion: true },
-        { season: 6, wins: 22, losses: 3, draws: 0, champion: true },
-        { season: 7, wins: 17, losses: 3, draws: 1, champion: false },
-        { season: 8, wins: 11, losses: 2, draws: 0, champion: false },
-        { season: 10, wins: 28, losses: 3, draws: 1, champion: true },
-        { season: 13, wins: 24, losses: 2, draws: 0, champion: true },
-        { season: 16, wins: 26, losses: 1, draws: 1, champion: true },
-        { season: 17, wins: 25, losses: 2, draws: 1, champion: true }
+        { season: 3, wins: 21, losses: 0, draws: 1, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 4, wins: 30, losses: 0, draws: 1, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 5, wins: 17, losses: 1, draws: 1, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 6, wins: 22, losses: 3, draws: 0, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 7, wins: 17, losses: 3, draws: 1, champion: false, runnerUp: true, thirdPlace: false },
+        { season: 8, wins: 11, losses: 2, draws: 0, champion: false, runnerUp: false, thirdPlace: true },
+        { season: 9, wins: 15, losses: 4, draws: 2, champion: false, runnerUp: false, thirdPlace: false },
+        { season: 10, wins: 28, losses: 3, draws: 1, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 11, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true, thirdPlace: false },
+        { season: 12, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false, thirdPlace: true },
+        { season: 13, wins: 24, losses: 2, draws: 0, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 14, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false, thirdPlace: true },
+        { season: 16, wins: 26, losses: 1, draws: 1, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 17, wins: 25, losses: 2, draws: 1, champion: true, runnerUp: false, thirdPlace: false }
       ]
     },
     players: [
@@ -183,6 +191,14 @@ const BDSPage = () => {
                   8x CTFPL Champions
                 </span>
                 <span className="flex items-center gap-2">
+                  <Award size={20} />
+                  2x Runner-up
+                </span>
+                <span className="flex items-center gap-2">
+                  <Medal size={20} />
+                  1x Third Place
+                </span>
+                <span className="flex items-center gap-2">
                   <Trophy size={20} />
                   {bdsData.seasonRecord.overall.wins}-{bdsData.seasonRecord.overall.losses}-{bdsData.seasonRecord.overall.draws} Overall
                 </span>
@@ -203,8 +219,12 @@ const BDSPage = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/50"></div>
           <div className="absolute bottom-8 left-8 right-8">
             <h2 className="text-4xl font-bold text-orange-400 mb-2">8x CTFPL Champions</h2>
-            <p className="text-xl text-orange-200">
+            <p className="text-xl text-orange-200 mb-2">
               Legendary dynasty that conquered Seasons 3, 4, 5, 6, 10, 13, 16, and 17
+            </p>
+            <p className="text-lg text-gray-300">
+              <span className="text-gray-400">Runner-up:</span> Seasons 7, 8 &nbsp;|&nbsp; 
+              <span className="text-amber-600">Third Place:</span> Season 9
             </p>
           </div>
         </div>
@@ -218,12 +238,14 @@ const BDSPage = () => {
       {/* Squad Statistics */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 mb-16">
         <h2 className="text-4xl font-bold text-center text-orange-400 mb-12">Championship Statistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
           {[
+            { label: 'Championships', value: bdsData.seasonRecord.championships, icon: Crown },
+            { label: 'Runner-ups', value: bdsData.seasonRecord.runnerUps, icon: Award },
+            { label: 'Third Place', value: bdsData.seasonRecord.thirdPlace, icon: Medal },
             { label: 'Total Wins', value: bdsData.seasonRecord.overall.wins, icon: Trophy },
             { label: 'Total Losses', value: bdsData.seasonRecord.overall.losses, icon: Target },
-            { label: 'Total Draws', value: bdsData.seasonRecord.overall.draws, icon: Award },
-            { label: 'Championships', value: bdsData.seasonRecord.championships, icon: Crown }
+            { label: 'Total Draws', value: bdsData.seasonRecord.overall.draws, icon: Star }
           ].map((stat, index) => (
             <div
               key={index}
@@ -249,6 +271,10 @@ const BDSPage = () => {
               className={`relative p-6 rounded-xl backdrop-blur-sm border transition-all duration-300 group hover:scale-105 ${
                 season.champion 
                   ? 'bg-gradient-to-br from-yellow-900/30 via-orange-900/20 to-red-900/30 border-yellow-500/30 hover:border-yellow-400/60' 
+                  : season.runnerUp
+                  ? 'bg-gradient-to-br from-gray-700/30 via-gray-800/20 to-gray-900/30 border-gray-400/30 hover:border-gray-300/60'
+                  : season.thirdPlace
+                  ? 'bg-gradient-to-br from-amber-900/20 via-yellow-900/15 to-orange-900/20 border-amber-600/20 hover:border-amber-500/40'
                   : 'bg-gradient-to-br from-red-900/20 via-gray-900/20 to-black/40 border-red-500/20 hover:border-red-400/40'
               }`}
             >
@@ -257,16 +283,43 @@ const BDSPage = () => {
                   <Crown className="text-yellow-400 animate-pulse" size={20} />
                 </div>
               )}
+              {season.runnerUp && (
+                <div className="absolute top-2 right-2">
+                  <Award className="text-gray-300 animate-pulse" size={20} />
+                </div>
+              )}
+              {season.thirdPlace && (
+                <div className="absolute top-2 right-2">
+                  <Medal className="text-amber-600 animate-pulse" size={20} />
+                </div>
+              )}
               
               <div className="text-center">
-                <h3 className={`text-2xl font-bold mb-3 ${season.champion ? 'text-yellow-400' : 'text-red-300'}`}>
-                  CTFPL S{season.season}{season.champion ? '*' : ''}
+                <h3 className={`text-2xl font-bold mb-3 ${
+                  season.champion ? 'text-yellow-400' 
+                  : season.runnerUp ? 'text-gray-300' 
+                  : season.thirdPlace ? 'text-amber-400'
+                  : 'text-red-300'
+                }`}>
+                  CTFPL S{season.season}{season.champion ? '*' : season.runnerUp ? '°' : season.thirdPlace ? '^' : ''}
                 </h3>
-                <div className={`text-xl font-bold mb-2 ${season.champion ? 'text-orange-300' : 'text-gray-300'}`}>
-                  {season.wins}-{season.losses}-{season.draws}
-                </div>
-                <div className={`text-sm ${season.champion ? 'text-yellow-200' : 'text-gray-400'}`}>
-                  {season.champion ? 'CHAMPIONS' : 'Season Record'}
+                {(season.wins > 0 || season.losses > 0 || season.draws > 0) && (
+                  <div className={`text-xl font-bold mb-2 ${
+                    season.champion ? 'text-orange-300' 
+                    : season.runnerUp ? 'text-gray-300' 
+                    : season.thirdPlace ? 'text-amber-300'
+                    : 'text-gray-300'
+                  }`}>
+                    {season.wins}-{season.losses}-{season.draws}
+                  </div>
+                )}
+                <div className={`text-sm ${
+                  season.champion ? 'text-yellow-200' 
+                  : season.runnerUp ? 'text-gray-400' 
+                  : season.thirdPlace ? 'text-amber-200'
+                  : 'text-gray-400'
+                }`}>
+                  {season.champion ? 'CHAMPIONS' : season.runnerUp ? 'RUNNER-UP' : season.thirdPlace ? 'THIRD PLACE' : 'Season Record'}
                 </div>
               </div>
             </div>
@@ -275,7 +328,9 @@ const BDSPage = () => {
         
         <div className="text-center mt-8">
           <p className="text-orange-300 text-lg">
-            <span className="text-yellow-400 font-bold">*</span> = Championship Season
+            <span className="text-yellow-400 font-bold">*</span> = Championship Season &nbsp;&nbsp;&nbsp;
+            <span className="text-gray-400 font-bold">°</span> = Runner-up &nbsp;&nbsp;&nbsp;
+            <span className="text-amber-400 font-bold">^</span> = Third Place
           </p>
         </div>
       </div>
@@ -298,9 +353,11 @@ const BDSPage = () => {
                     <Crown key={i} className="text-yellow-400" size={12} />
                   ))}
                 </div>
-                <div className="text-yellow-300 text-sm font-bold">
-                  {player.rings} Ring{player.rings !== 1 ? 's' : ''}
-                </div>
+                {player.rings > 0 && (
+                  <div className="text-yellow-300 text-sm font-bold">
+                    {player.rings} Ring{player.rings !== 1 ? 's' : ''}
+                  </div>
+                )}
               </div>
             </div>
           ))}

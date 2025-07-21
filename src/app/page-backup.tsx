@@ -656,7 +656,7 @@ export default function Home() {
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match && match[1]) {
-        console.log(`🔍 YouTube ID extracted: ${match[1]} from ${url}`);
+        //console.log(`🔍 YouTube ID extracted: ${match[1]} from ${url}`);
         return match[1];
       }
     }

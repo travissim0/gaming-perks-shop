@@ -45,11 +45,26 @@ const ChampionArchives = () => {
       name: 'Black Dragon Society',
       abbreviation: 'BDS',
       seasons: ['Season 3', 'Season 4', 'Season 5', 'Season 6', 'Season 10', 'Season 13', 'Season 16', 'Season 17'],
+      runnerUpSeasons: ['Season 7', 'Season 11', 'Season 15'],
+      thirdPlaceSeasons: ['Season 8', 'Season 12', 'Season 14'],
+      participatedSeasons: ['Season 3', 'Season 4', 'Season 5', 'Season 6', 'Season 7', 'Season 8', 'Season 10', 'Season 11', 'Season 12', 'Season 13', 'Season 14', 'Season 15', 'Season 16', 'Season 17'],
       titles: 8,
       description: 'Legendary dynasty that conquered eight CTFPL championships, the most dominant squad in Infantry history.',
       image: '/images/champion squads/BDS/BDS_S10_Champions.jpg',
       theme: 'dragon',
       established: '2001'
+    },
+    {
+      id: 'darkslayers',
+      name: 'Darkslayers',
+      abbreviation: 'DS',
+      seasons: ['Season 1'],
+      participatedSeasons: ['Season 1', 'Season 2', 'Season 3', 'Season 4', 'Season 5'],
+      titles: 1,
+      description: 'The inaugural CTFPL champions who set the foundation for all future squads. The original dynasty.',
+      image: 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/squads/champions/darkslayers/ds1.jpg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJzcXVhZHMvY2hhbXBpb25zL2RhcmtzbGF5ZXJzL2RzMS5qcGciLCJpYXQiOjE3NTMxMzI2NjIsImV4cCI6MjM4Mzg1MjY2Mn0.50o9MRw6uRKeEEMDqJcEfHDukxbzIJR4JUtBtO-mSY4',
+      theme: 'darkslayers',
+      established: '2002'
     },
     {
       id: 'smurfs',
@@ -210,9 +225,14 @@ const ChampionArchives = () => {
                       <div className="text-yellow-400 mb-1">
                         🏆 Champions: {squad.seasons.join(', ')}
                       </div>
-                      {squad.runnerUpSeasons && (
+                      {squad.runnerUpSeasons && squad.runnerUpSeasons.length > 0 && (
                         <div className="text-gray-300 mb-1">
                           🥈 Runner-up: {squad.runnerUpSeasons.join(', ')}
+                        </div>
+                      )}
+                      {squad.thirdPlaceSeasons && squad.thirdPlaceSeasons.length > 0 && (
+                        <div className="text-amber-600 mb-1">
+                          🥉 Third Place: {squad.thirdPlaceSeasons.join(', ')}
                         </div>
                       )}
                       {squad.participatedSeasons && (

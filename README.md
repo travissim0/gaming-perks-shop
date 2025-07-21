@@ -2,6 +2,106 @@
 
 A web application for selling in-game perks and DLC items to players. Built with Next.js, Supabase, and Ko-fi for payments.
 
+# Gaming Perks Shop Tech Stack
+
+  🖥️ Frontend Framework & Language
+
+  - Next.js 15.3.2 - React-based full-stack framework
+  - React 19.0.0 - UI component library
+  - TypeScript 5 - Type-safe JavaScript
+  - React DOM 19.0.0 - DOM renderer for React
+
+  🎨 Styling & UI
+
+  - Tailwind CSS 4 - Utility-first CSS framework
+  - Lucide React 0.513.0 - Icon library
+  - Framer Motion 12.15.0 - Animation library
+  - PostCSS - CSS processing
+
+  🗄️ Backend & Database
+
+  - Supabase 2.50.0 - Backend-as-a-Service (BaaS)
+    - PostgreSQL - Primary database
+    - Row Level Security (RLS) - Database security
+    - Real-time subscriptions - Live updates
+    - Authentication - User management
+    - Storage - File storage
+
+  📱 Communication & APIs
+
+  - Twilio 5.3.5 - SMS/Text messaging service
+  - Node Fetch 3.3.2 - HTTP client for API calls
+  - Ko-fi Webhooks - Payment processing integration
+
+  🛠️ Development Tools
+
+  - ESLint 9 - Code linting
+  - TypeScript compiler - Static type checking
+  - Turbopack - Fast bundler (Next.js 15)
+
+  📊 Rich Text & Data Processing
+
+  - TipTap 2.14.0 - Rich text editor
+    - TipTap React integration
+    - TipTap Starter Kit
+    - TipTap Underline extension
+  - CSV Parser 3.2.0 - CSV data processing
+
+  🔧 Configuration & Environment
+
+  - dotenv 16.5.0 - Environment variable management
+  - React Hot Toast 2.5.2 - Toast notifications
+
+  🎮 Gaming-Specific Features
+
+  - CTF (Capture The Flag) League Management
+  - Squad/Team Management System
+  - ELO Rating System
+  - Player Statistics & Rankings
+  - Season Management
+  - Zone Management
+
+  🗃️ Database Structure (PostgreSQL/Supabase)
+
+  - Tables: squads, squad_members, profiles, ctfpl_standings,     
+   ctfpl_seasons, elo_leaderboard
+  - Views: Aggregated player stats, ELO rankings, season
+  standings
+  - Functions: Custom PostgreSQL functions for game logic
+  - Triggers: Automated data processing
+  - RLS Policies: Row-level security for data access
+
+  🔐 Security & Performance
+
+  - Row Level Security (RLS) - Database-level security
+  - CORS configuration - API security
+  - Image optimization - Next.js image handling
+  - Bundle optimization - Code splitting & tree shaking
+  - Caching strategies - Performance optimization
+
+  🌐 Deployment & Hosting
+
+  - Supabase hosting - Database & backend
+  - Next.js deployment ready - Full-stack application
+  - Environment configurations - Multiple environment support     
+
+  📱 Platform Support
+
+  - Responsive design - Mobile, tablet, desktop
+  - Cross-browser compatibility
+  - Touch-friendly interfaces
+
+  🎯 Core Features
+
+  - Gaming Tournament Management
+  - Player Profile System
+  - Squad/Team Formation
+  - Real-time Notifications
+  - Admin Management System
+  - Video/Media Management
+  - Payment Integration (Ko-fi)
+  - SMS Notifications
+
 ## Features
 
 - User authentication (email/password and Google SSO)

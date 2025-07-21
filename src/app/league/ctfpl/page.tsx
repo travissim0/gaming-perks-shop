@@ -55,6 +55,7 @@ export default function CTFPLStandingsPage() {
   const [allSquads, setAllSquads] = useState<{id: string, name: string, tag: string}[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [seasonsLoading, setSeasonsLoading] = useState(true);
+  const [navbarMobileMenuOpen, setNavbarMobileMenuOpen] = useState(false);
   const [seasonStats, setSeasonStats] = useState({
     totalMatches: 0,
     totalSquads: 0,
@@ -248,20 +249,22 @@ export default function CTFPLStandingsPage() {
 
   return (
     <>
-      <Navbar user={user} />
+      <Navbar user={user} onMobileMenuChange={setNavbarMobileMenuOpen} />
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-        {/* Mobile season selector button */}
-        <div className="lg:hidden fixed top-44 left-4 z-50">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-lg shadow-lg border border-gray-600"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Mobile season selector button - only show when sidebar is closed and navbar menu is closed */}
+        {!sidebarOpen && !navbarMobileMenuOpen && (
+          <div className="lg:hidden fixed top-44 left-4 z-50">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="bg-gray-800/90 hover:bg-gray-700 text-white p-3 rounded-lg shadow-xl border border-cyan-500/50 backdrop-blur-sm"
+            >
+              <Menu className="w-5 h-5 text-cyan-400" />
+            </button>
+          </div>
+        )}
 
         {/* Mobile Season Sidebar */}
-        <div className={`lg:hidden fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className={`lg:hidden fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="p-6 border-b border-gray-700">
             <h2 className="text-xl font-bold text-white mb-2">Seasons</h2>
             <p className="text-gray-400 text-sm">Select a season to view standings</p>

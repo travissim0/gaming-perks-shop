@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Trophy, Crown, Flame, Star, Shield, Sword, Target, Award, ArrowLeft } from 'lucide-react';
+import { Trophy, Crown, Flame, Star, Shield, Sword, Target, Award, ArrowLeft, Medal } from 'lucide-react';
 import Link from 'next/link';
 
 const SmurfsPage = () => {
@@ -51,14 +51,16 @@ const SmurfsPage = () => {
       overall: { wins: 0, losses: 0, draws: 0 },
       championships: 1,
       runnerUps: 2,
+      thirdPlace: 0,
       championshipSeasons: [8],
-      runnerUpSeasons: [5],
+      runnerUpSeasons: [5, 9],
+      thirdPlaceSeasons: [],
       seasonRecords: [
-        { season: 5, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true },
-        { season: 6, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false },
-        { season: 7, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false },
-        { season: 8, wins: 0, losses: 0, draws: 0, champion: true, runnerUp: false },
-        { season: 9, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true }
+        { season: 5, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true, thirdPlace: false },
+        { season: 6, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false, thirdPlace: false },
+        { season: 7, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: false, thirdPlace: false },
+        { season: 8, wins: 0, losses: 0, draws: 0, champion: true, runnerUp: false, thirdPlace: false },
+        { season: 9, wins: 0, losses: 0, draws: 0, champion: false, runnerUp: true, thirdPlace: false }
       ]
     },
     players: [
@@ -165,7 +167,7 @@ const SmurfsPage = () => {
               animationDuration: `${2 + Math.random() * 3}s`
             }}
           >
-            <Flame className="text-blue-400 opacity-40" size={3 + Math.random() * 8} />
+            <Star className="text-blue-400 opacity-40" size={3 + Math.random() * 8} />
           </div>
         ))}
         {/* Smurf Village Elements */}
@@ -205,7 +207,7 @@ const SmurfsPage = () => {
                 <div className="w-24 h-1 bg-gradient-to-r from-transparent via-blue-500 to-cyan-500"></div>
                 <div className="flex items-center gap-2">
                   <span className="text-blue-500 text-2xl animate-pulse">🍄</span>
-                  <Flame className="text-cyan-500 animate-bounce" size={32} />
+                  <Star className="text-cyan-500 animate-bounce shadow-lg" style={{filter: 'drop-shadow(0 0 8px #06b6d4)'}} size={32} />
                   <span className="text-red-500 text-2xl animate-pulse">🧙‍♂️</span>
                 </div>
                 <div className="w-24 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-transparent"></div>
@@ -228,6 +230,10 @@ const SmurfsPage = () => {
                 <span className="flex items-center gap-2">
                   <Award size={20} />
                   2x Runner-up
+                </span>
+                <span className="flex items-center gap-2">
+                  <Medal size={20} />
+                  1x Third Place
                 </span>
                 <span className="flex items-center gap-2">
                   <Trophy size={20} />
@@ -255,8 +261,12 @@ const SmurfsPage = () => {
               <span className="text-2xl">🏆</span>
             </div>
             <h2 className="text-4xl font-bold text-cyan-400 mb-2">1x CTFPL Champions</h2>
-            <p className="text-xl text-cyan-200">
+            <p className="text-xl text-cyan-200 mb-2">
               The Smurfs conquered Season 8, leaving a blue mark in CTFPL history.
+            </p>
+            <p className="text-lg text-gray-300">
+              <span className="text-gray-400">Runner-up:</span> Seasons 5, 9 &nbsp;|&nbsp; 
+              <span className="text-amber-600">Third Place:</span> Season 6
             </p>
             <div className="flex justify-center gap-2 mt-4">
               <span className="text-lg animate-pulse">🧙‍♂️</span>
@@ -312,12 +322,12 @@ const SmurfsPage = () => {
         <div className="text-center p-12 rounded-2xl bg-gradient-to-br from-blue-900/40 via-cyan-900/30 to-black/60 backdrop-blur-sm border border-blue-500/30">
           <div className="flex justify-center items-center gap-4 mb-6">
             <span className="text-6xl animate-bounce">🍄</span>
-            <Flame className="text-cyan-500 animate-pulse" size={64} />
+            <Star className="text-cyan-500 animate-pulse shadow-lg" style={{filter: 'drop-shadow(0 0 12px #06b6d4)'}} size={64} />
             <span className="text-6xl animate-bounce" style={{animationDelay: '0.5s'}}>🏠</span>
           </div>
           <h2 className="text-4xl font-bold text-cyan-400 mb-6">The Smurfs' Legacy</h2>
           <p className="text-xl text-cyan-200 max-w-4xl mx-auto leading-relaxed">
-            From nobodies to champions. What began as a core squad of underdogs transformed into one of the most respected teams in Infantry history. Their journey was anything but easy—grinding through the brutal gauntlet of BDS, CC, and more. Its history dates back all the way to 2003, with ange1ica and Duffman starting RWAR that converted into Smurfs. The lengthy history Season 8 didn't just crown them 1x champions—it proved that with a strong leader and unwavering brotherhood, greatness was earned, not given. The Smurfs may not be the most decorated, but their rise became a symbol: respect is forged through the climb, not the count.
+            From nobodies to champions. What began as a core squad of underdogs transformed into one of the most respected teams in Infantry history. Their journey was anything but easy—grinding through the brutal gauntlet of BDS, CC, and more. Its history dates back all the way to 2003, with ange1ica, Duffman, and Kaizer starting RWAR that converted into Smurfs. Brief drama ensued was Duffman (the captain at the time) left the squad high and dry. However, the squad was able to bounce back. The lengthy history Season 8 didn't just crown them 1x champions—it proved that with a strong leader in Beso and unwavering brotherhood, greatness was earned, not given. The Smurfs may not be the most decorated, but their rise became a symbol: respect is forged through the climb, not the count.
           </p>
           <div className="mt-8">
             <div className="flex justify-center items-center gap-2">
@@ -332,13 +342,14 @@ const SmurfsPage = () => {
       {/* Squad Statistics */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 mb-16">
         <h2 className="text-4xl font-bold text-center text-cyan-400 mb-12">Championship Statistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
           {[
             { label: 'Championships', value: smurfsData.seasonRecord.championships, icon: Crown },
-            { label: 'Runner-ups', value: smurfsData.seasonRecord.runnerUps, icon: Star },
+            { label: 'Runner-ups', value: smurfsData.seasonRecord.runnerUps, icon: Award },
+            { label: 'Third Place', value: smurfsData.seasonRecord.thirdPlace, icon: Medal },
             { label: 'Total Wins', value: smurfsData.seasonRecord.overall.wins, icon: Trophy },
             { label: 'Total Losses', value: smurfsData.seasonRecord.overall.losses, icon: Target },
-            { label: 'Total Draws', value: smurfsData.seasonRecord.overall.draws, icon: Award }
+            { label: 'Total Draws', value: smurfsData.seasonRecord.overall.draws, icon: Star }
           ].map((stat, index) => (
             <div
               key={index}
@@ -366,6 +377,8 @@ const SmurfsPage = () => {
                   ? 'bg-gradient-to-br from-cyan-900/30 via-blue-900/20 to-blue-900/30 border-cyan-500/30 hover:border-cyan-400/60' 
                   : season.runnerUp
                   ? 'bg-gradient-to-br from-gray-700/30 via-gray-800/20 to-gray-900/30 border-gray-400/30 hover:border-gray-300/60'
+                  : season.thirdPlace
+                  ? 'bg-gradient-to-br from-amber-900/20 via-yellow-900/15 to-orange-900/20 border-amber-600/20 hover:border-amber-500/40'
                   : 'bg-gradient-to-br from-blue-900/20 via-gray-900/20 to-black/40 border-blue-500/20 hover:border-blue-400/40'
               }`}
             >
@@ -379,22 +392,38 @@ const SmurfsPage = () => {
                   <Award className="text-gray-300 animate-pulse" size={20} />
                 </div>
               )}
+              {season.thirdPlace && (
+                <div className="absolute top-2 right-2">
+                  <Medal className="text-amber-600 animate-pulse" size={20} />
+                </div>
+              )}
               
               <div className="text-center">
                 <h3 className={`text-2xl font-bold mb-3 ${
-                  season.champion ? 'text-cyan-400' : season.runnerUp ? 'text-gray-300' : 'text-blue-300'
+                  season.champion ? 'text-cyan-400' 
+                  : season.runnerUp ? 'text-gray-300' 
+                  : season.thirdPlace ? 'text-amber-400'
+                  : 'text-blue-300'
                 }`}>
-                  CTFPL S{season.season}{season.champion ? '*' : season.runnerUp ? '°' : ''}
+                  CTFPL S{season.season}{season.champion ? '*' : season.runnerUp ? '°' : season.thirdPlace ? '^' : ''}
                 </h3>
-                <div className={`text-xl font-bold mb-2 ${
-                  season.champion ? 'text-cyan-300' : season.runnerUp ? 'text-gray-300' : 'text-gray-300'
-                }`}>
-                  {season.wins}-{season.losses}-{season.draws}
-                </div>
+                {(season.wins > 0 || season.losses > 0 || season.draws > 0) && (
+                  <div className={`text-xl font-bold mb-2 ${
+                    season.champion ? 'text-cyan-300' 
+                    : season.runnerUp ? 'text-gray-300' 
+                    : season.thirdPlace ? 'text-amber-300'
+                    : 'text-gray-300'
+                  }`}>
+                    {season.wins}-{season.losses}-{season.draws}
+                  </div>
+                )}
                 <div className={`text-sm ${
-                  season.champion ? 'text-cyan-200' : season.runnerUp ? 'text-gray-400' : 'text-gray-400'
+                  season.champion ? 'text-cyan-200' 
+                  : season.runnerUp ? 'text-gray-400' 
+                  : season.thirdPlace ? 'text-amber-200'
+                  : 'text-gray-400'
                 }`}>
-                  {season.champion ? 'CHAMPIONS' : season.runnerUp ? 'RUNNER-UP' : 'Season Record'}
+                  {season.champion ? 'CHAMPIONS' : season.runnerUp ? 'RUNNER-UP' : season.thirdPlace ? 'THIRD PLACE' : 'Season Record'}
                 </div>
               </div>
             </div>
@@ -404,6 +433,8 @@ const SmurfsPage = () => {
         <div className="text-center mt-8">
           <p className="text-cyan-300 text-lg">
             <span className="text-cyan-400 font-bold">*</span> = Championship Season &nbsp;&nbsp;&nbsp;
+            <span className="text-gray-400 font-bold">°</span> = Runner-up &nbsp;&nbsp;&nbsp;
+            <span className="text-amber-400 font-bold">^</span> = Third Place
           </p>
         </div>
       </div>
@@ -426,9 +457,11 @@ const SmurfsPage = () => {
                     <Crown key={i} className="text-cyan-400" size={12} />
                   ))}
                 </div>
-                <div className="text-cyan-300 text-sm font-bold">
-                  {player.rings} Ring{player.rings !== 1 ? 's' : ''}
-                </div>
+                {player.rings > 0 && (
+                  <div className="text-cyan-300 text-sm font-bold">
+                    {player.rings} Ring{player.rings !== 1 ? 's' : ''}
+                  </div>
+                )}
               </div>
             </div>
           ))}
