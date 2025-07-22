@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 interface LogEntry {
   tabNumber: number;
@@ -46,6 +48,9 @@ const TAB_COLORS = {
 
 export default function LogViewerPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [logContent, setLogContent] = useState<string>('');
   const [parsedLogs, setParsedLogs] = useState<LogEntry[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
@@ -61,6 +66,80 @@ export default function LogViewerPage() {
   const [playerSearch, setPlayerSearch] = useState('');
   const logContainerRef = useRef<HTMLDivElement>(null);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // SECURITY: Check admin access
+  useEffect(() => {
+    const checkAdminAccess = async () => {
+      if (!user) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('is_admin, ctf_role')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error checking admin status:', error);
+          setIsAdmin(false);
+        } else {
+          // Allow access for admins and CTF staff who might need to review game logs
+          const hasAccess = profile?.is_admin || 
+                           profile?.ctf_role === 'ctf_admin' || 
+                           profile?.ctf_role === 'ctf_head_referee';
+          setIsAdmin(hasAccess || false);
+        }
+      } catch (error) {
+        console.error('Error checking admin access:', error);
+        setIsAdmin(false);
+      }
+      
+      setAuthLoading(false);
+    };
+
+    checkAdminAccess();
+  }, [user]);
+
+  // Redirect non-admin users
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/auth/login');
+    } else if (!authLoading && user && !isAdmin) {
+      router.push('/');
+    }
+  }, [authLoading, user, isAdmin, router]);
+
+  // SECURITY: Sanitize sensitive data from log content
+  const sanitizeLogContent = (content: string): string => {
+    // Remove potential IP addresses (IPv4 pattern)
+    const ipPattern = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g;
+    content = content.replace(ipPattern, '[IP_REDACTED]');
+    
+    // Remove potential IPv6 addresses
+    const ipv6Pattern = /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g;
+    content = content.replace(ipv6Pattern, '[IPV6_REDACTED]');
+    
+    // Remove potential MAC addresses
+    const macPattern = /\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b/g;
+    content = content.replace(macPattern, '[MAC_REDACTED]');
+    
+    // Remove potential email addresses (basic pattern)
+    const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+    content = content.replace(emailPattern, '[EMAIL_REDACTED]');
+    
+    // Remove potential file paths that might contain sensitive info
+    const pathPattern = /[C-Z]:\\[^\\:\*\?"<>\|]*\\[^\\:\*\?"<>\|]*/g;
+    content = content.replace(pathPattern, '[PATH_REDACTED]');
+    
+    // Remove potential Discord/external links that might contain tokens
+    const discordPattern = /https:\/\/discord\.gg\/[a-zA-Z0-9]+/g;
+    content = content.replace(discordPattern, '[DISCORD_LINK_REDACTED]');
+    
+    return content;
+  };
 
   // Single source of truth for player validation
   const isValidPlayer = (name: string): boolean => {
@@ -87,12 +166,15 @@ export default function LogViewerPage() {
 
   // Parse log content with unified logic
   const parseLogContent = (content: string) => {
-    const lines = content.split('\n').filter(line => line.trim());
+    // SECURITY: Sanitize content before processing
+    const sanitizedContent = sanitizeLogContent(content);
+    
+    const lines = sanitizedContent.split('\n').filter(line => line.trim());
     const entries: LogEntry[] = [];
     const playerSet = new Set<string>();
     const statsMap: { [key: string]: PlayerStats } = {};
 
-    console.log('=== UNIFIED PARSING & STATISTICS ===');
+    console.log('=== UNIFIED PARSING & STATISTICS (SANITIZED) ===');
     console.log('Total lines:', lines.length);
 
     lines.forEach((line, index) => {
@@ -218,7 +300,7 @@ export default function LogViewerPage() {
 
     const sortedStats = Object.values(statsMap).sort((a, b) => b.messageCount - a.messageCount);
 
-    console.log('=== UNIFIED RESULTS ===');
+    console.log('=== UNIFIED RESULTS (SANITIZED) ===');
     console.log('Total entries created:', entries.length);
     console.log('Total unique players found:', playerSet.size);
     console.log('Total players with stats:', sortedStats.length);

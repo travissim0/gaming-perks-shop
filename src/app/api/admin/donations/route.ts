@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminAccess, logAdminAction } from '@/utils/adminAuth';
 
 // Use service role client to bypass RLS for admin operations
 const supabaseAdmin = createClient(
@@ -7,61 +8,17 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Fallback admin emails when database is unavailable
-const FALLBACK_ADMIN_EMAILS = [
-  'qwerty5544@aim.com',  // Add your admin email here
-  // Add other admin emails as needed
-];
-
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Donations API starting...');
 
-    // Check authentication first
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'No authorization header' }, { status: 401 });
+    // Use centralized admin authorization
+    const authResult = await verifyAdminAccess(request);
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.statusCode });
     }
 
-    // Extract token from Bearer header
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Verify the user is admin using the service role client
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('❌ Auth error:', authError);
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    // Check if user is admin - with fallback for database issues
-    let isAdmin = false;
-    
-    try {
-      const { data: profile, error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (!profileError && profile?.is_admin) {
-        isAdmin = true;
-        console.log('✅ Admin verified from database:', user.email);
-      }
-    } catch (dbError) {
-      console.warn('⚠️ Database check failed, using fallback admin list');
-    }
-
-    // Fallback: Check against hardcoded admin emails if database check failed
-    if (!isAdmin && user.email && FALLBACK_ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-      isAdmin = true;
-      console.log('✅ Admin verified from fallback list:', user.email);
-    }
-
-    if (!isAdmin) {
-      console.error('❌ Not admin - email not in database or fallback list:', user.email);
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
+    const { user } = authResult;
 
     // Return cached admin data when database is down
     try {
