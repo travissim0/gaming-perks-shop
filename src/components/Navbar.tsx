@@ -393,7 +393,7 @@ export default function Navbar({ user }: { user: any }) {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-              <img src="/images/ctfpl1.png" alt="CTFPL" className="h-10 w-auto" />
+              <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-10 w-auto" />
             </Link>
             
             <div className="flex items-center space-x-4">
@@ -498,10 +498,10 @@ export default function Navbar({ user }: { user: any }) {
         <div className="border-b border-gray-700/50">
           <div className="container mx-auto px-4 py-2">
             <div className="flex items-center justify-between">
-              {/* Left - Logo */}
-              <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-                <img src="/images/ctfpl1.png" alt="CTFPL" className="h-16 w-auto" />
-              </Link>
+                          {/* Left - Logo */}
+            <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+              <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-16 w-auto" />
+            </Link>
 
             {/* Right - Utilities */}
             <div className="flex items-center space-x-3">
@@ -849,9 +849,9 @@ export default function Navbar({ user }: { user: any }) {
       <div className="lg:hidden border-t border-gray-700/50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
-            {/* News */}
-            <Link 
-              href="/"
+                        {/* News */}
+            <Link
+              href="/news"
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
               onClick={() => setIsMobileMenuOpen(false)}
             >
@@ -941,14 +941,13 @@ export default function Navbar({ user }: { user: any }) {
           <div className="flex items-center space-x-8 py-3">
             {/* News Section */}
             <div className="relative">
-              <a 
-                href="/"
-                rel="noopener noreferrer"
+              <Link 
+                href="/news"
                 className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-yellow-500/30 hover:shadow-lg hover:shadow-yellow-500/20"
               >
                 <span className="text-lg">📰</span>
                 <span className="font-semibold">News</span>
-              </a>
+              </Link>
             </div>
 
             {/* League Section */}
@@ -1109,7 +1108,7 @@ export default function Navbar({ user }: { user: any }) {
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">External Links</h4>
                   <div className="space-y-1">
                     <Link
-                      href="/"
+                      href="/news"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
