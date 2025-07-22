@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ Ko-fi donation saved successfully:', donation.id);
 
     // Process shop items if this is a shop order
-    let processedItems = [];
+    const processedItems = [];
     if (kofiData.type === 'Shop Order' && kofiData.shop_items && kofiData.shop_items.length > 0) {
       console.log('🛒 Processing shop order with items:', kofiData.shop_items);
 

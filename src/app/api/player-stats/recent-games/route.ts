@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
       });
 
       // Convert to array and add video information from matches
-      let recordedGames = matchesWithVideos
+      const recordedGames = matchesWithVideos
         .map(match => {
           const gameData = gamesMap.get(match.game_id);
           if (!gameData) {

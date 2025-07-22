@@ -329,7 +329,7 @@ export default function NewsPostPage({ params }: { params: Promise<{ id: string 
 
   const renderProseMirrorInline = (node: any, key: number): React.ReactNode => {
     if (node.type === 'text') {
-      let text = node.text;
+      const text = node.text;
       
       // Apply marks (formatting)
       if (node.marks && node.marks.length > 0) {

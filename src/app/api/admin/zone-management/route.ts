@@ -54,7 +54,7 @@ async function executeCommand(command: string): Promise<{ success: boolean; outp
   try {
     let fullCommand: string;
     let args: string[] = [];
-    let execOptions: any = { 
+    const execOptions: any = { 
       timeout: 90000, // Increased to 90 seconds
       env: { 
         ...process.env,

@@ -90,3 +90,6 @@ check-*.sql
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+#Discord bot
+/discord-bot/*

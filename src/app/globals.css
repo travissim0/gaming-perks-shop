@@ -10,6 +10,17 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* Custom breakpoints for better tablet support */
+  --breakpoint-xs: 480px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+  /* iPad specific breakpoints */
+  --breakpoint-tablet: 834px;  /* iPad Pro portrait */
+  --breakpoint-tablet-lg: 1210px; /* iPad Pro landscape */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,10 +34,71 @@ body {
   color: rgb(var(--foreground));
   background: linear-gradient(to bottom, #111827, #1f2937);
   font-family: Arial, Helvetica, sans-serif;
+  /* iOS Safari fixes */
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+}
+
+/* iOS Safari specific fixes */
+html {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+}
+
+/* Fix iOS viewport and scrolling issues */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Prevent zoom on input focus */
+    -webkit-text-size-adjust: 100%;
+    /* Fix momentum scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent horizontal scroll */
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+  }
+}
+
+/* Mobile scrolling fixes */
+.mobile-scroll-fix {
+  -webkit-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+}
+
+/* Prevent zoom on input focus for iOS */
+input, textarea, select {
+  font-size: 16px !important;
+  -webkit-appearance: none;
+  border-radius: 0;
 }
 
 /* Custom Free Infantry Theme Styles */
 @layer utilities {
+  /* iPad Pro specific navbar utilities */
+  .tablet-desktop {
+    @media (min-width: 834px) {
+      display: block;
+    }
+  }
+  
+  .tablet-mobile {
+    @media (max-width: 833px) {
+      display: block;
+    }
+  }
+  
+  .hide-on-tablet-desktop {
+    @media (min-width: 834px) {
+      display: none;
+    }
+  }
+  
+  .hide-on-tablet-mobile {
+    @media (max-width: 833px) {
+      display: none;
+    }
+  }
+
   .text-shadow-glow {
     text-shadow: 0 0 10px theme('colors.cyan.400'), 0 0 20px theme('colors.cyan.400/50');
   }
