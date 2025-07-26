@@ -62,6 +62,8 @@ public/
 !public/sounds/
 # Allow site images for affiliate sites page
 !public/images/sites/
+# Allow tools directory for Infantry Blob Viewer and other tools
+!public/tools/
 archive/
 
 # Large executables and binaries
