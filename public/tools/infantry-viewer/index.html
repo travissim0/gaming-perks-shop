@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infantry Blob Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-button active" data-tab="sprites">🖼️ Sprites</button>
+            <button class="tab-button" data-tab="audio">🔊 Audio</button>
+        </div>
+
+
+
+        <!-- Sprite Tab Content -->
+        <div class="tab-content active" id="sprite-tab">
+            <div class="main-layout">
+                <!-- Sprite List - Left Panel -->
+                <div class="sprite-browser">
+                    <div class="control-group compact">
+                        <label>BLO Files: <span id="fileCountLeft" class="info-inline">0 files</span></label>
+                        <select id="bloFileSelector" class="form-control" style="margin: 8px 0;">
+                            <option value="">No BLO files loaded</option>
+                        </select>
+                        <div class="sprite-controls">
+                            <input type="text" id="spriteSearch" placeholder="Search sprites..." class="sprite-search">
+                            <div class="tree-controls">
+                                <button id="expandAllBtn" class="btn btn-xs">⬇ Expand All</button>
+                                <button id="collapseAllBtn" class="btn btn-xs">⬆ Collapse All</button>
+                            </div>
+                        </div>
+                        <div id="spriteTreeView" class="sprite-tree-view"></div>
+                    </div>
+                </div>
+
+                <!-- Sprite Display - Center -->
+                <div class="sprite-display">
+                    <canvas id="spriteCanvas" width="700" height="700"></canvas>
+                    <div class="canvas-overlay">
+                        <div id="loadingIndicator" class="loading hidden">Loading...</div>
+                        <div id="errorMessage" class="error-message hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Sprite Controls - Right Panel -->
+                <div class="controls-panel">
+                    <!-- File Loading Controls -->
+                    <div class="control-group compact">
+                        <label>File Loading</label>
+                        <div class="file-loading-controls">
+                            <input type="file" id="fileInput" accept=".blo" style="display: none;">
+                            <input type="file" id="directoryInput" webkitdirectory directory multiple style="display: none;">
+                            <button id="loadButton" class="btn btn-primary btn-sm">Load BLO File</button>
+                            <button id="loadDirectoryButton" class="btn btn-secondary btn-sm">Load Directory</button>
+                        </div>
+                    </div>
+
+
+
+                    <!-- Current Sprite Info -->
+                    <div class="control-group compact">
+                        <label>Current Sprite: <span id="spriteDimensions" class="info-inline">-</span></label>
+                        <select id="spriteSelector" class="form-control" style="display: none;">
+                            <option value="">No sprites loaded</option>
+                        </select>
+                        <div class="info-row">
+                            <span><strong>Frames:</strong> <span id="frameCount">-</span></span>
+                            <span><strong>Grid:</strong> <span id="rowCount">-</span>×<span id="colCount">-</span></span>
+                            <span><strong>Current:</strong> <span id="currentFrame">0/0</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Animation & Navigation -->
+                    <div class="control-group compact">
+                        <label>Animation: <span id="speedValue" class="info-inline">15</span> | <span id="cfsTime" class="info-inline">50ms</span></label>
+                        <div class="animation-controls">
+                            <button id="playButton" class="btn btn-success btn-sm">▶</button>
+                            <button id="pauseButton" class="btn btn-warning btn-sm">⏸</button>
+                            <button id="stopButton" class="btn btn-danger btn-sm">⏹</button>
+                            <input type="range" id="speedSlider" min="1" max="20" value="15" class="slider compact-slider">
+                        </div>
+                        <div class="frame-controls compact">
+                            <div class="frame-input">
+                                <label>Row: <span id="rowValue">0</span></label>
+                                <input type="range" id="rowSlider" min="0" max="63" value="0" class="slider compact-slider">
+                            </div>
+                            <div class="frame-input">
+                                <label>Col: <span id="columnValue">0</span></label>
+                                <input type="range" id="columnSlider" min="0" max="11" value="0" class="slider compact-slider">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zoom -->
+                    <div class="control-group compact">
+                        <label>Zoom: <span id="zoomValue" class="info-inline">2.0x</span></label>
+                        <div class="zoom-controls compact">
+                            <input type="range" id="zoomSlider" min="0.5" max="20" step="0.5" value="2" class="slider compact-slider">
+                            <div class="zoom-presets">
+                                <button class="btn btn-xs" data-zoom="0.5">50%</button>
+                                <button class="btn btn-xs" data-zoom="1">100%</button>
+                                <button class="btn btn-xs" data-zoom="2">200%</button>
+                                <button class="btn btn-xs" data-zoom="5">500%</button>
+                                <button class="btn btn-xs" data-zoom="10">1000%</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HSV -->
+                    <div class="control-group compact">
+                        <label>HSV</label>
+                        <div class="color-controls compact">
+                            <div class="color-control compact">
+                                <label>H: <span id="hueValue">0</span></label>
+                                <input type="range" id="hueSlider" min="-180" max="180" value="0" class="slider compact-slider">
+                            </div>
+                            <div class="color-control compact">
+                                <label>S: <span id="saturationValue">0</span></label>
+                                <input type="range" id="saturationSlider" min="-100" max="100" value="0" class="slider compact-slider">
+                            </div>
+                            <div class="color-control compact">
+                                <label>V: <span id="valueValue">0</span></label>
+                                <input type="range" id="valueSlider" min="-100" max="100" value="0" class="slider compact-slider">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Background -->
+                    <div class="control-group compact">
+                        <label>Background</label>
+                        <div class="color-controls compact">
+                            <div class="color-control compact">
+                                <label>R: <span id="bgRedValue">0</span></label>
+                                <input type="range" id="bgRedSlider" min="0" max="255" value="0" class="slider compact-slider">
+                            </div>
+                            <div class="color-control compact">
+                                <label>G: <span id="bgGreenValue">0</span></label>
+                                <input type="range" id="bgGreenSlider" min="0" max="255" value="0" class="slider compact-slider">
+                            </div>
+                            <div class="color-control compact">
+                                <label>B: <span id="bgBlueValue">0</span></label>
+                                <input type="range" id="bgBlueSlider" min="0" max="255" value="0" class="slider compact-slider">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audio Tab Content -->
+        <div class="tab-content" id="audio-tab">
+            <div class="main-layout">
+                <!-- Audio Browser - Left Panel -->
+                <div class="audio-browser">
+                    <div class="control-group compact">
+                        <label>Audio Library</label>
+                        <div class="audio-controls">
+                            <input type="text" id="audioSearch" placeholder="Search audio files..." class="audio-search">
+                            <div class="tree-controls">
+                                <button id="expandAllAudioBtn" class="btn btn-xs">⬇ Expand All</button>
+                                <button id="collapseAllAudioBtn" class="btn btn-xs">⬆ Collapse All</button>
+                            </div>
+                            <div class="audio-summary" id="audioSummary">0 files loaded</div>
+                        </div>
+                        <div id="audioTreeView" class="audio-tree-view"></div>
+                    </div>
+                </div>
+
+                <!-- Audio Player - Center -->
+                <div class="audio-center">
+                    <div class="audio-player-advanced">
+                        <div class="current-track-info">
+                            <h3 id="currentTrackName">No audio selected</h3>
+                            <div id="currentTrackDetails">Select an audio file to play</div>
+                        </div>
+                        
+                        <div class="waveform-container">
+                            <canvas id="waveformCanvas" width="600" height="100"></canvas>
+                        </div>
+                        
+                        <div class="player-controls">
+                            <button id="audioPlayBtn" class="btn btn-success">▶ Play</button>
+                            <button id="audioPauseBtn" class="btn btn-warning">⏸ Pause</button>
+                            <button id="audioStopBtn" class="btn btn-danger">⏹ Stop</button>
+                            <div class="time-display">
+                                <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+                            </div>
+                        </div>
+
+                        <audio id="audioPlayer" style="width: 100%; margin-top: 10px;" controls></audio>
+                    </div>
+                </div>
+
+                <!-- Audio Controls - Right Panel -->
+                <div class="audio-controls-panel">
+                    <div class="control-group compact">
+                        <label>Volume Control</label>
+                        <div class="volume-control">
+                            <label for="volumeSlider">Volume: <span id="volumeValue">50%</span></label>
+                            <input type="range" id="volumeSlider" min="0" max="100" value="50" class="slider compact-slider">
+                        </div>
+                    </div>
+
+                    <div class="control-group compact">
+                        <label>Audio Information</label>
+                        <div id="audioMetadata" class="audio-metadata">
+                            <div>File: <span id="audioFileName">-</span></div>
+                            <div>Size: <span id="audioFileSize">-</span></div>
+                            <div>Duration: <span id="audioDuration">-</span></div>
+                            <div>Format: <span id="audioFormat">WAV</span></div>
+                        </div>
+                    </div>
+
+                    <div class="control-group compact">
+                        <label>Playlist</label>
+                        <div class="playlist-controls">
+                            <button id="playAllBtn" class="btn btn-sm">▶ Play All</button>
+                            <button id="shuffleBtn" class="btn btn-sm">🔀 Shuffle</button>
+                            <button id="exportBtn" class="btn btn-sm">💾 Export</button>
+                        </div>
+                        <div id="audioInfo" class="audio-info">No audio files loaded</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="status-bar">
+            <span id="statusText">Ready</span>
+            <span class="hotkeys-info">Hotkeys: ↑↓ BLO Files | ←→ Sprites | Tab: Switch Mode</span>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
