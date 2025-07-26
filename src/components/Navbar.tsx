@@ -385,6 +385,7 @@ export default function Navbar({ user }: { user: any }) {
     { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
+    { href: '/tools', label: 'Tools', icon: '🔧' },
   ];
 
   if (!user) {
@@ -868,6 +869,16 @@ export default function Navbar({ user }: { user: any }) {
               <span className="font-medium">League</span>
             </Link>
 
+            {/* Tools */}
+            <Link
+              href="/tools"
+              className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="text-sm">🔧</span>
+              <span className="font-medium">Tools</span>
+            </Link>
+
             {/* Squads */}
             <button 
               onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'squads' ? null : 'squads')}
@@ -1104,6 +1115,28 @@ export default function Navbar({ user }: { user: any }) {
 
               {/* Navigation Sections */}
               <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Tools</h4>
+                  <div className="space-y-1">
+                    <Link
+                      href="/tools"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🔧</span>
+                      Infantry Tools
+                    </Link>
+                    <Link
+                      href="/tools/infantry-viewer"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🖼️</span>
+                      Blob Viewer
+                    </Link>
+                  </div>
+                </div>
+
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">External Links</h4>
                   <div className="space-y-1">
