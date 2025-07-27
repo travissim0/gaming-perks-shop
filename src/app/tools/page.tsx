@@ -1,84 +1,131 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 
 export default function ToolsPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent mb-6">
+            Infantry Tools
+          </h1>
+          <p className="text-xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
+            Professional development tools for Infantry Online creators, mappers, and developers
+          </p>
+        </div>
+
+        {/* Available Tools */}
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
-              Infantry Tools
-            </h1>
-            <p className="text-gray-400 text-lg">
-              Essential tools for Infantry Online players and developers
-            </p>
-          </div>
-
-          {/* Tools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
+          <h2 className="text-3xl font-bold text-gray-100 mb-8 flex items-center">
+            <span className="mr-3">🎨</span>
+            Available Tools
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Infantry Blob Viewer */}
-            <Link href="/tools/infantry-viewer" className="group">
-              <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-blue-500 transition-all duration-300 transform hover:scale-105">
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mr-4">
-                    <span className="text-2xl">🖼️</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-white group-hover:text-blue-400 transition-colors">
-                      Infantry Blob Viewer
-                    </h3>
-                    <p className="text-gray-400 text-sm">BLO/CFS File Viewer</p>
-                  </div>
-                </div>
-                <p className="text-gray-300 mb-4">
-                  View and animate Infantry Online BLO files with sprite animation, audio playback, and advanced controls.
-                </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="px-2 py-1 bg-blue-900 text-blue-300 rounded text-xs">Sprites</span>
-                  <span className="px-2 py-1 bg-green-900 text-green-300 rounded text-xs">Animation</span>
-                  <span className="px-2 py-1 bg-purple-900 text-purple-300 rounded text-xs">Audio</span>
-                  <span className="px-2 py-1 bg-red-900 text-red-300 rounded text-xs">Web-based</span>
-                </div>
-                <div className="text-blue-400 text-sm font-medium group-hover:text-blue-300">
-                  Launch Tool →
-                </div>
+            <div className="bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-8 hover:scale-105 transition-all duration-300 group relative overflow-hidden">
+              {/* Background Pattern */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              
+              {/* Status Badge */}
+              <div className="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-medium border bg-green-500/20 text-green-400 border-green-500/30">
+                Active
               </div>
-            </Link>
 
-            {/* Placeholder for future tools */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 opacity-50">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-gray-600 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-2xl">🔧</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-400">
-                    More Tools Coming Soon
-                  </h3>
-                  <p className="text-gray-500 text-sm">Under Development</p>
-                </div>
-              </div>
-              <p className="text-gray-400 mb-4">
-                Additional Infantry Online tools and utilities are in development.
+              {/* Tool Icon */}
+              <div className="text-5xl mb-6">🖼️</div>
+
+              {/* Tool Info */}
+              <h3 className="text-2xl font-bold text-gray-100 mb-4 group-hover:text-white transition-colors">
+                Infantry Blob Viewer
+              </h3>
+              <p className="text-gray-400 text-base mb-8 leading-relaxed group-hover:text-gray-300 transition-colors">
+                Professional-grade sprite and audio viewer for Infantry Online BLO/CFS files. Perfect for developers, mappers, and content creators. Features animation playback, frame control, color adjustments, and audio waveform visualization.
               </p>
-              <div className="text-gray-500 text-sm">
-                Stay tuned...
+
+              {/* Features */}
+              <div className="mb-8">
+                <ul className="text-sm text-gray-400 space-y-2">
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
+                    Universal BLO/CFS file support with instant loading
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
+                    Smooth animation playback with precise speed control
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
+                    High-quality audio playback with visual waveforms
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
+                    Advanced zoom (50%-2000%) and HSV color adjustments
+                  </li>
+                  <li className="flex items-center">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
+                    Frame-by-frame navigation and directory batch loading
+                  </li>
+                </ul>
               </div>
+
+              {/* Action Button */}
+              <Link
+                href="/tools/blob-viewer/"
+                className="inline-flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 rounded-lg text-base font-medium transition-all duration-200 group-hover:translate-x-1"
+              >
+                Launch Blob Viewer
+                <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             </div>
 
-          </div>
+            {/* Placeholder for future tools */}
+            <div className="bg-gradient-to-br from-gray-600/20 to-gray-700/20 border border-gray-500/30 rounded-xl p-8 relative overflow-hidden">
+              <div className="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-medium border bg-gray-500/20 text-gray-400 border-gray-500/30">
+                Coming Soon
+              </div>
 
-          {/* Back to Site */}
-          <div className="text-center mt-12">
+              <div className="text-5xl mb-6 opacity-50">🛠️</div>
+
+              <h3 className="text-2xl font-bold text-gray-300 mb-4">
+                More Tools Coming
+              </h3>
+              <p className="text-gray-500 text-base mb-8 leading-relaxed">
+                Additional Infantry development tools are in development. Check back soon for map editors, config analyzers, and more.
+              </p>
+
+              <button 
+                disabled
+                className="inline-flex items-center px-6 py-3 bg-gray-500/20 border border-gray-500/30 rounded-lg text-base font-medium text-gray-500 cursor-not-allowed"
+              >
+                In Development
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-16 pt-8 border-t border-gray-700">
+          <p className="text-gray-400 mb-4">
+            Have suggestions for new tools? Let us know on the forum.
+          </p>
+          <div className="flex justify-center space-x-4">
             <Link 
-              href="/" 
-              className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              href="/forum" 
+              className="px-4 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 hover:border-cyan-500/50 rounded-lg text-cyan-400 hover:text-cyan-300 transition-all duration-200"
             >
-              ← Back to CTFPL
+              💬 Forum
+            </Link>
+            <Link 
+              href="/guides" 
+              className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 hover:border-purple-500/50 rounded-lg text-purple-400 hover:text-purple-300 transition-all duration-200"
+            >
+              📚 Guides
             </Link>
           </div>
         </div>
