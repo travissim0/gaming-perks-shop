@@ -385,7 +385,7 @@ export default function Navbar({ user }: { user: any }) {
     { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
-    { href: '/tools/blob-viewer/', label: 'Blob Viewer', icon: '🖼️' },
+    { href: '/tools/blob-viewer/index.html', label: 'Blob Viewer', icon: '🖼️' },
     { href: '/tools', label: 'All Tools', icon: '🔧' },
   ];
 
@@ -1128,7 +1128,7 @@ export default function Navbar({ user }: { user: any }) {
                       Infantry Tools
                     </Link>
                     <Link
-                      href="/tools/blob-viewer/"
+                      href="/tools/blob-viewer/index.html"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >

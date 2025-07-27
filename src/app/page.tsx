@@ -1869,7 +1869,7 @@ export default function Home() {
                 <div className="p-3 bg-gray-900">
                   <div className="space-y-2">
                     <Link 
-                      href="/tools/blob-viewer/"
+                      href="/tools/blob-viewer/index.html"
                       className="block bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-lg p-3 hover:scale-105 transition-all duration-300 group"
                     >
                       <div className="flex items-center space-x-2 mb-2">

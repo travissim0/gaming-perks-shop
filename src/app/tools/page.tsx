@@ -73,10 +73,10 @@ export default function ToolsPage() {
               </div>
 
               {/* Action Button */}
-              <Link
-                href="/tools/blob-viewer/"
-                className="inline-flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 rounded-lg text-base font-medium transition-all duration-200 group-hover:translate-x-1"
-              >
+                                    <Link
+                        href="/tools/blob-viewer/index.html"
+                        className="inline-flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 hover:border-white/40 rounded-lg text-base font-medium transition-all duration-200 group-hover:translate-x-1"
+                      >
                 Launch Blob Viewer
                 <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
