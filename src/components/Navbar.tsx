@@ -373,6 +373,9 @@ export default function Navbar({ user }: { user: any }) {
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
+  ];
+
+  const activityNavItems = [
     { href: '/event-log', label: 'Player Event Log', icon: '📋' },
   ];
 
@@ -1209,29 +1212,7 @@ export default function Navbar({ user }: { user: any }) {
               {/* Navigation Sections */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Tools</h4>
-                  <div className="space-y-1">
-                    <Link
-                      href="/tools"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🔧</span>
-                      Infantry Tools
-                    </Link>
-                    <Link
-                      href="/tools/blob-viewer/index.html"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🖼️</span>
-                      Sprite Animator
-                    </Link>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">External Links</h4>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Main</h4>
                   <div className="space-y-1">
                     <Link
                       href="/news"
@@ -1312,6 +1293,23 @@ export default function Navbar({ user }: { user: any }) {
                 </div>
 
                 <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Activity</h4>
+                  <div className="space-y-1">
+                    {activityNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <span className="mr-3">{item.icon}</span>
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Misc</h4>
                   <div className="space-y-1">
                     {miscNavItems.map((item) => (
@@ -1325,6 +1323,28 @@ export default function Navbar({ user }: { user: any }) {
                         {item.label}
                       </Link>
                     ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Tools</h4>
+                  <div className="space-y-1">
+                    <Link
+                      href="/tools"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🔧</span>
+                      Infantry Tools
+                    </Link>
+                    <Link
+                      href="/tools/blob-viewer/index.html"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🖼️</span>
+                      Sprite Animator
+                    </Link>
                   </div>
                 </div>
 
