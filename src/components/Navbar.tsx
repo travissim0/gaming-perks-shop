@@ -496,12 +496,23 @@ export default function Navbar({ user }: { user: any }) {
       )}
 
       <nav className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-cyan-500/30 shadow-xl">
+        {/* Mobile Logo Section - Only visible on mobile */}
+        <div className="lg:hidden bg-gray-800/50 border-b border-gray-700/30">
+          <div className="container mx-auto px-4 py-3">
+            <div className="flex justify-center">
+              <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-14 w-auto" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {/* Top Utility Bar */}
         <div className="border-b border-gray-700/50">
           <div className="container mx-auto px-4 py-2">
             <div className="flex items-center justify-between">
-                          {/* Left - Logo */}
-            <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                          {/* Left - Logo (hidden on mobile, shown on desktop) */}
+            <Link href="/" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
               <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-16 w-auto" />
             </Link>
 

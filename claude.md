@@ -145,6 +145,107 @@ If infinite recursion occurs in production:
 3. Implement proper filtering in application layer as hotfix
 4. Design better policies after the immediate issue is resolved
 
+## Responsive Design & Tailwind Breakpoints
+
+### Project Breakpoint Configuration
+
+This project uses **Tailwind CSS v4** with custom responsive breakpoints optimized for gaming and tablet devices.
+
+#### Standard Tailwind Breakpoints
+| Breakpoint | Min-width | Typical Devices | Usage |
+|------------|-----------|-----------------|-------|
+| **Default** | 0px | Mobile phones (portrait) | Base styles |
+| **sm:** | 640px | Mobile landscape, small tablets | `sm:hidden` |
+| **md:** | 768px | Tablets, small laptops | `md:flex` |
+| **lg:** | 1024px | Laptops, desktop monitors | `lg:grid-cols-3` |
+| **xl:** | 1280px | Large desktop monitors | `xl:max-w-6xl` |
+| **2xl:** | 1536px | Extra large desktop monitors | `2xl:px-0` |
+
+#### Custom Breakpoints (globals.css)
+```css
+/* Located in src/app/globals.css lines 14-24 */
+--breakpoint-xs: 480px;           /* Small mobile */
+--breakpoint-sm: 640px;           /* Large mobile */
+--breakpoint-md: 768px;           /* Tablet portrait */
+--breakpoint-lg: 1024px;          /* Tablet landscape / Laptop */
+--breakpoint-xl: 1280px;          /* Desktop */
+--breakpoint-2xl: 1536px;         /* Large desktop */
+
+/* iPad specific breakpoints */
+--breakpoint-tablet: 834px;       /* iPad Pro portrait */
+--breakpoint-tablet-lg: 1210px;   /* iPad Pro landscape */
+```
+
+#### Custom Utility Classes
+```css
+/* Located in src/app/globals.css lines 76-100 */
+.tablet-desktop         /* Show on iPad Pro+ (min-width: 834px) */
+.tablet-mobile          /* Show on smaller than iPad Pro (max-width: 833px) */
+.hide-on-tablet-desktop /* Hide on iPad Pro+ */
+.hide-on-tablet-mobile  /* Hide on smaller than iPad Pro */
+```
+
+### Responsive Development Guidelines
+
+#### ✅ Best Practices
+
+1. **Mobile-First Approach**: Always design for mobile first, then enhance
+```jsx
+// Good
+<div className="p-4 md:p-6 lg:p-8">
+
+// Bad  
+<div className="p-8 md:p-6 sm:p-4">
+```
+
+2. **Consistent Breakpoint Usage**: Use same breakpoint for related elements
+```jsx
+// Good - Consistent md: usage
+<div className="hidden md:block">
+<button className="md:hidden">
+
+// Bad - Mixed breakpoints
+<div className="hidden lg:block">
+<button className="md:hidden">
+```
+
+3. **iPad Optimization**: Use custom classes for better tablet experience
+```jsx
+<div className="
+  grid-cols-1           // Mobile: 1 column
+  md:grid-cols-2        // Tablet: 2 columns  
+  tablet-desktop        // iPad specific styles
+  lg:grid-cols-3        // Desktop: 3 columns
+">
+```
+
+#### Current Navbar Implementation
+The `ImprovedNavbar.tsx` uses these breakpoints:
+
+| Element | Class | Behavior |
+|---------|-------|----------|
+| Mobile Menu Button | `md:hidden` | Hidden on tablets+ |
+| Search Bar | `hidden md:flex` | Hidden on mobile, shown on tablets+ |
+| Main Navigation | `hidden md:block` | Hidden on mobile, shown on tablets+ |
+| Mobile Menu Container | `md:hidden` | Hidden on tablets+ |
+
+#### Testing Breakpoints
+Test responsive design at these critical widths:
+- **375px** - iPhone
+- **768px** - iPad portrait (md: breakpoint)
+- **834px** - iPad Pro portrait (custom tablet)
+- **1024px** - iPad landscape (lg: breakpoint)
+- **1280px** - Desktop (xl: breakpoint)
+
+#### Configuration Files
+- **Tailwind Import**: `src/app/globals.css:1` - `@import "tailwindcss";`
+- **Custom Breakpoints**: `src/app/globals.css:14-24`
+- **Custom Utilities**: `src/app/globals.css:76-100`
+- **PostCSS Config**: `postcss.config.mjs`
+- **Package Version**: `tailwindcss: ^4` in `package.json`
+
+For complete breakpoint documentation, see: `RESPONSIVE_BREAKPOINTS_GUIDE.md`
+
 ---
 
-*Last updated: Based on squad system infinite recursion incident where squad_members and squads tables had circular policy dependencies* 
+*Last updated: Based on squad system infinite recursion incident where squad_members and squads tables had circular policy dependencies and current Tailwind CSS v4 responsive implementation* 
