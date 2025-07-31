@@ -55,10 +55,13 @@ function AdminRatingsContent() {
   const [analystQuote, setAnalystQuote] = useState('');
   const [breakdownSummary, setBreakdownSummary] = useState('');
   const [playerRatings, setPlayerRatings] = useState<PlayerRatingForm[]>([]);
+
+
   
   // Edit states
   const [editingRating, setEditingRating] = useState<SquadRatingWithDetails | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isLoadingEditData, setIsLoadingEditData] = useState(false);
 
   useEffect(() => {
     if (user && !loading) {
@@ -81,13 +84,14 @@ function AdminRatingsContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (selectedSquadId) {
+    if (selectedSquadId && !isLoadingEditData && !editingRating) {
+      // Only load default member data if we're not editing and not loading edit data
       loadSquadMembers(selectedSquadId);
-    } else {
+    } else if (!selectedSquadId && !editingRating) {
       setSquadMembers([]);
       setPlayerRatings([]);
     }
-  }, [selectedSquadId]);
+  }, [selectedSquadId, isLoadingEditData, editingRating]);
 
   const checkAccess = async () => {
     if (!user) return;
@@ -214,6 +218,48 @@ function AdminRatingsContent() {
     }
   };
 
+  const loadSquadMembersWithRatings = async (squadId: string, existingRatings: any[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('squad_members')
+        .select(`
+          id,
+          player_id,
+          profiles!squad_members_player_id_fkey(in_game_alias)
+        `)
+        .eq('squad_id', squadId)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      const members = (data || []).map((member: any) => ({
+        id: member.id,
+        player_id: member.player_id,
+        profiles: {
+          in_game_alias: member.profiles?.in_game_alias || 'Unknown Player'
+        }
+      }));
+
+      setSquadMembers(members);
+      
+      // Initialize player ratings form with existing ratings merged in
+      const playerRatingsWithData = members.map(member => {
+        const existingRating = existingRatings.find((rating: any) => rating.player_id === member.player_id);
+        return {
+          player_id: member.player_id,
+          player_alias: member.profiles.in_game_alias,
+          rating: existingRating ? existingRating.rating : 3.0,
+          notes: existingRating ? (existingRating.notes || '') : ''
+        };
+      });
+      
+      setPlayerRatings(playerRatingsWithData);
+    } catch (error) {
+      console.error('Error loading squad members with ratings:', error);
+      toast.error('Failed to load squad members');
+    }
+  };
+
   const resetForm = () => {
     setSelectedSquadId('');
     setSeasonName('');
@@ -223,6 +269,7 @@ function AdminRatingsContent() {
     setBreakdownSummary('');
     setPlayerRatings([]);
     setEditingRating(null);
+    setIsLoadingEditData(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -278,6 +325,8 @@ function AdminRatingsContent() {
 
   const handleEdit = async (rating: SquadRatingWithDetails) => {
     try {
+      setIsLoadingEditData(true); // Prevent useEffect from interfering
+      
       // Load the full rating details including player ratings
       const response = await fetch(`/api/squad-ratings/${rating.id}`);
       const data = await response.json();
@@ -286,34 +335,33 @@ function AdminRatingsContent() {
         throw new Error(data.error || 'Failed to load rating details');
       }
 
-      // Set form fields
+
+
+      // Set form fields (but NOT selectedSquadId yet to avoid useEffect)
       setEditingRating(rating);
-      setSelectedSquadId(rating.squad_id);
       setSeasonName(rating.season_name);
       setAnalysisDate(rating.analysis_date);
       setAnalystCommentary(rating.analyst_commentary || '');
       setAnalystQuote(rating.analyst_quote || '');
       setBreakdownSummary(rating.breakdown_summary || '');
 
-      // Load squad members first, then set player ratings
-      await loadSquadMembers(rating.squad_id);
-      
-      // Set player ratings from the loaded data
-      const existingPlayerRatings = data.player_ratings || [];
-      setPlayerRatings(prev => prev.map(pr => {
-        const existing = existingPlayerRatings.find((epr: any) => epr.player_id === pr.player_id);
-        return existing ? {
-          ...pr,
-          rating: existing.rating,
-          notes: existing.notes || ''
-        } : pr;
-      }));
+      // Load squad members and merge with existing player ratings in one step
+      await loadSquadMembersWithRatings(rating.squad_id, data.player_ratings || []);
+
+      // Set selectedSquadId AFTER player data is loaded
+      setSelectedSquadId(rating.squad_id);
 
       setActiveTab('edit');
     } catch (error) {
       console.error('Error loading rating for edit:', error);
       toast.error('Failed to load rating details');
+      setIsLoadingEditData(false);
     }
+    
+    // Set isLoadingEditData to false AFTER selectedSquadId is set and processed
+    setTimeout(() => {
+      setIsLoadingEditData(false);
+    }, 100);
   };
 
   const handleDelete = async (ratingId: string) => {
@@ -347,6 +395,10 @@ function AdminRatingsContent() {
     setPlayerRatings(prev => prev.map(pr => 
       pr.player_id === playerId ? { ...pr, [field]: value } : pr
     ));
+  };
+
+  const canEditRating = (rating: SquadRatingWithDetails) => {
+    return user && rating.analyst_id === user.id;
   };
 
   const formatDate = (dateString: string) => {
@@ -464,18 +516,22 @@ function AdminRatingsContent() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEdit(rating)}
-                          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(rating.id)}
-                          className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                        >
-                          Delete
-                        </button>
+                        {canEditRating(rating) && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(rating)}
+                              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(rating.id)}
+                              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                         <Link
                           href={`/league/ratings/${rating.id}`}
                           target="_blank"
@@ -483,6 +539,11 @@ function AdminRatingsContent() {
                         >
                           View
                         </Link>
+                        {!canEditRating(rating) && (
+                          <span className="text-xs text-gray-500 px-2">
+                            By {rating.analyst_alias}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -606,9 +667,14 @@ function AdminRatingsContent() {
               {/* Player Ratings */}
               {playerRatings.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-300 mb-4">Player Ratings</h3>
+                  <h3 className="text-lg font-medium text-gray-300 mb-4">
+                    Player Ratings
+                    <span className="text-sm text-gray-500 ml-2">(sorted by rating, highest first)</span>
+                  </h3>
                   <div className="space-y-4">
-                    {playerRatings.map((player) => (
+                    {playerRatings
+                      .sort((a, b) => b.rating - a.rating)
+                      .map((player) => (
                       <div key={player.player_id} className="bg-gray-900/50 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-white font-medium">{player.player_alias}</h4>

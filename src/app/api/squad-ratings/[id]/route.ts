@@ -39,6 +39,8 @@ export async function GET(
       return NextResponse.json({ error: playersError.message }, { status: 500 });
     }
 
+
+
     return NextResponse.json({ 
       squad_rating: squadRating, 
       player_ratings: playerRatings || [] 
@@ -92,6 +94,17 @@ export async function PUT(
 
     if (!profile?.is_admin && !profile?.is_media_manager) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
+    // Check if user is the original analyst for this rating
+    const { data: existingRating } = await supabaseAdmin
+      .from('squad_ratings')
+      .select('analyst_id')
+      .eq('id', id)
+      .single();
+
+    if (existingRating && existingRating.analyst_id !== user.id) {
+      return NextResponse.json({ error: 'You can only edit ratings you created' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -201,6 +214,17 @@ export async function DELETE(
 
     if (!profile?.is_admin && !profile?.is_media_manager) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
+    // Check if user is the original analyst for this rating
+    const { data: existingRating } = await supabaseAdmin
+      .from('squad_ratings')
+      .select('analyst_id')
+      .eq('id', id)
+      .single();
+
+    if (existingRating && existingRating.analyst_id !== user.id) {
+      return NextResponse.json({ error: 'You can only delete ratings you created' }, { status: 403 });
     }
 
     // Delete squad rating using admin client (player ratings will be deleted via CASCADE)
