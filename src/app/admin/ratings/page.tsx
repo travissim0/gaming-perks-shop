@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -35,7 +35,7 @@ interface PlayerRatingForm {
   notes: string;
 }
 
-export default function AdminRatingsPage() {
+function AdminRatingsContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const [hasAccess, setHasAccess] = useState(false);
@@ -676,5 +676,17 @@ export default function AdminRatingsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AdminRatingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-pink-500"></div>
+      </div>
+    }>
+      <AdminRatingsContent />
+    </Suspense>
   );
 }
