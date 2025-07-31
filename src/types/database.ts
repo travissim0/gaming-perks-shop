@@ -114,6 +114,40 @@ export interface SquadInvite {
   expires_at: string;
 }
 
+export interface SquadRating {
+  id: string;
+  squad_id: string;
+  analyst_id: string;
+  season_name: string;
+  analysis_date: string;
+  analyst_commentary?: string | null;
+  analyst_quote?: string | null;
+  breakdown_summary?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlayerRating {
+  id: string;
+  squad_rating_id: string;
+  player_id: string;
+  rating: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Extended interfaces for joined data
+export interface SquadRatingWithDetails extends SquadRating {
+  squad_name: string;
+  squad_tag: string;
+  analyst_alias: string;
+}
+
+export interface PlayerRatingWithDetails extends PlayerRating {
+  player_alias: string;
+}
+
 export interface Product {
   id: string;
   name: string;

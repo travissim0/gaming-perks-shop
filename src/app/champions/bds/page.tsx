@@ -92,7 +92,7 @@ const BDSPage = () => {
       { alias: 'Rocky', rings: 1 },
       { alias: 'shadow', rings: 1 },
       { alias: 'Terminator', rings: 1 },
-      { alias: 'The Korean', rings: 1 },
+      { alias: 'The |<orean', rings: 1 },
       { alias: 'Tyrael', rings: 1 },
       { alias: 'WolveN', rings: 1 }
     ]

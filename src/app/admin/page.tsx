@@ -679,6 +679,17 @@ export default function AdminDashboard() {
                   <div className="text-xs text-orange-400">Start/stop Infantry zones</div>
                 </div>
               </Link>
+
+              <Link
+                href="/admin/ratings"
+                className="flex items-center gap-4 px-4 py-3 bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/30 text-pink-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-pink-500/20"
+              >
+                <span className="text-3xl">📊</span>
+                <div>
+                  <div className="font-semibold">Squad Ratings</div>
+                  <div className="text-xs text-pink-400">Manage squad analysis</div>
+                </div>
+              </Link>
             </div>
             
             <div className="mt-6">

@@ -490,4 +490,63 @@ export const getSafeSquadMemberName = (member: {
 }): string => {
   const alias = member.in_game_alias || member.profiles?.in_game_alias;
   return validateDisplayName(alias);
+};
+
+/**
+ * Get all squad ratings with joined data
+ * @returns Promise with squad ratings including squad and analyst info
+ */
+export const getSquadRatings = async () => {
+  return retryWithContext(
+    async () => {
+      const { data, error } = await supabase.rpc('get_squad_ratings');
+      
+      if (error) {
+        throw new SupabaseQueryError(`Failed to fetch squad ratings: ${error.message}`, error);
+      }
+      
+      return { data, error: null };
+    },
+    'getSquadRatings',
+    RETRY_ATTEMPTS
+  );
+};
+
+/**
+ * Get a specific squad rating with player ratings
+ * @param ratingId - Squad rating ID
+ * @returns Promise with squad rating and player ratings
+ */
+export const getSquadRatingDetails = async (ratingId: string) => {
+  return retryWithContext(
+    async () => {
+      // Get squad rating details
+      const { data: squadRating, error: squadError } = await supabase
+        .rpc('get_squad_ratings')
+        .eq('id', ratingId)
+        .single();
+
+      if (squadError) {
+        throw new SupabaseQueryError(`Failed to fetch squad rating: ${squadError.message}`, squadError);
+      }
+
+      // Get player ratings for this squad rating
+      const { data: playerRatings, error: playersError } = await supabase
+        .rpc('get_player_ratings_for_squad', { squad_rating_uuid: ratingId });
+
+      if (playersError) {
+        throw new SupabaseQueryError(`Failed to fetch player ratings: ${playersError.message}`, playersError);
+      }
+
+      return { 
+        data: { 
+          squad_rating: squadRating, 
+          player_ratings: playerRatings || [] 
+        }, 
+        error: null 
+      };
+    },
+    'getSquadRatingDetails',
+    RETRY_ATTEMPTS
+  );
 }; 

@@ -1083,6 +1083,13 @@ export default function Navbar({ user }: { user: any }) {
                     <span className="mr-3 text-lg">🛡️</span>
                     <span className="font-medium">CTFDL</span>
                   </Link>
+                  <Link
+                    href="/league/ratings"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">📊</span>
+                    <span className="font-medium">Ratings</span>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -1237,6 +1244,14 @@ export default function Navbar({ user }: { user: any }) {
                     >
                       <span className="mr-3">🛡️</span>
                       CTFDL
+                    </Link>
+                    <Link
+                      href="/league/ratings"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📊</span>
+                      Ratings
                     </Link>
                   </div>
                 </div>
