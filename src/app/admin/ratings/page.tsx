@@ -310,7 +310,8 @@ function AdminRatingsContent() {
         analyst_commentary: analystCommentary.trim() || null,
         analyst_quote: analystQuote.trim() || null,
         breakdown_summary: breakdownSummary.trim() || null,
-        is_official: isOfficial,
+        // Only allow official ratings if user has permission
+        is_official: canToggleOfficialStatus ? isOfficial : false,
         player_ratings: playerRatings.filter(pr => pr.rating > 0)
       };
 
@@ -787,40 +788,57 @@ function AdminRatingsContent() {
                 </div>
               </div>
 
-              {/* Official/Unofficial Flag */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-3">
-                  Rating Type
-                </label>
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="rating_type"
-                      checked={!isOfficial}
-                      onChange={() => setIsOfficial(false)}
-                      className="w-4 h-4 text-orange-500 bg-gray-700 border-gray-600 focus:ring-orange-500 focus:ring-2"
-                    />
-                    <div>
-                      <span className="text-orange-400 font-medium">Unofficial</span>
-                      <p className="text-sm text-gray-400">Individual opinion - taken with a grain of salt</p>
-                    </div>
+              {/* Official/Unofficial Flag - Only show for CTF Admins and Site Admins */}
+              {canToggleOfficialStatus && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Rating Type
                   </label>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="rating_type"
-                      checked={isOfficial}
-                      onChange={() => setIsOfficial(true)}
-                      className="w-4 h-4 text-green-500 bg-gray-700 border-gray-600 focus:ring-green-500 focus:ring-2"
-                    />
-                    <div>
-                      <span className="text-green-400 font-medium">Official</span>
-                      <p className="text-sm text-gray-400">Panel review - objective stance</p>
-                    </div>
-                  </label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="rating_type"
+                        checked={!isOfficial}
+                        onChange={() => setIsOfficial(false)}
+                        className="w-4 h-4 text-orange-500 bg-gray-700 border-gray-600 focus:ring-orange-500 focus:ring-2"
+                      />
+                      <div>
+                        <span className="text-orange-400 font-medium">Unofficial</span>
+                        <p className="text-sm text-gray-400">Individual opinion - taken with a grain of salt</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="rating_type"
+                        checked={isOfficial}
+                        onChange={() => setIsOfficial(true)}
+                        className="w-4 h-4 text-green-500 bg-gray-700 border-gray-600 focus:ring-green-500 focus:ring-2"
+                      />
+                      <div>
+                        <span className="text-green-400 font-medium">Official</span>
+                        <p className="text-sm text-gray-400">Panel review - objective stance</p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {/* Show notice for non-CTF admins */}
+              {!canToggleOfficialStatus && (
+                <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <div className="text-orange-400 text-sm">ℹ️</div>
+                    <div>
+                      <p className="text-orange-200/80 text-sm">
+                        Your ratings will be marked as <span className="text-orange-400 font-medium">unofficial</span>. 
+                        Only CTF admins and site admins can create official ratings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Analyst Quote */}
               <div>

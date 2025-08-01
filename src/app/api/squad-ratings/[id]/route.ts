@@ -126,6 +126,14 @@ export async function PUT(
       player_ratings 
     } = body;
 
+    // Check permissions for changing official status
+    if (is_official !== undefined) {
+      const canSetOfficial = isAdmin || isCTFAdmin;
+      if (!canSetOfficial) {
+        return NextResponse.json({ error: 'Only site admins and CTF admins can change official rating status' }, { status: 403 });
+      }
+    }
+
     // Update squad rating using admin client
     const { data: squadRating, error: squadRatingError } = await supabaseAdmin
       .from('squad_ratings')
