@@ -44,8 +44,9 @@ function AdminRatingsContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const [hasAccess, setHasAccess] = useState(false);
+  const [isFullAdmin, setIsFullAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit'>('create');
   
   // Data states
   const [ratings, setRatings] = useState<SquadRatingWithDetails[]>([]);
@@ -90,8 +91,13 @@ function AdminRatingsContent() {
     const tabParam = searchParams.get('tab');
     if (tabParam === 'create') {
       setActiveTab('create');
+    } else if (isFullAdmin && tabParam === 'list') {
+      setActiveTab('list');
+    } else if (!isFullAdmin) {
+      // Non-admins always go to create tab
+      setActiveTab('create');
     }
-  }, [searchParams]);
+  }, [searchParams, isFullAdmin]);
 
   useEffect(() => {
     if (selectedSquadId && !isLoadingEditData && !editingRating) {
@@ -115,15 +121,18 @@ function AdminRatingsContent() {
 
       if (error) throw error;
 
-      const access = data?.is_admin || data?.is_media_manager || data?.ctf_role === 'ctf_admin' || false;
-      setHasAccess(access);
+      const adminAccess = data?.is_admin || data?.is_media_manager || data?.ctf_role === 'ctf_admin' || false;
       
-      if (!access) {
-        toast.error('Access denied: Admin, Media Manager, or CTF Admin privileges required');
-      }
+      // Allow everyone to access the page (for creating ratings)
+      setHasAccess(true);
+      // Track if user has full admin privileges  
+      setIsFullAdmin(adminAccess);
+      
     } catch (error) {
       console.error('Error checking access:', error);
-      toast.error('Error checking permissions');
+      // Still allow access, just without admin privileges
+      setHasAccess(true);
+      setIsFullAdmin(false);
     } finally {
       setIsLoading(false);
     }
@@ -555,9 +564,11 @@ function AdminRatingsContent() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">
-              Squad <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">Ratings</span> Management
+              Squad <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">Ratings</span> {isFullAdmin ? 'Management' : 'Creation'}
             </h1>
-            <p className="text-gray-400">Manage squad analysis and player ratings</p>
+            <p className="text-gray-400">
+              {isFullAdmin ? 'Manage squad analysis and player ratings' : 'Create your squad rating analysis'}
+            </p>
           </div>
           <Link 
             href="/admin"
@@ -569,16 +580,18 @@ function AdminRatingsContent() {
 
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8">
-          <button
-            onClick={() => { setActiveTab('list'); resetForm(); }}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${
-              activeTab === 'list' 
-                ? 'bg-pink-600 text-white shadow-lg shadow-pink-500/20' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            📊 All Ratings ({ratings.length})
-          </button>
+          {isFullAdmin && (
+            <button
+              onClick={() => { setActiveTab('list'); resetForm(); }}
+              className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                activeTab === 'list' 
+                  ? 'bg-pink-600 text-white shadow-lg shadow-pink-500/20' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              📊 All Ratings ({ratings.length})
+            </button>
+          )}
           <button
             onClick={() => { setActiveTab('create'); resetForm(); }}
             className={`px-6 py-3 rounded-lg font-medium transition-all ${
@@ -592,7 +605,7 @@ function AdminRatingsContent() {
         </div>
 
         {/* Content */}
-        {activeTab === 'list' && (
+        {activeTab === 'list' && isFullAdmin && (
           <div className="space-y-6">
             {ratings.length === 0 ? (
               <div className="text-center py-12">

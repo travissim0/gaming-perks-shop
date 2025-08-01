@@ -30,24 +30,8 @@ export default function SquadRatingsPage() {
       return;
     }
 
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('is_admin, is_media_manager')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error('Error checking permissions:', error);
-        setCanManageRatings(false);
-        return;
-      }
-
-      setCanManageRatings(data?.is_admin || data?.is_media_manager || false);
-    } catch (error) {
-      console.error('Error checking permissions:', error);
-      setCanManageRatings(false);
-    }
+    // Anyone who is authenticated can now create unofficial ratings
+    setCanManageRatings(true);
   };
 
   const fetchRatings = async () => {
