@@ -13,6 +13,7 @@ export default function SquadRatingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<string>('all');
+  const [showUnofficialRatings, setShowUnofficialRatings] = useState(false);
   const [canManageRatings, setCanManageRatings] = useState(false);
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function SquadRatingsPage() {
   // Get unique seasons for filter
   const seasons = Array.from(new Set(ratings.map(r => r.season_name))).sort();
 
-  // Filter ratings based on search and season
+  // Filter ratings based on search, season, and official status
   const filteredRatings = ratings.filter(rating => {
     const matchesSearch = !searchTerm || 
       rating.squad_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -80,8 +81,15 @@ export default function SquadRatingsPage() {
     
     const matchesSeason = selectedSeason === 'all' || rating.season_name === selectedSeason;
     
-    return matchesSearch && matchesSeason;
+    // Show official ratings by default, unofficial only if explicitly requested
+    const matchesOfficialFilter = rating.is_official || showUnofficialRatings;
+    
+    return matchesSearch && matchesSeason && matchesOfficialFilter;
   });
+
+  // Separate official and unofficial ratings for display
+  const officialRatings = filteredRatings.filter(r => r.is_official);
+  const unofficialRatings = filteredRatings.filter(r => !r.is_official);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -197,8 +205,41 @@ export default function SquadRatingsPage() {
                 ))}
               </select>
             </div>
+            <div className="md:w-64">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Rating Types
+              </label>
+              <label className="flex items-center space-x-3 cursor-pointer p-3 bg-gray-700 border border-gray-600 rounded-lg hover:bg-gray-650 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showUnofficialRatings}
+                  onChange={(e) => setShowUnofficialRatings(e.target.checked)}
+                  className="w-4 h-4 text-orange-500 bg-gray-600 border-gray-500 rounded focus:ring-orange-500 focus:ring-2"
+                />
+                <div>
+                  <span className="text-white text-sm font-medium">Show Unofficial Ratings</span>
+                  <p className="text-xs text-gray-400">Individual opinions</p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
+
+        {/* Unofficial Ratings Disclaimer */}
+        {showUnofficialRatings && unofficialRatings.length > 0 && (
+          <div className="bg-gradient-to-r from-orange-900/20 to-red-900/20 border border-orange-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-start space-x-3">
+              <div className="text-orange-400 text-xl">⚠️</div>
+              <div>
+                <h3 className="text-orange-300 font-semibold mb-1">Unofficial Ratings Disclaimer</h3>
+                <p className="text-orange-200/80 text-sm">
+                  These are individual opinions and should be taken with a grain of salt. 
+                  Official ratings represent panel reviews with an objective stance.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Results Count */}
         <div className="mb-6">
@@ -231,6 +272,14 @@ export default function SquadRatingsPage() {
                     <div className="flex items-center space-x-4">
                       <div className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xl font-bold px-3 py-2 rounded">
                         {rating.squad_tag}
+                      </div>
+                      {/* Official/Unofficial Badge */}
+                      <div className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        rating.is_official 
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                          : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                      }`}>
+                        {rating.is_official ? '✓ Official' : '⚠ Unofficial'}
                       </div>
                       <div>
                         <h3 className="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors">

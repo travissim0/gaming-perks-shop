@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       analyst_commentary, 
       analyst_quote, 
       breakdown_summary,
+      is_official = false,
       player_ratings 
     } = body;
 
@@ -92,7 +93,8 @@ export async function POST(request: NextRequest) {
         analysis_date: analysis_date || new Date().toISOString().split('T')[0],
         analyst_commentary,
         analyst_quote,
-        breakdown_summary
+        breakdown_summary,
+        is_official
       })
       .select()
       .single();

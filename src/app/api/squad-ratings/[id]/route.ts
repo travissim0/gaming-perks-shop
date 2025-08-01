@@ -114,6 +114,7 @@ export async function PUT(
       analyst_commentary, 
       analyst_quote, 
       breakdown_summary,
+      is_official,
       player_ratings 
     } = body;
 
@@ -125,7 +126,8 @@ export async function PUT(
         analysis_date,
         analyst_commentary,
         analyst_quote,
-        breakdown_summary
+        breakdown_summary,
+        ...(is_official !== undefined && { is_official })
       })
       .eq('id', id)
       .select()

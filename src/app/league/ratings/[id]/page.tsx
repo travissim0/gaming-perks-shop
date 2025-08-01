@@ -156,9 +156,30 @@ export default function IndividualSquadRatingPage() {
           <h1 className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tight">
             {squadRating.squad_name}
           </h1>
-          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-2xl font-bold px-6 py-3 rounded-lg inline-block">
-            {squadRating.squad_tag}
+          <div className="flex items-center justify-center space-x-4 mb-4">
+            <div className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-2xl font-bold px-6 py-3 rounded-lg">
+              {squadRating.squad_tag}
+            </div>
+            {/* Official/Unofficial Badge */}
+            <div className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+              squadRating.is_official 
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+            }`}>
+              {squadRating.is_official ? '✓ Official Rating' : '⚠ Unofficial Rating'}
+            </div>
           </div>
+          {/* Unofficial Disclaimer for Individual Page */}
+          {!squadRating.is_official && (
+            <div className="bg-gradient-to-r from-orange-900/20 to-red-900/20 border border-orange-500/30 rounded-lg p-4 max-w-2xl mx-auto">
+              <div className="flex items-center justify-center space-x-2">
+                <span className="text-orange-400">⚠️</span>
+                <p className="text-orange-200/80 text-sm text-center">
+                  This is an individual opinion and should be taken with a grain of salt.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Squad Breakdown by Analyst */}

@@ -54,6 +54,7 @@ function AdminRatingsContent() {
   const [analystCommentary, setAnalystCommentary] = useState('');
   const [analystQuote, setAnalystQuote] = useState('');
   const [breakdownSummary, setBreakdownSummary] = useState('');
+  const [isOfficial, setIsOfficial] = useState(false);
   const [playerRatings, setPlayerRatings] = useState<PlayerRatingForm[]>([]);
 
 
@@ -62,6 +63,8 @@ function AdminRatingsContent() {
   const [editingRating, setEditingRating] = useState<SquadRatingWithDetails | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [canToggleOfficialStatus, setCanToggleOfficialStatus] = useState(false);
 
   useEffect(() => {
     if (user && !loading) {
@@ -72,6 +75,7 @@ function AdminRatingsContent() {
   useEffect(() => {
     if (hasAccess) {
       loadData();
+      checkTogglePermissions();
     }
   }, [hasAccess]);
 
@@ -99,7 +103,7 @@ function AdminRatingsContent() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('is_admin, is_media_manager')
+        .select('is_admin, is_media_manager, ctf_role')
         .eq('id', user.id)
         .single();
 
@@ -267,6 +271,7 @@ function AdminRatingsContent() {
     setAnalystCommentary('');
     setAnalystQuote('');
     setBreakdownSummary('');
+    setIsOfficial(false);
     setPlayerRatings([]);
     setEditingRating(null);
     setIsLoadingEditData(false);
@@ -290,6 +295,7 @@ function AdminRatingsContent() {
         analyst_commentary: analystCommentary.trim() || null,
         analyst_quote: analystQuote.trim() || null,
         breakdown_summary: breakdownSummary.trim() || null,
+        is_official: isOfficial,
         player_ratings: playerRatings.filter(pr => pr.rating > 0)
       };
 
@@ -344,6 +350,7 @@ function AdminRatingsContent() {
       setAnalystCommentary(rating.analyst_commentary || '');
       setAnalystQuote(rating.analyst_quote || '');
       setBreakdownSummary(rating.breakdown_summary || '');
+      setIsOfficial(rating.is_official || false);
 
       // Load squad members and merge with existing player ratings in one step
       await loadSquadMembersWithRatings(rating.squad_id, data.player_ratings || []);
@@ -399,6 +406,71 @@ function AdminRatingsContent() {
 
   const canEditRating = (rating: SquadRatingWithDetails) => {
     return user && rating.analyst_id === user.id;
+  };
+
+  const checkTogglePermissions = async () => {
+    if (!user) {
+      setCanToggleOfficialStatus(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin, ctf_role')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        setCanToggleOfficialStatus(false);
+        return;
+      }
+
+      const canToggle = data?.is_admin || data?.ctf_role === 'ctf_admin';
+      setCanToggleOfficialStatus(canToggle);
+    } catch (error) {
+      console.error('Error checking toggle permissions:', error);
+      setCanToggleOfficialStatus(false);
+    }
+  };
+
+  const handleToggleOfficial = async (rating: SquadRatingWithDetails) => {
+    if (toggling) return; // Prevent multiple concurrent toggles
+    
+    if (!canToggleOfficialStatus) {
+      toast.error('Only site admins and CTF admins can change rating status');
+      return;
+    }
+
+    setToggling(rating.id);
+
+    try {
+      const newStatus = !rating.is_official;
+      const response = await fetch(`/api/squad-ratings/${rating.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({
+          is_official: newStatus
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update rating status');
+      }
+
+      toast.success(`Rating marked as ${newStatus ? 'official' : 'unofficial'}`);
+      await loadRatings(); // Reload the ratings list
+    } catch (error) {
+      console.error('Error toggling official status:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update rating status');
+    } finally {
+      setToggling(null);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -506,6 +578,14 @@ function AdminRatingsContent() {
                         <div className="bg-gradient-to-r from-pink-500 to-purple-500 text-white text-xl font-bold px-3 py-2 rounded">
                           {rating.squad_tag}
                         </div>
+                        {/* Official/Unofficial Status Badge */}
+                        <div className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          rating.is_official 
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                            : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                        }`}>
+                          {rating.is_official ? '✓ Official' : '⚠ Unofficial'}
+                        </div>
                         <div>
                           <h3 className="text-2xl font-bold text-white">
                             {rating.squad_name}
@@ -531,6 +611,32 @@ function AdminRatingsContent() {
                               Delete
                             </button>
                           </>
+                        )}
+                        {canToggleOfficialStatus && (
+                          <button
+                            onClick={() => handleToggleOfficial(rating)}
+                            disabled={toggling === rating.id}
+                            className={`px-3 py-2 text-white rounded transition-colors text-sm ${
+                              rating.is_official 
+                                ? 'bg-orange-600 hover:bg-orange-700' 
+                                : 'bg-green-600 hover:bg-green-700'
+                            } ${toggling === rating.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={`Mark as ${rating.is_official ? 'unofficial' : 'official'}`}
+                          >
+                            {toggling === rating.id ? (
+                              <div className="flex items-center space-x-1">
+                                <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>...</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-1">
+                                <span>{rating.is_official ? '⚠️' : '✓'}</span>
+                                <span className="hidden sm:inline">
+                                  {rating.is_official ? 'Make Unofficial' : 'Make Official'}
+                                </span>
+                              </div>
+                            )}
+                          </button>
                         )}
                         <Link
                           href={`/league/ratings/${rating.id}`}
@@ -619,6 +725,41 @@ function AdminRatingsContent() {
                     onChange={(e) => setAnalysisDate(e.target.value)}
                     className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+
+              {/* Official/Unofficial Flag */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-3">
+                  Rating Type
+                </label>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="rating_type"
+                      checked={!isOfficial}
+                      onChange={() => setIsOfficial(false)}
+                      className="w-4 h-4 text-orange-500 bg-gray-700 border-gray-600 focus:ring-orange-500 focus:ring-2"
+                    />
+                    <div>
+                      <span className="text-orange-400 font-medium">Unofficial</span>
+                      <p className="text-sm text-gray-400">Individual opinion - taken with a grain of salt</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="rating_type"
+                      checked={isOfficial}
+                      onChange={() => setIsOfficial(true)}
+                      className="w-4 h-4 text-green-500 bg-gray-700 border-gray-600 focus:ring-green-500 focus:ring-2"
+                    />
+                    <div>
+                      <span className="text-green-400 font-medium">Official</span>
+                      <p className="text-sm text-gray-400">Panel review - objective stance</p>
+                    </div>
+                  </label>
                 </div>
               </div>
 

@@ -123,6 +123,7 @@ export interface SquadRating {
   analyst_commentary?: string | null;
   analyst_quote?: string | null;
   breakdown_summary?: string | null;
+  is_official: boolean;
   created_at: string;
   updated_at: string;
 }
