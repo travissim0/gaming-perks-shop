@@ -55,18 +55,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin or media manager
+    // Get user profile for permission checks
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin, is_media_manager')
+      .select('is_admin, is_media_manager, ctf_role')
       .eq('id', user.id)
       .single();
 
-    if (!profile?.is_admin && !profile?.is_media_manager) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
-
+    // Parse request body early to check if it's an official rating
     const body = await request.json();
+    const isOfficialRating = body.is_official === true;
+
+    // Check permissions based on rating type
+    if (isOfficialRating) {
+      // Only admins and CTF admins can create official ratings
+      const canCreateOfficial = profile?.is_admin || profile?.ctf_role === 'ctf_admin';
+      if (!canCreateOfficial) {
+        return NextResponse.json({ error: 'Only admins and CTF admins can create official ratings' }, { status: 403 });
+      }
+    }
+    // For unofficial ratings, anyone can create them (no additional permission check needed)
+
     const { 
       squad_id, 
       season_name, 

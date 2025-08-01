@@ -81,15 +81,20 @@ export default function SquadRatingsPage() {
     
     const matchesSeason = selectedSeason === 'all' || rating.season_name === selectedSeason;
     
-    // Show official ratings by default, unofficial only if explicitly requested
-    const matchesOfficialFilter = rating.is_official || showUnofficialRatings;
+    // Handle missing is_official field (default to false for backwards compatibility)
+    const isOfficial = rating.is_official === true;
+    const isUnofficial = rating.is_official === false || rating.is_official === undefined || rating.is_official === null;
+    
+    // Show official ratings always, unofficial only if requested
+    // If is_official field is missing, treat as unofficial for backwards compatibility
+    const matchesOfficialFilter = isOfficial || (isUnofficial && showUnofficialRatings);
     
     return matchesSearch && matchesSeason && matchesOfficialFilter;
   });
 
   // Separate official and unofficial ratings for display
-  const officialRatings = filteredRatings.filter(r => r.is_official);
-  const unofficialRatings = filteredRatings.filter(r => !r.is_official);
+  const officialRatings = filteredRatings.filter(r => r.is_official === true);
+  const unofficialRatings = filteredRatings.filter(r => r.is_official !== true);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -209,18 +214,23 @@ export default function SquadRatingsPage() {
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Rating Types
               </label>
-              <label className="flex items-center space-x-3 cursor-pointer p-3 bg-gray-700 border border-gray-600 rounded-lg hover:bg-gray-650 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={showUnofficialRatings}
-                  onChange={(e) => setShowUnofficialRatings(e.target.checked)}
-                  className="w-4 h-4 text-orange-500 bg-gray-600 border-gray-500 rounded focus:ring-orange-500 focus:ring-2"
-                />
-                <div>
-                  <span className="text-white text-sm font-medium">Show Unofficial Ratings</span>
-                  <p className="text-xs text-gray-400">Individual opinions</p>
+              <button
+                onClick={() => setShowUnofficialRatings(!showUnofficialRatings)}
+                className={`w-full p-4 rounded-lg border-2 transition-all duration-200 ${
+                  showUnofficialRatings 
+                    ? 'bg-orange-600 border-orange-500 text-white' 
+                    : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-orange-500 hover:bg-gray-650'
+                }`}
+              >
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-lg">
+                    {showUnofficialRatings ? '👁️' : '👁️‍🗨️'}
+                  </span>
+                  <span className="font-medium">
+                    {showUnofficialRatings ? 'Hide' : 'Show'} Unofficial Ratings
+                  </span>
                 </div>
-              </label>
+              </button>
             </div>
           </div>
         </div>
@@ -231,10 +241,10 @@ export default function SquadRatingsPage() {
             <div className="flex items-start space-x-3">
               <div className="text-orange-400 text-xl">⚠️</div>
               <div>
-                <h3 className="text-orange-300 font-semibold mb-1">Unofficial Ratings Disclaimer</h3>
+                <h3 className="text-orange-300 font-semibold mb-1">Unofficial Ratings Shown</h3>
                 <p className="text-orange-200/80 text-sm">
-                  These are individual opinions and should be taken with a grain of salt. 
-                  Official ratings represent panel reviews with an objective stance.
+                  Individual opinions shown alongside official panel reviews. 
+                  Look for the badges to distinguish between rating types.
                 </p>
               </div>
             </div>
@@ -286,7 +296,9 @@ export default function SquadRatingsPage() {
                           {rating.squad_name}
                         </h3>
                         <p className="text-gray-400">
-                          Analyzed by <span className="text-cyan-400">{rating.analyst_alias}</span>
+                          Analyzed by <span className="text-cyan-400">
+                            {rating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : rating.analyst_alias}
+                          </span>
                         </p>
                       </div>
                     </div>

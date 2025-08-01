@@ -8,6 +8,11 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
 
+// Available seasons (hardcoded list)
+const AVAILABLE_SEASONS = [
+  'CTFPL Season 22'
+] as const;
+
 interface Squad {
   id: string;
   name: string;
@@ -49,7 +54,7 @@ function AdminRatingsContent() {
   
   // Form states
   const [selectedSquadId, setSelectedSquadId] = useState('');
-  const [seasonName, setSeasonName] = useState('');
+  const [seasonName, setSeasonName] = useState(AVAILABLE_SEASONS[0]);
   const [analysisDate, setAnalysisDate] = useState(new Date().toISOString().split('T')[0]);
   const [analystCommentary, setAnalystCommentary] = useState('');
   const [analystQuote, setAnalystQuote] = useState('');
@@ -65,6 +70,7 @@ function AdminRatingsContent() {
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [canToggleOfficialStatus, setCanToggleOfficialStatus] = useState(false);
+  const [userAdminStatus, setUserAdminStatus] = useState({ isAdmin: false, isCTFAdmin: false });
 
   useEffect(() => {
     if (user && !loading) {
@@ -109,11 +115,11 @@ function AdminRatingsContent() {
 
       if (error) throw error;
 
-      const access = data?.is_admin || data?.is_media_manager || false;
+      const access = data?.is_admin || data?.is_media_manager || data?.ctf_role === 'ctf_admin' || false;
       setHasAccess(access);
       
       if (!access) {
-        toast.error('Access denied: Admin or Media Manager privileges required');
+        toast.error('Access denied: Admin, Media Manager, or CTF Admin privileges required');
       }
     } catch (error) {
       console.error('Error checking access:', error);
@@ -266,7 +272,7 @@ function AdminRatingsContent() {
 
   const resetForm = () => {
     setSelectedSquadId('');
-    setSeasonName('');
+    setSeasonName(AVAILABLE_SEASONS[0]);
     setAnalysisDate(new Date().toISOString().split('T')[0]);
     setAnalystCommentary('');
     setAnalystQuote('');
@@ -280,8 +286,8 @@ function AdminRatingsContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedSquadId || !seasonName.trim()) {
-      toast.error('Please select a squad and enter a season name');
+    if (!selectedSquadId || !seasonName) {
+      toast.error('Please select a squad and season');
       return;
     }
 
@@ -290,7 +296,7 @@ function AdminRatingsContent() {
     try {
       const payload = {
         squad_id: selectedSquadId,
-        season_name: seasonName.trim(),
+        season_name: seasonName,
         analysis_date: analysisDate,
         analyst_commentary: analystCommentary.trim() || null,
         analyst_quote: analystQuote.trim() || null,
@@ -405,12 +411,26 @@ function AdminRatingsContent() {
   };
 
   const canEditRating = (rating: SquadRatingWithDetails) => {
-    return user && rating.analyst_id === user.id;
+    if (!user) return false;
+    
+    // Site admins and CTF admins can edit any rating
+    if (userAdminStatus.isAdmin || userAdminStatus.isCTFAdmin) {
+      return true;
+    }
+    
+    // For unofficial ratings: only the author can edit (if not admin)
+    if (!rating.is_official) {
+      return rating.analyst_id === user.id;
+    }
+    
+    // For official ratings: only admins can edit (already checked above)
+    return false;
   };
 
   const checkTogglePermissions = async () => {
     if (!user) {
       setCanToggleOfficialStatus(false);
+      setUserAdminStatus({ isAdmin: false, isCTFAdmin: false });
       return;
     }
 
@@ -423,14 +443,20 @@ function AdminRatingsContent() {
 
       if (error) {
         setCanToggleOfficialStatus(false);
+        setUserAdminStatus({ isAdmin: false, isCTFAdmin: false });
         return;
       }
 
-      const canToggle = data?.is_admin || data?.ctf_role === 'ctf_admin';
+      const isAdmin = data?.is_admin === true;
+      const isCTFAdmin = data?.ctf_role === 'ctf_admin';
+      const canToggle = isAdmin || isCTFAdmin;
+      
       setCanToggleOfficialStatus(canToggle);
+      setUserAdminStatus({ isAdmin, isCTFAdmin });
     } catch (error) {
       console.error('Error checking toggle permissions:', error);
       setCanToggleOfficialStatus(false);
+      setUserAdminStatus({ isAdmin: false, isCTFAdmin: false });
     }
   };
 
@@ -446,15 +472,29 @@ function AdminRatingsContent() {
 
     try {
       const newStatus = !rating.is_official;
+      const SYSTEM_ACCOUNT_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
+      
+      // Prepare the payload
+      const payload: any = {
+        is_official: newStatus
+      };
+      
+      // If making official, change analyst to system account
+      if (newStatus) {
+        payload.analyst_id = SYSTEM_ACCOUNT_ID;
+      }
+      // If making unofficial, revert to current user as analyst
+      else {
+        payload.analyst_id = user.id;
+      }
+      
       const response = await fetch(`/api/squad-ratings/${rating.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
         },
-        body: JSON.stringify({
-          is_official: newStatus
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -591,7 +631,9 @@ function AdminRatingsContent() {
                             {rating.squad_name}
                           </h3>
                           <p className="text-gray-400">
-                            By <span className="text-pink-400">{rating.analyst_alias}</span> • {rating.season_name}
+                            By <span className="text-pink-400">
+                              {rating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : rating.analyst_alias}
+                            </span> • {rating.season_name}
                           </p>
                         </div>
                       </div>
@@ -704,16 +746,20 @@ function AdminRatingsContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Season Name <span className="text-red-400">*</span>
+                    Season <span className="text-red-400">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={seasonName}
                     onChange={(e) => setSeasonName(e.target.value)}
                     className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                    placeholder="e.g., Season 53, Season 54, etc."
                     required
-                  />
+                  >
+                    {AVAILABLE_SEASONS.map(season => (
+                      <option key={season} value={season}>
+                        {season}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">

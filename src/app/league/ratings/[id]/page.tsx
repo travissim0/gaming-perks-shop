@@ -185,7 +185,9 @@ export default function IndividualSquadRatingPage() {
         {/* Squad Breakdown by Analyst */}
         <div className="text-center mb-6">
           <h2 className="text-3xl font-bold text-gray-300 mb-2">
-            Squad Breakdown by <span className="text-cyan-400">{squadRating.analyst_alias}</span>
+            Squad Breakdown by <span className="text-cyan-400">
+              {squadRating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : squadRating.analyst_alias}
+            </span>
           </h2>
           <h3 className="text-xl text-gray-400 mb-2">({squadRating.season_name})</h3>
           <p className="text-gray-500">{formatDate(squadRating.analysis_date)}</p>
@@ -203,7 +205,7 @@ export default function IndividualSquadRatingPage() {
                   "{squadRating.analyst_quote}"
                 </blockquote>
                 <cite className="text-cyan-400 text-sm font-medium mt-2 block">
-                  — {squadRating.analyst_alias}
+                  — {squadRating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : squadRating.analyst_alias}
                 </cite>
               </div>
             )}

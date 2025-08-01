@@ -1,9 +1,7 @@
--- Add Official/Unofficial Flag to Squad Ratings System
+-- Squad Ratings Official/Unofficial System Migration
 -- Execute this in your Supabase SQL Editor
--- Adds is_official boolean column and marks existing ratings as unofficial
--- Updates system to support anonymous official ratings and improved permissions
 
--- Add the is_official column to squad_ratings table (only if it doesn't exist)
+-- Step 1: Add is_official column if it doesn't exist
 DO $$ 
 BEGIN
     IF NOT EXISTS (
@@ -16,12 +14,15 @@ BEGIN
     END IF;
 END $$;
 
--- Mark all existing ratings as unofficial
+-- Step 2: Mark all existing ratings as unofficial
 UPDATE squad_ratings 
 SET is_official = FALSE;
 
--- Update the get_squad_ratings function to include is_official field
-CREATE OR REPLACE FUNCTION get_squad_ratings()
+-- Step 3: Drop existing function if it exists
+DROP FUNCTION IF EXISTS get_squad_ratings();
+
+-- Step 4: Create new function with is_official field
+CREATE FUNCTION get_squad_ratings()
 RETURNS TABLE (
     id UUID,
     squad_id UUID,
@@ -61,21 +62,20 @@ AS $$
     ORDER BY sr.is_official DESC, sr.analysis_date DESC, sr.created_at DESC;
 $$;
 
--- Add index for performance on official/unofficial filtering
+-- Step 5: Add performance index
 CREATE INDEX IF NOT EXISTS idx_squad_ratings_is_official ON squad_ratings(is_official);
 
--- Update table comment for documentation
-COMMENT ON COLUMN squad_ratings.is_official IS 
-    'Flag to distinguish between official ratings (panel reviews) and unofficial ratings (individual opinions)';
-
--- Grant permissions (maintain existing access)
-GRANT EXECUTE ON FUNCTION get_squad_ratings() TO authenticated;
-
--- Standardize all existing season names to CTFPL Season 22
+-- Step 6: Update all existing season names to CTFPL Season 22
 UPDATE squad_ratings 
 SET season_name = 'CTFPL Season 22'
 WHERE season_name IS NOT NULL;
 
--- Add documentation for season name constraint
+-- Step 7: Add documentation comments
+COMMENT ON COLUMN squad_ratings.is_official IS 
+    'Flag to distinguish between official ratings (panel reviews) and unofficial ratings (individual opinions)';
+
 COMMENT ON COLUMN squad_ratings.season_name IS 
     'Season name must be selected from predefined list (currently: CTFPL Season 22)';
+
+-- Step 8: Grant permissions
+GRANT EXECUTE ON FUNCTION get_squad_ratings() TO authenticated;

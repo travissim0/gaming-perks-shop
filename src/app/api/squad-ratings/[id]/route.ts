@@ -85,26 +85,33 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin or media manager
+    // Check if user has permissions to edit ratings
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin, is_media_manager')
+      .select('is_admin, is_media_manager, ctf_role')
       .eq('id', user.id)
       .single();
 
-    if (!profile?.is_admin && !profile?.is_media_manager) {
+    const isAdmin = profile?.is_admin === true;
+    const isMediaManager = profile?.is_media_manager === true;
+    const isCTFAdmin = profile?.ctf_role === 'ctf_admin';
+
+    // Allow access for admins, media managers, or CTF admins
+    if (!isAdmin && !isMediaManager && !isCTFAdmin) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    // Check if user is the original analyst for this rating
-    const { data: existingRating } = await supabaseAdmin
-      .from('squad_ratings')
-      .select('analyst_id')
-      .eq('id', id)
-      .single();
+    // Check if user is the original analyst for this rating (only for non-admins)
+    if (!isAdmin && !isCTFAdmin) {
+      const { data: existingRating } = await supabaseAdmin
+        .from('squad_ratings')
+        .select('analyst_id')
+        .eq('id', id)
+        .single();
 
-    if (existingRating && existingRating.analyst_id !== user.id) {
-      return NextResponse.json({ error: 'You can only edit ratings you created' }, { status: 403 });
+      if (existingRating && existingRating.analyst_id !== user.id) {
+        return NextResponse.json({ error: 'You can only edit ratings you created' }, { status: 403 });
+      }
     }
 
     const body = await request.json();
@@ -115,6 +122,7 @@ export async function PUT(
       analyst_quote, 
       breakdown_summary,
       is_official,
+      analyst_id,
       player_ratings 
     } = body;
 
@@ -127,7 +135,8 @@ export async function PUT(
         analyst_commentary,
         analyst_quote,
         breakdown_summary,
-        ...(is_official !== undefined && { is_official })
+        ...(is_official !== undefined && { is_official }),
+        ...(analyst_id !== undefined && { analyst_id })
       })
       .eq('id', id)
       .select()
