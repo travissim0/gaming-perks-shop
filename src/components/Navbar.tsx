@@ -375,9 +375,6 @@ export default function Navbar({ user }: { user: any }) {
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
   ];
 
-  const activityNavItems = [
-    { href: '/event-log', label: 'Player Event Log', icon: '📋' },
-  ];
 
   const communityNavItems = [
     { href: '/forum', label: 'Forum', icon: '💬' },
@@ -1090,6 +1087,13 @@ export default function Navbar({ user }: { user: any }) {
                     <span className="mr-3 text-lg">📊</span>
                     <span className="font-medium">Ratings</span>
                   </Link>
+                  <Link
+                    href="/event-log"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">📋</span>
+                    <span className="font-medium">Player Event Log</span>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -1229,6 +1233,12 @@ export default function Navbar({ user }: { user: any }) {
                       <span className="mr-3">📰</span>
                       News
                     </Link>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">League</h4>
+                  <div className="space-y-1">
                     <Link
                       href="/league/ctfpl"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
@@ -1252,6 +1262,14 @@ export default function Navbar({ user }: { user: any }) {
                     >
                       <span className="mr-3">📊</span>
                       Ratings
+                    </Link>
+                    <Link
+                      href="/event-log"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📋</span>
+                      Player Event Log
                     </Link>
                   </div>
                 </div>
@@ -1307,22 +1325,6 @@ export default function Navbar({ user }: { user: any }) {
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Activity</h4>
-                  <div className="space-y-1">
-                    {activityNavItems.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        <span className="mr-3">{item.icon}</span>
-                        {item.label}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
 
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Misc</h4>

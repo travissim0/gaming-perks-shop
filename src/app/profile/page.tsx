@@ -81,6 +81,7 @@ export default function ProfilePage() {
   const [userSquad, setUserSquad] = useState<Squad[]>([]);
   const [aliases, setAliases] = useState<string[]>([]);
   const [aliasInput, setAliasInput] = useState('');
+  const [aliasError, setAliasError] = useState<string | null>(null);
   
   // Game-related state
   const [userGames, setUserGames] = useState<RecordedGame[]>([]);
@@ -169,14 +170,45 @@ export default function ProfilePage() {
     setAliases(aliases.filter(a => a !== alias));
   };
 
+  const validateAlias = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 'Display Name / Main Alias cannot be blank or empty.';
+    }
+    if (trimmed.length < 1) {
+      return 'Display Name / Main Alias must be at least 1 character long.';
+    }
+    if (!/\S/.test(trimmed)) {
+      return 'Display Name / Main Alias must contain at least one valid character (not just spaces).';
+    }
+    return null;
+  };
+
+  const handleAliasChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInGameAlias(value);
+    
+    // Clear previous error when user starts typing
+    if (aliasError) {
+      setAliasError(null);
+    }
+  };
+
+  const handleAliasBlur = () => {
+    const error = validateAlias(inGameAlias);
+    setAliasError(error);
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!user) return;
 
-    // Prevent blank display name
-    if (!inGameAlias.trim()) {
-      toast.error('Display Name / Main Alias cannot be blank.');
+    // Validate display name/main alias
+    const aliasValidationError = validateAlias(inGameAlias);
+    if (aliasValidationError) {
+      toast.error(aliasValidationError);
+      setAliasError(aliasValidationError);
       return;
     }
     
@@ -584,11 +616,26 @@ export default function ProfilePage() {
                       id="inGameAlias"
                       type="text"
                       value={inGameAlias}
-                      onChange={(e) => setInGameAlias(e.target.value)}
+                      onChange={handleAliasChange}
+                      onBlur={handleAliasBlur}
                       required
-                      className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-mono"
+                      className={`w-full px-4 py-3 bg-gray-800 border rounded-lg text-white focus:outline-none focus:ring-2 transition-all duration-300 font-mono ${
+                        aliasError 
+                          ? 'border-red-500 focus:border-red-400 focus:ring-red-500/20' 
+                          : 'border-gray-600 focus:border-cyan-500 focus:ring-cyan-500/20'
+                      }`}
                       placeholder="Enter your combat alias..."
                     />
+                    {aliasError && (
+                      <p className="mt-2 text-sm text-red-400 font-mono">
+                        ⚠️ {aliasError}
+                      </p>
+                    )}
+                    {!aliasError && (
+                      <p className="mt-2 text-xs text-gray-400 font-mono">
+                        📝 Must contain at least 1 valid character, cannot be blank or just spaces
+                      </p>
+                    )}
                   </div>
                 </div>
 
