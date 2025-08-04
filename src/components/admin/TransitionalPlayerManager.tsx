@@ -123,7 +123,7 @@ export default function TransitionalPlayerManager({ isVisible = true }: Transiti
               🔄 Transitional Players ({transitionalPlayers.length})
             </h4>
             <p className="text-sm text-gray-400 mb-3">
-              Players from other zones (Skirmish/USL) who are exempt from squad size limits
+              Players from other zones (Skirmish/USL) or new players who are exempt from squad size limits
             </p>
             {transitionalPlayers.length === 0 ? (
               <div className="bg-gray-700 rounded p-4 text-center text-gray-400">
@@ -188,7 +188,7 @@ export default function TransitionalPlayerManager({ isVisible = true }: Transiti
         <h5 className="font-semibold text-blue-400 mb-2">📋 About Transitional Players</h5>
         <ul className="text-sm text-gray-300 space-y-1">
           <li>• Transitional players are exempt from the 15-player squad limit</li>
-          <li>• They are typically players coming from other zones (Skirmish/USL)</li>
+          <li>• They are typically players coming from other zones (Skirmish/USL) or new players</li>
           <li>• Squads can have unlimited transitional players</li>
           <li>• Regular players still count toward the 15-member limit</li>
           <li>• Admin approval is required to change transitional status</li>

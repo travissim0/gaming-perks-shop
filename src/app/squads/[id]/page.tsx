@@ -19,6 +19,7 @@ interface SquadMember {
   role: 'captain' | 'co_captain' | 'player';
   status: string;
   joined_at: string;
+  transitional_player?: boolean;
 }
 
 interface Squad {
@@ -158,7 +159,8 @@ export default function SquadDetailPage() {
         in_game_alias: member.profiles?.in_game_alias || 'Anonymous User',
         role: member.role,
         status: member.status || 'active',
-        joined_at: member.joined_at
+        joined_at: member.joined_at,
+        transitional_player: member.profiles?.transitional_player || false
       })) || []
     };
 
@@ -398,7 +400,13 @@ export default function SquadDetailPage() {
           if (membersResponse.error) throw new Error(membersResponse.error.message);
           if (playerResponse.error) throw new Error(playerResponse.error.message);
 
-          const currentMembers = membersResponse.data || [];
+          const currentMembers = (membersResponse.data || []).map((member: any) => ({
+            ...member,
+            profile: member.profiles ? {
+              ...member.profiles,
+              transitional_player: member.profiles.transitional_player || false
+            } : undefined
+          }));
           const newPlayer = playerResponse.data;
 
           // Check if player can be added to squad
@@ -761,6 +769,55 @@ export default function SquadDetailPage() {
     }
   };
 
+  const getMemberCounts = (members: SquadMember[]) => {
+    const transitionalCount = members.filter(m => m.transitional_player).length;
+    const regularCount = members.length - transitionalCount;
+    const totalCount = members.length;
+    
+    return { regularCount, transitionalCount, totalCount };
+  };
+
+  const formatMemberCountDisplay = (members: SquadMember[]) => {
+    const { regularCount, transitionalCount, totalCount } = getMemberCounts(members);
+    
+    if (transitionalCount === 0) {
+      return `${totalCount}`;
+    }
+    
+    return `${regularCount} + ${transitionalCount}`;
+  };
+
+  const renderMemberCountBadges = (members: SquadMember[], squad: Squad) => {
+    const { regularCount, transitionalCount } = getMemberCounts(members);
+    const maxMembers = squad.max_members || 15;
+    const isOverLimit = regularCount > maxMembers;
+    
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`px-2 py-1 rounded-md text-sm border ${
+          isOverLimit 
+            ? 'bg-red-600/20 text-red-300 border-red-500/30' 
+            : 'bg-blue-600/20 text-blue-300 border-blue-500/30'
+        }`}>
+          {regularCount} Regular
+        </span>
+        {transitionalCount > 0 && (
+          <span className="bg-orange-600/20 text-orange-300 px-2 py-1 rounded-md text-sm border border-orange-500/30">
+            {transitionalCount} Transitional
+          </span>
+        )}
+        {isOverLimit && (
+          <span 
+            className="bg-red-600/20 text-red-300 px-2 py-1 rounded-md text-sm border border-red-500/30 cursor-help flex items-center gap-1"
+            title={`Squad exceeds limit: ${regularCount}/${maxMembers} regular members. Squad may be ineligible for tournaments.`}
+          >
+            ⚠️ Over Limit
+          </span>
+        )}
+      </div>
+    );
+  };
+
   // Squad management functions
   const kickMember = async (memberId: string, memberName: string) => {
     if (!confirm(`Are you sure you want to kick ${memberName} from the squad?`)) return;
@@ -948,8 +1005,23 @@ export default function SquadDetailPage() {
                       <p className="text-gray-300 text-lg mb-4">{squad.description}</p>
                     )}
                     
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-4">
-                      <span>👥 {squad.members.length} members</span>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-4">
+                      <div className="flex items-center gap-2">
+                        <span>👥</span>
+                        <div className="flex items-center gap-1">
+                          <span className="bg-blue-600/20 text-blue-300 px-1.5 py-0.5 rounded text-xs">
+                            {getMemberCounts(squad.members).regularCount}
+                          </span>
+                          {getMemberCounts(squad.members).transitionalCount > 0 && (
+                            <>
+                              <span className="text-gray-500">+</span>
+                              <span className="bg-orange-600/20 text-orange-300 px-1.5 py-0.5 rounded text-xs">
+                                {getMemberCounts(squad.members).transitionalCount}T
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
                       <span>📅 Created {new Date(squad.created_at).toLocaleDateString()}</span>
                     </div>
                     
@@ -1112,9 +1184,33 @@ export default function SquadDetailPage() {
         <div className="flex justify-center">
           <div className="w-full max-w-4xl">
             <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
-              <h2 className="text-2xl font-bold text-cyan-400 mb-6 flex items-center gap-2">
-                👥 Squad Members ({squad.members.length})
-              </h2>
+              <div className="mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+                  <h2 className="text-2xl font-bold text-cyan-400 flex items-center gap-2">
+                    👥 Squad Members
+                  </h2>
+                  {renderMemberCountBadges(squad.members, squad)}
+                </div>
+                
+                {/* Legend */}
+                <div className="bg-slate-700/30 border border-slate-600/30 rounded-lg p-4 mt-3">
+                  <div className="text-sm font-medium text-gray-300 mb-3">Badge Legend:</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded-md text-sm border border-blue-500/30">Regular</span>
+                      <span className="text-gray-300 text-sm">Normal squad members</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-orange-600/20 text-orange-300 px-2 py-1 rounded-md text-sm border border-orange-500/30">Transitional</span>
+                      <span className="text-gray-300 text-sm">Players from other zones (Skirmish/USL) or new players</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-red-600/20 text-red-300 px-2 py-1 rounded-md text-sm border border-red-500/30 flex items-center gap-1">⚠️ Over Limit</span>
+                      <span className="text-gray-300 text-sm">Squad exceeds maximum capacity</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               {/* Mobile-optimized compact member list */}
               <div className="space-y-2 md:space-y-3">
@@ -1140,7 +1236,24 @@ export default function SquadDetailPage() {
                       <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
                         <span className="text-lg md:text-2xl flex-shrink-0">{getRoleIcon(member.role)}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-white text-sm md:text-base truncate">{member.in_game_alias}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-white text-sm md:text-base truncate">{member.in_game_alias}</p>
+                            {member.transitional_player ? (
+                              <span 
+                                className="text-orange-400 text-xs px-1.5 py-0.5 bg-orange-900/30 rounded border border-orange-500/30 cursor-help"
+                                title="Transitional Player - From other zones (Skirmish/USL) or new players, exempt from squad size limits"
+                              >
+                                🔄 T
+                              </span>
+                            ) : (
+                              <span 
+                                className="text-blue-400 text-xs px-1.5 py-0.5 bg-blue-900/30 rounded border border-blue-500/30 cursor-help"
+                                title="Regular Player - Counts toward squad size limit"
+                              >
+                                R
+                              </span>
+                            )}
+                          </div>
                           <p className={`text-xs md:text-sm ${getRoleColor(member.role)}`}>
                             {getRoleDisplayName(member.role)}
                           </p>

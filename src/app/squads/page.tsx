@@ -77,6 +77,7 @@ export default function SquadsPage() {
   const [allSquads, setAllSquads] = useState<Squad[]>([]);
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [memberData, setMemberData] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<SquadInvite[]>([]);
   const [receivedInvitations, setReceivedInvitations] = useState<SquadInvite[]>([]);
   const [sentJoinRequests, setSentJoinRequests] = useState<SquadInvite[]>([]);
@@ -144,6 +145,50 @@ export default function SquadsPage() {
       }
     }
   });
+
+  // Helper functions for member count display
+  const getMemberCounts = (squadId: string, memberData: any[]) => {
+    const squadMembers = memberData.filter(m => m.squad_id === squadId);
+    const transitionalCount = squadMembers.filter(m => m.profiles?.transitional_player).length;
+    const regularCount = squadMembers.length - transitionalCount;
+    const totalCount = squadMembers.length;
+    
+    return { regularCount, transitionalCount, totalCount };
+  };
+
+  const renderMemberCountBadges = (squad: Squad, memberData: any[]) => {
+    const { regularCount, transitionalCount } = getMemberCounts(squad.id, memberData);
+    const maxMembers = squad.max_members || 15;
+    const isOverLimit = regularCount > maxMembers;
+    
+    return (
+      <div className="flex items-center gap-1">
+        <span className={`px-1.5 py-0.5 rounded text-xs border ${
+          isOverLimit 
+            ? 'bg-red-600/20 text-red-300 border-red-500/30' 
+            : 'bg-blue-600/20 text-blue-300 border-blue-500/30'
+        }`}>
+          {regularCount}
+        </span>
+        {transitionalCount > 0 && (
+          <>
+            <span className="text-gray-500 text-xs">+</span>
+            <span className="bg-orange-600/20 text-orange-300 px-1.5 py-0.5 rounded text-xs border border-orange-500/30">
+              {transitionalCount}T
+            </span>
+          </>
+        )}
+        {isOverLimit && (
+          <span 
+            className="text-red-400 text-xs cursor-help"
+            title={`Squad exceeds limit: ${regularCount}/${maxMembers} regular members. Squad may be ineligible for tournaments.`}
+          >
+            ⚠️
+          </span>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -529,7 +574,10 @@ export default function SquadsPage() {
       const squadIds = squadsData.map(squad => squad.id);
       const { data: memberCounts } = await supabase
         .from('squad_members')
-        .select('squad_id')
+        .select(`
+          squad_id,
+          profiles!squad_members_player_id_fkey(transitional_player)
+        `)
         .in('squad_id', squadIds)
         .eq('status', 'active');
 
@@ -555,6 +603,7 @@ export default function SquadsPage() {
 
       console.log('🔍 loadAllSquads: Setting formatted squads state');
       setAllSquads(formattedSquads);
+      setMemberData(memberCounts || []);
       console.log('✅ loadAllSquads: Completed successfully');
     } catch (error) {
       console.error('❌ loadAllSquads: Exception caught:', error);
@@ -1988,7 +2037,26 @@ export default function SquadsPage() {
 
         {/* All Squads Section */}
         <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-3xl font-bold mb-6 text-cyan-400 tracking-wider">All Squads</h2>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+            <h2 className="text-3xl font-bold text-cyan-400 tracking-wider">All Squads</h2>
+            
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="text-gray-400 font-medium">Legend:</span>
+              <div className="flex items-center gap-1">
+                <span className="bg-blue-600/20 text-blue-300 px-1.5 py-0.5 rounded text-xs border border-blue-500/30">#</span>
+                <span className="text-gray-300">Regular</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="bg-orange-600/20 text-orange-300 px-1.5 py-0.5 rounded text-xs border border-orange-500/30">#T</span>
+                <span className="text-gray-300">Transitional</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="bg-red-600/20 text-red-300 px-1.5 py-0.5 rounded text-xs border border-red-500/30">#</span>
+                <span className="text-gray-300">Over Limit</span>
+              </div>
+            </div>
+          </div>
           
           {/* Active Squads */}
           {dataLoading ? (
@@ -2035,9 +2103,10 @@ export default function SquadsPage() {
                           
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-400">
-                              <span className="flex items-center gap-1 truncate">
-                                👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
-                              </span>
+                              <div className="flex items-center gap-2 truncate">
+                                <span>👥</span>
+                                {renderMemberCountBadges(squad, memberData)}
+                              </div>
                               <span className="flex items-center gap-1 truncate">
                                 👑 <span className="truncate">{squad.captain_alias}</span>
                               </span>
@@ -2112,9 +2181,10 @@ export default function SquadsPage() {
                                 <p className="text-gray-400 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-500">
-                                    <span className="flex items-center gap-1 truncate">
-                                      👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
-                                    </span>
+                                    <div className="flex items-center gap-2 truncate">
+                                      <span>👥</span>
+                                      {renderMemberCountBadges(squad, memberData)}
+                                    </div>
                                     <span className="flex items-center gap-1 truncate">
                                       👑 <span className="truncate">{squad.captain_alias}</span>
                                     </span>
@@ -2164,9 +2234,10 @@ export default function SquadsPage() {
                                 <p className="text-gray-500 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-600">
-                                    <span className="flex items-center gap-1 truncate">
-                                      👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
-                                    </span>
+                                    <div className="flex items-center gap-2 truncate">
+                                      <span>👥</span>
+                                      {renderMemberCountBadges(squad, memberData)}
+                                    </div>
                                     <span className="flex items-center gap-1 truncate">
                                       👑 <span className="truncate">{squad.captain_alias}</span>
                                     </span>

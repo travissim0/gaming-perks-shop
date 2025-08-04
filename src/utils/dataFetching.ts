@@ -245,7 +245,7 @@ export const queries = {
             role,
             joined_at,
             status,
-            profiles!squad_members_player_id_fkey(in_game_alias)
+            profiles!squad_members_player_id_fkey(in_game_alias, transitional_player)
           `)
           .eq('squad_id', squadId)
           .eq('status', 'active')
