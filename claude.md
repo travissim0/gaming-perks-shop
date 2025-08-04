@@ -246,6 +246,65 @@ Test responsive design at these critical widths:
 
 For complete breakpoint documentation, see: `RESPONSIVE_BREAKPOINTS_GUIDE.md`
 
+## Database Schema Changes & TypeScript Compatibility
+
+**CRITICAL**: After applying database schema changes (adding new columns), always check for TypeScript errors in related components.
+
+### Common Post-Schema-Update Issues
+
+1. **Missing Column TypeScript Errors**: When new database columns are added, TypeScript may not recognize them in Supabase query results
+   
+   **Error Pattern:**
+   ```
+   Property 'new_column' does not exist on type '{ existing_columns... }'.ts(2339)
+   ```
+
+   **Solution:** Cast query results as `any` when mapping data:
+   ```typescript
+   // ❌ BEFORE (causes TypeScript errors)
+   const formatted = data.map(item => ({
+     existing_field: item.existing_field,
+     new_field: item.new_field  // TypeScript error here
+   }));
+
+   // ✅ AFTER (works with new columns)
+   const formatted = data.map((item: any) => ({
+     existing_field: item.existing_field,
+     new_field: item.new_field || null  // Safe with fallback
+   }));
+   ```
+
+2. **Database Column Existence Checks**: Always use defensive queries when new columns might not exist yet:
+   ```typescript
+   try {
+     // Try query with new columns
+     const { data, error } = await supabase.from('table').select('old_col, new_col');
+   } catch (enhancedError: any) {
+     if (enhancedError.message?.includes('column') && enhancedError.message?.includes('does not exist')) {
+       // Fallback to basic query without new columns
+       const { data, error } = await supabase.from('table').select('old_col');
+     }
+   }
+   ```
+
+### Post-Schema-Update Checklist
+
+After applying any database schema changes:
+
+1. **Run Build Check**: `npm run build` - ensures TypeScript compilation passes
+2. **Run Lint Check**: `npm run lint` - catches new TypeScript errors  
+3. **Check Related Components**: Review components that query the modified tables
+4. **Test UI Functionality**: Verify features work with both old and new data
+5. **Browser Console**: Check for runtime errors in affected pages
+
+### Recent Schema Additions
+
+- **profiles.transitional_player** (boolean) - Squad capacity exemption flag
+- **squads.max_members** (default changed to 15) - Squad capacity limit
+- **squad_invites.invite_source** (varchar) - How invite was initiated
+- **squad_invites.invite_type** (varchar) - Purpose of invitation  
+- **squad_invites.viewed_at** (timestamp) - When recipient viewed invite
+
 ---
 
-*Last updated: Based on squad system infinite recursion incident where squad_members and squads tables had circular policy dependencies and current Tailwind CSS v4 responsive implementation* 
+*Last updated: Based on squad system infinite recursion incident, Tailwind CSS v4 responsive implementation, and database schema TypeScript compatibility requirements* 

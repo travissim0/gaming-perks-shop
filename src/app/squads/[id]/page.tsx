@@ -56,6 +56,21 @@ interface PendingRequest {
   requester_alias: string;
 }
 
+interface SentInvite {
+  id: string;
+  invited_player_id: string;
+  invited_by: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  invite_source?: string | null;
+  invite_type?: string | null;
+  viewed_at?: string | null;
+  responded_at?: string | null;
+  invited_player_alias: string;
+  message?: string | null;
+}
+
 export default function SquadDetailPage() {
   const { user, loading } = useAuth();
   const params = useParams();
@@ -64,6 +79,7 @@ export default function SquadDetailPage() {
   const [squad, setSquad] = useState<Squad | null>(null);
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [sentInvites, setSentInvites] = useState<SentInvite[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [isRequesting, setIsRequesting] = useState(false);
   const [hasExistingRequest, setHasExistingRequest] = useState(false);
@@ -110,6 +126,7 @@ export default function SquadDetailPage() {
       const userMember = squad.members?.find(m => m.player_id === user.id);
       if (userMember && ['captain', 'co_captain'].includes(userMember.role)) {
         loadPendingRequests();
+        loadSentInvites();
       }
     }
   }, [squad, user, pageLoading]);
@@ -264,10 +281,97 @@ export default function SquadDetailPage() {
         invited_by: request.invited_by,
         created_at: request.created_at,
         expires_at: request.expires_at,
-        requester_alias: request.profiles?.in_game_alias || 'Unknown'
+        requester_alias: (request.profiles as any)?.in_game_alias || 'Unknown'
       }));
 
       setPendingRequests(formattedRequests);
+    }
+  };
+
+  const loadSentInvites = async () => {
+    if (!squad?.id || !isUserCaptainOrCoCaptain()) return;
+
+    const { success, data } = await robustFetch(
+      async () => {
+        // First try with new columns, fall back to basic query if they don't exist
+        try {
+          const { data, error } = await supabase
+            .from('squad_invites')
+            .select(`
+              id,
+              invited_player_id,
+              invited_by,
+              status,
+              created_at,
+              expires_at,
+              invite_source,
+              invite_type,
+              viewed_at,
+              responded_at,
+              message,
+              profiles!squad_invites_invited_player_id_fkey (
+                in_game_alias
+              )
+            `)
+            .eq('squad_id', squad.id)
+            // Include all invites - we'll filter captain-sent vs join requests in the UI
+            .in('status', ['pending', 'accepted', 'declined'])
+            .order('created_at', { ascending: false })
+            .limit(20); // Limit to recent 20 invites
+
+          if (error) throw error;
+          return data;
+        } catch (enhancedError: any) {
+          // If enhanced columns don't exist, fall back to basic query
+          if (enhancedError.message?.includes('column') && enhancedError.message?.includes('does not exist')) {
+            console.log('📝 Enhanced invite tracking columns not yet available, using basic query...');
+            const { data, error } = await supabase
+              .from('squad_invites')
+              .select(`
+                id,
+                invited_player_id,
+                invited_by,
+                status,
+                created_at,
+                expires_at,
+                responded_at,
+                message,
+                profiles!squad_invites_invited_player_id_fkey (
+                  in_game_alias
+                )
+              `)
+              .eq('squad_id', squad.id)
+              .neq('invited_by', 'invited_player_id')
+              .in('status', ['pending', 'accepted', 'declined'])
+              .order('created_at', { ascending: false })
+              .limit(20);
+
+            if (error) throw error;
+            return data;
+          }
+          throw enhancedError;
+        }
+      },
+      { errorMessage: 'Failed to load sent invites' }
+    );
+
+    if (success && data) {
+      const formattedInvites: SentInvite[] = data.map((invite: any) => ({
+        id: invite.id,
+        invited_player_id: invite.invited_player_id,
+        invited_by: invite.invited_by,
+        status: invite.status,
+        created_at: invite.created_at,
+        expires_at: invite.expires_at,
+        invite_source: invite.invite_source || null,
+        invite_type: invite.invite_type || null,
+        viewed_at: invite.viewed_at || null,
+        responded_at: invite.responded_at || null,
+        invited_player_alias: (invite.profiles as any)?.in_game_alias || 'Unknown User',
+        message: invite.message || null
+      }));
+      
+      setSentInvites(formattedInvites);
     }
   };
 
@@ -451,6 +555,7 @@ export default function SquadDetailPage() {
       await Promise.allSettled([
         loadSquadDetails(),
         loadPendingRequests(),
+        loadSentInvites(),
         loadUserSquad(),
         checkExistingRequest()
       ]);
@@ -833,7 +938,8 @@ export default function SquadDetailPage() {
       toast.success('Member kicked successfully');
       await Promise.allSettled([
         loadSquadDetails(),
-        loadPendingRequests()
+        loadPendingRequests(),
+        loadSentInvites()
       ]);
     } catch (error) {
       console.error('Error kicking member:', error);
@@ -921,6 +1027,59 @@ export default function SquadDetailPage() {
     if (!squad || !user) return false;
     const userMember = squad.members.find(m => m.player_id === user.id);
     return userMember && ['captain', 'co_captain'].includes(userMember.role);
+  };
+
+  // Helper functions for sent invites
+  const getInviteStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'text-yellow-400 bg-yellow-600/20 border-yellow-500/30';
+      case 'accepted': return 'text-green-400 bg-green-600/20 border-green-500/30';
+      case 'declined': return 'text-red-400 bg-red-600/20 border-red-500/30';
+      default: return 'text-gray-400 bg-gray-600/20 border-gray-500/30';
+    }
+  };
+
+  const getInviteStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return '⏳';
+      case 'accepted': return '✅';
+      case 'declined': return '❌';
+      default: return '❓';
+    }
+  };
+
+  const formatInviteSource = (source?: string | null) => {
+    if (!source) return 'Manual';
+    switch (source) {
+      case 'free_agent_list': return 'Free Agent List';
+      case 'direct_username': return 'Direct Username';
+      case 'manual_search': return 'Manual Search';
+      case 'referral': return 'Referral';
+      default: return 'Manual';
+    }
+  };
+
+  const formatInviteType = (type?: string | null) => {
+    if (!type) return 'Recruitment';
+    switch (type) {
+      case 'recruitment': return 'Recruitment';
+      case 'replacement': return 'Replacement';
+      case 'expansion': return 'Expansion';
+      case 'legacy_transfer': return 'Legacy Transfer';
+      default: return 'Recruitment';
+    }
+  };
+
+  const getResponseTime = (createdAt: string, respondedAt?: string | null) => {
+    if (!respondedAt) return null;
+    const created = new Date(createdAt);
+    const responded = new Date(respondedAt);
+    const diffHours = Math.round((responded.getTime() - created.getTime()) / (1000 * 60 * 60));
+    
+    if (diffHours < 1) return '< 1 hour';
+    if (diffHours < 24) return `${diffHours} hours`;
+    const diffDays = Math.round(diffHours / 24);
+    return `${diffDays} days`;
   };
 
   // Enhanced loading screen with timeout indicator
@@ -1367,6 +1526,120 @@ export default function SquadDetailPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sent Invites Section (Captain/Co-Captain Only) - Centered */}
+        {isUserCaptainOrCoCaptain() && (
+          <div className="flex justify-center mt-8">
+            <div className="w-full max-w-4xl">
+              <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
+                <h3 className="text-xl font-bold text-cyan-400 mb-4 flex items-center gap-2">
+                  📤 Sent Invites ({sentInvites.length})
+                </h3>
+                
+                {sentInvites.length === 0 ? (
+                  <p className="text-gray-400 text-center py-8">No invites sent</p>
+                ) : (
+                  <div className="space-y-3">
+                    {sentInvites.map((invite) => (
+                      <div
+                        key={invite.id}
+                        className="bg-gradient-to-r from-slate-700/50 to-slate-600/50 rounded-lg p-4 border border-slate-600/30"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-white">{invite.invited_player_alias}</p>
+                              <p className="text-sm text-gray-400">
+                                Sent {new Date(invite.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 rounded text-xs border ${getInviteStatusColor(invite.status)}`}>
+                                {getInviteStatusIcon(invite.status)} {invite.status.charAt(0).toUpperCase() + invite.status.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Detailed information */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-400">Source:</span>
+                              <span className="ml-1 text-gray-300">{formatInviteSource(invite.invite_source)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Type:</span>
+                              <span className="ml-1 text-gray-300">{formatInviteType(invite.invite_type)}</span>
+                            </div>
+                            {invite.viewed_at && (
+                              <div>
+                                <span className="text-gray-400">Viewed:</span>
+                                <span className="ml-1 text-green-300">✓</span>
+                              </div>
+                            )}
+                            {invite.responded_at && (
+                              <div>
+                                <span className="text-gray-400">Response Time:</span>
+                                <span className="ml-1 text-gray-300">{getResponseTime(invite.created_at, invite.responded_at)}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Message if present */}
+                          {invite.message && (
+                            <div className="bg-slate-600/30 rounded p-2 border-l-2 border-cyan-500/50">
+                              <span className="text-xs text-gray-400">Message:</span>
+                              <p className="text-sm text-gray-300 mt-1">{invite.message}</p>
+                            </div>
+                          )}
+                          
+                          {/* Expiration warning for pending invites */}
+                          {invite.status === 'pending' && invite.expires_at && (
+                            <div className="text-xs text-yellow-400">
+                              Expires: {new Date(invite.expires_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Legend for invite analytics */}
+                <div className="bg-slate-700/30 border border-slate-600/30 rounded-lg p-4 mt-6">
+                  <div className="text-sm font-medium text-gray-300 mb-3">Invite Analytics Legend:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs font-medium text-gray-400 mb-2">Status:</div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-yellow-600/20 text-yellow-300 border border-yellow-500/30">⏳ Pending</span>
+                          <span className="text-gray-400">Awaiting response</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-green-600/20 text-green-300 border border-green-500/30">✅ Accepted</span>
+                          <span className="text-gray-400">Player joined squad</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-500/30">❌ Declined</span>
+                          <span className="text-gray-400">Player declined invite</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-gray-400 mb-2">Tracking:</div>
+                      <div className="space-y-1 text-xs text-gray-300">
+                        <div>• <strong>Source:</strong> How invite was sent</div>
+                        <div>• <strong>Type:</strong> Purpose of invitation</div>
+                        <div>• <strong>Viewed:</strong> Player opened the invite</div>
+                        <div>• <strong>Response Time:</strong> Time to respond</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
