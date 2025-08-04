@@ -5,8 +5,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
+import TransitionalPlayerManager from '@/components/admin/TransitionalPlayerManager';
+import { Squad } from '@/types/database';
 
-interface Squad {
+interface AdminSquad {
   id: string;
   name: string;
   tag: string;
@@ -14,17 +16,18 @@ interface Squad {
   captain_alias: string;
   member_count: number;
   is_active: boolean;
-  is_legacy: boolean; // Add legacy field
+  is_legacy: boolean;
   created_at: string;
   banner_url?: string;
 }
 
 export default function AdminSquads() {
   const { user, loading } = useAuth();
-  const [squads, setSquads] = useState<Squad[]>([]);
+  const [squads, setSquads] = useState<AdminSquad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'legacy'>('all');
+  const [showTransitionalManager, setShowTransitionalManager] = useState(false);
 
   useEffect(() => {
     checkAdminStatus();
@@ -74,14 +77,14 @@ export default function AdminSquads() {
           created_at,
           banner_url,
           captain_id,
-          profiles!squads_captain_id_fkey(in_game_alias),
-          squad_members!inner(id)
+          profiles(in_game_alias),
+          squad_members(id)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formattedSquads: Squad[] = (data || []).map((squad: any) => ({
+      const formattedSquads: AdminSquad[] = (data || []).map((squad: any) => ({
         id: squad.id,
         name: squad.name,
         tag: squad.tag,
@@ -154,6 +157,25 @@ export default function AdminSquads() {
     if (filter === 'inactive') return !squad.is_active && !squad.is_legacy;
     if (filter === 'legacy') return squad.is_legacy;
     return true;
+  }).sort((a, b) => {
+    // For "All Squads" view, sort by active status first, then by name
+    if (filter === 'all') {
+      // Active squads first (non-legacy active squads have highest priority)
+      const aActive = a.is_active && !a.is_legacy;
+      const bActive = b.is_active && !b.is_legacy;
+      
+      if (aActive !== bActive) {
+        return bActive ? 1 : -1; // Active squads first
+      }
+      
+      // Then legacy squads
+      if (a.is_legacy !== b.is_legacy) {
+        return a.is_legacy ? 1 : -1; // Non-legacy first
+      }
+    }
+    
+    // Finally sort by name alphabetically
+    return a.name.localeCompare(b.name);
   });
 
   if (loading) {
@@ -384,6 +406,32 @@ export default function AdminSquads() {
             </div>
             <div className="text-sm text-gray-400">Legacy Squads</div>
           </div>
+        </div>
+
+        {/* Transitional Player Management Section */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold text-cyan-400">Transitional Player Management</h2>
+              <p className="text-gray-400 text-sm">
+                Manage players from other zones (Skirmish/USL) who are exempt from squad size limits
+              </p>
+            </div>
+            <button
+              onClick={() => setShowTransitionalManager(!showTransitionalManager)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                showTransitionalManager
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+              }`}
+            >
+              {showTransitionalManager ? '🔼 Hide' : '🔽 Show'} Player Manager
+            </button>
+          </div>
+          
+          {showTransitionalManager && (
+            <TransitionalPlayerManager isVisible={showTransitionalManager} />
+          )}
         </div>
       </div>
     </div>

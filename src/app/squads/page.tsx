@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
+import { getSquadMemberCountDisplay } from '@/utils/squadValidation';
 
 interface Squad {
   id: string;
@@ -20,18 +21,23 @@ interface Squad {
   captain_id: string;
   captain_alias: string;
   created_at: string;
+  updated_at: string;
   member_count: number;
   members: SquadMember[];
   banner_url?: string;
-  is_active?: boolean;
-  is_legacy?: boolean;
+  is_active: boolean;
+  is_legacy: boolean;
+  tournament_eligible: boolean;
+  max_members?: number;
 }
 
 interface SquadMember {
   id: string;
+  squad_id: string;
   player_id: string;
   in_game_alias: string;
   role: 'captain' | 'co_captain' | 'player';
+  status: string;
   joined_at: string;
 }
 
@@ -434,16 +440,21 @@ export default function SquadsPage() {
         website_link: squadData.website_link,
         captain_id: squadData.captain_id,
         created_at: squadData.created_at,
+        updated_at: squadData.updated_at || new Date().toISOString(),
         banner_url: squadData.banner_url,
         is_legacy: squadData.is_legacy || false,
         is_active: squadData.is_active !== false,
+        tournament_eligible: squadData.tournament_eligible || false,
+        max_members: squadData.max_members || 15,
         captain_alias: 'Loading...',
         member_count: allMembersData?.length || 0,
         members: allMembersData?.map((member: any) => ({
           id: member.id,
+          squad_id: member.squad_id || squadData.id,
           player_id: member.player_id,
           in_game_alias: member.profiles?.in_game_alias || 'Anonymous User',
           role: member.role,
+          status: member.status || 'active',
           joined_at: member.joined_at
         })) || []
       };
@@ -489,9 +500,12 @@ export default function SquadsPage() {
           website_link,
           captain_id,
           created_at,
+          updated_at,
           banner_url,
           is_active,
           is_legacy,
+          tournament_eligible,
+          max_members,
           profiles!squads_captain_id_fkey(in_game_alias)
         `)
         .order('created_at', { ascending: false });
@@ -529,11 +543,14 @@ export default function SquadsPage() {
         captain_id: squad.captain_id,
         captain_alias: squad.profiles?.in_game_alias || 'Unknown',
         created_at: squad.created_at,
+        updated_at: squad.updated_at || new Date().toISOString(),
         banner_url: squad.banner_url,
         member_count: memberCounts?.filter(m => m.squad_id === squad.id).length || 0,
         members: [], // Not needed for list view
-        is_active: squad.is_active,
-        is_legacy: squad.is_legacy
+        is_active: squad.is_active || false,
+        is_legacy: squad.is_legacy || false,
+        tournament_eligible: squad.tournament_eligible || false,
+        max_members: squad.max_members || 15
       }));
 
       console.log('🔍 loadAllSquads: Setting formatted squads state');
@@ -2019,7 +2036,7 @@ export default function SquadsPage() {
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-400">
                               <span className="flex items-center gap-1 truncate">
-                                👥 {squad.member_count} members
+                                👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
                               </span>
                               <span className="flex items-center gap-1 truncate">
                                 👑 <span className="truncate">{squad.captain_alias}</span>
@@ -2096,7 +2113,7 @@ export default function SquadsPage() {
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-500">
                                     <span className="flex items-center gap-1 truncate">
-                                      👥 {squad.member_count} members
+                                      👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
                                     </span>
                                     <span className="flex items-center gap-1 truncate">
                                       👑 <span className="truncate">{squad.captain_alias}</span>
@@ -2148,7 +2165,7 @@ export default function SquadsPage() {
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-600">
                                     <span className="flex items-center gap-1 truncate">
-                                      👥 {squad.member_count} members
+                                      👥 {getSquadMemberCountDisplay(squad, squad.members || [])}
                                     </span>
                                     <span className="flex items-center gap-1 truncate">
                                       👑 <span className="truncate">{squad.captain_alias}</span>

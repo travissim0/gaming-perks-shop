@@ -9,12 +9,15 @@ import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
+import { canAddPlayerToSquad, hasAdminOverride, getSquadMemberCountDisplay } from '@/utils/squadValidation';
 
 interface SquadMember {
   id: string;
+  squad_id: string;
   player_id: string;
   in_game_alias: string;
   role: 'captain' | 'co_captain' | 'player';
+  status: string;
   joined_at: string;
 }
 
@@ -27,9 +30,12 @@ interface Squad {
   website_link?: string;
   captain_id: string;
   created_at: string;
+  updated_at: string;
   banner_url?: string;
   is_active: boolean;
-  is_legacy?: boolean; // Add legacy flag (optional for backward compatibility)
+  is_legacy: boolean;
+  tournament_eligible: boolean;
+  max_members?: number;
   members: SquadMember[];
 }
 
@@ -141,11 +147,17 @@ export default function SquadDetailPage() {
     
     const formattedSquad: Squad = {
       ...squadData,
+      updated_at: squadData.updated_at || new Date().toISOString(),
+      tournament_eligible: squadData.tournament_eligible || false,
+      max_members: squadData.max_members || 15,
+      is_legacy: squadData.is_legacy || false,
       members: membersData?.map((member: any) => ({
         id: member.id,
+        squad_id: member.squad_id || squadId,
         player_id: member.player_id,
         in_game_alias: member.profiles?.in_game_alias || 'Anonymous User',
         role: member.role,
+        status: member.status || 'active',
         joined_at: member.joined_at
       })) || []
     };
@@ -365,6 +377,41 @@ export default function SquadDetailPage() {
             .single();
 
           if (fetchError) throw new Error(fetchError.message);
+
+          // Get current members and new player profile for validation
+          const [membersResponse, playerResponse] = await Promise.all([
+            supabase
+              .from('squad_members')
+              .select(`
+                *,
+                profiles!squad_members_player_id_fkey(*)
+              `)
+              .eq('squad_id', squad!.id)
+              .eq('status', 'active'),
+            supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', request.invited_player_id)
+              .single()
+          ]);
+
+          if (membersResponse.error) throw new Error(membersResponse.error.message);
+          if (playerResponse.error) throw new Error(playerResponse.error.message);
+
+          const currentMembers = membersResponse.data || [];
+          const newPlayer = playerResponse.data;
+
+          // Check if player can be added to squad
+          const validation = canAddPlayerToSquad(
+            squad!,
+            currentMembers,
+            newPlayer,
+            hasAdminOverride(userProfile)
+          );
+
+          if (!validation.canAdd) {
+            throw new Error(`Cannot approve request: ${validation.reason}`);
+          }
 
           // Add member to squad
           const { error: memberError } = await supabase
@@ -974,6 +1021,13 @@ export default function SquadDetailPage() {
                             '📤 Request to Join'
                           )}
                         </button>
+                        
+                        {/* Squad Capacity Info */}
+                        {squad && squad.members && (
+                          <div className="text-sm text-gray-400 text-center">
+                            {getSquadMemberCountDisplay(squad, squad.members)}
+                          </div>
+                        )}
                         
                         {/* Withdraw Request Button */}
                         {hasExistingRequest && (

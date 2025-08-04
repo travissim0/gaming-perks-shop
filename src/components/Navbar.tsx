@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
+import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
+import { toast } from 'react-hot-toast';
 
 export default function Navbar({ user }: { user: any }) {
   const router = useRouter();
@@ -331,6 +333,57 @@ export default function Navbar({ user }: { user: any }) {
 
         if (fetchError) throw fetchError;
 
+        // Get squad details and current members for validation
+        const [squadResponse, membersResponse, playerResponse] = await Promise.all([
+          supabase
+            .from('squads')
+            .select('*, max_members')
+            .eq('id', request.squad_id)
+            .single(),
+          supabase
+            .from('squad_members')
+            .select(`
+              *,
+              profiles!squad_members_player_id_fkey(*)
+            `)
+            .eq('squad_id', request.squad_id)
+            .eq('status', 'active'),
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', request.invited_player_id)
+            .single()
+        ]);
+
+        if (squadResponse.error) throw squadResponse.error;
+        if (membersResponse.error) throw membersResponse.error;
+        if (playerResponse.error) throw playerResponse.error;
+
+        const squad = squadResponse.data;
+        const currentMembers = membersResponse.data || [];
+        const newPlayer = playerResponse.data;
+
+        // Get current user profile for admin check
+        const { data: currentUserProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        // Check if player can be added to squad
+        const validation = canAddPlayerToSquad(
+          squad,
+          currentMembers,
+          newPlayer,
+          hasAdminOverride(currentUserProfile)
+        );
+
+        if (!validation.canAdd) {
+          toast.error(`Cannot approve request: ${validation.reason}`);
+          setProcessingRequest(null);
+          return;
+        }
+
         // Add member to squad
         const { error: memberError } = await supabase
           .from('squad_members')
@@ -341,6 +394,9 @@ export default function Navbar({ user }: { user: any }) {
           });
 
         if (memberError) throw memberError;
+        
+        // Show success message with details
+        toast.success(`Request approved! ${validation.reason}`);
       }
 
       // Update invite status
@@ -356,6 +412,7 @@ export default function Navbar({ user }: { user: any }) {
       
     } catch (error) {
       console.error(`Error ${action}ing request:`, error);
+      toast.error(`Failed to ${action} request. Please try again.`);
     } finally {
       setProcessingRequest(null);
     }
