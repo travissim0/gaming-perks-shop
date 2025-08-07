@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
+import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
 import { toast } from 'react-hot-toast';
 
 export default function Navbar({ user }: { user: any }) {
@@ -36,6 +37,9 @@ export default function Navbar({ user }: { user: any }) {
   // Mobile dropdown states - simplified to one active dropdown at a time
   const [activeMobileDropdown, setActiveMobileDropdown] = useState<string | null>(null);
   // Note: isMobileMenuOpen is used for both logged-in and non-logged-in users
+  
+  // Check if user has test zone access
+  const { hasTestZoneAccess } = useTestZoneAccess(user?.id);
 
   // Function to check pending squad requests for captain/co-captain
   const checkPendingSquadRequests = async () => {
@@ -963,6 +967,16 @@ export default function Navbar({ user }: { user: any }) {
                         <Settings className="w-4 h-4 mr-3" />
                         Profile
                       </Link>
+                      {hasTestZoneAccess && (
+                        <Link 
+                          href="/test-zone" 
+                          className="flex items-center px-4 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 transition-colors"
+                          onClick={() => setShowUserDropdown(false)}
+                        >
+                          <span className="text-lg mr-3">🧪</span>
+                          <span className="font-medium">Test Zone</span>
+                        </Link>
+                      )}
                       <Link 
                         href="/perks" 
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
