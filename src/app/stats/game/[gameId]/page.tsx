@@ -76,6 +76,10 @@ export default function GameStatsPage() {
   const [isVideoExpanded, setIsVideoExpanded] = useState(true);
   const [showVideoEmbed, setShowVideoEmbed] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('theater');
+  const [showAddVideo, setShowAddVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [vodUrl, setVodUrl] = useState('');
+  const [submittingVideo, setSubmittingVideo] = useState(false);
 
   useEffect(() => {
     if (gameId) {
@@ -118,6 +122,41 @@ export default function GameStatsPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  // Handle video URL submission
+  const handleVideoSubmit = async () => {
+    if (!videoUrl && !vodUrl) {
+      alert('Please enter at least one video URL');
+      return;
+    }
+
+    setSubmittingVideo(true);
+    try {
+      const response = await fetch('/api/matches/add-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId,
+          youtube_url: videoUrl || null,
+          vod_url: vodUrl || null
+        })
+      });
+
+      if (response.ok) {
+        // Refresh the page data
+        await fetchGameData();
+        setShowAddVideo(false);
+        setVideoUrl('');
+        setVodUrl('');
+      } else {
+        throw new Error('Failed to add video');
+      }
+    } catch (err) {
+      alert('Error adding video: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setSubmittingVideo(false);
+    }
   };
 
   // Helper function to get YouTube video ID from URL
@@ -200,11 +239,39 @@ export default function GameStatsPage() {
     const status = getPlayerWinStatus(player);
     switch (status) {
       case 'win':
-        return 'bg-green-500/10 border-green-500/20';
+        return 'bg-green-500/30 border-green-500/40';
       case 'loss':
-        return 'bg-red-500/10 border-red-500/20';
+        return 'bg-red-500/30 border-red-500/40';
       default:
         return 'bg-transparent';
+    }
+  };
+
+  // Get player name style based on win/loss status
+  const getPlayerNameStyle = (player: PlayerGameStats): string => {
+    const status = getPlayerWinStatus(player);
+    const baseClass = 'hover:border-cyan-400 transition-all';
+    switch (status) {
+      case 'win':
+        return `${baseClass} !lowercase`; // Winners in lowercase
+      case 'loss':
+        return `${baseClass} !uppercase`; // Losers in UPPERCASE
+      default:
+        return baseClass;
+    }
+  };
+
+  // Get team name display based on win/loss
+  const getTeamDisplay = (team: string, players: PlayerGameStats[]): { text: string, style: string } => {
+    if (players.length === 0) return { text: team, style: '' };
+    const status = getPlayerWinStatus(players[0]);
+    switch (status) {
+      case 'win':
+        return { text: `🏆 ${team} - WIN`, style: 'text-green-400' };
+      case 'loss':
+        return { text: `💀 ${team} - LOSS`, style: 'text-red-400' };
+      default:
+        return { text: team, style: '' };
     }
   };
 
@@ -253,17 +320,16 @@ export default function GameStatsPage() {
     return teamGroups;
   };
 
-  // Get class color style for player names
+  // Get class color style for player names with new color scheme
   const getClassColorStyle = (className: string) => {
     const colors: Record<string, string> = {
-      'Rifleman': '#90EE90',
-      'Grenadier': '#FFB6C1',
-      'Rocket': '#FF6347',
-      'Mortar': '#DDA0DD',
-      'Sniper': '#87CEEB',
-      'Engineer': '#F0E68C',
-      'Medic': '#98FB98',
-      'Pilot': '#FFA500'
+      'Squad Leader': '#22c55e',    // green
+      'Heavy Weapons': '#3b82f6',   // blue
+      'Infantry': '#ef4444',        // red
+      'Field Medic': '#eab308',     // yellow
+      'Combat Engineer': '#92400e',  // brown
+      'Jump Trooper': '#6b7280',    // gray
+      'Infiltrator': '#c084fc'      // pink/purple
     };
     return { color: colors[className] || '#FFFFFF' };
   };
@@ -336,44 +402,62 @@ export default function GameStatsPage() {
               )}
             </div>
             
-            {/* View Mode Selector */}
-            {gameData.videoInfo?.has_video && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-blue-200">View:</span>
-                <div className="flex bg-white/10 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('theater')}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${
-                      viewMode === 'theater' 
-                        ? 'bg-purple-600 text-white' 
-                        : 'text-blue-200 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    🎭 Theater
-                  </button>
-                  <button
-                    onClick={() => setViewMode('balanced')}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${
-                      viewMode === 'balanced' 
-                        ? 'bg-purple-600 text-white' 
-                        : 'text-blue-200 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    ⚖️ Balanced
-                  </button>
-                  <button
-                    onClick={() => setViewMode('stats-only')}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${
-                      viewMode === 'stats-only' 
-                        ? 'bg-purple-600 text-white' 
-                        : 'text-blue-200 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    📊 Stats Only
-                  </button>
+            {/* View Mode Selector and Add Video Button */}
+            <div className="flex items-center gap-4">
+              {gameData.videoInfo?.has_video ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-blue-200">View:</span>
+                  <div className="flex bg-white/10 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode('theater')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${
+                        viewMode === 'theater' 
+                          ? 'bg-purple-600 text-white' 
+                          : 'text-blue-200 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      🎭 Theater
+                    </button>
+                    <button
+                      onClick={() => setViewMode('balanced')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${
+                        viewMode === 'balanced' 
+                          ? 'bg-purple-600 text-white' 
+                          : 'text-blue-200 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      ⚖️ Balanced
+                    </button>
+                    <button
+                      onClick={() => setViewMode('stats-only')}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${
+                        viewMode === 'stats-only' 
+                          ? 'bg-purple-600 text-white' 
+                          : 'text-blue-200 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      📊 Stats Only
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <button
+                  onClick={() => setShowAddVideo(true)}
+                  className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm transition-colors"
+                >
+                  🎥 Add Video/VOD
+                </button>
+              )}
+              {/* Also show add button if video exists but can add more */}
+              {gameData.videoInfo?.has_video && (!gameData.videoInfo.youtube_url || !gameData.videoInfo.vod_url) && (
+                <button
+                  onClick={() => setShowAddVideo(true)}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors"
+                >
+                  ➕ Add {!gameData.videoInfo.youtube_url ? 'YouTube' : 'VOD'}
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="flex items-center gap-4">
@@ -435,6 +519,15 @@ export default function GameStatsPage() {
                       >
                         ⭐ Highlights
                       </a>
+                    )}
+                    {/* Add Video Button */}
+                    {(!gameData.videoInfo.youtube_url || !gameData.videoInfo.vod_url) && (
+                      <button
+                        onClick={() => setShowAddVideo(true)}
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm transition-colors"
+                      >
+                        ➕ Add Video
+                      </button>
                     )}
                   </div>
                 </div>
@@ -535,10 +628,10 @@ export default function GameStatsPage() {
                         {/* WIN/LOSS and Defense on same line */}
                         <div className="flex justify-between items-center mb-1">
                           {winStatus !== 'unknown' && (
-                            <div className={`px-2 py-1 rounded text-lg font-black ${
+                            <div className={`px-3 py-1 rounded text-xl font-black ${
                               winStatus === 'win' 
-                                ? 'bg-green-500/40 text-green-100' 
-                                : 'bg-red-500/40 text-red-100'
+                                ? 'bg-green-500/50 text-green-100 border-2 border-green-400' 
+                                : 'bg-red-500/50 text-red-100 border-2 border-red-400'
                             }`}>
                               {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
                             </div>
@@ -552,8 +645,11 @@ export default function GameStatsPage() {
                             <div key={player.id} className="bg-blue-500/10 rounded p-1">
                               <div className="flex items-center justify-between">
                                 <span 
-                                  className="font-medium text-lg truncate"
-                                  style={getClassColorStyle(player.main_class || '')}
+                                  className="inline-block font-bold text-lg px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md truncate"
+                                  style={{
+                                    ...getClassColorStyle(player.main_class || ''),
+                                    textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                                  }}
                                   title={`${player.player_name} (${player.main_class})`}
                                 >
                                   {player.player_name}
@@ -572,10 +668,10 @@ export default function GameStatsPage() {
                         {/* WIN/LOSS and Offense on same line */}
                         <div className="flex justify-between items-center mb-1">
                           {winStatus !== 'unknown' && defense.length === 0 && (
-                            <div className={`px-2 py-1 rounded text-lg font-black ${
+                            <div className={`px-3 py-1 rounded text-xl font-black ${
                               winStatus === 'win' 
-                                ? 'bg-green-500/40 text-green-100' 
-                                : 'bg-red-500/40 text-red-100'
+                                ? 'bg-green-500/50 text-green-100 border-2 border-green-400' 
+                                : 'bg-red-500/50 text-red-100 border-2 border-red-400'
                             }`}>
                               {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
                             </div>
@@ -589,8 +685,11 @@ export default function GameStatsPage() {
                             <div key={player.id} className="bg-red-500/10 rounded p-1">
                               <div className="flex items-center justify-between">
                                 <span 
-                                  className="font-medium text-lg truncate"
-                                  style={getClassColorStyle(player.main_class || '')}
+                                  className="inline-block font-bold text-lg px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md truncate"
+                                  style={{
+                                    ...getClassColorStyle(player.main_class || ''),
+                                    textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                                  }}
                                   title={`${player.player_name} (${player.main_class})`}
                                 >
                                   {player.player_name}
@@ -795,39 +894,42 @@ export default function GameStatsPage() {
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Side</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Base</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Caps</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Carrier Kills</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Carry Time</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Class Swaps</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB Hits</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Turret DMG</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">Accuracy</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FlagCap</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CK</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CarryTime</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ClassSwaps</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TurDmg</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ACC</th>
                 </tr>
               </thead>
               <tbody>
                                  {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => (
                    <React.Fragment key={team}>
                                          <tr className="bg-white/30">
-                       <td colSpan={14} className="px-3 py-2 text-center text-sm font-bold">
+                       <td colSpan={12} className="px-3 py-2 text-center text-sm font-bold">
                          <span 
-                           className="font-bold text-lg"
-                           style={{ color: getTeamColor(team) }}
+                           className={`font-bold text-xl ${getTeamDisplay(team, [...defense, ...offense]).style}`}
                          >
-                           {team}
+                           {getTeamDisplay(team, [...defense, ...offense]).text}
                          </span>
-                         <span className="text-xs text-blue-200 ml-2">
+                         <span className="text-xs text-gray-300 ml-2">
                            ({defense.length + offense.length} players)
                          </span>
+                         {/* Display base at team level */}
+                         {(defense[0]?.base_used || offense[0]?.base_used) && (
+                           <span className="ml-4 bg-white/20 px-3 py-1 rounded text-sm">
+                             Base: {defense[0]?.base_used || offense[0]?.base_used}
+                           </span>
+                         )}
                                               </td>
                      </tr>
                      {defense.length > 0 && (
                        <tr className="bg-blue-500/20">
-                         <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                         <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
                            🛡️ DEFENSE ({defense.length})
                          </td>
                        </tr>
@@ -843,34 +945,27 @@ export default function GameStatsPage() {
                         <td className="px-3 py-2">
                           <Link 
                             href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                            className="transition-colors font-medium hover:text-cyan-300"
-                            style={getClassColorStyle(player.main_class || '')}
                           >
-                            {player.player_name}
+                            <span
+                              className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                              style={{
+                                ...getClassColorStyle(player.main_class || ''),
+                                textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                              }}
+                            >
+                              {player.player_name}
+                            </span>
                           </Link>
                         </td>
                         <td className="px-3 py-2">
                           <span 
-                            className="font-medium text-xs"
-                            style={getClassColorStyle(player.main_class || '')}
+                            className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                            style={{
+                              ...getClassColorStyle(player.main_class || ''),
+                              textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                            }}
                           >
                             {player.main_class || 'Unknown'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            player.side === 'offense' 
-                              ? 'bg-red-500/20 text-red-300' 
-                              : player.side === 'defense' 
-                              ? 'bg-blue-500/20 text-blue-300'
-                              : 'bg-gray-500/20 text-gray-300'
-                          }`}>
-                            {player.side || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                            {player.base_used || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
@@ -891,7 +986,7 @@ export default function GameStatsPage() {
                      ))}
                      {offense.length > 0 && (
                        <tr className="bg-red-500/20">
-                         <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                         <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
                            ⚔️ OFFENSE ({offense.length})
                          </td>
                        </tr>
@@ -907,34 +1002,27 @@ export default function GameStatsPage() {
                         <td className="px-3 py-2">
                           <Link 
                             href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                            className="transition-colors font-medium hover:text-cyan-300"
-                            style={getClassColorStyle(player.main_class || '')}
                           >
-                            {player.player_name}
+                            <span
+                              className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                              style={{
+                                ...getClassColorStyle(player.main_class || ''),
+                                textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                              }}
+                            >
+                              {player.player_name}
+                            </span>
                           </Link>
                         </td>
                         <td className="px-3 py-2">
                           <span 
-                            className="font-medium text-xs"
-                            style={getClassColorStyle(player.main_class || '')}
+                            className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                            style={{
+                              ...getClassColorStyle(player.main_class || ''),
+                              textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                            }}
                           >
                             {player.main_class || 'Unknown'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            player.side === 'offense' 
-                              ? 'bg-red-500/20 text-red-300' 
-                              : player.side === 'defense' 
-                              ? 'bg-blue-500/20 text-blue-300'
-                              : 'bg-gray-500/20 text-gray-300'
-                          }`}>
-                            {player.side || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                            {player.base_used || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
@@ -977,17 +1065,15 @@ export default function GameStatsPage() {
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Side</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Base</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FC</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FlagCap</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CK</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CT</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CS</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CarryTime</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ClassSwaps</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TD</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TurDmg</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ACC</th>
                   </tr>
                 </thead>
@@ -995,21 +1081,26 @@ export default function GameStatsPage() {
                   {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => (
                     <React.Fragment key={team}>
                       <tr className="bg-white/20">
-                        <td colSpan={14} className="px-3 py-2 text-center text-sm font-bold">
+                        <td colSpan={12} className="px-3 py-2 text-center text-sm font-bold">
                           <span 
-                            className="font-bold text-lg"
-                            style={{ color: getTeamColor(team) }}
+                            className={`font-bold text-xl ${getTeamDisplay(team, [...defense, ...offense]).style}`}
                           >
-                            {team}
+                            {getTeamDisplay(team, [...defense, ...offense]).text}
                           </span>
-                          <span className="text-xs text-blue-200 ml-2">
+                          <span className="text-xs text-gray-300 ml-2">
                             ({defense.length + offense.length} players)
                           </span>
+                          {/* Display base at team level */}
+                          {(defense[0]?.base_used || offense[0]?.base_used) && (
+                            <span className="ml-4 bg-white/20 px-3 py-1 rounded text-sm">
+                              Base: {defense[0]?.base_used || offense[0]?.base_used}
+                            </span>
+                          )}
                         </td>
                       </tr>
                       {defense.length > 0 && (
                         <tr className="bg-blue-500/20">
-                          <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                          <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
                             🛡️ DEFENSE ({defense.length})
                           </td>
                         </tr>
@@ -1025,34 +1116,27 @@ export default function GameStatsPage() {
                           <td className="px-3 py-2">
                             <Link 
                               href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                              className="transition-colors font-medium hover:text-cyan-300"
-                              style={getClassColorStyle(player.main_class || '')}
                             >
-                              {player.player_name}
+                              <span
+                                className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                                style={{
+                                  ...getClassColorStyle(player.main_class || ''),
+                                  textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                                }}
+                              >
+                                {player.player_name}
+                              </span>
                             </Link>
                           </td>
                           <td className="px-3 py-2">
                             <span 
-                              className="font-medium text-xs"
-                              style={getClassColorStyle(player.main_class || '')}
+                              className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                              style={{
+                                ...getClassColorStyle(player.main_class || ''),
+                                textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                              }}
                             >
                               {player.main_class || 'Unknown'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              player.side === 'offense' 
-                                ? 'bg-red-500/20 text-red-300' 
-                                : player.side === 'defense' 
-                                ? 'bg-blue-500/20 text-blue-300'
-                                : 'bg-gray-500/20 text-gray-300'
-                            }`}>
-                              {player.side || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                              {player.base_used || 'Unknown'}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
@@ -1073,7 +1157,7 @@ export default function GameStatsPage() {
                       ))}
                       {offense.length > 0 && (
                         <tr className="bg-red-500/20">
-                          <td colSpan={14} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                          <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
                             ⚔️ OFFENSE ({offense.length})
                           </td>
                         </tr>
@@ -1089,34 +1173,27 @@ export default function GameStatsPage() {
                           <td className="px-3 py-2">
                             <Link 
                               href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                              className="transition-colors font-medium hover:text-cyan-300"
-                              style={getClassColorStyle(player.main_class || '')}
                             >
-                              {player.player_name}
+                              <span
+                                className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                                style={{
+                                  ...getClassColorStyle(player.main_class || ''),
+                                  textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                                }}
+                              >
+                                {player.player_name}
+                              </span>
                             </Link>
                           </td>
                           <td className="px-3 py-2">
                             <span 
-                              className="font-medium text-xs"
-                              style={getClassColorStyle(player.main_class || '')}
+                              className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                              style={{
+                                ...getClassColorStyle(player.main_class || ''),
+                                textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                              }}
                             >
                               {player.main_class || 'Unknown'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              player.side === 'offense' 
-                                ? 'bg-red-500/20 text-red-300' 
-                                : player.side === 'defense' 
-                                ? 'bg-blue-500/20 text-blue-300'
-                                : 'bg-gray-500/20 text-gray-300'
-                            }`}>
-                              {player.side || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className="bg-white/20 px-2 py-1 rounded text-xs">
-                              {player.base_used || 'Unknown'}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right text-xs font-bold text-green-400">{player.kills}</td>
@@ -1143,6 +1220,63 @@ export default function GameStatsPage() {
           </motion.div>
         )}
 
+        {/* Add Video Modal */}
+        {showAddVideo && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-gray-800 rounded-xl p-6 max-w-md w-full border border-white/20"
+            >
+              <h3 className="text-xl font-bold mb-4 text-blue-200">Add Video/VOD URL</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    YouTube URL
+                  </label>
+                  <input
+                    type="url"
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    placeholder="https://youtube.com/watch?v=..."
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    VOD URL
+                  </label>
+                  <input
+                    type="url"
+                    value={vodUrl}
+                    onChange={(e) => setVodUrl(e.target.value)}
+                    placeholder="https://example.com/vod/..."
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleVideoSubmit}
+                  disabled={submittingVideo}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  {submittingVideo ? 'Adding...' : 'Add Video'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddVideo(false);
+                    setVideoUrl('');
+                    setVodUrl('');
+                  }}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
       </div>
     </div>
