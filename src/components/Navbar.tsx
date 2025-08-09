@@ -34,6 +34,13 @@ export default function Navbar({ user }: { user: any }) {
   const adminDropdownRef = useRef<HTMLDivElement>(null);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   
+  // Desktop dropdown states for non-authenticated users
+  const [showLeagueDropdown, setShowLeagueDropdown] = useState(false);
+  const [showSquadsDropdown, setShowSquadsDropdown] = useState(false);
+  const [showStatsDropdown, setShowStatsDropdown] = useState(false);
+  const [showCommunityDropdown, setShowCommunityDropdown] = useState(false);
+  const [showMiscDropdown, setShowMiscDropdown] = useState(false);
+  
   // Mobile dropdown states - simplified to one active dropdown at a time
   const [activeMobileDropdown, setActiveMobileDropdown] = useState<string | null>(null);
   // Note: isMobileMenuOpen is used for both logged-in and non-logged-in users
@@ -451,6 +458,33 @@ export default function Navbar({ user }: { user: any }) {
     { href: '/tools', label: 'All Tools', icon: '🔧' },
   ];
 
+  // Navigation arrays for non-authenticated users (same as authenticated)
+  const publicSquadsNavItems = [
+    { href: '/squads', label: 'Squads', icon: '🛡️' },
+    { href: '/free-agents', label: 'Players', icon: '🎯' },
+    { href: '/matches', label: 'Match Log', icon: '⚔️' },
+    { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
+  ];
+
+  const publicStatsNavItems = [
+    { href: '/stats', label: 'Player Stats', icon: '📊' },
+    { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
+  ];
+
+  const publicCommunityNavItems = [
+    { href: '/forum', label: 'Forum', icon: '💬' },
+    { href: '/guides', label: 'Guides', icon: '📚' },
+    { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
+  ];
+
+  const publicMiscNavItems = [
+    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
+    { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
+    { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
+    { href: '/tools/blob-viewer/index.html', label: 'Blob Viewer', icon: '🖼️' },
+    { href: '/tools', label: 'All Tools', icon: '🔧' },
+  ];
+
   if (!user) {
     return (
       <>
@@ -499,6 +533,220 @@ export default function Navbar({ user }: { user: any }) {
           </div>
         </nav>
 
+        {/* Desktop Navigation for non-logged-in users */}
+        <div className="hidden xl:block bg-gray-800/50 border-t border-gray-700/30">
+          <div className="container mx-auto px-4">
+            <div className="flex items-center justify-center space-x-8 py-3">
+              {/* News */}
+              <Link
+                href="/news"
+                className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700/50 transition-all duration-300 rounded"
+              >
+                <span className="text-sm">📰</span>
+                <span className="font-medium">News</span>
+              </Link>
+
+              {/* League Dropdown */}
+              <div 
+                className="relative group"
+                onMouseEnter={() => setShowLeagueDropdown(true)}
+                onMouseLeave={() => setShowLeagueDropdown(false)}
+              >
+                <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
+                  <span className="text-sm">🏆</span>
+                  <span className="font-medium">League</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showLeagueDropdown && (
+                  <div 
+                    className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
+                    onMouseEnter={() => setShowLeagueDropdown(true)}
+                    onMouseLeave={() => setShowLeagueDropdown(false)}
+                  >
+                    <div className="py-2">
+                      <Link
+                        href="/league/ctfpl"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">⚔️</span>
+                        CTFPL
+                      </Link>
+                      <Link
+                        href="/"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">🛡️</span>
+                        CTFDL
+                      </Link>
+                      <Link
+                        href="/league/ratings"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">📊</span>
+                        Ratings
+                      </Link>
+                      <Link
+                        href="/event-log"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">📋</span>
+                        Player Event Log
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Squads Dropdown */}
+              <div 
+                className="relative group"
+                onMouseEnter={() => setShowSquadsDropdown(true)}
+                onMouseLeave={() => setShowSquadsDropdown(false)}
+              >
+                <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
+                  <span className="text-sm">🛡️</span>
+                  <span className="font-medium">Squads</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showSquadsDropdown && (
+                  <div 
+                    className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
+                    onMouseEnter={() => setShowSquadsDropdown(true)}
+                    onMouseLeave={() => setShowSquadsDropdown(false)}
+                  >
+                    <div className="py-2">
+                      {publicSquadsNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Stats Dropdown */}
+              <div 
+                className="relative group"
+                onMouseEnter={() => setShowStatsDropdown(true)}
+                onMouseLeave={() => setShowStatsDropdown(false)}
+              >
+                <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
+                  <span className="text-sm">📊</span>
+                  <span className="font-medium">Stats</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showStatsDropdown && (
+                  <div 
+                    className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
+                    onMouseEnter={() => setShowStatsDropdown(true)}
+                    onMouseLeave={() => setShowStatsDropdown(false)}
+                  >
+                    <div className="py-2">
+                      {publicStatsNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Community Dropdown */}
+              <div 
+                className="relative group"
+                onMouseEnter={() => setShowCommunityDropdown(true)}
+                onMouseLeave={() => setShowCommunityDropdown(false)}
+              >
+                <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
+                  <span className="text-sm">💬</span>
+                  <span className="font-medium">Community</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showCommunityDropdown && (
+                  <div 
+                    className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
+                    onMouseEnter={() => setShowCommunityDropdown(true)}
+                    onMouseLeave={() => setShowCommunityDropdown(false)}
+                  >
+                    <div className="py-2">
+                      {publicCommunityNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Misc Dropdown */}
+              <div 
+                className="relative group"
+                onMouseEnter={() => setShowMiscDropdown(true)}
+                onMouseLeave={() => setShowMiscDropdown(false)}
+              >
+                <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
+                  <span className="text-sm">🔧</span>
+                  <span className="font-medium">Misc</span>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {showMiscDropdown && (
+                  <div 
+                    className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
+                    onMouseEnter={() => setShowMiscDropdown(true)}
+                    onMouseLeave={() => setShowMiscDropdown(false)}
+                  >
+                    <div className="py-2">
+                      {publicMiscNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Mobile Menu for non-logged-in users */}
         {isMobileMenuOpen && (
           <div className="xl:hidden bg-gray-800 border-t border-gray-700">
@@ -512,46 +760,205 @@ export default function Navbar({ user }: { user: any }) {
                   <span className="mr-3">📰</span>
                   News
                 </Link>
-                <Link
-                  href="/league/ctfpl"
-                  className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <span className="mr-3">⚔️</span>
-                  CTFPL
-                </Link>
-                <Link
-                  href="/squads"
-                  className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <span className="mr-3">🛡️</span>
-                  Squads
-                </Link>
-                <Link
-                  href="/stats"
-                  className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <span className="mr-3">📊</span>
-                  Stats
-                </Link>
-                <Link
-                  href="/forum"
-                  className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <span className="mr-3">💬</span>
-                  Forum
-                </Link>
-                <Link
-                  href="/tools"
-                  className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <span className="mr-3">🔧</span>
-                  Tools
-                </Link>
+                {/* League Section */}
+                <div className="border-l-2 border-cyan-500/50 pl-2">
+                  <button
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'league' ? null : 'league')}
+                    className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-3">🏆</span>
+                      League
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'league' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {activeMobileDropdown === 'league' && (
+                    <div className="ml-4 mt-2 space-y-1">
+                      <Link
+                        href="/league/ctfpl"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">⚔️</span>
+                        CTFPL
+                      </Link>
+                      <Link
+                        href="/"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">🛡️</span>
+                        CTFDL
+                      </Link>
+                      <Link
+                        href="/league/ratings"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">📊</span>
+                        Ratings
+                      </Link>
+                      <Link
+                        href="/event-log"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">📋</span>
+                        Player Event Log
+                      </Link>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Squads Section */}
+                <div className="border-l-2 border-cyan-500/50 pl-2">
+                  <button
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'squads' ? null : 'squads')}
+                    className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-3">🛡️</span>
+                      Squads
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'squads' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {activeMobileDropdown === 'squads' && (
+                    <div className="ml-4 mt-2 space-y-1">
+                      {publicSquadsNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                          onClick={() => {
+                            setActiveMobileDropdown(null);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Stats Section */}
+                <div className="border-l-2 border-cyan-500/50 pl-2">
+                  <button
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'stats' ? null : 'stats')}
+                    className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-3">📊</span>
+                      Stats
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'stats' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {activeMobileDropdown === 'stats' && (
+                    <div className="ml-4 mt-2 space-y-1">
+                      {publicStatsNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                          onClick={() => {
+                            setActiveMobileDropdown(null);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Community Section */}
+                <div className="border-l-2 border-cyan-500/50 pl-2">
+                  <button
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'community' ? null : 'community')}
+                    className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-3">💬</span>
+                      Community
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'community' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {activeMobileDropdown === 'community' && (
+                    <div className="ml-4 mt-2 space-y-1">
+                      {publicCommunityNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                          onClick={() => {
+                            setActiveMobileDropdown(null);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Misc Section */}
+                <div className="border-l-2 border-purple-500/50 pl-2">
+                  <button
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'misc' ? null : 'misc')}
+                    className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <span className="mr-3">🔧</span>
+                      Misc
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'misc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {activeMobileDropdown === 'misc' && (
+                    <div className="ml-4 mt-2 space-y-1">
+                      {publicMiscNavItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center px-3 py-2 text-gray-400 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                          onClick={() => {
+                            setActiveMobileDropdown(null);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          <span className="mr-3">{item.icon}</span>
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
