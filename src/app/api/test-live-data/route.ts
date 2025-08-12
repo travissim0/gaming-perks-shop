@@ -1,47 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLiveGameData, setLiveGameData } from '@/server/liveGameDataStore';
-
-export async function GET() {
-  const data = getLiveGameData();
-  if (!data) {
-    return NextResponse.json({ status: 'no-data' }, { status: 200 });
-  }
-  return NextResponse.json({ status: 'ok', data });
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const incoming = await request.json();
-    if (!incoming?.arenaName || !Array.isArray(incoming?.players)) {
-      return NextResponse.json({ error: 'Invalid data structure' }, { status: 400 });
-    }
-
-    const normalizedPlayers = (incoming.players as any[]).map((p: any) => ({
-      ...p,
-      className: p.className ?? p.class ?? 'Unknown',
-    }));
-    const totalPlayers = normalizedPlayers.length;
-    const playingPlayers = normalizedPlayers.filter((p: any) => 
-      p.teamType !== 'Spectator' && !String(p.team || '').toLowerCase().includes('spec') && !String(p.team || '').toLowerCase().includes('np')
-    ).length;
-    const spectators = totalPlayers - playingPlayers;
-
-    setLiveGameData({
-      ...incoming,
-      players: normalizedPlayers,
-      lastUpdated: new Date().toISOString(),
-      totalPlayers,
-      playingPlayers,
-      spectators,
-      serverStatus: totalPlayers > 0 ? 'active' : 'idle'
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to process' }, { status: 500 });
-  }
-}
-import { NextRequest, NextResponse } from 'next/server';
 
 // Simple endpoint to test CTF server integration
 export async function GET(request: NextRequest) {

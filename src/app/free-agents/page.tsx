@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
@@ -48,16 +48,19 @@ const ROLE_COLORS = {
 };
 
 const CLASS_COLORS = {
-  'O INF': 'bg-red-500/20 text-red-300 border-red-500/30',
-  'D INF': 'bg-red-500/20 text-red-300 border-red-500/30',
-  'O HVY': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'D HVY': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  // Slight shade variations between Offense vs Defense of the same class
+  'O INF': 'bg-red-500/20 text-red-500 border-red-500/30',
+  'D INF': 'bg-red-500/20 text-red-400 border-red-500/30',
+  'O HVY': 'bg-blue-500/20 text-blue-500 border-blue-500/30',
+  'D HVY': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   'Medic': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
   'SL': 'bg-green-500/20 text-green-300 border-green-500/30',
   'Foot JT': 'bg-gray-400/20 text-gray-300 border-gray-400/30',
+  'D Foot JT': 'bg-gray-400/20 text-gray-400 border-gray-400/30',
   'Pack JT': 'bg-gray-400/20 text-gray-300 border-gray-400/30',
-  'Engineer': 'bg-amber-600/20 text-amber-300 border-amber-600/30',
-  'Infil': 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+  'Engineer': 'bg-amber-700/20 text-amber-800 border-amber-700/30', // brown-ish
+  'Infil': 'bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30',
+  '10-man Infil': 'bg-fuchsia-600/20 text-fuchsia-500 border-fuchsia-600/30'
 };
 
 export default function FreeAgentsPage() {
@@ -69,6 +72,7 @@ export default function FreeAgentsPage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [directUser, setDirectUser] = useState<any>(null); // Direct user check bypass
+  const [showClassDistribution, setShowClassDistribution] = useState(false);
   
   // Handle client-side mounting - only run once
   useEffect(() => {
@@ -851,6 +855,18 @@ export default function FreeAgentsPage() {
     }
   };
 
+  // Stable dataset for class distribution charts: always reflect the entire free-agents pool
+  // Ignores search/class filters and view toggles so charts don't shift when filtering the table
+  const baseAgentsForCharts: FreeAgent[] = useMemo(() => {
+    // Filter out hidden free-agent profiles only
+    const visibleFreeAgents = freeAgents.filter(agent => {
+      const playerProfile = allPlayers.find(p => p.id === agent.player_id);
+      const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
+      return !isHidden;
+    });
+    return visibleFreeAgents;
+  }, [freeAgents, allPlayers]);
+
   const filteredAndSortedAgents = getDataSource()
     .filter(agent => {
       // Search filter
@@ -928,83 +944,72 @@ export default function FreeAgentsPage() {
       const timezone = toTimezoneAbbr(agent.timezone ?? 'America/New_York');
       const times = agent.availability_times || {};
       const timeEntries = Object.entries(times);
-      
-      if (timeEntries.length === 0) {
-        return (
-          <div className="flex flex-wrap items-center gap-2">
-            {agent.availability_days.map(day => (
-              <span key={day} className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded text-xs font-medium border border-blue-500/30">
-                {day.slice(0, 3)}
-              </span>
-            ))}
-            <span className="text-purple-400 text-xs font-medium bg-purple-500/20 border border-purple-500/30 rounded px-2 py-1">
-              {timezone}
-            </span>
-          </div>
-        );
-      }
-      
-      // Group consecutive days with same times
-      const dayGroups: { days: string[], time: { start: string, end: string } }[] = [];
       const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      
-      // Sort available days by day order
-      const sortedDays = agent.availability_days.sort((a, b) => 
-        dayOrder.indexOf(a) - dayOrder.indexOf(b)
-      );
-      
-      let currentGroup: { days: string[], time: { start: string, end: string } } | null = null;
-      
-      for (const day of sortedDays) {
-        const dayTime = times[day];
-        if (!dayTime) continue;
-        
-        if (!currentGroup || 
-            currentGroup.time.start !== dayTime.start || 
-            currentGroup.time.end !== dayTime.end) {
-          // Start new group
-          currentGroup = { days: [day], time: dayTime };
-          dayGroups.push(currentGroup);
-        } else {
-          // Add to current group
-          currentGroup.days.push(day);
-        }
-      }
-      
-      return (
-        <div className="flex flex-wrap items-center gap-2">
-          {dayGroups.map((group, index) => {
-            const dayRange = group.days.length > 2 && 
-                           dayOrder.indexOf(group.days[group.days.length - 1]) - dayOrder.indexOf(group.days[0]) === group.days.length - 1
-              ? `${group.days[0].slice(0, 3)}-${group.days[group.days.length - 1].slice(0, 3)}`
-              : group.days.map(d => d.slice(0, 3)).join(', ');
-            
+      const availableSet = new Set(agent.availability_days);
+
+      const dayBar = (
+        <div className="grid grid-cols-7 rounded overflow-hidden border-2 border-black">
+          {dayOrder.map((d, idx) => {
+            const available = availableSet.has(d);
             return (
-              <div key={index} className="flex items-center gap-1 bg-blue-500/20 border border-blue-500/30 rounded px-2 py-1">
-                <span className="text-blue-300 text-xs font-medium">{dayRange}</span>
-                <span className="text-green-400 text-xs font-medium">
-                  {formatTime(group.time.start)}
-                </span>
-                <span className="text-gray-400 text-xs">-</span>
-                <span className="text-red-400 text-xs font-medium">
-                  {formatTime(group.time.end)}
-                </span>
+              <div
+                key={d}
+                title={d.slice(0, 3)}
+                className={`${available ? 'bg-green-500' : 'bg-red-600'} border-2 border-black h-4 flex items-center justify-center ${idx !== 6 ? 'border-r-2' : ''}`}
+              >
+                <span className="text-[9px] leading-none font-bold text-black">{d.slice(0, 3)}</span>
               </div>
             );
           })}
-          <span className="text-purple-400 text-xs font-medium bg-purple-500/20 border border-purple-500/30 rounded px-2 py-1">
-            {timezone}
-          </span>
+        </div>
+      );
+
+      if (timeEntries.length === 0) {
+        return (
+          <div className="flex items-center gap-2">
+            {dayBar}
+          </div>
+        );
+      }
+
+      // Build unique time ranges (no duplicate day labels)
+      const uniqueTimeKeys = new Set<string>();
+      const uniqueTimes: { start: string; end: string }[] = [];
+      for (const d of dayOrder) {
+        const t = times[d];
+        if (!t) continue;
+        const key = `${t.start}-${t.end}`;
+        if (!uniqueTimeKeys.has(key)) {
+          uniqueTimeKeys.add(key);
+          uniqueTimes.push({ start: t.start, end: t.end });
+        }
+      }
+
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            {dayBar}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {uniqueTimes.map((t, idx) => (
+              <div key={idx} className="flex items-center gap-1 bg-blue-500/20 border border-blue-500/30 rounded px-1.5 py-0.5">
+                <span className="text-green-400 text-[10px] font-medium">{formatTime(t.start)}</span>
+                <span className="text-gray-400 text-[10px]">-</span>
+                <span className="text-red-400 text-[10px] font-medium">{formatTime(t.end)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       );
     }
-    
+
     // Fallback to old availability text
     return <span className="text-gray-400 text-sm">{agent.availability || 'Not specified'}</span>;
   };
 
   // Helper function to format time
   const formatTime = (time: string) => {
+    // Treat stored times as EST and display consistently in EST
     if (!time) return '';
     const [hours, minutes] = time.split(':');
     const hour = parseInt(hours);
@@ -1034,21 +1039,10 @@ export default function FreeAgentsPage() {
     }
 
     return classes.map((className: string, index: number) => {
-      const rating = agent.class_ratings?.[className];
       const colorClass = CLASS_COLORS[className as keyof typeof CLASS_COLORS] || 'bg-gray-500/20 text-gray-300 border-gray-500/30';
-      
       return (
-        <div key={`${type}-${index}`} className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border ${colorClass} ${opacity}`}>
-          <span>{className}</span>
-          {rating && type !== 'try' && (
-            <div className="flex">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <span key={star} className={`text-xs ${star <= rating ? 'text-yellow-400' : 'text-gray-600'}`}>
-                  ★
-                </span>
-              ))}
-            </div>
-          )}
+        <div key={`${type}-${index}`} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${colorClass} ${opacity}`}>
+          <span className="leading-none">{className}</span>
         </div>
       );
     });
@@ -1092,6 +1086,21 @@ export default function FreeAgentsPage() {
                   </button>
                 </div>
                 
+                {/* Class Distribution Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowClassDistribution((v) => !v)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all border shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+                    showClassDistribution
+                      ? 'bg-gradient-to-r from-fuchsia-600/30 to-cyan-600/30 text-white border-fuchsia-400/40 ring-1 ring-fuchsia-400/30'
+                      : 'bg-gray-800/60 text-gray-200 border-gray-600/60 hover:bg-gray-700/70'
+                  }`}
+                  title="Toggle class distribution charts"
+                >
+                  <span className="text-base">📊</span>
+                  {showClassDistribution ? 'Hide Class Breakdown' : 'Show Class Breakdown'}
+                </button>
+
                 <span className="bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1 text-cyan-300 text-xs sm:text-sm font-medium w-fit">
                   <span className="text-white font-bold">{filteredAndSortedAgents.length}</span> players found
                 </span>
@@ -1192,6 +1201,12 @@ export default function FreeAgentsPage() {
             </div>
           ) : viewMode === 'cards' ? (
             /* Card View */
+            <>
+              {showClassDistribution && (
+                <div className="mb-6">
+                  <ClassDistributionView agents={baseAgentsForCharts} onSelectClass={(cls) => setClassFilter(cls)} />
+                </div>
+              )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredAndSortedAgents.map((agent: FreeAgent, index: number) => (
                 <div 
@@ -1272,15 +1287,22 @@ export default function FreeAgentsPage() {
                 </div>
               ))}
             </div>
+            </>
           ) : (
             /* Table View */
+            <>
+            {showClassDistribution && (
+              <div className="mb-6">
+                <ClassDistributionView agents={baseAgentsForCharts} onSelectClass={(cls) => setClassFilter(cls)} />
+              </div>
+            )}
             <div className="bg-gradient-to-br from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl border border-cyan-500/20 shadow-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-[10px]">
                   <thead>
                     <tr className="bg-gradient-to-r from-cyan-600/20 to-purple-600/20 border-b border-cyan-500/20">
                       <th 
-                        className="px-6 py-4 text-left text-sm font-bold text-cyan-300 cursor-pointer hover:text-cyan-200 transition-colors"
+                        className="px-4 py-3 text-left text-xs font-bold text-cyan-300 cursor-pointer hover:text-cyan-200 transition-colors"
                         onClick={() => handleSort('player_alias')}
                       >
                         <div className="flex items-center gap-2">
@@ -1291,44 +1313,62 @@ export default function FreeAgentsPage() {
                           )}
                         </div>
                       </th>
-                      
+                      {/* Preferred Roles */}
                       <th 
-                        className="px-6 py-4 text-left text-sm font-bold text-pink-300 cursor-pointer hover:text-pink-200 transition-colors"
+                        className="px-4 py-3 text-left text-xs font-bold text-pink-300 cursor-pointer hover:text-pink-200 transition-colors"
                         onClick={() => handleSort('preferred_roles')}
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-lg">⚔️</span>
-                          Classes
+                          Preferred
                           {sortField === 'preferred_roles' && (
                             <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                           )}
                         </div>
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-blue-300 min-w-[12rem] whitespace-nowrap">
+                      {/* Secondary Roles */}
+                      <th className="px-4 py-3 text-left text-xs font-bold text-purple-300">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🗡️</span>
+                          Secondary
+                        </div>
+                      </th>
+                      {/* Classes To Try */}
+                      <th className="px-4 py-3 text-left text-xs font-bold text-indigo-300">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🧪</span>
+                          Try
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-blue-300 min-w-[8rem] whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">🛡️</span>
                           Squad
                         </div>
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-green-300">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-green-300 w-[28%]">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">📅</span>
-                          Availability
+                          <span className="flex items-center gap-1">
+                            Availability
+                            <span className="text-[10px] text-gray-300">(EST)</span>
+                            <span
+                              className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-700 text-gray-200 text-[10px]"
+                              title="All availability times and ranges are displayed in Eastern Time (EST)."
+                            >
+                              ?
+                            </span>
+                          </span>
                         </div>
                       </th>
-                      <th 
-                        className="px-6 py-4 text-left text-sm font-bold text-yellow-300 cursor-pointer hover:text-yellow-200 transition-colors"
-                        onClick={() => handleSort('created_at')}
-                      >
+                      {/* Notes column */}
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-300 w-[40%]">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">📅</span>
-                          Joined
-                          {sortField === 'created_at' && (
-                            <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                          )}
+                          <span className="text-lg">📝</span>
+                          Notes
                         </div>
                       </th>
-                      <th className="px-6 py-4 text-left text-sm font-bold text-cyan-300">Actions</th>
+                      <th className="px-1 py-1 text-left text-[9px] font-bold text-cyan-300 w-[0.33%] whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1338,69 +1378,85 @@ export default function FreeAgentsPage() {
                         className="border-b border-gray-700/30 hover:bg-gradient-to-r hover:from-cyan-500/5 hover:to-purple-500/5 transition-all duration-300"
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                               {agent.player_alias.charAt(0).toUpperCase()}
                             </div>
-                            <span className="font-medium text-white">{agent.player_alias}</span>
+                            <span className="font-medium text-white text-[10px]">{agent.player_alias}</span>
                           </div>
                         </td>
                         
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            {agent.preferred_roles && agent.preferred_roles.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {renderClassBadges(agent, 'preferred')}
-                              </div>
-                            )}
-                            {agent.secondary_roles && agent.secondary_roles.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {renderClassBadges(agent, 'secondary')}
-                              </div>
-                            )}
-                            {agent.classes_to_try && agent.classes_to_try.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {renderClassBadges(agent, 'try')}
-                              </div>
-                            )}
-                          </div>
+                        {/* Preferred */}
+                        <td className="px-4 py-3">
+                          {agent.preferred_roles && agent.preferred_roles.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {renderClassBadges(agent, 'preferred')}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">—</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4 min-w-[12rem] whitespace-nowrap">
+                        {/* Secondary */}
+                        <td className="px-4 py-3">
+                          {agent.secondary_roles && agent.secondary_roles.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {renderClassBadges(agent, 'secondary')}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">—</span>
+                          )}
+                        </td>
+                        {/* Try */}
+                        <td className="px-4 py-3">
+                          {agent.classes_to_try && agent.classes_to_try.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {renderClassBadges(agent, 'try')}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 min-w-[8rem] whitespace-nowrap">
                           {playerIdToActiveSquad[agent.player_id] ? (
-                            <div className="flex items-center gap-2 text-sm">
+                            <div className="flex items-center gap-2 text-xs">
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-blue-500/30 text-blue-300 bg-blue-500/10">
                                 <span>{playerIdToActiveSquad[agent.player_id].name}</span>
                               </span>
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">—</span>
+                            <span className="text-gray-400 text-xs">—</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-gray-300 text-sm">{formatAvailability(agent)}</div>
+                        <td className="px-4 py-3 w-[28%]">
+                          <div className="text-gray-300 text-[10px]">{formatAvailability(agent)}</div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="text-gray-400 text-sm">{new Date(agent.created_at).toLocaleDateString()}</span>
+                        {/* Notes */}
+                        <td className="px-4 py-3 w-[40%]">
+                          {agent.notes ? (
+                            <div className="text-gray-300 text-[10px] break-words whitespace-pre-line">{agent.notes}</div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">—</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                        <td className="px-1 py-1 w-[0.33%] whitespace-nowrap">
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={() => openMessageModal(agent.player_id, agent.player_alias)}
-                              className="px-3 py-1 rounded-md text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30"
-                              title={`Message ${agent.player_alias}`}
+                              className="px-1 py-0 rounded-md text-[9px] font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30 leading-none"
+                              aria-label={`Message ${agent.player_alias}`}
                             >
-                              ✉️ Message
+                              ✉
                             </button>
                             {isCaptain && !freeAgentPlayerIds.has(agent.player_id) ? null : null}
                             {isCaptain && freeAgentPlayerIds.has(agent.player_id) && (
                               <button
                                 onClick={() => invitePlayerToSquad(agent.player_id)}
                                 disabled={isInviting === agent.player_id}
-                                className={`px-3 py-1 rounded-md text-xs font-medium border ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
+                                className={`px-1 py-0 rounded-md text-[9px] font-medium border ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
                                 title={`Invite ${agent.player_alias} to your squad`}
                               >
-                                {isInviting === agent.player_id ? 'Inviting...' : 'Invite'}
+                                {isInviting === agent.player_id ? '…' : 'Inv'}
                               </button>
                             )}
                           </div>
@@ -1411,6 +1467,7 @@ export default function FreeAgentsPage() {
                 </table>
               </div>
             </div>
+            </>
           )}
         </div>
       </main>
@@ -1486,6 +1543,246 @@ export default function FreeAgentsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ClassDistributionView({ agents, onSelectClass }: { agents: FreeAgent[]; onSelectClass: (cls: string) => void }) {
+  const allClassKeys = [
+    'O INF','D INF','O HVY','D HVY','Medic','SL','Foot JT','D Foot JT','Pack JT','Engineer','Infil','10-man Infil'
+  ];
+
+  const buildCounts = (picker: (a: FreeAgent) => string[]) => {
+    const counts: Record<string, number> = Object.fromEntries(allClassKeys.map(k => [k, 0]));
+    for (const a of agents) {
+      for (const cls of picker(a) || []) {
+        if (counts[cls] !== undefined) counts[cls] += 1;
+      }
+    }
+    return counts;
+  };
+
+  const preferredCounts = buildCounts(a => a.preferred_roles || []);
+  const secondaryCounts = buildCounts(a => a.secondary_roles || []);
+  const tryCounts = buildCounts(a => a.classes_to_try || []);
+
+  // Extract the text color utility from CLASS_COLORS for use as SVG fill via currentColor
+  const getTextColorClass = (className: string): string => {
+    const mapping = (CLASS_COLORS as any)[className];
+    // Fallback palette for classes to guarantee non-gray colors
+    const fallback: Record<string, string> = {
+      'O INF': 'text-red-500',
+      'D INF': 'text-red-400',
+      'O HVY': 'text-blue-500',
+      'D HVY': 'text-blue-400',
+      'Medic': 'text-yellow-300',
+      'SL': 'text-green-300',
+      'Foot JT': 'text-gray-300',
+      'D Foot JT': 'text-gray-400',
+      'Pack JT': 'text-gray-300',
+      'Engineer': 'text-amber-800',
+      'Infil': 'text-fuchsia-400',
+      '10-man Infil': 'text-fuchsia-500'
+    };
+    if (typeof mapping === 'string') {
+      const token = mapping.split(' ').find((t: string) => t.startsWith('text-')) || fallback[className];
+      if (!token) return 'text-gray-500';
+      // Slight saturation boost for lighter shades
+      return token
+        .replace('-200', '-400')
+        .replace('-300', '-500');
+    }
+    return fallback[className] || 'text-gray-500';
+  };
+
+  const PieChart = ({ title, counts }: { title: string; counts: Record<string, number> }) => {
+    const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const radius = 40;
+    const cx = 50;
+    const cy = 50;
+
+    const segments = [] as { d: string; cls: string; key: string; midAngle: number }[];
+    let startAngle = 0;
+    const entries = allClassKeys
+      .map(k => ({ key: k, value: counts[k] }))
+      .filter(e => e.value > 0);
+
+    const polarToCartesian = (cx: number, cy: number, r: number, angle: number) => {
+      const rad = (angle - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    };
+    const describeArc = (cx: number, cy: number, r: number, start: number, end: number) => {
+      const startP = polarToCartesian(cx, cy, r, end);
+      const endP = polarToCartesian(cx, cy, r, start);
+      const largeArcFlag = end - start <= 180 ? 0 : 1;
+      return `M ${cx} ${cy} L ${startP.x} ${startP.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${endP.x} ${endP.y} Z`;
+    };
+
+    for (const e of entries) {
+      const angle = (e.value / total) * 360;
+      const endAngle = startAngle + angle;
+      const midAngle = startAngle + angle / 2;
+      segments.push({ d: describeArc(cx, cy, radius, startAngle, endAngle), cls: getTextColorClass(e.key), key: e.key, midAngle });
+      startAngle = endAngle;
+    }
+
+    // Build label data with leader lines and simple overlap avoidance
+    type LeaderLabel = {
+      key: string;
+      cls: string;
+      percent: number;
+      start: { x: number; y: number };
+      elbow: { x: number; y: number };
+      endX: number;
+      endY: number;
+      sideRight: boolean;
+      fontSize: number;
+    };
+
+    const pad = 8; // keep labels safely within the viewBox
+    const elbowRadius = radius + 6;
+    const labelRadius = radius + 14; // place labels around the circle slightly outside the arc
+
+    // Build labels positioned radially around the chart
+
+    // Ensure labels have a minimum angular spacing so they are spread around the circle
+    const minAngleSpacing = 8; // degrees
+    const segmentsSorted = segments
+      .map((s, i) => ({ s, e: entries[i] }))
+      .sort((a, b) => a.s.midAngle - b.s.midAngle);
+
+    let lastAngle = -999;
+    const labels: LeaderLabel[] = segmentsSorted.map(({ s, e }) => {
+      let angle = s.midAngle;
+      if (lastAngle !== -999 && angle - lastAngle < minAngleSpacing) {
+        angle = lastAngle + minAngleSpacing;
+      }
+      if (angle >= 360) angle -= 360;
+      lastAngle = angle;
+
+      const percent = (e.value / total) * 100;
+      const edge = polarToCartesian(cx, cy, radius, angle);
+      const elbow = polarToCartesian(cx, cy, elbowRadius, angle);
+      const labelPoint = polarToCartesian(cx, cy, labelRadius, angle);
+      const sideRight = Math.cos(angle * Math.PI / 180) >= 0;
+      const endX = Math.max(pad, Math.min(100 - pad, labelPoint.x));
+      const endY = Math.max(pad, Math.min(100 - pad, labelPoint.y));
+      const fontSize = 5 + Math.min(2, (percent / 100) * 2); // 5px..7px (~66% smaller)
+      return { key: s.key, cls: s.cls, percent, start: edge, elbow, endX, endY, sideRight, fontSize };
+    });
+
+    return (
+      <div className="bg-gray-800/60 border border-gray-700/60 rounded-xl p-4">
+        <div className="mb-3 text-sm font-semibold text-white flex items-center gap-2">
+          {title} Class Distribution
+        </div>
+        <div>
+          <svg viewBox="0 0 100 100" className="w-full max-w-[520px] h-auto" style={{ overflow: 'visible' }}>
+            {segments.map((s, i) => (
+              <path
+                key={i}
+                d={s.d}
+                className={`${s.cls}`}
+                fill="currentColor"
+                onMouseEnter={() => setHoveredKey(s.key)}
+                onMouseLeave={() => setHoveredKey(null)}
+                onClick={() => onSelectClass(s.key)}
+                style={{ cursor: 'pointer' }}
+              />
+            ))}
+            {/* Donut hole */}
+            <circle cx={cx} cy={cy} r={24} className="fill-gray-900" />
+            {/* Center tooltip when hovering a slice */}
+            {hoveredKey && (
+              <text
+                x={cx}
+                y={cy}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className={`${getTextColorClass(hoveredKey)}`}
+                fill="currentColor"
+                style={{ fontSize: '10px', fontWeight: 700, filter: 'drop-shadow(0 0 2px currentColor)' }}
+              >
+                {hoveredKey}
+              </text>
+            )}
+            {/* Leader lines and percentage labels */}
+            {labels.map((l, i) => {
+              const isActive = hoveredKey === l.key;
+              const labelText = `${Math.round(l.percent)}%`;
+              const labelPad = 2.5;
+              const approxWidth = Math.max(14, labelText.length * l.fontSize * 0.56 + labelPad * 2);
+              const approxHeight = l.fontSize + labelPad * 2;
+              // Center the badge around the label end point so text and box always align,
+              // regardless of side or font weight changes.
+              const centerX = Math.max(approxWidth / 2 + 2, Math.min(100 - approxWidth / 2 - 2, l.endX));
+              const centerY = Math.max(approxHeight / 2 + 2, Math.min(100 - approxHeight / 2 - 2, l.endY));
+              const rectX = centerX - approxWidth / 2;
+              const rectY = centerY - approxHeight / 2;
+              const scale = isActive ? 1.06 : 1.0;
+              const transform = `translate(${centerX},${centerY}) scale(${scale}) translate(${-centerX},${-centerY})`;
+              return (
+                <g key={`lbl-${i}`} className={l.cls} transform={transform}>
+                  <polyline
+                    points={`${l.start.x},${l.start.y} ${l.elbow.x},${l.elbow.y} ${l.endX},${l.endY}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={isActive ? 1.2 : 0.7}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                    style={{
+                      strokeDasharray: '2 6',
+                      animation: `${isActive ? 'dash-travel-fast' : 'dash-travel'} ${isActive ? '0.8s' : '1.8s'} linear infinite`,
+                      filter: isActive ? 'drop-shadow(0 0 2px currentColor)' : undefined
+                    }}
+                  />
+                  {/* Compact backdrop to avoid color overlap with the donut */}
+                  <rect
+                    x={rectX}
+                    y={rectY}
+                    width={approxWidth}
+                    height={approxHeight}
+                    rx={3}
+                    ry={3}
+                    fill="rgba(13,17,23,0.65)"
+                    stroke="currentColor"
+                    strokeOpacity={0.25}
+                  />
+                  <text
+                    x={centerX}
+                    y={centerY}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="currentColor"
+                    style={{
+                      fontSize: `${l.fontSize}px`,
+                      pointerEvents: 'none',
+                      fontWeight: 700,
+                      filter: isActive ? 'drop-shadow(0 0 1.5px currentColor)' : 'drop-shadow(0 0 0.5px rgba(0,0,0,0.35))'
+                    }}
+                  >
+                    {labelText}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          {/* Animations for leader-line traveling highlight */}
+          <style>{`
+            @keyframes dash-travel { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -16; } }
+            @keyframes dash-travel-fast { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -10; } }
+          `}</style>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+      <PieChart title="Preferred" counts={preferredCounts} />
+      <PieChart title="Secondary" counts={secondaryCounts} />
+      <PieChart title="Try" counts={tryCounts} />
     </div>
   );
 }

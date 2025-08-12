@@ -90,6 +90,9 @@ export default function MatchesPage() {
   const [selectedRole, setSelectedRole] = useState<'player' | 'commentator' | 'recording' | 'referee'>('player');
   const [allowMultipleRoles, setAllowMultipleRoles] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
+  const [userCtfRole, setUserCtfRole] = useState<string | null>(null);
+  const [calendarView, setCalendarView] = useState<boolean>(true);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
 
   // Form states
   const [matchTitle, setMatchTitle] = useState('');
@@ -98,6 +101,10 @@ export default function MatchesPage() {
   const [scheduledTime, setScheduledTime] = useState('');
   const [matchType, setMatchType] = useState<'squad_vs_squad' | 'pickup' | 'tournament'>('pickup');
   const [selectedSquadB, setSelectedSquadB] = useState('');
+  // Tournament-specific state
+  const [tournamentSquads, setTournamentSquads] = useState<Squad[]>([]);
+  const [selectedTournamentSquadA, setSelectedTournamentSquadA] = useState('');
+  const [selectedTournamentSquadB, setSelectedTournamentSquadB] = useState('');
 
   // VOD management states
   const [showVodModal, setShowVodModal] = useState(false);
@@ -147,7 +154,8 @@ export default function MatchesPage() {
       fetchAllSquads().catch(error => {
         console.error('Error fetching all squads:', error);
         setAllSquads([]);
-      })
+      }),
+      fetchUserCtfRole().catch(() => setUserCtfRole(null))
     ];
     
     await Promise.allSettled(promises);
@@ -311,9 +319,53 @@ export default function MatchesPage() {
         const data = await response.json();
         setAllSquads(data.squads || []);
       }
+      // Also fetch tournament-eligible squads directly to ensure the flag
+      const { data: tSquads } = await supabase
+        .from('squads')
+        .select('id, name, tag, tournament_eligible, is_active')
+        .eq('is_active', true)
+        .eq('tournament_eligible', true)
+        .order('name');
+      setTournamentSquads((tSquads as any) || []);
     } catch (error) {
       console.error('Error fetching all squads:', error);
     }
+  };
+
+  const fetchUserCtfRole = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('ctf_role')
+        .eq('id', user?.id)
+        .maybeSingle();
+      if (!error && data) setUserCtfRole((data as any).ctf_role || null);
+    } catch (e) {
+      console.error('Error fetching user ctf_role:', e);
+    }
+  };
+
+  const canJoinRole = (role: 'player' | 'commentator' | 'recording' | 'referee'): boolean => {
+    const r = (userCtfRole || '').toLowerCase();
+    if (role === 'commentator') return r === 'commentator' || r === 'ctf_admin';
+    if (role === 'referee') return r === 'head referee' || r === 'referee' || r === 'ctf_admin';
+    return true;
+  };
+
+  // Calendar helpers
+  const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+  const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+  const daysInMonth = endOfMonth.getDate();
+  const leadingBlanks = startOfMonth.getDay(); // 0 Sun - 6 Sat
+  const goPrevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  const goNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  const isSameDate = (d1: Date, d2: Date) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+  const matchesByDay = (day: number) => {
+    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    return plannedMatches.filter(m => {
+      const d = new Date(m.scheduled_at);
+      return isSameDate(d, date);
+    });
   };
 
   const createMatch = async (e: React.FormEvent) => {
@@ -321,6 +373,18 @@ export default function MatchesPage() {
     
     const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
     
+    // Validate tournament squads selection when needed
+    if (matchType === 'tournament') {
+      if (!selectedTournamentSquadA || !selectedTournamentSquadB) {
+        toast.error('Please select both squads for the tournament match');
+        return;
+      }
+      if (selectedTournamentSquadA === selectedTournamentSquadB) {
+        toast.error('Tournament squads must be different');
+        return;
+      }
+    }
+
     try {
       const response = await fetch('/api/matches', {
         method: 'POST',
@@ -332,8 +396,8 @@ export default function MatchesPage() {
           description: matchDescription,
           matchType,
           scheduledAt: scheduledDateTime,
-          squadAId: userSquad?.id,
-          squadBId: selectedSquadB || null,
+          squadAId: matchType === 'tournament' ? selectedTournamentSquadA : userSquad?.id,
+          squadBId: matchType === 'tournament' ? selectedTournamentSquadB : (selectedSquadB || null),
           createdBy: user?.id
         }),
       });
@@ -644,8 +708,8 @@ export default function MatchesPage() {
           </button>
         </div>
 
-        {/* Matches Grid */}
-        {plannedMatches.length > 0 && (
+        {/* Matches Grid (List view only) */}
+        {!calendarView && plannedMatches.length > 0 && (
           <div className="grid gap-6">
             {plannedMatches.map((match) => {
               const { date, time } = formatDateTime(match.scheduled_at);
@@ -773,8 +837,71 @@ export default function MatchesPage() {
           </div>
         )}
 
+    {/* Calendar View Toggle */}
+    <div className="flex items-center justify-between mb-4">
+      <button
+        onClick={() => setCalendarView(!calendarView)}
+        className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm"
+      >
+        {calendarView ? 'List View' : 'Calendar View'}
+      </button>
+      {calendarView && (
+        <div className="flex items-center gap-2">
+          <button onClick={goPrevMonth} className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">◀</button>
+          <div className="text-gray-300 font-medium">
+            {currentMonth.toLocaleString('default', { month: 'long' })} {currentMonth.getFullYear()}
+          </div>
+          <button onClick={goNextMonth} className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">▶</button>
+        </div>
+      )}
+    </div>
+
+    {calendarView ? (
+      <div className="grid grid-cols-7 gap-3 animate-fadeIn">
+        {[...'SunMonTueWedThuFriSat'].join('').match(/.{1,3}/g)!.map((d) => (
+          <div key={d} className="text-center text-xs text-gray-400">{d}</div>
+        ))}
+        {Array.from({ length: leadingBlanks }).map((_, i) => (
+          <div key={`blank-${i}`} />
+        ))}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const dayMatches = matchesByDay(day);
+          return (
+            <div
+              key={day}
+              className="aspect-square p-2 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-cyan-500/40 hover:shadow-cyan-500/10 hover:shadow transition-all"
+            >
+              <div className="text-sm text-gray-300 mb-1 flex items-center justify-between">
+                <span>{day}</span>
+                {dayMatches.length > 0 && (
+                  <span className="text-[10px] bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 rounded px-1">
+                    {dayMatches.length}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1">
+                {dayMatches.slice(0, 3).map((m) => (
+                  <Link
+                    key={m.id}
+                    href={`/matches/${m.id}`}
+                    className="block text-xs bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 rounded px-2 py-1 truncate hover:bg-cyan-600/30 hover:border-cyan-400/40"
+                  >
+                    {m.title}
+                  </Link>
+                ))}
+                {dayMatches.length > 3 && (
+                  <div className="text-[10px] text-gray-400">+{dayMatches.length - 3} more…</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ) : null}
+
         {/* Auto-Logged Matches - Collapsible Section */}
-        {autoLoggedMatches.length > 0 && (
+        {!calendarView && autoLoggedMatches.length > 0 && (
           <div className="mt-8">
             <div 
               className="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4 cursor-pointer hover:bg-yellow-900/30 transition-all duration-300"
@@ -880,7 +1007,7 @@ export default function MatchesPage() {
         )}
 
         {/* Past Matches - Collapsible Section */}
-        {expiredMatches.length > 0 && (
+        {!calendarView && expiredMatches.length > 0 && (
           <div className="mt-8">
             <div 
               className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
@@ -957,7 +1084,7 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {completedMatches.length > 0 && (
+        {!calendarView && completedMatches.length > 0 && (
           <div className="mt-8">
             <div 
               className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 cursor-pointer hover:bg-gray-800/70 transition-all duration-300"
@@ -1034,7 +1161,7 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {plannedMatches.length === 0 && expiredMatches.length === 0 && completedMatches.length === 0 && autoLoggedMatches.length === 0 && !dataLoading && (
+        {!calendarView && plannedMatches.length === 0 && expiredMatches.length === 0 && completedMatches.length === 0 && autoLoggedMatches.length === 0 && !dataLoading && (
           <div className="text-center py-12">
             <h2 className="text-xl font-semibold mb-4">No matches scheduled</h2>
             <p className="text-gray-400 mb-6">Be the first to create a match!</p>
@@ -1085,6 +1212,40 @@ export default function MatchesPage() {
                     {canCreateSquadMatch && <option value="squad_vs_squad">Squad vs Squad</option>}
                   </select>
                 </div>
+                {matchType === 'tournament' && (
+                  <div className="mb-4 space-y-3 animate-fadeIn">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Tournament Squad A (Home)</label>
+                      <select
+                        value={selectedTournamentSquadA}
+                        onChange={(e) => setSelectedTournamentSquadA(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                        required
+                      >
+                        <option value="">Select squad...</option>
+                        {tournamentSquads.map((s) => (
+                          <option key={s.id} value={s.id}>[{s.tag}] {s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Tournament Squad B (Away)</label>
+                      <select
+                        value={selectedTournamentSquadB}
+                        onChange={(e) => setSelectedTournamentSquadB(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                        required
+                      >
+                        <option value="">Select squad...</option>
+                        {tournamentSquads
+                          .filter((s) => s.id !== selectedTournamentSquadA)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>[{s.tag}] {s.name}</option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 {matchType === 'squad_vs_squad' && (
                   <div className="mb-4">
                     <label className="block text-sm font-medium mb-2">Opponent Squad</label>
@@ -1187,26 +1348,38 @@ export default function MatchesPage() {
                         <option value="player" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('player')}>
                           🎮 Player {allowMultipleRoles && getUserRoles(selectedMatch).includes('player') ? '(Already joined)' : ''}
                         </option>
-                        <option value="commentator" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator')}>
-                          🎤 Commentator {allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator') ? '(Already joined)' : ''}
+                        <option value="commentator" disabled={(allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator')) || !canJoinRole('commentator')}>
+                          🎤 Commentator {allowMultipleRoles && getUserRoles(selectedMatch).includes('commentator') ? '(Already joined)' : (!canJoinRole('commentator') ? '(Requires Commentator role)' : '')}
                         </option>
                         <option value="recording" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('recording')}>
                           📹 Recorder {allowMultipleRoles && getUserRoles(selectedMatch).includes('recording') ? '(Already joined)' : ''}
                         </option>
-                        <option value="referee" disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes('referee')}>
-                          👨‍⚖️ Referee {allowMultipleRoles && getUserRoles(selectedMatch).includes('referee') ? '(Already joined)' : ''}
+                        <option value="referee" disabled={(allowMultipleRoles && getUserRoles(selectedMatch).includes('referee')) || !canJoinRole('referee')}>
+                          👨‍⚖️ Referee {allowMultipleRoles && getUserRoles(selectedMatch).includes('referee') ? '(Already joined)' : (!canJoinRole('referee') ? '(Requires Referee or Head referee role)' : '')}
                         </option>
                       </select>
+                      {!canJoinRole(selectedRole) && (
+                        <p className="text-xs text-red-400 mt-2">
+                          {selectedRole === 'commentator' && 'Only users with ctf_role "Commentator" can join as commentator.'}
+                          {selectedRole === 'referee' && 'Only users with ctf_role "Referee" or "Head referee" can join as referee.'}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => joinMatch(selectedMatch.id, selectedRole)}
+                        onClick={() => {
+                          if (!canJoinRole(selectedRole)) {
+                            toast.error(selectedRole === 'commentator' ? 'You must have ctf_role Commentator to join as commentator' : 'You must have ctf_role Referee or Head referee to join as referee');
+                            return;
+                          }
+                          joinMatch(selectedMatch.id, selectedRole);
+                        }}
                         className={`flex-1 py-2 rounded ${
-                          allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)
+                          (allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)) || !canJoinRole(selectedRole)
                             ? 'bg-gray-500 cursor-not-allowed'
                             : 'bg-green-600 hover:bg-green-700'
                         }`}
-                        disabled={allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)}
+                        disabled={(allowMultipleRoles && getUserRoles(selectedMatch).includes(selectedRole)) || !canJoinRole(selectedRole)}
                       >
                         Join as {selectedRole}
                       </button>

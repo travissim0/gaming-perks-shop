@@ -298,7 +298,7 @@ export default function ZoneManagementPage() {
       const data = await response.json();
       
       if (data.success) {
-        setMessage({ type: 'success', text: `Zone ${zoneKey} ${action} successful: ${data.message}` });
+        toast.success(`Zone ${zoneKey} ${action} successful`);
         // Single delayed refresh to allow action to take effect
         setTimeout(() => {
           fetchZoneStatus(false);
@@ -309,7 +309,7 @@ export default function ZoneManagementPage() {
       }
     } catch (error) {
       console.error(`Error ${action}ing zone:`, error);
-      setMessage({ type: 'error', text: `Failed to ${action} zone ${zoneKey}` });
+      toast.error(`Failed to ${action} zone ${zoneKey}`);
     } finally {
       setActionLoading(null);
     }
@@ -615,23 +615,7 @@ export default function ZoneManagementPage() {
           </div>
         </div>
 
-        {/* Message Display */}
-        {message && (
-          <div className={`mb-6 p-3 rounded-lg border text-sm ${
-            message.type === 'success' 
-              ? 'bg-green-900/20 border-green-500/30 text-green-300' 
-              : 'bg-red-900/20 border-red-500/30 text-red-300'
-          }`}>
-            <div className="flex items-center gap-2">
-              {message.type === 'success' ? (
-                <span className="text-green-400">✓</span>
-              ) : (
-                <span className="text-red-400">✗</span>
-              )}
-              {message.text}
-            </div>
-          </div>
-        )}
+        {/* Removed inline message banner to prevent layout shift. Using toasts instead. */}
 
         {/* Controls */}
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
