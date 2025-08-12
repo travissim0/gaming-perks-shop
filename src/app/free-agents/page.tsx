@@ -131,12 +131,23 @@ export default function FreeAgentsPage() {
   
   const [isInFreeAgentPool, setIsInFreeAgentPool] = useState(false);
   const [showJoinForm, setShowJoinForm] = useState(false);
-  const [playerTypeFilter, setPlayerTypeFilter] = useState<string>('combined');
+  const [playerTypeFilter, setPlayerTypeFilter] = useState<string>('free_agents');
   const [classFilter, setClassFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('table');
   const [sortField, setSortField] = useState<keyof FreeAgent>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [includeInSquadPlayers, setIncludeInSquadPlayers] = useState(false);
+  const [activeSquadMemberIds, setActiveSquadMemberIds] = useState<Set<string>>(new Set());
+  const [playerIdToActiveSquad, setPlayerIdToActiveSquad] = useState<Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }>>({});
+  const [freeAgentPlayerIds, setFreeAgentPlayerIds] = useState<Set<string>>(new Set());
+  const [isCaptain, setIsCaptain] = useState(false);
+  const [captainSquad, setCaptainSquad] = useState<{ id: string; name: string; tag?: string | null; is_legacy?: boolean } | null>(null);
+  const [messageModal, setMessageModal] = useState<{ open: boolean; recipientId: string; recipientAlias: string }>({ open: false, recipientId: '', recipientAlias: '' });
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageContent, setMessageContent] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isInviting, setIsInviting] = useState<string | null>(null);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [hasDirectSession, setHasDirectSession] = useState(false);
 
@@ -190,7 +201,9 @@ export default function FreeAgentsPage() {
     try {
       await Promise.all([
         loadFreeAgents(),
-        loadAllPlayers()
+        loadAllPlayers(),
+        loadActiveSquadMemberIds(),
+        loadCaptainStatus()
       ]);
       console.log('✅ FREE AGENTS: Data load completed');
     } catch (error) {
@@ -225,10 +238,143 @@ export default function FreeAgentsPage() {
       }));
 
       setFreeAgents(formattedAgents);
+      setFreeAgentPlayerIds(new Set(formattedAgents.map(a => a.player_id)));
       console.log(`✅ FREE AGENTS: Loaded ${formattedAgents.length} free agents`);
     } catch (error) {
       console.error('❌ FREE AGENTS: Error loading free agents:', error);
       toast.error('Failed to load free agents');
+    }
+  };
+
+  // Load current user's captain status and squad (active)
+  const loadCaptainStatus = async () => {
+    const userId = effectiveUser?.id;
+    if (!userId) return;
+    try {
+      // Try newer schema first
+      const { data, error } = await supabase
+        .from('squad_members')
+        .select('role, squads!inner(id, name, tag, is_active, is_legacy)')
+        .eq('player_id', userId)
+        .eq('status', 'active')
+        .eq('squads.is_active', true)
+        .limit(5);
+
+      let role = null;
+      let squad = null as any;
+      if (!error && data && data.length > 0) {
+        const captainRow = data.find((m: any) => m.role === 'captain');
+        if (captainRow) {
+          role = 'captain';
+          squad = captainRow.squads;
+        }
+      } else {
+        // Fallback older schema user_id
+        const { data: data2, error: error2 } = await supabase
+          .from('squad_members')
+          .select('role, squads!inner(id, name, tag, is_active, is_legacy)')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .eq('squads.is_active', true)
+          .limit(5);
+        if (!error2 && data2 && data2.length > 0) {
+          const captainRow = data2.find((m: any) => m.role === 'captain');
+          if (captainRow) {
+            role = 'captain';
+            squad = captainRow.squads;
+          }
+        }
+      }
+
+      if (role === 'captain' && squad) {
+        setIsCaptain(true);
+        setCaptainSquad({ id: squad.id, name: squad.name, tag: squad.tag, is_legacy: squad.is_legacy });
+      } else {
+        setIsCaptain(false);
+        setCaptainSquad(null);
+      }
+    } catch (e) {
+      console.error('❌ Error loading captain status:', e);
+      setIsCaptain(false);
+      setCaptainSquad(null);
+    }
+  };
+
+  const openMessageModal = (recipientId: string, recipientAlias: string) => {
+    if (!effectiveUser) {
+      toast.error('Please log in to send messages');
+      return;
+    }
+    setMessageModal({ open: true, recipientId, recipientAlias });
+    setMessageSubject('');
+    setMessageContent('');
+  };
+
+  const sendQuickMessage = async () => {
+    if (!effectiveUser || !messageModal.recipientId || !messageContent.trim()) return;
+    setIsSendingMessage(true);
+    try {
+      const { error } = await supabase
+        .from('private_messages')
+        .insert({
+          sender_id: effectiveUser.id,
+          recipient_id: messageModal.recipientId,
+          subject: messageSubject.trim() || 'No Subject',
+          content: messageContent.trim(),
+        });
+      if (error) throw error;
+      toast.success('Message sent');
+      setMessageModal({ open: false, recipientId: '', recipientAlias: '' });
+      setMessageSubject('');
+      setMessageContent('');
+    } catch (err: any) {
+      console.error('Error sending message:', err);
+      toast.error('Failed to send message');
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  const invitePlayerToSquad = async (playerId: string) => {
+    if (!isCaptain || !captainSquad) return;
+    setIsInviting(playerId);
+    try {
+      // Check for existing pending invite
+      const { data: existingInvite } = await supabase
+        .from('squad_invites')
+        .select('id, status, expires_at')
+        .eq('squad_id', captainSquad.id)
+        .eq('invited_player_id', playerId)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (existingInvite) {
+        toast.error('Player already has a pending invitation to your squad');
+        setIsInviting(null);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('squad_invites')
+        .insert([
+          {
+            squad_id: captainSquad.id,
+            invited_player_id: playerId,
+            invited_by: effectiveUser?.id,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            message: captainSquad.is_legacy
+              ? `Invitation to join legacy squad ${captainSquad.name}.`
+              : `Invitation to join ${captainSquad.name}`,
+          },
+        ]);
+      if (error) throw error;
+      toast.success('Invitation sent');
+    } catch (e) {
+      console.error('Error inviting player:', e);
+      toast.error('Failed to send invitation');
+    } finally {
+      setIsInviting(null);
     }
   };
 
@@ -242,6 +388,62 @@ export default function FreeAgentsPage() {
     } catch (error) {
       console.error('❌ FREE AGENTS: Error loading all players:', error);
       toast.error('Failed to load players');
+    }
+  };
+
+  // Load active squad member IDs to filter out players already in squads by default
+  const loadActiveSquadMemberIds = async () => {
+    try {
+      // Try with newer schema using player_id
+      const { data, error } = await supabase
+        .from('squad_members')
+        .select('player_id, status, squads!inner(id, is_active, name, tag, is_legacy)')
+        .eq('status', 'active')
+        .eq('squads.is_active', true);
+
+      let playerIds: string[] = [];
+      const map: Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }> = {};
+      if (!error) {
+        (data || []).forEach((m: any) => {
+          if (m.player_id && m.squads) {
+            playerIds.push(m.player_id);
+            map[m.player_id] = {
+              id: m.squads.id,
+              name: m.squads.name,
+              tag: m.squads.tag,
+              is_legacy: m.squads.is_legacy,
+            };
+          }
+        });
+      } else {
+        // Fallback to older schema using user_id
+        const { data: data2, error: error2 } = await supabase
+          .from('squad_members')
+          .select('user_id, status, squads!inner(id, is_active, name, tag, is_legacy)')
+          .eq('status', 'active')
+          .eq('squads.is_active', true);
+
+        if (!error2) {
+          (data2 || []).forEach((m: any) => {
+            if (m.user_id && m.squads) {
+              playerIds.push(m.user_id);
+              map[m.user_id] = {
+                id: m.squads.id,
+                name: m.squads.name,
+                tag: m.squads.tag,
+                is_legacy: m.squads.is_legacy,
+              };
+            }
+          });
+        }
+      }
+
+      setActiveSquadMemberIds(new Set(playerIds));
+      setPlayerIdToActiveSquad(map);
+    } catch (e) {
+      console.error('❌ FREE AGENTS: Error loading active squad member IDs:', e);
+      setActiveSquadMemberIds(new Set());
+      setPlayerIdToActiveSquad({});
     }
   };
 
@@ -552,8 +754,10 @@ export default function FreeAgentsPage() {
     if (playerTypeFilter === 'players') {
       // Convert all players to FreeAgent format for consistent display
       // Filter out hidden players at the frontend level as a backup
-      const visiblePlayers = allPlayers.filter(player => !player.hide_from_free_agents);
-      
+      const visiblePlayers = allPlayers
+        .filter(player => !player.hide_from_free_agents)
+        .filter(player => includeInSquadPlayers || !activeSquadMemberIds.has(player.id));
+
       return visiblePlayers.map(player => ({
         id: player.id,
         player_id: player.id,
@@ -573,18 +777,53 @@ export default function FreeAgentsPage() {
       }));
     } else if (playerTypeFilter === 'free_agents') {
       // Filter out free agents whose profiles are hidden
-      return freeAgents.filter(agent => {
-        // Find the corresponding player profile to check visibility
+      const visibleFreeAgents = freeAgents.filter(agent => {
         const playerProfile = allPlayers.find(p => p.id === agent.player_id);
-        return !playerProfile || !playerProfile.hide_from_free_agents;
+        const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
+        return !isHidden;
       });
+
+      if (!includeInSquadPlayers) {
+        // Default: exclude players already in squads
+        return visibleFreeAgents.filter(agent => !activeSquadMemberIds.has(agent.player_id));
+      }
+
+      // If including players in squads, also add any in-squad players who never filled the form
+      const freeAgentIds = new Set(visibleFreeAgents.map(fa => fa.player_id));
+      const additionalInSquadPlayers = allPlayers
+        .filter(player => activeSquadMemberIds.has(player.id))
+        .filter(player => !player.hide_from_free_agents)
+        .filter(player => !freeAgentIds.has(player.id))
+        .map(player => ({
+          id: player.id,
+          player_id: player.id,
+          player_alias: player.in_game_alias || 'Unknown Player',
+          preferred_roles: [] as string[],
+          secondary_roles: [] as string[],
+          availability: '',
+          availability_days: [] as string[],
+          availability_times: {} as Record<string, { start: string; end: string }>,
+          skill_level: 'unknown',
+          class_ratings: {} as Record<string, number>,
+          classes_to_try: [] as string[],
+          notes: `Registered player`,
+          created_at: player.created_at,
+          contact_info: player.email,
+          timezone: 'Unknown'
+        }));
+
+      return [...visibleFreeAgents, ...additionalInSquadPlayers];
     } else {
       // Combined: merge both lists, prioritizing free agents
       // Filter out hidden players from both lists
-      const visiblePlayers = allPlayers.filter(player => !player.hide_from_free_agents);
+      const visiblePlayers = allPlayers
+        .filter(player => !player.hide_from_free_agents)
+        .filter(player => includeInSquadPlayers || !activeSquadMemberIds.has(player.id));
       const visibleFreeAgents = freeAgents.filter(agent => {
         const playerProfile = allPlayers.find(p => p.id === agent.player_id);
-        return !playerProfile || !playerProfile.hide_from_free_agents;
+        const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
+        const isInSquad = activeSquadMemberIds.has(agent.player_id);
+        return !isHidden && (includeInSquadPlayers || !isInSquad);
       });
       
       const freeAgentPlayerIds = new Set(visibleFreeAgents.map(fa => fa.player_id));
@@ -596,7 +835,7 @@ export default function FreeAgentsPage() {
           player_alias: player.in_game_alias || 'Unknown Player',
           preferred_roles: [] as string[],
           secondary_roles: [] as string[],
-          availability: 'Contact player directly',
+          availability: '',
           availability_days: [] as string[],
           availability_times: {} as Record<string, { start: string; end: string }>,
           skill_level: 'unknown',
@@ -660,10 +899,33 @@ export default function FreeAgentsPage() {
     }
   };
 
+  // Convert IANA timezone names to common abbreviations
+  const toTimezoneAbbr = (tz?: string): string => {
+    if (!tz) return 'EST';
+    const map: Record<string, string> = {
+      'America/Los_Angeles': 'PST',
+      'America/Denver': 'MST',
+      'America/Phoenix': 'MST',
+      'America/Chicago': 'CST',
+      'America/New_York': 'EST',
+      'America/Toronto': 'EST',
+      'America/Vancouver': 'PST',
+      'Europe/London': 'GMT',
+      'Europe/Paris': 'CET',
+      'Europe/Berlin': 'CET',
+      'Asia/Tokyo': 'JST',
+      'Australia/Sydney': 'AEST',
+    };
+    if (map[tz]) return map[tz];
+    // If already an abbreviation like EST, return as-is
+    if (/^[A-Z]{2,5}$/.test(tz)) return tz;
+    return tz.includes('/') ? (tz.split('/').pop() || tz) : tz;
+  };
+
   // Helper function to format availability
   const formatAvailability = (agent: FreeAgent) => {
     if (agent.availability_days && agent.availability_days.length > 0) {
-      const timezone = agent.timezone || 'EST';
+      const timezone = toTimezoneAbbr(agent.timezone ?? 'America/New_York');
       const times = agent.availability_times || {};
       const timeEntries = Object.entries(times);
       
@@ -796,165 +1058,8 @@ export default function FreeAgentsPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6">
         <div className="max-w-7xl mx-auto">
-          {/* Hero Header */}
-          <div className="text-center mb-12 relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 rounded-3xl blur-3xl"></div>
-            <div className="relative bg-gradient-to-br from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-3xl p-12 border border-cyan-500/20 shadow-2xl">
-              <h1 className="text-6xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-6 animate-pulse">
-                🎯 CTF Free Agent Pool
-              </h1>
-              <p className="text-2xl text-gray-300 mb-8 font-medium">
-                <span className="text-cyan-400">Players</span> looking for <span className="text-purple-400">squads</span> • <span className="text-pink-400">Squads</span> looking for <span className="text-green-400">players</span>
-              </p>
-              
-              <div className="flex items-center justify-center gap-3 mb-8">
-                <div className="w-24 h-1 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-full animate-pulse"></div>
-                <span className="text-4xl animate-bounce">⚡</span>
-                <div className="w-24 h-1 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full animate-pulse"></div>
-              </div>
-              
-              {/* User Actions */}
-              {(() => {
-                // More robust check - show if we have user or if profile exists
-                // This fixes the auth loading issue where user exists but component doesn't mount
-                const hasUserOrProfile = effectiveUser || (profile && profile.id) || hasDirectSession;
-                const isNotBanned = !profile?.is_league_banned;
-                const canShowSection = hasUserOrProfile && isNotBanned;
-                
-                console.log('🔍 VISIBILITY SECTION CHECK:', {
-                  mounted,
-                  authLoading,
-                  hasUser: !!user,
-                  userId: user?.id,
-                  hasProfile: !!profile,
-                  hasUserOrProfile,
-                  hasDirectSession,
-                  isLeagueBanned: profile?.is_league_banned,
-                  isNotBanned,
-                  canShowSection,
-                  profileData: profile ? {
-                    id: profile.id,
-                    alias: profile.in_game_alias,
-                    hidden: profile.hide_from_free_agents
-                  } : null
-                });
-                return canShowSection;
-              })() && (
-                <div className="flex flex-col items-center gap-4 mb-8">
-                  <div className="flex justify-center gap-6">
-                    {!isInFreeAgentPool ? (
-                      <button
-                        onClick={() => setShowJoinForm(true)}
-                        className="px-8 py-4 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 text-white rounded-xl hover:from-green-400 hover:via-emerald-400 hover:to-cyan-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-green-500/30 border border-green-400/30 relative overflow-hidden group"
-                      >
-                        <span className="relative flex items-center gap-2">
-                          🚀 Join Free Agent Pool
-                          <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
-                        </span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-cyan-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={leaveFreeAgentPool}
-                        className="px-8 py-4 bg-gradient-to-r from-red-500 via-pink-500 to-rose-500 text-white rounded-xl hover:from-red-400 hover:via-pink-400 hover:to-rose-400 transition-all duration-300 transform hover:scale-105 font-bold shadow-lg shadow-red-500/30 border border-red-400/30 relative overflow-hidden group"
-                      >
-                        <span className="relative flex items-center gap-2">
-                          🚪 Leave Free Agent Pool
-                          <span className="group-hover:translate-x-1 transition-transform duration-300">→</span>
-                        </span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-red-400/20 to-rose-400/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Free Agent Visibility Toggle */}
-                  <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-xl p-4 backdrop-blur-sm shadow-lg">
-                    <div className="flex items-center justify-center gap-3">
-                      {profile ? (
-                        <>
-                          <span className="text-sm text-indigo-300 font-medium">
-                            {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
-                            <span className="text-xs text-gray-500 ml-2">
-                              (DB: {profile.hide_from_free_agents === true ? 'true' : profile.hide_from_free_agents === false ? 'false' : 'null'})
-                            </span>
-                          </span>
-                          <button
-                            onClick={toggleFreeAgentVisibility}
-                            disabled={isTogglingVisibility || !profile}
-                            className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
-                              !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
-                            } shadow-sm flex-shrink-0 ${isTogglingVisibility ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
-                          >
-                            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-300 ${
-                              !profile.hide_from_free_agents ? 'translate-x-6' : 'translate-x-0.5'
-                            } ${isTogglingVisibility ? 'animate-pulse' : ''}`}></div>
-                          </button>
-                          <span className="text-xs text-gray-400">
-                            {profile.hide_from_free_agents ? '👁️‍🗨️ Show me' : '🫥 Hide me'}
-                          </span>
-                        </>
-                      ) : (hasDirectSession || effectiveUser) ? (
-                        <div className="flex items-center justify-center gap-3">
-                          <span className="text-sm text-indigo-300 font-medium animate-pulse">
-                            Loading visibility settings...
-                          </span>
-                          <button
-                            onClick={toggleFreeAgentVisibility}
-                            disabled={isTogglingVisibility}
-                            className={`relative w-12 h-6 rounded-full transition-all duration-300 bg-gray-600 shadow-sm flex-shrink-0 ${isTogglingVisibility ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
-                            title="Loading visibility settings..."
-                          >
-                            <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full translate-x-0.5"></div>
-                          </button>
-                          <span className="text-xs text-gray-400 animate-pulse">
-                            Loading...
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-3">
-                          <span className="text-sm text-red-300 font-medium">
-                            Please sign in to manage visibility
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 text-center mt-2">
-                      Control whether you appear on this page for squad recruitment
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {profile?.is_league_banned && (
-                <div className="bg-gradient-to-r from-red-500/10 to-pink-500/10 border border-red-500/30 rounded-2xl p-6 mb-8 max-w-md mx-auto backdrop-blur-sm shadow-lg">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl animate-pulse">🚫</span>
-                    <span className="text-red-400 font-bold text-lg">Access Restricted</span>
-                  </div>
-                  <p className="text-red-300">
-                    You are banned from the CTF league and cannot join the free agent pool.
-                  </p>
-                </div>
-              )}
-
-              {!effectiveUser && (
-                <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-2xl p-6 mb-8 max-w-md mx-auto backdrop-blur-sm shadow-lg">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl animate-bounce">🔐</span>
-                    <span className="text-blue-400 font-bold text-lg">Login Required</span>
-                  </div>
-                  <p className="text-blue-300">
-                    <a href="/auth/login" className="underline hover:text-cyan-300 transition-colors font-medium">
-                      Log in
-                    </a> to join the free agent pool
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Compact Controls */}
           <div className="bg-gradient-to-r from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-xl p-4 border border-cyan-500/20 shadow-xl mb-6">
@@ -1043,6 +1148,23 @@ export default function FreeAgentsPage() {
                     <option value="10-man Infil">10-man Infil</option>
                   </select>
                 </div>
+
+                {/* Include in-squad players toggle */}
+                <label
+                  className={`flex items-center gap-2 min-w-0 rounded-lg px-3 py-2 text-sm transition-colors border shadow-sm ${
+                    includeInSquadPlayers
+                      ? 'bg-green-600/20 border-green-400/50 text-green-300 ring-1 ring-green-400/30'
+                      : 'bg-gray-700/50 border-gray-600/50 text-gray-200 hover:bg-gray-700/70'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className={`form-checkbox h-4 w-4 ${includeInSquadPlayers ? 'accent-green-500' : 'accent-gray-400'}`}
+                    checked={includeInSquadPlayers}
+                    onChange={(e) => setIncludeInSquadPlayers(e.target.checked)}
+                  />
+                  Include players already in squads
+                </label>
               </div>
             </div>
           </div>
@@ -1169,18 +1291,7 @@ export default function FreeAgentsPage() {
                           )}
                         </div>
                       </th>
-                      <th 
-                        className="px-6 py-4 text-left text-sm font-bold text-purple-300 cursor-pointer hover:text-purple-200 transition-colors"
-                        onClick={() => handleSort('skill_level')}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">🏆</span>
-                          Level
-                          {sortField === 'skill_level' && (
-                            <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                          )}
-                        </div>
-                      </th>
+                      
                       <th 
                         className="px-6 py-4 text-left text-sm font-bold text-pink-300 cursor-pointer hover:text-pink-200 transition-colors"
                         onClick={() => handleSort('preferred_roles')}
@@ -1191,6 +1302,12 @@ export default function FreeAgentsPage() {
                           {sortField === 'preferred_roles' && (
                             <span className="text-xs">{sortDirection === 'asc' ? '↑' : '↓'}</span>
                           )}
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-bold text-blue-300 min-w-[12rem] whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🛡️</span>
+                          Squad
                         </div>
                       </th>
                       <th className="px-6 py-4 text-left text-sm font-bold text-green-300">
@@ -1211,6 +1328,7 @@ export default function FreeAgentsPage() {
                           )}
                         </div>
                       </th>
+                      <th className="px-6 py-4 text-left text-sm font-bold text-cyan-300">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1228,11 +1346,7 @@ export default function FreeAgentsPage() {
                             <span className="font-medium text-white">{agent.player_alias}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium border ${SKILL_LEVEL_COLORS[agent.skill_level as keyof typeof SKILL_LEVEL_COLORS]}`}>
-                            {agent.skill_level.charAt(0).toUpperCase() + agent.skill_level.slice(1)}
-                          </span>
-                        </td>
+                        
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             {agent.preferred_roles && agent.preferred_roles.length > 0 && (
@@ -1252,11 +1366,44 @@ export default function FreeAgentsPage() {
                             )}
                           </div>
                         </td>
+                        <td className="px-6 py-4 min-w-[12rem] whitespace-nowrap">
+                          {playerIdToActiveSquad[agent.player_id] ? (
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-blue-500/30 text-blue-300 bg-blue-500/10">
+                                <span>{playerIdToActiveSquad[agent.player_id].name}</span>
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-sm">—</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="text-gray-300 text-sm">{formatAvailability(agent)}</div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-gray-400 text-sm">{new Date(agent.created_at).toLocaleDateString()}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openMessageModal(agent.player_id, agent.player_alias)}
+                              className="px-3 py-1 rounded-md text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30"
+                              title={`Message ${agent.player_alias}`}
+                            >
+                              ✉️ Message
+                            </button>
+                            {isCaptain && !freeAgentPlayerIds.has(agent.player_id) ? null : null}
+                            {isCaptain && freeAgentPlayerIds.has(agent.player_id) && (
+                              <button
+                                onClick={() => invitePlayerToSquad(agent.player_id)}
+                                disabled={isInviting === agent.player_id}
+                                className={`px-3 py-1 rounded-md text-xs font-medium border ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
+                                title={`Invite ${agent.player_alias} to your squad`}
+                              >
+                                {isInviting === agent.player_id ? 'Inviting...' : 'Invite'}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1274,6 +1421,70 @@ export default function FreeAgentsPage() {
           onSubmit={joinFreeAgentPool}
           onCancel={() => setShowJoinForm(false)}
         />
+      )}
+
+      {/* Message Modal */}
+      {messageModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-lg mx-4 rounded-xl border border-cyan-500/30 bg-gray-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-cyan-300">
+                Message {messageModal.recipientAlias}
+              </h3>
+              <button
+                onClick={() => setMessageModal({ open: false, recipientId: '', recipientAlias: '' })}
+                className="text-gray-400 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm text-gray-300">Subject</label>
+                <input
+                  type="text"
+                  value={messageSubject}
+                  onChange={(e) => setMessageSubject(e.target.value)}
+                  placeholder={`Message to ${messageModal.recipientAlias}`}
+                  className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm text-gray-300">Description</label>
+                <textarea
+                  value={messageContent}
+                  onChange={(e) => setMessageContent(e.target.value)}
+                  rows={6}
+                  placeholder="Write your message..."
+                  className="w-full resize-y rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setMessageModal({ open: false, recipientId: '', recipientAlias: '' })}
+                className="rounded-lg border border-gray-600 bg-gray-700 px-4 py-2 text-sm text-gray-200 hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendQuickMessage}
+                disabled={isSendingMessage || !messageContent.trim()}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  isSendingMessage || !messageContent.trim()
+                    ? 'cursor-not-allowed border-gray-700 bg-gray-700 text-gray-400'
+                    : 'border border-cyan-500/40 bg-cyan-600 text-white hover:bg-cyan-500'
+                }`}
+              >
+                {isSendingMessage ? 'Sending…' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

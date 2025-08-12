@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
@@ -54,6 +55,7 @@ export default function MessagesPage() {
     content: ''
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,7 +71,15 @@ export default function MessagesPage() {
     if (user) {
       fetchMessages();
       fetchUsers();
+      loadBlockedUsers();
+      subscribeToRealtime();
     }
+    return () => {
+      // Cleanup realtime subscription on unmount
+      try {
+        supabase.removeAllChannels();
+      } catch {}
+    };
   }, [user]);
 
   useEffect(() => {
@@ -122,6 +132,91 @@ export default function MessagesPage() {
     }
   };
 
+  const loadBlockedUsers = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_blocks')
+        .select('blocked_id')
+        .eq('blocker_id', user.id);
+      if (!error && data) {
+        setBlockedUsers(data.map((r: any) => r.blocked_id));
+      }
+    } catch {}
+  };
+
+  // Safe Notification check [[memory:2139712]]
+  const canNotify = (): boolean => typeof window !== 'undefined' && 'Notification' in window;
+
+  const playNotificationSound = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      o.connect(g);
+      g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+      o.start();
+      o.stop(ctx.currentTime + 0.2);
+    } catch {}
+  };
+
+  const notifyNewMessage = (pm: PrivateMessage) => {
+    // Skip if from self or sender is blocked
+    if (!user || pm.sender_id === user.id || blockedUsers.includes(pm.sender_id)) return;
+    playNotificationSound();
+    if (canNotify()) {
+      try {
+        if (Notification.permission === 'granted') {
+          new Notification('New message', {
+            body: pm.subject ? `${pm.subject}: ${pm.content}` : pm.content,
+          });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              new Notification('New message', { body: pm.content });
+            }
+          });
+        }
+      } catch {}
+    }
+  };
+
+  const subscribeToRealtime = () => {
+    if (!user) return;
+    if (canNotify() && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch {}
+    }
+    const channel = supabase.channel(`pm_${user.id}`);
+    channel
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload: any) => {
+        const pm = payload.new as PrivateMessage;
+        if (pm.sender_id === user.id || pm.recipient_id === user.id) {
+          setMessages((prev) => [pm, ...prev]);
+          if (selectedConversation && (pm.sender_id === selectedConversation || pm.recipient_id === selectedConversation)) {
+            setConversationMessages((prev) => [...prev, pm]);
+          }
+          notifyNewMessage(pm);
+          if (pm.sender_id !== user.id) {
+            toast.success('New message received', { id: 'pm-new', duration: 2500 });
+          }
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'private_messages' }, (payload: any) => {
+        const pm = payload.new as PrivateMessage;
+        if (pm.sender_id === user.id || pm.recipient_id === user.id) {
+          setMessages((prev) => prev.map((m) => (m.id === pm.id ? pm : m)));
+          setConversationMessages((prev) => prev.map((m) => (m.id === pm.id ? pm : m)));
+        }
+      })
+      .subscribe((status) => {
+        // optionally log status
+      });
+  };
+
   const fetchConversation = async (otherUserId: string) => {
     if (!user) return;
     
@@ -162,6 +257,14 @@ export default function MessagesPage() {
     if (!user || !composeForm.recipient_id || !composeForm.content.trim()) return;
 
     try {
+      // Prevent if blocked
+      const { data: blockRows } = await supabase
+        .from('user_blocks')
+        .select('id, blocker_id, blocked_id')
+        .or(`and(blocker_id.eq.${composeForm.recipient_id},blocked_id.eq.${user.id}),and(blocker_id.eq.${user.id},blocked_id.eq.${composeForm.recipient_id})`);
+      if ((blockRows || []).length > 0) {
+        return;
+      }
       const { error } = await supabase
         .from('private_messages')
         .insert({
@@ -186,6 +289,47 @@ export default function MessagesPage() {
       
     } catch (error) {
       console.error('Error sending message:', error);
+    }
+  };
+
+  const blockUser = async (blockedId: string) => {
+    if (!user || !blockedId) return;
+    try {
+      const { error } = await supabase
+        .from('user_blocks')
+        .insert({ blocker_id: user.id, blocked_id: blockedId });
+      if (!error) {
+        setBlockedUsers((prev) => Array.from(new Set([...prev, blockedId])));
+        // Remove future notifications
+        toast.success('User blocked');
+      }
+    } catch (e) {
+      console.error('Error blocking user:', e);
+    }
+  };
+
+  const unblockUser = async (blockedId: string) => {
+    if (!user || !blockedId) return;
+    try {
+      const { error } = await supabase
+        .from('user_blocks')
+        .delete()
+        .match({ blocker_id: user.id, blocked_id: blockedId });
+      if (!error) {
+        setBlockedUsers((prev) => prev.filter((id) => id !== blockedId));
+        toast.success('User unblocked');
+      }
+    } catch (e) {
+      console.error('Error unblocking user:', e);
+    }
+  };
+
+  const toggleBlock = async (targetUserId: string) => {
+    if (!targetUserId) return;
+    if (blockedUsers.includes(targetUserId)) {
+      await unblockUser(targetUserId);
+    } else {
+      await blockUser(targetUserId);
     }
   };
 
@@ -484,6 +628,8 @@ export default function MessagesPage() {
                   otherUserId={selectedConversation}
                   onSendReply={replyToMessage}
                   onBack={() => setViewMode('inbox')}
+                  onToggleBlock={toggleBlock}
+                  isBlocked={blockedUsers.includes(selectedConversation)}
                 />
               )}
             </div>
@@ -499,13 +645,17 @@ function ConversationView({
   currentUserId, 
   otherUserId, 
   onSendReply, 
-  onBack 
+  onBack,
+  onToggleBlock,
+  isBlocked,
 }: {
   messages: PrivateMessage[];
   currentUserId: string;
   otherUserId: string;
   onSendReply: (content: string) => void;
   onBack: () => void;
+  onToggleBlock: (userId: string) => void;
+  isBlocked: boolean;
 }) {
   const [replyContent, setReplyContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -535,19 +685,29 @@ function ConversationView({
   return (
     <div className="flex flex-col h-[600px]">
       {/* Header */}
-      <div className="flex items-center space-x-4 pb-4 border-b border-gray-700">
-        <button
-          onClick={onBack}
-          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          ← Back
-        </button>
-        <UserAvatar user={otherUser || {}} size="md" />
-        <div>
-          <h2 className="text-xl font-bold text-cyan-400">
-                                {otherUser?.in_game_alias || 'Anonymous User'}
-          </h2>
-          <p className="text-gray-500 text-sm">{messages.length} messages</p>
+      <div className="flex items-center justify-between pb-4 border-b border-gray-700">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            ← Back
+          </button>
+          <UserAvatar user={otherUser || {}} size="md" />
+          <div>
+            <h2 className="text-xl font-bold text-cyan-400">
+              {otherUser?.in_game_alias || 'Anonymous User'}
+            </h2>
+            <p className="text-gray-500 text-sm">{messages.length} messages</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onToggleBlock(otherUserId)}
+            className={`${isBlocked ? 'bg-gray-600 hover:bg-gray-700' : 'bg-rose-600 hover:bg-rose-700'} text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors`}
+          >
+            {isBlocked ? 'Unblock' : 'Block'}
+          </button>
         </div>
       </div>
 

@@ -193,6 +193,45 @@ export default function Navbar({ user }: { user: any }) {
     };
   }, [user, isAxidus]);
 
+  // Unread private messages: initial load + realtime updates
+  useEffect(() => {
+    if (!user) return;
+
+    let isMounted = true;
+
+    const fetchUnread = async () => {
+      const { data, error } = await supabase
+        .from('private_messages')
+        .select('id')
+        .eq('recipient_id', user.id)
+        .eq('is_read', false);
+      if (!error && data && isMounted) setUnreadMessageCount(data.length);
+    };
+
+    fetchUnread();
+
+    const channel = supabase
+      .channel(`navbar-pm-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
+        const pm: any = (payload as any).new;
+        if (pm?.recipient_id === user.id) {
+          setUnreadMessageCount((c) => c + 1);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'private_messages' }, async (payload) => {
+        const pm: any = (payload as any).new;
+        if (pm?.recipient_id === user.id) {
+          await fetchUnread();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, [user]);
+
   // Set up real-time subscriptions for Axidus
   useEffect(() => {
     if (!isAxidus) return;

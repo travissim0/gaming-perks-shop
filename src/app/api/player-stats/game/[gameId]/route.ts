@@ -78,10 +78,19 @@ export async function GET(
       );
     }
 
-    // Calculate some summary stats for the game
-    const totalKills = gameStats.reduce((sum, player) => sum + (player.kills || 0), 0);
-    const totalDeaths = gameStats.reduce((sum, player) => sum + (player.deaths || 0), 0);
-    const totalCaptures = gameStats.reduce((sum, player) => sum + (player.captures || 0), 0);
+    // Normalize field names expected by the frontend while preserving originals
+    const normalizedPlayers = (gameStats || []).map((p: any) => ({
+      ...p,
+      // Aliases for legacy/frontend fields
+      flag_captures: p.flag_captures ?? p.captures ?? 0,
+      resource_unused_per_death: p.resource_unused_per_death ?? p.avg_resource_unused_per_death ?? 0,
+      explosive_unused_per_death: p.explosive_unused_per_death ?? p.avg_explosive_unused_per_death ?? 0,
+    }));
+
+    // Calculate some summary stats for the game using normalized data
+    const totalKills = normalizedPlayers.reduce((sum: number, player: any) => sum + (player.kills || 0), 0);
+    const totalDeaths = normalizedPlayers.reduce((sum: number, player: any) => sum + (player.deaths || 0), 0);
+    const totalCaptures = normalizedPlayers.reduce((sum: number, player: any) => sum + (player.flag_captures || 0), 0);
     const gameLength = gameStats[0]?.game_length_minutes || 0;
     const durationSeconds = Math.round(gameLength * 60); // Convert minutes to seconds
     const gameMode = gameStats[0]?.game_mode || 'Unknown';
@@ -125,7 +134,7 @@ export async function GET(
     }
 
     // Separate players by team if available
-    const teamStats = gameStats.reduce((acc, player) => {
+    const teamStats = normalizedPlayers.reduce((acc: Record<string, any[]>, player: any) => {
       const team = player.team || 'Unknown';
       if (!acc[team]) {
         acc[team] = [];
@@ -152,7 +161,7 @@ export async function GET(
           totalCaptures,
           playerCount: gameStats.length
         },
-        players: gameStats,
+        players: normalizedPlayers,
         teamStats
       }
     });

@@ -530,7 +530,7 @@ namespace CTFGameType
             }
         }
         
-        private static string DetermineGameType(string arenaName)
+        public static string DetermineGameType(string arenaName)
         {
             if (arenaName.Contains("OvD"))
                 return "OvD";
@@ -546,7 +546,7 @@ namespace CTFGameType
                 return "Unknown";
         }
         
-        private static string DeterminePlayerTeamType(Player player)
+        public static string DeterminePlayerTeamType(Player player)
         {
             if (player._team._name.Contains(" T"))
                 return "Titan";
@@ -556,25 +556,53 @@ namespace CTFGameType
                 return "Unknown";
         }
         
-        private static bool DetermineOffenseTeam(List<Player> players, Arena arena)
+        public static bool DetermineOffenseTeam(List<Player> players, Arena arena)
         {
-            // First, try to find the team with a Squad Leader - that team is offense
+            // NEW LOGIC: Defense owns the Bridge3 flag, other team is offense
+            Arena.FlagState bridge3Flag = arena.getFlag("Bridge3");
+            if (bridge3Flag != null && bridge3Flag.team != null)
+            {
+                string flagOwnerTeamName = bridge3Flag.team._name;
+                
+                // If Bridge3 flag is owned by a team containing " C", then Collective is defense (Titan is offense)
+                if (flagOwnerTeamName.Contains(" C"))
+                    return true; // Titan is offense
+                // If Bridge3 flag is owned by a team containing " T", then Titan is defense (Collective is offense)
+                else if (flagOwnerTeamName.Contains(" T"))
+                    return false; // Titan is defense
+            }
+            
+            // Fallback: First, try to find the team with a Squad Leader - that team is offense
             foreach (Player player in players)
             {
-                string className = player._baseVehicle._type.Name;
-                if (className == "Squad Leader")
+                // Get the player's primary skill name instead of vehicle type
+                string primarySkill = "";
+                if (player._skills.Count > 0)
+                {
+                    primarySkill = player._skills.First().Value.skill.Name;
+                }
+                
+                if (primarySkill == "Squad Leader")
                 {
                     return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
                 }
             }
             
             // If no Squad Leader found, use a consistent fallback based on team balance
-            // Count players on each team type
+            // Count players on each team type (excluding Dueler players)
             int titanCount = 0;
             int collectiveCount = 0;
             
             foreach (Player player in players)
             {
+                // Skip Dueler players from team counting
+                string primarySkill = "";
+                if (player._skills.Count > 0)
+                {
+                    primarySkill = player._skills.First().Value.skill.Name;
+                }
+                if (primarySkill == "Dueler") continue;
+                
                 if (player._team._name.Contains(" T"))
                     titanCount++;
                 else if (player._team._name.Contains(" C"))
@@ -589,36 +617,95 @@ namespace CTFGameType
                 return true;  // Titan = offense (smaller or equal team)
         }
         
-        private static bool DetermineIsOffense(string teamType, bool titanIsOffense, string gameType)
+    /// <summary>
+    /// Validates if a game meets the criteria for stats export:
+    /// - Two teams that have 4 or more players each
+    /// - Only 1 team containing " C" and 1 team containing " T"
+    /// </summary>
+    public static bool IsValidGameForStats(List<Player> players)
+    {
+        if (players == null || players.Count < 8) // Minimum 8 total players (4v4)
+            return false;
+            
+        // Count teams and their player counts
+        var teamCounts = new Dictionary<string, int>();
+        var cTeams = new List<string>();
+        var tTeams = new List<string>();
+        
+        foreach (Player player in players)
         {
-            // For OvD games, use the Squad Leader logic
-            if (gameType == "OvD")
+            if (player._team == null || player._team.IsSpec || player.IsSpectator)
+                continue;
+                
+            // Skip Dueler players from validation
+            string primarySkill = "";
+            if (player._skills.Count > 0)
             {
-                if (teamType == "Titan")
-                    return titanIsOffense;
-                else
-                    return !titanIsOffense;
+                primarySkill = player._skills.First().Value.skill.Name;
             }
+            if (primarySkill == "Dueler") continue;
+                
+            string teamName = player._team._name;
             
-            // For CTF games, assume teams alternate offense/defense
-            if (gameType == "CTF")
-            {
-                if (teamType == "Titan")
-                    return titanIsOffense;
-                else
-                    return !titanIsOffense;
-            }
+            // Count players per team
+            if (!teamCounts.ContainsKey(teamName))
+                teamCounts[teamName] = 0;
+            teamCounts[teamName]++;
             
-            // For other game types (Pub, Mix, Duel, Unknown), still try to separate teams
-            // Don't default everyone to offense - use the same logic
+            // Track C and T teams
+            if (teamName.Contains(" C") && !cTeams.Contains(teamName))
+                cTeams.Add(teamName);
+            else if (teamName.Contains(" T") && !tTeams.Contains(teamName))
+                tTeams.Add(teamName);
+        }
+        
+        // Must have exactly 1 C team and 1 T team
+        if (cTeams.Count != 1 || tTeams.Count != 1)
+            return false;
+            
+        // Both teams must have 4+ players
+        string cTeamName = cTeams[0];
+        string tTeamName = tTeams[0];
+        
+        if (!teamCounts.ContainsKey(cTeamName) || !teamCounts.ContainsKey(tTeamName))
+            return false;
+            
+        if (teamCounts[cTeamName] < 4 || teamCounts[tTeamName] < 4)
+            return false;
+            
+        return true;
+    }
+    
+    public static bool DetermineIsOffense(string teamType, bool titanIsOffense, string gameType)
+    {
+        // For OvD games, use the Squad Leader logic
+        if (gameType == "OvD")
+        {
             if (teamType == "Titan")
                 return titanIsOffense;
             else
                 return !titanIsOffense;
         }
         
-        private static string GetSpecialWeapon(Player player)
+        // For CTF games, assume teams alternate offense/defense
+        if (gameType == "CTF")
         {
+            if (teamType == "Titan")
+                return titanIsOffense;
+            else
+                return !titanIsOffense;
+        }
+        
+        // For other game types (Pub, Mix, Duel, Unknown), still try to separate teams
+        // Don't default everyone to offense - use the same logic
+        if (teamType == "Titan")
+            return titanIsOffense;
+        else
+            return !titanIsOffense;
+    }
+    
+    public static string GetSpecialWeapon(Player player)
+    {
             // Check for special weapons based on player's current equipment
             // You may need to adapt this based on your specific weapon detection system
             
@@ -693,6 +780,429 @@ namespace CTFGameType
                        .Replace("\n", "\\n")
                        .Replace("\r", "\\r")
                        .Replace("\t", "\\t");
+        }
+    }
+
+    public class LiveGameDataIntegration
+    {
+        private static readonly HttpClient httpClient = new HttpClient();
+        
+        static LiveGameDataIntegration()
+        {
+            httpClient.Timeout = TimeSpan.FromSeconds(30); // 30 second timeout
+            
+            // Enable modern TLS protocols for older .NET Framework
+            System.Net.ServicePointManager.SecurityProtocol = 
+                System.Net.SecurityProtocolType.Tls12 | 
+                System.Net.SecurityProtocolType.Tls11 | 
+                System.Net.SecurityProtocolType.Tls;
+        }
+        
+        // Use localhost for testing, switch to production URL when ready
+        private const bool USE_LOCAL_API = true;  // Temporarily use local for debugging
+        private const string LOCAL_API_ENDPOINT = "http://localhost:3001/api/livegamedata";
+        private const string PRODUCTION_API_ENDPOINT = "https://freeinf.org/api/livegamedata";  // Use HTTPS with TLS support
+        
+        private static string LIVE_API_ENDPOINT
+        {
+            get { return USE_LOCAL_API ? LOCAL_API_ENDPOINT : PRODUCTION_API_ENDPOINT; }
+        }
+
+        // Timer for regular updates
+        private static System.Threading.Timer liveDataTimer;
+        private static Arena currentArena;
+        private static Dictionary<Player, Dictionary<string, int>> livePlayerClassPlayTimes;
+        private static Dictionary<Player, int> livePlayerLastClassSwitch;
+
+        /// <summary>
+        /// Initialize the live data system with references to your existing tracking dictionaries
+        /// Call this in your arena initialization
+        /// </summary>
+        public static void Initialize(Arena arena, 
+            Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes,
+            Dictionary<Player, int> playerLastClassSwitch)
+        {
+            currentArena = arena;
+            livePlayerClassPlayTimes = playerClassPlayTimes;
+            livePlayerLastClassSwitch = playerLastClassSwitch;
+
+            // Start timer for regular updates (every 15 seconds during active games)
+            liveDataTimer = new System.Threading.Timer(
+                SendLiveGameDataCallback, 
+                null, 
+                TimeSpan.FromSeconds(5), // First update after 5 seconds
+                TimeSpan.FromSeconds(15) // Then every 15 seconds
+            );
+
+            // Console.WriteLine("[LiveGameData] Live game data integration initialized");
+        }
+
+        /// <summary>
+        /// Stop the live data timer (call when arena is closing or no players)
+        /// </summary>
+        public static void Stop()
+        {
+            if (liveDataTimer != null)
+                liveDataTimer.Dispose();
+            liveDataTimer = null;
+            // Console.WriteLine("[LiveGameData] Live game data timer stopped");
+        }
+
+        /// <summary>
+        /// Timer callback to send live data automatically
+        /// </summary>
+        private static void SendLiveGameDataCallback(object state)
+        {
+            if (currentArena == null) 
+            {
+                // Console.WriteLine("[LiveGameData] Timer callback - arena is null");
+                return;
+            }
+
+            try
+            {
+                int playerCount = currentArena.Players.Count();
+                // Console.WriteLine(String.Format("[LiveGameData] Timer callback - {0} players in arena", playerCount));
+                
+                // Only send updates if there are players in the arena
+                if (playerCount > 0)
+                {
+                    string baseUsed = GetCurrentBase(currentArena);
+                    Task.Run(async () => await SendLiveGameData(currentArena, baseUsed));
+                }
+                else
+                {
+                    // Console.WriteLine("[LiveGameData] No players in arena, skipping live data send");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] Error in timer callback: {0}", ex.Message));
+                // Console.WriteLine(String.Format("[LiveGameData] Stack trace: {0}", ex.StackTrace));
+            }
+        }
+
+        /// <summary>
+        /// Send current game state to the live monitoring endpoint WITH validation
+        /// </summary>
+        public static async Task SendLiveGameData(Arena arena, string baseUsed = "Unknown")
+        {
+            try
+            {
+                // NEW: Validate game before sending live data - but only log, don't block
+                var players = arena.Players.ToList();
+                bool isValidGame = WebIntegration.IsValidGameForStats(players);
+                
+                if (!isValidGame)
+                {
+                    // Console.WriteLine("[LiveGameData] Game does not meet full criteria (4+ per team, 1C/1T), but sending data anyway for monitoring.");
+                    // Continue anyway for live monitoring - validation should only block final stats
+                }
+                
+                // Determine game type
+                string gameType = WebIntegration.DetermineGameType(arena._name);
+                
+                // Get all players in the arena
+                var liveGameDataPlayers = new List<LivePlayerData>();
+                
+                // Determine which team is offense/defense
+                bool titanIsOffense = WebIntegration.DetermineOffenseTeam(players, arena);
+                
+                // Process each player with enhanced data
+                foreach (Player player in players)
+                {
+                    string actualTeamName = player._team._name;
+                    string teamType = WebIntegration.DeterminePlayerTeamType(player);
+                    string className = player._baseVehicle._type.Name;
+                    bool isOffense = WebIntegration.DetermineIsOffense(teamType, titanIsOffense, gameType);
+                    string weapon = WebIntegration.GetSpecialWeapon(player);
+                    
+                    // Get class play times for this player
+                    var classPlayTimes = new Dictionary<string, int>();
+                    int totalPlayTime = 0;
+                    
+                    if (livePlayerClassPlayTimes != null && livePlayerClassPlayTimes.ContainsKey(player))
+                    {
+                        classPlayTimes = new Dictionary<string, int>(livePlayerClassPlayTimes[player]);
+                        totalPlayTime = classPlayTimes.Values.Sum();
+                        
+                        // Add current session time for active class
+                        if (livePlayerLastClassSwitch != null && livePlayerLastClassSwitch.ContainsKey(player))
+                        {
+                            int currentTick = Environment.TickCount;
+                            int sessionTime = Math.Max(0, currentTick - livePlayerLastClassSwitch[player]);
+                            
+                            if (!classPlayTimes.ContainsKey(className))
+                                classPlayTimes[className] = 0;
+                            classPlayTimes[className] += sessionTime;
+                            totalPlayTime += sessionTime;
+                        }
+                    }
+                    
+                    // Check if player is dueling (disabled for now)
+                    bool isDueling = false;
+                    string duelOpponent = null;
+                    string duelType = null;
+                    
+                    // Get player health and energy
+                    int currentHealth = GetPlayerHealth(player);
+                    int currentEnergy = GetPlayerEnergy(player);
+                    bool isAlive = !player.IsDead;
+                    
+                    liveGameDataPlayers.Add(new LivePlayerData
+                    {
+                        alias = player._alias,
+                        team = actualTeamName,
+                        teamType = teamType,
+                        className = className,
+                        isOffense = isOffense,
+                        weapon = weapon,
+                        classPlayTimes = classPlayTimes,
+                        totalPlayTime = totalPlayTime,
+                        isDueling = isDueling,
+                        duelOpponent = duelOpponent,
+                        duelType = duelType,
+                        currentHealth = currentHealth,
+                        currentEnergy = currentEnergy,
+                        isAlive = isAlive
+                    });
+                }
+                
+                // Build JSON with enhanced data
+                string jsonData = BuildLiveGameDataJson(arena._name, gameType, baseUsed, liveGameDataPlayers);
+                
+                // Send to live API endpoint
+                // Console.WriteLine(String.Format("[LiveGameData] Sending data to: {0}", LIVE_API_ENDPOINT));
+                // Console.WriteLine(String.Format("[LiveGameData] JSON payload size: {0} bytes", jsonData.Length));
+                // Console.WriteLine(String.Format("[LiveGameData] Player count: {0}", liveGameDataPlayers.Count));
+                
+                var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(LIVE_API_ENDPOINT, content);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    // Console.WriteLine(String.Format("[LiveGameData] Successfully sent live data for {0} players", liveGameDataPlayers.Count));
+                }
+                else
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(String.Format("[LiveGameData] Failed to send live data: {0} - {1}", response.StatusCode, errorContent));
+                    
+                    // Log only clean error info - no massive HTML dumps
+                    if (errorContent.Contains("html") || errorContent.Length > 200)
+                    {
+                        Console.WriteLine(String.Format("[LiveGameData] Server returned HTML error page (likely endpoint/CORS issue)"));
+                    }
+                    else
+                    {
+                        Console.WriteLine(String.Format("[LiveGameData] Error response: {0}", errorContent));
+                    }
+                }
+            }
+            catch (System.Net.Http.HttpRequestException httpEx)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] HTTP error sending live game data: {0}", httpEx.Message));
+                // Console.WriteLine(String.Format("[LiveGameData] Inner exception: {0}", httpEx.InnerException != null ? httpEx.InnerException.Message : "None"));
+            }
+            catch (System.Threading.Tasks.TaskCanceledException timeoutEx)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] Timeout sending live game data: {0}", timeoutEx.Message));
+            }
+            catch (Exception ex)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] Error sending live game data: {0}", ex.Message));
+                // Console.WriteLine(String.Format("[LiveGameData] Exception type: {0}", ex.GetType().Name));
+                // Console.WriteLine(String.Format("[LiveGameData] Stack trace: {0}", ex.StackTrace));
+            }
+        }
+
+        /// <summary>
+        /// Send current game state to the live monitoring endpoint WITHOUT validation (manual command)
+        /// </summary>
+        public static async Task SendLiveGameDataManual(Arena arena, string baseUsed, List<LivePlayerData> playerData)
+        {
+            try
+            {
+                // Determine game type
+                string gameType = WebIntegration.DetermineGameType(arena._name);
+                
+                // Console.WriteLine(String.Format("[LiveGameData] Manual snapshot requested for {0} players", playerData.Count));
+                
+                // Build JSON with provided player data
+                string jsonData = BuildLiveGameDataJson(arena._name, gameType, baseUsed, playerData);
+                
+                // Send to live API endpoint
+                // Console.WriteLine(String.Format("[LiveGameData] Sending manual snapshot to: {0}", LIVE_API_ENDPOINT));
+                // Console.WriteLine(String.Format("[LiveGameData] JSON payload size: {0} bytes", jsonData.Length));
+                
+                var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");
+                
+                // Add timeout for the specific request
+                using (var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                {
+                    var response = await httpClient.PostAsync(LIVE_API_ENDPOINT, content, cts.Token);
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        // Console.WriteLine(String.Format("[LiveGameData] Successfully sent manual live data snapshot for {0} players", playerData.Count));
+                        string responseContent = await response.Content.ReadAsStringAsync();
+                        // Console.WriteLine(String.Format("[LiveGameData] Server response: {0}", responseContent));
+                    }
+                    else
+                    {
+                        string errorContent = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine(String.Format("[LiveGameData] Failed to send manual live data: {0} - {1}", response.StatusCode, errorContent));
+                        
+                        // Log only clean error info - no massive HTML dumps
+                        if (errorContent.Contains("html") || errorContent.Length > 200)
+                        {
+                            Console.WriteLine(String.Format("[LiveGameData] Manual send: Server returned HTML error page (likely endpoint/CORS issue)"));
+                        }
+                        else
+                        {
+                            Console.WriteLine(String.Format("[LiveGameData] Manual send error: {0}", errorContent));
+                        }
+                    }
+                }
+            }
+            catch (System.Net.Http.HttpRequestException httpEx)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] HTTP error sending manual live game data: {0}", httpEx.Message));
+                // Console.WriteLine(String.Format("[LiveGameData] Inner exception: {0}", httpEx.InnerException != null ? httpEx.InnerException.Message : "None"));
+            }
+            catch (System.Threading.Tasks.TaskCanceledException timeoutEx)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] Timeout sending manual live game data: {0}", timeoutEx.Message));
+            }
+            catch (Exception ex)
+            {
+                // Console.WriteLine(String.Format("[LiveGameData] Error sending manual live game data: {0}", ex.Message));
+                // Console.WriteLine(String.Format("[LiveGameData] Exception type: {0}", ex.GetType().Name));
+                // Console.WriteLine(String.Format("[LiveGameData] Stack trace: {0}", ex.StackTrace));
+            }
+        }
+
+        /// <summary>
+        /// Enhanced player data structure for live monitoring
+        /// </summary>
+        public class LivePlayerData
+        {
+            public string alias { get; set; }
+            public string team { get; set; }
+            public string teamType { get; set; }
+            public string className { get; set; }
+            public bool isOffense { get; set; }
+            public string weapon { get; set; }
+            public Dictionary<string, int> classPlayTimes { get; set; }
+            public int totalPlayTime { get; set; }
+            public bool isDueling { get; set; }
+            public string duelOpponent { get; set; }
+            public string duelType { get; set; }
+            public int currentHealth { get; set; }
+            public int currentEnergy { get; set; }
+            public bool isAlive { get; set; }
+        }
+
+        /// <summary>
+        /// Build JSON string for live game data
+        /// </summary>
+        private static string BuildLiveGameDataJson(string arenaName, string gameType, string baseUsed, List<LivePlayerData> players)
+        {
+            var json = new System.Text.StringBuilder();
+            json.Append("{");
+            json.AppendFormat("\"arenaName\":\"{0}\",", WebIntegration.EscapeJsonString(arenaName));
+            json.AppendFormat("\"gameType\":\"{0}\",", WebIntegration.EscapeJsonString(gameType));
+            json.AppendFormat("\"baseUsed\":\"{0}\",", WebIntegration.EscapeJsonString(baseUsed));
+            json.Append("\"players\":[");
+            
+            for (int i = 0; i < players.Count; i++)
+            {
+                var player = players[i];
+                json.Append("{");
+                json.AppendFormat("\"alias\":\"{0}\",", WebIntegration.EscapeJsonString(player.alias));
+                json.AppendFormat("\"team\":\"{0}\",", WebIntegration.EscapeJsonString(player.team));
+                json.AppendFormat("\"teamType\":\"{0}\",", WebIntegration.EscapeJsonString(player.teamType));
+                json.AppendFormat("\"className\":\"{0}\",", WebIntegration.EscapeJsonString(player.className));
+                json.AppendFormat("\"isOffense\":{0},", player.isOffense.ToString().ToLower());
+                json.AppendFormat("\"weapon\":\"{0}\",", WebIntegration.EscapeJsonString(player.weapon));
+                json.AppendFormat("\"totalPlayTime\":{0},", player.totalPlayTime);
+                json.AppendFormat("\"isDueling\":{0},", player.isDueling.ToString().ToLower());
+                json.AppendFormat("\"currentHealth\":{0},", player.currentHealth);
+                json.AppendFormat("\"currentEnergy\":{0},", player.currentEnergy);
+                json.AppendFormat("\"isAlive\":{0},", player.isAlive.ToString().ToLower());
+                
+                if (player.duelOpponent != null)
+                    json.AppendFormat("\"duelOpponent\":\"{0}\",", WebIntegration.EscapeJsonString(player.duelOpponent));
+                else
+                    json.Append("\"duelOpponent\":null,");
+                    
+                if (player.duelType != null)
+                    json.AppendFormat("\"duelType\":\"{0}\",", WebIntegration.EscapeJsonString(player.duelType));
+                else
+                    json.Append("\"duelType\":null,");
+                
+                // Add class play times
+                json.Append("\"classPlayTimes\":{");
+                if (player.classPlayTimes != null && player.classPlayTimes.Count > 0)
+                {
+                    var classTimes = player.classPlayTimes.ToList();
+                    for (int j = 0; j < classTimes.Count; j++)
+                    {
+                        json.AppendFormat("\"{0}\":{1}", WebIntegration.EscapeJsonString(classTimes[j].Key), classTimes[j].Value);
+                        if (j < classTimes.Count - 1) json.Append(",");
+                    }
+                }
+                json.Append("}");
+                
+                json.Append("}");
+                if (i < players.Count - 1) json.Append(",");
+            }
+            
+            json.Append("]}");
+            return json.ToString();
+        }
+
+        /// <summary>
+        /// Get current base being used (you may need to adapt this based on your base tracking)
+        /// </summary>
+        private static string GetCurrentBase(Arena arena)
+        {
+            // Simple base detection - adapt this to your needs
+            if (arena._name.Contains("North")) return "North Base";
+            if (arena._name.Contains("South")) return "South Base";
+            return "Unknown Base";
+        }
+
+        /// <summary>
+        /// Get player's current health
+        /// </summary>
+        private static int GetPlayerHealth(Player player)
+        {
+            try
+            {
+                // Access player health - adapt based on your Player class structure
+                return (int)player._baseVehicle._state.health;
+            }
+            catch
+            {
+                return 60; // Default CTF health
+            }
+        }
+
+        /// <summary>
+        /// Get player's current energy
+        /// </summary>
+        private static int GetPlayerEnergy(Player player)
+        {
+            try
+            {
+                // Access player energy - adapt based on your Player class structure
+                return (int)player._baseVehicle._state.energy;
+            }
+            catch
+            {
+                return 600; // Default CTF energy
+            }
         }
     }
 
@@ -1034,7 +1544,7 @@ namespace CTFGameType
                         {
                             // Last part is a duel type, so player name is everything in between
                             duelTypeStr = lastPart;
-                            if (parts.Length <= 2)
+                            if (parts.Length == 2)
                             {
                                 // Only "challenge" and duel type, no player name
                                 player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
@@ -1042,30 +1552,12 @@ namespace CTFGameType
                                 return;
                             }
                             // Join all parts except first (challenge) and last (duel type)
-                            // Make sure we have enough parts to join
-                            int namePartsCount = parts.Length - 2;
-                            if (namePartsCount > 0)
-                            {
-                                targetName = String.Join(" ", parts, 1, namePartsCount);
-                            }
-                            else
-                            {
-                                player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
-                                return;
-                            }
+                            targetName = String.Join(" ", parts, 1, parts.Length - 2);
                         }
                         else
                         {
                             // No duel type specified, player name is everything after "challenge"
-                            if (parts.Length > 1)
-                            {
-                                targetName = String.Join(" ", parts, 1, parts.Length - 1);
-                            }
-                            else
-                            {
-                                player.sendMessage(-1, "Usage: ?duel challenge <player> [type]");
-                                return;
-                            }
+                            targetName = String.Join(" ", parts, 1, parts.Length - 1);
                         }
                         
                         // Trim any quotes that players might use
@@ -1083,7 +1575,7 @@ namespace CTFGameType
                         break;
 
                     case "test":
-                        // NEW: Test command for simulating duels against fake players
+                        // Test command for simulating duels against fake players
                         if (parts.Length < 2)
                         {
                             player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
@@ -1091,50 +1583,18 @@ namespace CTFGameType
                             return;
                         }
                         
-                        // Parse fake player name and duel type
-                        string fakePlayerName;
-                        string testDuelTypeStr = "unranked";
+                        string fakePlayerName = parts.Length > 2 ? String.Join(" ", parts, 1, parts.Length - 2) : String.Join(" ", parts, 1, parts.Length - 1);
+                        string testDuelTypeStr = parts.Length > 2 && (parts[parts.Length - 1].ToLower() == "bo3" || parts[parts.Length - 1].ToLower() == "bo5" || parts[parts.Length - 1].ToLower() == "unranked") ? parts[parts.Length - 1] : "bo3";
                         
-                        // Check if the last part is a valid duel type
-                        string testLastPart = parts[parts.Length - 1].ToLower();
-                        if (testLastPart == "unranked" || testLastPart == "bo3" || testLastPart == "bo5" || 
-                            testLastPart == "ranked_bo3" || testLastPart == "ranked_bo5")
+                        // If only one word after "test", it's the player name and default to bo3
+                        if (parts.Length == 2)
                         {
-                            testDuelTypeStr = testLastPart;
-                            if (parts.Length <= 2)
-                            {
-                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
-                                return;
-                            }
-                            // Make sure we have enough parts to join
-                            int namePartsCount = parts.Length - 2;
-                            if (namePartsCount > 0)
-                            {
-                                fakePlayerName = String.Join(" ", parts, 1, namePartsCount);
-                            }
-                            else
-                            {
-                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
-                                return;
-                            }
-                        }
-                        else
-                        {
-                            if (parts.Length > 1)
-                            {
-                                fakePlayerName = String.Join(" ", parts, 1, parts.Length - 1);
-                            }
-                            else
-                            {
-                                player.sendMessage(-1, "Usage: ?duel test <fake_player_name> [type]");
-                                return;
-                            }
+                            fakePlayerName = parts[1];
+                            testDuelTypeStr = "bo3";
                         }
                         
-                        fakePlayerName = fakePlayerName.Trim('"', '\'');
                         DuelType testDuelType = ParseDuelType(testDuelTypeStr);
-                        
-                        await SimulateDuelAgainstFakePlayer(player, fakePlayerName, testDuelType);
+                        await SimulateDuelMatch(player, fakePlayerName, testDuelType);
                         break;
 
                     case "accept":
@@ -1185,7 +1645,7 @@ namespace CTFGameType
             player.sendMessage(-1, "?duel decline - Decline a duel challenge");
             player.sendMessage(-1, "!?duel forfeit - Forfeit current duel");
             player.sendMessage(-1, "@?duel stats [player] - View dueling statistics");
-            player.sendMessage(-1, "~?duel test <fake_name> [type] - Test duel vs fake player");
+            player.sendMessage(-1, "~?duel test <fake_player> [type] - Simulate duel for testing");
             player.sendMessage(-1, "");
             player.sendMessage(-1, "!Duel Types: unranked, bo3 (ranked), bo5 (ranked)");
             player.sendMessage(-1, "@RANKED TILES: Step on Bo3 (775,517) or Bo5 (784,517) tiles!");
@@ -1196,7 +1656,7 @@ namespace CTFGameType
             player.sendMessage(-1, "?duel challenge Axidus bo3");
             player.sendMessage(-1, "?duel challenge Jeff Bezos bo5");
             player.sendMessage(-1, "?duel stats Jeff Bezos");
-            player.sendMessage(-1, "~?duel test TestBot bo3 (for testing)");
+            player.sendMessage(-1, "~?duel test TestBot bo3 - Test with fake player");
         }
 
         private static DuelType ParseDuelType(string type)
@@ -2957,162 +3417,166 @@ namespace CTFGameType
                        .Replace("\t", "\\t");
         }
 
-        private static async Task SimulateDuelAgainstFakePlayer(Player realPlayer, string fakePlayerName, DuelType duelType)
+        private static async Task SimulateDuelMatch(Player realPlayer, string fakePlayerName, DuelType duelType)
         {
             try
             {
-                // Check if real player is already in a duel
-                if (IsPlayerInDuel(realPlayer._alias))
-                {
-                    realPlayer.sendMessage(-1, "You are already in a duel.");
-                    return;
-                }
-
-                string matchKey = String.Format("{0}_{1}", realPlayer._alias, fakePlayerName);
+                realPlayer.sendMessage(-1, String.Format("🧪 SIMULATING DUEL: {0} vs {1} ({2})", realPlayer._alias, fakePlayerName, GetDuelTypeString(duelType)));
+                realPlayer.sendMessage(-1, "This is a test match with randomized stats!");
                 
                 // Create a simulated duel match
-                var duelMatch = new DuelMatch
+                var simulatedMatch = new DuelMatch
                 {
                     MatchType = duelType,
                     Player1Name = realPlayer._alias,
                     Player2Name = fakePlayerName,
-                    Status = DuelStatus.InProgress,
+                    Status = DuelStatus.Completed,
                     ArenaName = realPlayer._arena._name,
-                    StartedAt = DateTime.Now
+                    StartedAt = DateTime.Now.AddMinutes(-5), // Simulate it started 5 minutes ago
+                    CompletedAt = DateTime.Now
                 };
 
-                // Initialize player IDs (will be resolved by the API)
-                PopulatePlayerIds(duelMatch);
+                // Populate player IDs (real player gets null, fake player gets null)
+                simulatedMatch.Player1Id = null;
+                simulatedMatch.Player2Id = null;
 
-                // Add to active duels temporarily
-                activeDuels.TryAdd(matchKey, duelMatch);
+                // Determine how many rounds to simulate based on duel type
+                int roundsToWin = GetRoundsToWin(duelType);
+                int maxPossibleRounds = duelType == DuelType.RankedBo5 ? 5 : (duelType == DuelType.RankedBo3 ? 3 : 1);
+                
+                // Real player always wins, but make it somewhat competitive
+                Random rand = new Random();
+                int realPlayerWins = roundsToWin;
+                int fakePlayerWins = rand.Next(0, roundsToWin); // Fake player can win 0 to (roundsToWin-1) rounds
+                
+                simulatedMatch.Player1RoundsWon = realPlayerWins;
+                simulatedMatch.Player2RoundsWon = fakePlayerWins;
+                simulatedMatch.TotalRounds = realPlayerWins + fakePlayerWins;
+                simulatedMatch.WinnerName = realPlayer._alias;
+                simulatedMatch.WinnerId = null;
 
-                // Announce test duel start
-                string duelTypeStr = GetDuelTypeString(duelType);
-                realPlayer.sendMessage(-1, String.Format("!TEST DUEL STARTED: {0} vs {1} (FAKE)! ({2})", 
-                    realPlayer._alias, fakePlayerName, duelTypeStr));
-                realPlayer.sendMessage(-1, "@This is a simulated duel for testing purposes.");
+                realPlayer.sendMessage(-1, String.Format("Simulating {0} rounds...", simulatedMatch.TotalRounds));
 
-                // Reset shot stats for real player
-                ResetPlayerShotStats(realPlayer);
+                // Generate rounds with randomized stats
+                for (int roundNum = 1; roundNum <= simulatedMatch.TotalRounds; roundNum++)
+                {
+                    var round = new DuelRound
+                    {
+                        RoundNumber = roundNum,
+                        StartedAt = DateTime.Now.AddMinutes(-5).AddSeconds(roundNum * 30),
+                        CompletedAt = DateTime.Now.AddMinutes(-5).AddSeconds(roundNum * 30 + rand.Next(5, 45)),
+                    };
+                    
+                    round.DurationSeconds = (int)(round.CompletedAt - round.StartedAt).TotalSeconds;
 
-                // Simulate the duel rounds
-                await SimulateDuelRounds(duelMatch, realPlayer, fakePlayerName);
+                    // Determine round winner (real player wins more often)
+                    bool realPlayerWinsRound;
+                    if (roundNum <= realPlayerWins)
+                    {
+                        // Real player needs to win this round
+                        realPlayerWinsRound = true;
+                    }
+                    else
+                    {
+                        // Fake player wins this round
+                        realPlayerWinsRound = false;
+                    }
 
-                // Complete the duel
-                await CompleteFakeDuel(duelMatch, realPlayer._arena);
+                    if (realPlayerWinsRound)
+                    {
+                        round.WinnerName = realPlayer._alias;
+                        round.LoserName = fakePlayerName;
+                        round.WinnerHpLeft = rand.Next(10, 60); // Real player survives with some HP
+                        round.LoserHpLeft = 0;
+                    }
+                    else
+                    {
+                        round.WinnerName = fakePlayerName;
+                        round.LoserName = realPlayer._alias;
+                        round.WinnerHpLeft = rand.Next(5, 45); // Fake player survives with some HP
+                        round.LoserHpLeft = 0;
+                    }
 
-                // Remove from active duels
-                DuelMatch removedMatch;
-                activeDuels.TryRemove(matchKey, out removedMatch);
+                    // Generate randomized kill data for this round - BOTH players fire shots during the round
+                    
+                    // First, generate shot stats for the loser (who fired shots but didn't get the kill)
+                    var loserShotsFired = rand.Next(6, 20);
+                    var loserAccuracy = rand.NextDouble() * 0.4 + 0.25; // 25% to 65% accuracy for loser
+                    var loserShotsHit = Math.Min(loserShotsFired, (int)(loserShotsFired * loserAccuracy));
+                    
+                    // Create a "miss" record for the loser (represents their shots that didn't result in a kill)
+                    var loserShots = new DuelKill
+                    {
+                        KillerName = round.LoserName,
+                        VictimName = round.WinnerName,
+                        WeaponUsed = "Assault Rifle",
+                        DamageDealt = loserShotsHit * rand.Next(8, 15), // Damage dealt but not fatal
+                        VictimHpBefore = round.WinnerHpLeft + (loserShotsHit * rand.Next(8, 15)),
+                        VictimHpAfter = round.WinnerHpLeft,
+                        ShotsFired = loserShotsFired,
+                        ShotsHit = loserShotsHit,
+                        IsDoubleHit = rand.Next(0, 100) < 10, // 10% chance for loser
+                        IsTripleHit = rand.Next(0, 100) < 3,  // 3% chance for loser
+                        KillTimestamp = round.CompletedAt.AddSeconds(-rand.Next(1, 10)) // Slightly before the final kill
+                    };
+                    
+                    round.Kills.Add(loserShots);
 
-                realPlayer.sendMessage(-1, "!Test duel completed! Check the dashboard to see the results.");
+                    // Now generate the final kill shot for the winner
+                    var kill = new DuelKill
+                    {
+                        KillerName = round.WinnerName,
+                        VictimName = round.LoserName,
+                        WeaponUsed = "Assault Rifle",
+                        DamageDealt = 60, // Death blow
+                        VictimHpBefore = rand.Next(20, 60),
+                        VictimHpAfter = 0,
+                        ShotsFired = rand.Next(8, 25),
+                        ShotsHit = 0, // Will be calculated below
+                        IsDoubleHit = rand.Next(0, 100) < 15, // 15% chance
+                        IsTripleHit = rand.Next(0, 100) < 5,  // 5% chance
+                        KillTimestamp = round.CompletedAt
+                    };
+
+                    // Calculate realistic shots hit based on accuracy for the winner
+                    double winnerAccuracy = rand.NextDouble() * 0.4 + 0.3; // 30% to 70% accuracy
+                    kill.ShotsHit = Math.Min(kill.ShotsFired, (int)(kill.ShotsFired * winnerAccuracy));
+                    
+                    // Ensure at least 1 hit for the kill
+                    if (kill.ShotsHit == 0) kill.ShotsHit = 1;
+
+                    round.Kills.Add(kill);
+                    simulatedMatch.Rounds.Add(round);
+
+                    // Announce round result with both players' accuracy
+                    realPlayer.sendMessage(-1, String.Format("Round {0}: {1} defeats {2} ({3}HP left)", 
+                        roundNum, round.WinnerName, round.LoserName, round.WinnerHpLeft));
+                    realPlayer.sendMessage(-1, String.Format("  {0}: {1:F1}% accuracy ({2}/{3}), {4}: {5:F1}% accuracy ({6}/{7})", 
+                        round.WinnerName, 
+                        kill.ShotsFired > 0 ? (double)kill.ShotsHit / kill.ShotsFired * 100 : 0,
+                        kill.ShotsHit, kill.ShotsFired,
+                        round.LoserName,
+                        loserShotsFired > 0 ? (double)loserShotsHit / loserShotsFired * 100 : 0,
+                        loserShotsHit, loserShotsFired));
+                }
+
+                // Announce final result
+                realPlayer.sendMessage(-1, String.Format("🏆 SIMULATION COMPLETE: {0} wins {1}-{2}!", 
+                    simulatedMatch.WinnerName, simulatedMatch.Player1RoundsWon, simulatedMatch.Player2RoundsWon));
+
+                // Send the simulated match to the website API
+                realPlayer.sendMessage(-1, "📡 Sending test data to API...");
+                await SendDuelMatchToWebsite(simulatedMatch);
+                realPlayer.sendMessage(-1, "✅ Test data sent! Check the dueling dashboard to see the results.");
+                
+                Console.WriteLine(String.Format("SIMULATION: Generated test duel {0} vs {1} with {2} rounds", 
+                    realPlayer._alias, fakePlayerName, simulatedMatch.TotalRounds));
             }
             catch (Exception ex)
             {
-                Console.WriteLine(String.Format("Error in SimulateDuelAgainstFakePlayer: {0}", ex.Message));
-                realPlayer.sendMessage(-1, "An error occurred during the test duel.");
+                Console.WriteLine(String.Format("Error in SimulateDuelMatch: {0}", ex.Message));
+                realPlayer.sendMessage(-1, "Error occurred during duel simulation.");
             }
-        }
-
-        private static async Task SimulateDuelRounds(DuelMatch match, Player realPlayer, string fakePlayerName)
-        {
-            Random rand = new Random();
-            int roundsToWin = GetRoundsToWin(match.MatchType);
-            int roundNumber = 1;
-
-            while (match.Player1RoundsWon < roundsToWin && match.Player2RoundsWon < roundsToWin)
-            {
-                realPlayer.sendMessage(-1, String.Format("@=== ROUND {0} ===", roundNumber));
-                
-                // Create round
-                var round = new DuelRound
-                {
-                    RoundNumber = roundNumber,
-                    StartedAt = DateTime.Now
-                };
-
-                // Simulate round duration (5-30 seconds)
-                int roundDurationSeconds = rand.Next(5, 31);
-                await Task.Delay(1000); // Brief delay for realism
-                
-                round.CompletedAt = round.StartedAt.AddSeconds(roundDurationSeconds);
-                round.DurationSeconds = roundDurationSeconds;
-
-                // Real player always wins (for testing purposes)
-                round.WinnerName = realPlayer._alias;
-                round.LoserName = fakePlayerName;
-                
-                // Randomize HP values
-                round.WinnerHpLeft = rand.Next(10, 60); // Real player survives with some HP
-                round.LoserHpLeft = 0; // Fake player dies
-
-                // Generate randomized kill data
-                var kill = new DuelKill
-                {
-                    KillerName = realPlayer._alias,
-                    VictimName = fakePlayerName,
-                    WeaponUsed = "Assault Rifle",
-                    DamageDealt = 60,
-                    VictimHpBefore = rand.Next(20, 60),
-                    VictimHpAfter = 0,
-                    ShotsFired = rand.Next(8, 25),
-                    ShotsHit = 0, // Will be calculated below
-                    IsDoubleHit = rand.Next(0, 100) < 15, // 15% chance
-                    IsTripleHit = rand.Next(0, 100) < 5,  // 5% chance
-                    KillTimestamp = round.CompletedAt
-                };
-
-                // Calculate realistic shots hit (60-95% accuracy)
-                double accuracy = 0.6 + (rand.NextDouble() * 0.35); // 60-95%
-                kill.ShotsHit = Math.Min(kill.ShotsFired, (int)Math.Ceiling(kill.ShotsFired * accuracy));
-
-                round.Kills.Add(kill);
-                match.Rounds.Add(round);
-
-                // Update match scores
-                match.Player1RoundsWon++;
-                match.TotalRounds++;
-
-                // Announce round result
-                realPlayer.sendMessage(-1, String.Format("@Round {0}: {1} defeats {2} ({3}HP left)", 
-                    roundNumber, round.WinnerName, round.LoserName, round.WinnerHpLeft));
-                realPlayer.sendMessage(-1, String.Format("Shot Stats: {0}/{1} ({2:F1}% accuracy)", 
-                    kill.ShotsHit, kill.ShotsFired, accuracy * 100));
-
-                roundNumber++;
-                
-                // Brief delay between rounds
-                if (match.Player1RoundsWon < roundsToWin)
-                {
-                    await Task.Delay(500);
-                }
-            }
-
-            // Set winner
-            match.WinnerName = realPlayer._alias;
-            match.WinnerId = match.Player1Id;
-        }
-
-        private static async Task CompleteFakeDuel(DuelMatch match, Arena arena)
-        {
-            match.Status = DuelStatus.Completed;
-            match.CompletedAt = DateTime.Now;
-
-            // Announce match result
-            string finalScore = String.Format("({0}-{1})", match.Player1RoundsWon, match.Player2RoundsWon);
-            
-            foreach (Player p in arena.Players)
-            {
-                p.sendMessage(-1, String.Format("● {0} WINS the TEST {1} duel against {2}! {3}", 
-                    match.WinnerName, GetDuelTypeString(match.MatchType), match.Player2Name, finalScore));
-            }
-
-            Console.WriteLine(String.Format("Fake duel completed: {0} vs {1} - Final Score: {2}", 
-                match.Player1Name, match.Player2Name, finalScore));
-
-            // Send match data to website
-            await SendDuelMatchToWebsite(match);
         }
     }
 
@@ -3555,5 +4019,454 @@ namespace CTFGameType
         public double AvgResourceUnusedPerDeath { get; set; }
         public double AvgExplosiveUnusedPerDeath { get; set; }
         public double GameLengthMinutes { get; set; }
+    }
+
+    public class ImprovedWebIntegration
+    {
+        private static readonly HttpClient httpClient = new HttpClient();
+        private const string API_ENDPOINT = "https://freeinf.org/api/game-data";
+        
+        // Track all players who participated in the game, even if they leave
+        private static Dictionary<string, PlayerGameData> gameParticipants = new Dictionary<string, PlayerGameData>();
+        private static DateTime lastDataPrep = DateTime.MinValue;
+        private static readonly TimeSpan dataPrepInterval = TimeSpan.FromMinutes(1); // Poll every minute
+        
+        public class PlayerGameData
+        {
+            public string Alias { get; set; }
+            public string Team { get; set; }
+            public string TeamType { get; set; }
+            public string MostPlayedClass { get; set; }
+            public bool IsOffense { get; set; }
+            public string Weapon { get; set; }
+            public DateTime FirstSeen { get; set; }
+            public DateTime LastActive { get; set; }
+            public bool IsActive { get; set; } // Currently in game
+            public int TotalPlayTimeMs { get; set; }
+            public Dictionary<string, int> ClassPlayTimes { get; set; }
+            
+            public PlayerGameData()
+            {
+                ClassPlayTimes = new Dictionary<string, int>();
+                FirstSeen = DateTime.Now;
+                LastActive = DateTime.Now;
+                IsActive = true;
+            }
+        }
+        
+        /// <summary>
+        /// Periodically prepare game data to ensure we capture stats even if players leave early
+        /// </summary>
+                public static void PrepareGameData(Arena arena, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes, 
+Dictionary<Player, int> playerLastClassSwitch, string baseUsed = "Unknown")
+        {
+            try
+            {
+                // Only prep data once per minute to avoid spam
+                if (DateTime.Now - lastDataPrep < dataPrepInterval)
+                    return;
+                    
+                lastDataPrep = DateTime.Now;
+                
+                // NEW: Validate game before preparing data - but only log, don't block
+                var allPlayers = arena.Players.ToList();
+                bool isValidGame = WebIntegration.IsValidGameForStats(allPlayers);
+                
+                if (!isValidGame)
+                {
+                    Console.WriteLine("[GameStats] Game does not meet full criteria for stats export, but continuing data preparation.");
+                    // Continue anyway - validation should only block final stats export
+                }
+                
+                // Determine game type and offense team
+                string gameType = DetermineGameType(arena._name);
+                bool titanIsOffense = DetermineOffenseTeam(arena.Players.ToList(), arena);
+                
+                // Update data for currently active players
+                foreach (Player player in arena.Players.ToList())
+                {
+                    if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
+                        continue;
+                    
+                    // Skip Dueler players entirely from stats
+                    string primarySkill = "";
+                    if (player._skills.Count > 0)
+                    {
+                        primarySkill = player._skills.First().Value.skill.Name;
+                    }
+                    if (primarySkill == "Dueler") continue;
+                        
+                    string playerKey = player._alias.ToLower();
+                    
+                    // Initialize or update player data
+                    if (!gameParticipants.ContainsKey(playerKey))
+                    {
+                        gameParticipants[playerKey] = new PlayerGameData();
+                    }
+                    
+                    var playerData = gameParticipants[playerKey];
+                    playerData.Alias = player._alias;
+                    playerData.Team = player._team._name;
+                    playerData.TeamType = DeterminePlayerTeamType(player);
+                    playerData.IsOffense = DetermineIsOffense(playerData.TeamType, titanIsOffense, gameType);
+                    playerData.Weapon = GetSpecialWeapon(player);
+                    playerData.LastActive = DateTime.Now;
+                    playerData.IsActive = true;
+                    
+                    // Calculate most played class using playerClassPlayTimes
+                    playerData.MostPlayedClass = GetMostPlayedClass(player, playerClassPlayTimes, playerLastClassSwitch);
+                    
+                    // Update class play times from the tracking dictionary
+                    if (playerClassPlayTimes.ContainsKey(player))
+                    {
+                        playerData.ClassPlayTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                        playerData.TotalPlayTimeMs = playerClassPlayTimes[player].Values.Sum();
+                    }
+                }
+                
+                // Mark players who are no longer active as inactive (but keep their data)
+                var activeAliases = arena.Players.Where(p => !p._team.IsSpec && 
+                                                       !(p._baseVehicle != null && p._baseVehicle._type.Name.Contains("Spectator")))
+                                               .Select(p => p._alias.ToLower()).ToHashSet();
+                
+                foreach (var participant in gameParticipants.Values)
+                {
+                    if (!activeAliases.Contains(participant.Alias.ToLower()))
+                    {
+                        participant.IsActive = false;
+                    }
+                }
+                
+                Console.WriteLine(string.Format("[GameStats] Prepared data for {0} participants ({1} active)", gameParticipants.Count, activeAliases.Count));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error preparing game data: {0}", ex.Message));
+            }
+        }
+        
+        /// <summary>
+        /// Get the most played class for a player using playerClassPlayTimes
+        /// </summary>
+        private static string GetMostPlayedClass(Player player, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes, 
+                                               Dictionary<Player, int> playerLastClassSwitch)
+        {
+            try
+            {
+                if (!playerClassPlayTimes.ContainsKey(player))
+                {
+                    // Fallback to current class if no play time data
+                    return player._skills.Count > 0 ? player._skills.First().Value.skill.Name : player._baseVehicle._type.Name;
+                }
+                
+                // Get current time to calculate current class time
+                int currentTick = Environment.TickCount;
+                var playTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                
+                // Add time for current class if player has one
+                string currentSkill = player._skills.Count > 0 ? player._skills.First().Value.skill.Name : null;
+                if (currentSkill != null && playerLastClassSwitch.ContainsKey(player))
+                {
+                    int sessionTime = Math.Max(0, currentTick - playerLastClassSwitch[player]);
+                    if (!playTimes.ContainsKey(currentSkill))
+                        playTimes[currentSkill] = 0;
+                    playTimes[currentSkill] += sessionTime;
+                }
+                
+                // Return the class with the most play time
+                if (playTimes.Count > 0)
+                {
+                    var mostPlayed = playTimes.OrderByDescending(x => x.Value).First();
+                    return mostPlayed.Key;
+                }
+                
+                // Final fallback
+                return player._baseVehicle._type.Name;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error getting most played class for {0}: {1}", player._alias, ex.Message));
+                return player._baseVehicle._type.Name;
+            }
+        }
+        
+        /// <summary>
+        /// Send comprehensive game data to website at game end, including all participants
+        /// </summary>
+        public static async Task SendGameEndDataToWebsite(Arena arena, string baseUsed, Dictionary<Player, Dictionary<string, int>> playerClassPlayTimes,
+                                                         Dictionary<Player, int> playerLastClassSwitch, Team winningTeam = null)
+        {
+            try
+            {
+                // NEW: Validate game before sending data
+                var allPlayers = arena.Players.ToList();
+                bool isValidGame = WebIntegration.IsValidGameForStats(allPlayers);
+                
+                if (!isValidGame)
+                {
+                    Console.WriteLine("[GameStats] Game does not meet criteria for stats export. Skipping game end data send.");
+                    return;
+                }
+                
+                // Update ALL participants with final game state and fresh most played class calculation
+                // Determine game type and offense team
+                string gameType = DetermineGameType(arena._name);
+                bool titanIsOffense = DetermineOffenseTeam(arena.Players.ToList(), arena);
+                
+                // Clear existing participants to rebuild with fresh data
+                gameParticipants.Clear();
+                
+                // Process all players with their final playtime data
+                foreach (Player player in arena.Players.ToList())
+                {
+                    if (player._team.IsSpec || (player._baseVehicle != null && player._baseVehicle._type.Name.Contains("Spectator")))
+                        continue;
+                    
+                    // Skip Dueler players entirely from stats
+                    string primarySkill = "";
+                    if (player._skills.Count > 0)
+                    {
+                        primarySkill = player._skills.First().Value.skill.Name;
+                    }
+                    if (primarySkill == "Dueler") continue;
+                        
+                    string playerKey = player._alias.ToLower();
+                    
+                    var playerData = new PlayerGameData();
+                    playerData.Alias = player._alias;
+                    playerData.Team = player._team._name;
+                    playerData.TeamType = DeterminePlayerTeamType(player);
+                    playerData.IsOffense = DetermineIsOffense(playerData.TeamType, titanIsOffense, gameType);
+                    playerData.Weapon = GetSpecialWeapon(player);
+                    playerData.LastActive = DateTime.Now;
+                    playerData.IsActive = true;
+                    
+                    // Calculate fresh most played class using final playerClassPlayTimes
+                    playerData.MostPlayedClass = GetMostPlayedClass(player, playerClassPlayTimes, playerLastClassSwitch);
+                    
+                    // Update class play times from the tracking dictionary
+                    if (playerClassPlayTimes.ContainsKey(player))
+                    {
+                        playerData.ClassPlayTimes = new Dictionary<string, int>(playerClassPlayTimes[player]);
+                        playerData.TotalPlayTimeMs = playerClassPlayTimes[player].Values.Sum();
+                    }
+                    
+                    gameParticipants[playerKey] = playerData;
+                }
+                
+                // Filter participants who actually played (had some play time)
+                var validParticipants = gameParticipants.Values
+                    .Where(p => p.TotalPlayTimeMs > 5000) // At least 5 seconds of play time
+                    .ToList();
+                
+                if (validParticipants.Count == 0)
+                {
+                    Console.WriteLine("[GameStats] No valid participants found, skipping stats upload");
+                    return;
+                }
+                
+                // Convert to PlayerData format for the API
+                var gameDataPlayers = validParticipants.Select(p => new PlayerData
+                {
+                    alias = p.Alias,
+                    team = p.Team,
+                    teamType = p.TeamType,
+                    className = p.MostPlayedClass, // Use most played class instead of setup class!
+                    isOffense = p.IsOffense,
+                    weapon = p.Weapon
+                }).ToList();
+                
+                // Build enhanced JSON with additional metadata
+                string jsonData = BuildEnhancedJsonString(arena._name, gameType, baseUsed, gameDataPlayers, 
+                                                        validParticipants, winningTeam != null ? winningTeam._name : null);
+                
+                // Send to API
+                var content = new StringContent(jsonData, System.Text.Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync(API_ENDPOINT, content);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine(string.Format("[GameStats] Successfully sent game end data for {0} participants", validParticipants.Count));
+                }
+                else
+                {
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine(string.Format("[GameStats] Failed to send game data: {0} - {1}", response.StatusCode, errorContent));
+                }
+                
+                // Clear participants for next game
+                gameParticipants.Clear();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(string.Format("[GameStats] Error sending game end data: {0}", ex.Message));
+            }
+        }
+        
+        /// <summary>
+        /// Enhanced JSON builder with additional metadata
+        /// </summary>
+        private static string BuildEnhancedJsonString(string arenaName, string gameType, string baseUsed, 
+                                                    List<PlayerData> players, List<PlayerGameData> participantData, 
+                                                    string winningTeam = null)
+        {
+            var json = new System.Text.StringBuilder();
+            json.Append("{");
+            
+            // Basic game information
+            json.AppendFormat("\"arenaName\":\"{0}\",", EscapeJsonString(arenaName));
+            json.AppendFormat("\"gameType\":\"{0}\",", EscapeJsonString(gameType));
+            json.AppendFormat("\"baseUsed\":\"{0}\",", EscapeJsonString(baseUsed));
+            json.AppendFormat("\"gameEndTime\":\"{0}\",", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            
+            if (!string.IsNullOrEmpty(winningTeam))
+            {
+                json.AppendFormat("\"winningTeam\":\"{0}\",", EscapeJsonString(winningTeam));
+            }
+            
+            // Enhanced player data
+            json.Append("\"players\":[");
+            for (int i = 0; i < players.Count; i++)
+            {
+                var player = players[i];
+                var participantInfo = participantData.FirstOrDefault(p => p.Alias.Equals(player.alias, StringComparison.OrdinalIgnoreCase));
+                
+                json.Append("{");
+                json.AppendFormat("\"alias\":\"{0}\",", EscapeJsonString(player.alias));
+                json.AppendFormat("\"team\":\"{0}\",", EscapeJsonString(player.team));
+                json.AppendFormat("\"teamType\":\"{0}\",", EscapeJsonString(player.teamType));
+                json.AppendFormat("\"class\":\"{0}\",", EscapeJsonString(player.className));
+                json.AppendFormat("\"isOffense\":{0},", player.isOffense.ToString().ToLower());
+                
+                // Add enhanced statistics
+                if (participantInfo != null)
+                {
+                    json.AppendFormat("\"totalPlayTimeMs\":{0},", participantInfo.TotalPlayTimeMs);
+                    json.AppendFormat("\"playTimeSeconds\":{0:F1},", participantInfo.TotalPlayTimeMs / 1000.0);
+                    
+                    // Add class breakdown
+                    if (participantInfo.ClassPlayTimes.Count > 0)
+                    {
+                        json.Append("\"classBreakdown\":{");
+                        var classEntries = participantInfo.ClassPlayTimes.ToList();
+                        for (int j = 0; j < classEntries.Count; j++)
+                        {
+                            json.AppendFormat("\"{0}\":{1:F1}", EscapeJsonString(classEntries[j].Key), 
+                                            classEntries[j].Value / 1000.0);
+                            if (j < classEntries.Count - 1) json.Append(",");
+                        }
+                        json.Append("},");
+                    }
+                }
+                
+                // Add weapon info
+                if (string.IsNullOrEmpty(player.weapon))
+                {
+                    json.Append("\"weapon\":null");
+                }
+                else
+                {
+                    json.AppendFormat("\"weapon\":\"{0}\"", EscapeJsonString(player.weapon));
+                }
+                
+                json.Append("}");
+                if (i < players.Count - 1) json.Append(",");
+            }
+            json.Append("]");
+            
+            json.Append("}");
+            return json.ToString();
+        }
+        
+        // Helper methods (reused from original WebIntegration)
+        public static string DetermineGameType(string arenaName)
+        {
+            if (arenaName.Contains("OvD"))
+                return "OvD";
+            else if (arenaName.Contains("Arena 1"))
+                return "Pub";
+            else if (arenaName.Contains("Mix"))
+                return "Mix";
+            else if (arenaName.Contains("Duel"))
+                return "Dueling";
+            else if (arenaName.Contains("CTF"))
+                return "CTF";
+            else
+                return "Unknown";
+        }
+        
+        public static string DeterminePlayerTeamType(Player player)
+        {
+            if (player._team._name.Contains(" T"))
+                return "Titan";
+            else if (player._team._name.Contains(" C"))
+                return "Collective";
+            else
+                return "Unknown";
+        }
+        
+        public static bool DetermineOffenseTeam(List<Player> players, Arena arena)
+        {
+            // First, try to find the team with a Squad Leader - that team is offense
+            foreach (Player player in players)
+            {
+                string className = player._baseVehicle._type.Name;
+                if (className == "Squad Leader")
+                {
+                    return player._team._name.Contains(" T"); // Return true if Titan has Squad Leader
+                }
+            }
+            
+            // If no Squad Leader found, use team balance logic
+            int titanCount = 0;
+            int collectiveCount = 0;
+            
+            foreach (Player player in players)
+            {
+                if (player._team._name.Contains(" T"))
+                    titanCount++;
+                else if (player._team._name.Contains(" C"))
+                    collectiveCount++;
+            }
+            
+            // Make the larger team defense, smaller team offense
+            if (titanCount > collectiveCount)
+                return false; // Titan = defense
+            else
+                return true;  // Titan = offense
+        }
+        
+        private static bool DetermineIsOffense(string teamType, bool titanIsOffense, string gameType)
+        {
+            if (teamType == "Titan")
+                return titanIsOffense;
+            else
+                return !titanIsOffense;
+        }
+        
+        private static string GetSpecialWeapon(Player player)
+        {
+            if (player._baseVehicle != null && player._baseVehicle._type != null)
+            {
+                string vehicleType = player._baseVehicle._type.Name;
+                if (vehicleType.Contains("CAW"))
+                    return "CAW";
+                else if (vehicleType.Contains("SG"))
+                    return "SG";
+            }
+            return null;
+        }
+        
+        private static string EscapeJsonString(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+                
+            return input.Replace("\\", "\\\\")
+                       .Replace("\"", "\\\"")
+                       .Replace("\n", "\\n")
+                       .Replace("\r", "\\r")
+                       .Replace("\t", "\\t");
+        }
     }
 } 

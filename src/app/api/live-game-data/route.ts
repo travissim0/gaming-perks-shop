@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getLiveGameData, setLiveGameData, LiveGameData as StoreLiveGameData } from '@/server/liveGameDataStore';
 
 // Enhanced interface for live game monitoring
 interface LivePlayerData {
@@ -34,8 +35,8 @@ interface LiveGameData {
   spectators?: number;
 }
 
-// In-memory storage for enhanced live data
-let liveGameData: LiveGameData | null = null;
+// Use shared in-memory storage so aliases can read/write the same instance
+// Deprecated local variable; keeping type for request validation.
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,9 +50,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize players (support older senders using `class`)
+    const normalizedPlayers = (data.players as any[]).map((p: any) => ({
+      ...p,
+      className: p.className ?? p.class ?? 'Unknown',
+    }));
+
     // Calculate additional metrics
-    const totalPlayers = data.players.length;
-    const playingPlayers = data.players.filter((p: any) => 
+    const totalPlayers = normalizedPlayers.length;
+    const playingPlayers = normalizedPlayers.filter((p: any) => 
       p.teamType !== 'Spectator' && 
       !p.team.toLowerCase().includes('spec') && 
       !p.team.toLowerCase().includes('np')
@@ -59,14 +66,16 @@ export async function POST(request: NextRequest) {
     const spectators = totalPlayers - playingPlayers;
 
     // Store the enhanced game data with timestamp and metrics
-    liveGameData = {
+    const stored: StoreLiveGameData = {
       ...data,
+      players: normalizedPlayers,
       lastUpdated: new Date().toISOString(),
       totalPlayers,
       playingPlayers,
       spectators,
       serverStatus: totalPlayers > 0 ? 'active' : 'idle'
     };
+    setLiveGameData(stored);
 
     console.log(`[LiveGameData] Updated: ${data.arenaName} | ${totalPlayers} total, ${playingPlayers} playing, ${spectators} spectating`);
 
@@ -92,6 +101,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const liveGameData = getLiveGameData();
     // Check if data is stale (older than 2 minutes)
     const isDataStale = liveGameData?.lastUpdated ? 
       (Date.now() - new Date(liveGameData.lastUpdated).getTime()) > 120000 : true;
@@ -145,6 +155,7 @@ export async function GET(request: NextRequest) {
 
 // Additional endpoint for quick server status check
 export async function HEAD(request: NextRequest) {
+  const liveGameData = getLiveGameData();
   const hasActiveData = liveGameData?.lastUpdated && 
     (Date.now() - new Date(liveGameData.lastUpdated).getTime()) < 120000;
   
