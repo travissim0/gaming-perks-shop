@@ -395,9 +395,11 @@ export default function FreeAgentsPage() {
     }
   };
 
-  // Load active squad member IDs to filter out players already in squads by default
+  // Load active squad member IDs to filter out players already in active squads by default
+  // and build a display map of any squad (active or inactive) for the Squad column
   const loadActiveSquadMemberIds = async () => {
     try {
+      // 1) Active squads only (for filtering)
       // Try with newer schema using player_id
       const { data, error } = await supabase
         .from('squad_members')
@@ -405,13 +407,13 @@ export default function FreeAgentsPage() {
         .eq('status', 'active')
         .eq('squads.is_active', true);
 
-      let playerIds: string[] = [];
-      const map: Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }> = {};
+      let playerIdsActive: string[] = [];
+      const displayMap: Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }> = {};
       if (!error) {
         (data || []).forEach((m: any) => {
           if (m.player_id && m.squads) {
-            playerIds.push(m.player_id);
-            map[m.player_id] = {
+            playerIdsActive.push(m.player_id);
+            displayMap[m.player_id] = {
               id: m.squads.id,
               name: m.squads.name,
               tag: m.squads.tag,
@@ -430,8 +432,8 @@ export default function FreeAgentsPage() {
         if (!error2) {
           (data2 || []).forEach((m: any) => {
             if (m.user_id && m.squads) {
-              playerIds.push(m.user_id);
-              map[m.user_id] = {
+              playerIdsActive.push(m.user_id);
+              displayMap[m.user_id] = {
                 id: m.squads.id,
                 name: m.squads.name,
                 tag: m.squads.tag,
@@ -442,8 +444,28 @@ export default function FreeAgentsPage() {
         }
       }
 
-      setActiveSquadMemberIds(new Set(playerIds));
-      setPlayerIdToActiveSquad(map);
+      // 2) Any squads (active or inactive) for display in Squad column
+      const { data: anyData, error: anyErr } = await supabase
+        .from('squad_members')
+        .select('player_id, user_id, status, squads!inner(id, is_active, name, tag, is_legacy)')
+        .eq('status', 'active');
+
+      if (!anyErr) {
+        (anyData || []).forEach((m: any) => {
+          const key = m.player_id || m.user_id;
+          if (key && m.squads) {
+            displayMap[key] = {
+              id: m.squads.id,
+              name: m.squads.name,
+              tag: m.squads.tag,
+              is_legacy: m.squads.is_legacy,
+            };
+          }
+        });
+      }
+
+      setActiveSquadMemberIds(new Set(playerIdsActive));
+      setPlayerIdToActiveSquad(displayMap);
     } catch (e) {
       console.error('❌ FREE AGENTS: Error loading active squad member IDs:', e);
       setActiveSquadMemberIds(new Set());
@@ -1104,6 +1126,18 @@ export default function FreeAgentsPage() {
                 <span className="bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 rounded-full px-3 sm:px-4 py-1 text-cyan-300 text-xs sm:text-sm font-medium w-fit">
                   <span className="text-white font-bold">{filteredAndSortedAgents.length}</span> players found
                 </span>
+
+                {/* Join Free Agent CTA */}
+                {effectiveUser && !freeAgentPlayerIds.has(effectiveUser.id) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowJoinForm(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-green-600/80 hover:bg-green-600 text-white border border-green-400/40 shadow-sm"
+                    title="Join the Free Agent pool"
+                  >
+                    <span>Join Free Agent Pool</span>
+                  </button>
+                )}
               </div>
 
               {/* Filters - Mobile: Stack vertically, Desktop: Horizontal */}

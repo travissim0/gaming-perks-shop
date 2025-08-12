@@ -87,7 +87,44 @@ export function useCTFRoles() {
         .eq('is_active', true);
 
       if (error) throw error;
-      setUserRoles(data || []);
+
+      let roles: UserCTFRole[] = data || [];
+
+      // Fallback: if no explicit user_ctf_roles, derive from profiles.ctf_role and admin flag
+      if (!roles || roles.length === 0) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('ctf_role, is_admin')
+          .eq('id', user.id)
+          .single();
+
+        const derived: UserCTFRole[] = [];
+        if (profile?.ctf_role) {
+          derived.push({
+            id: `profile-${user.id}-ctf-role`,
+            user_id: user.id,
+            role_name: profile.ctf_role as CTFRoleType,
+            assigned_by: null,
+            assigned_at: new Date().toISOString(),
+            is_active: true,
+            notes: 'derived from profiles.ctf_role'
+          });
+        }
+        if (profile?.is_admin) {
+          derived.push({
+            id: `profile-${user.id}-admin`,
+            user_id: user.id,
+            role_name: 'admin',
+            assigned_by: null,
+            assigned_at: new Date().toISOString(),
+            is_active: true,
+            notes: 'derived from profiles.is_admin'
+          });
+        }
+        roles = derived;
+      }
+
+      setUserRoles(roles || []);
     } catch (err: any) {
       console.error('Error fetching user CTF roles:', err);
       setError(err.message);

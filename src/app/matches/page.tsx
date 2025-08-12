@@ -371,7 +371,35 @@ export default function MatchesPage() {
   const createMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+    // Create date treating the input as EST/EDT timezone
+    // Parse as local time first to get the date/time components
+    const inputDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`);
+    
+    // Create a Date object that represents the same local time in Eastern timezone
+    // Convert to UTC by manually calculating the offset for Eastern timezone
+    const year = inputDateTime.getFullYear();
+    const month = inputDateTime.getMonth(); // 0-based
+    const day = inputDateTime.getDate();
+    const hours = inputDateTime.getHours();
+    const minutes = inputDateTime.getMinutes();
+    
+    // Check if the date falls in EDT (March 2nd Sunday to November 1st Sunday)
+    // Simplified: March-October are EDT months, Nov-Feb are EST months
+    const isEDT = month >= 2 && month <= 10; // March (2) through October (10)
+    const offsetHours = isEDT ? 4 : 5; // EDT is UTC-4, EST is UTC-5
+    
+    // Create the date in UTC by adding the Eastern timezone offset
+    const scheduledDateTime = new Date(Date.UTC(year, month, day, hours + offsetHours, minutes)).toISOString();
+    
+    console.log('🕒 Timezone conversion debug:', {
+      inputDate: scheduledDate,
+      inputTime: scheduledTime,
+      parsedLocal: `${year}-${month+1}-${day} ${hours}:${minutes}`,
+      isEDT,
+      offsetHours,
+      finalUTC: scheduledDateTime,
+      displayedAsEST: new Date(scheduledDateTime).toLocaleString('en-US', { timeZone: 'America/New_York' })
+    });
     
     // Validate tournament squads selection when needed
     if (matchType === 'tournament') {
@@ -386,20 +414,25 @@ export default function MatchesPage() {
     }
 
     try {
+      const requestBody = {
+        title: matchTitle,
+        description: matchDescription,
+        matchType,
+        scheduledAt: scheduledDateTime,
+        squadAId: matchType === 'tournament' ? selectedTournamentSquadA : userSquad?.id,
+        squadBId: matchType === 'tournament' ? selectedTournamentSquadB : (selectedSquadB || null),
+        createdBy: user?.id
+      };
+      
+      console.log('🚀 Creating match with data:', requestBody);
+      console.log('📋 Tournament squad selections:', { selectedTournamentSquadA, selectedTournamentSquadB });
+      
       const response = await fetch('/api/matches', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: matchTitle,
-          description: matchDescription,
-          matchType,
-          scheduledAt: scheduledDateTime,
-          squadAId: matchType === 'tournament' ? selectedTournamentSquadA : userSquad?.id,
-          squadBId: matchType === 'tournament' ? selectedTournamentSquadB : (selectedSquadB || null),
-          createdBy: user?.id
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
@@ -1277,7 +1310,7 @@ export default function MatchesPage() {
                   />
                 </div>
                 <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Time (EST)</label>
+                  <label className="block text-sm font-medium mb-2">Time (EST/EDT)</label>
                   <select
                     value={scheduledTime}
                     onChange={(e) => setScheduledTime(e.target.value)}
@@ -1291,6 +1324,10 @@ export default function MatchesPage() {
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    ℹ️ All times are automatically converted to Eastern Time (US). 
+                    Your input will be saved as EST/EDT regardless of your current timezone.
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <button

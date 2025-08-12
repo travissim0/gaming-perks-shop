@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
         scheduled_at,
         duration_minutes,
         max_participants,
+        squad_a_id,
+        squad_b_id,
         map_name,
         game_mode,
         server_info,
@@ -48,8 +50,8 @@ export async function GET(req: NextRequest) {
         actual_end_time,
         match_notes,
         profiles!matches_created_by_fkey(in_game_alias),
-        squad_a:squads!matches_squad_a_id_fkey(name, tag),
-        squad_b:squads!matches_squad_b_id_fkey(name, tag),
+        squad_a:squads!matches_squad_a_id_fkey(name, tag, banner_url),
+        squad_b:squads!matches_squad_b_id_fkey(name, tag, banner_url),
         winner_squad:squads!matches_winner_squad_id_fkey(name, tag),
         match_participants(
           id,
@@ -296,6 +298,8 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log('🔥 API received match creation request:', body);
+    
     const {
       title,
       description,
@@ -312,6 +316,8 @@ export async function POST(req: NextRequest) {
       squadBId,
       createdBy
     } = body;
+    
+    console.log('⚔️ Extracted squad IDs:', { squadAId, squadBId });
 
     // Validate required fields
     if (!title || !matchType || !scheduledAt || !createdBy) {
