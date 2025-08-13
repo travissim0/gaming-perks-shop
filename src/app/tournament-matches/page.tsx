@@ -183,7 +183,7 @@ export default function TournamentMatchesPage() {
                 {/* Squad A */}
                 <div className="text-center">
                   <div className="mb-3">
-                    <h3 className="text-white font-bold text-base sm:text-lg md:text-xl mb-2 drop-shadow-[0_0_8px_rgba(34,211,238,0.45)] whitespace-nowrap truncate">
+                    <h3 className="text-white font-bold text-base sm:text-lg md:text-xl mb-2 drop-shadow-[0_0_8px_rgba(34,211,238,0.45)] whitespace-nowrap">
                       {squadA?.name || 'TBD'}
                     </h3>
                   </div>
@@ -232,7 +232,7 @@ export default function TournamentMatchesPage() {
                 {/* Squad B */}
                 <div className="text-center">
                   <div className="mb-3">
-                    <h3 className="text-white font-bold text-base sm:text-lg md:text-xl mb-2 drop-shadow-[0_0_8px_rgba(168,85,247,0.45)] whitespace-nowrap truncate">
+                    <h3 className="text-white font-bold text-base sm:text-lg md:text-xl mb-2 drop-shadow-[0_0_8px_rgba(168,85,247,0.45)] whitespace-nowrap">
                       {squadB?.name || 'TBD'}
                     </h3>
                   </div>

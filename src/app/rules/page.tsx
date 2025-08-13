@@ -54,7 +54,7 @@ export default function RulesPage() {
           {/* PDF Embed */}
           <div className="relative" style={{ height: '80vh' }}>
             <iframe
-              src="/CTFPL S22 Rules August 11th, 2025.pdf"
+              src="/CTFPL-S22-Rules-August-11th-2025.pdf"
               className="w-full h-full"
               title="CTFPL Season 22 Rules"
               style={{ border: 'none' }}
@@ -70,7 +70,7 @@ export default function RulesPage() {
                   Your browser doesn't support embedded PDF viewing. Please download the file to view the rules.
                 </p>
                 <a 
-                  href="/CTFPL S22 Rules August 11th, 2025.pdf" 
+                  href="/CTFPL-S22-Rules-August-11th-2025.pdf" 
                   download
                   className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors font-semibold"
                 >
