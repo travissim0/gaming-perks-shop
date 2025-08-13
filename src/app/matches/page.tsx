@@ -115,6 +115,7 @@ export default function MatchesPage() {
   // Game linking states
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkMatchId, setLinkMatchId] = useState<string>('');
+  const [linkGameId, setLinkGameId] = useState<string>('');
   const [suggestedGames, setSuggestedGames] = useState<any[]>([]);
 
   useEffect(() => {
@@ -741,6 +742,65 @@ export default function MatchesPage() {
           </button>
         </div>
 
+        {/* Large Toggle Section */}
+        <div className="mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {/* Tournament Matches Option */}
+            <Link href="/tournament-matches">
+              <div className="group cursor-pointer bg-gradient-to-br from-purple-900/30 to-blue-900/30 border border-purple-500/30 hover:border-purple-400/50 rounded-2xl p-8 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/20 hover:scale-[1.02]">
+                <div className="text-center">
+                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform duration-300">
+                    🏆
+                  </div>
+                  <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-purple-300 to-blue-300 bg-clip-text text-transparent">
+                    Tournament Matches
+                  </h2>
+                  <p className="text-gray-400 text-lg mb-4">
+                    View upcoming CTFPL tournament matches with squad vs squad layouts
+                  </p>
+                  <div className="flex items-center justify-center gap-2 text-purple-300 group-hover:text-purple-200 transition-colors">
+                    <span>View Tournament Schedule</span>
+                    <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Calendar Option */}
+            <div 
+              className="group cursor-pointer bg-gradient-to-br from-cyan-900/30 to-green-900/30 border border-cyan-500/30 hover:border-cyan-400/50 rounded-2xl p-8 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-[1.02]"
+              onClick={() => {
+                setCalendarView(true);
+                // Scroll to calendar section
+                const calendarSection = document.getElementById('calendar-section');
+                if (calendarSection) {
+                  calendarSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+            >
+              <div className="text-center">
+                <div className="text-6xl mb-4 group-hover:scale-110 transition-transform duration-300">
+                  📅
+                </div>
+                <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-cyan-300 to-green-300 bg-clip-text text-transparent">
+                  Calendar View
+                </h2>
+                <p className="text-gray-400 text-lg mb-4">
+                  Browse all matches in an interactive calendar format
+                </p>
+                <div className="flex items-center justify-center gap-2 text-cyan-300 group-hover:text-cyan-200 transition-colors">
+                  <span>View Calendar</span>
+                  <svg className="w-5 h-5 group-hover:translate-y-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Matches Grid (List view only) */}
         {!calendarView && plannedMatches.length > 0 && (
           <div className="grid gap-6">
@@ -871,7 +931,7 @@ export default function MatchesPage() {
         )}
 
     {/* Calendar View Toggle */}
-    <div className="flex items-center justify-between mb-4">
+    <div id="calendar-section" className="flex items-center justify-between mb-4">
       <button
         onClick={() => setCalendarView(!calendarView)}
         className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm"
@@ -1488,12 +1548,17 @@ export default function MatchesPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
               <h3 className="text-xl font-bold mb-4">Link Game to Match</h3>
-              <form onSubmit={openLinkModal}>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (linkGameId && linkMatchId) {
+                  linkGameToMatch(linkGameId, linkMatchId);
+                }
+              }}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">Suggested Games</label>
                   <select
-                    value={linkMatchId}
-                    onChange={(e) => setLinkMatchId(e.target.value)}
+                    value={linkGameId}
+                    onChange={(e) => setLinkGameId(e.target.value)}
                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
                   >
                     <option value="">Select a game...</option>
@@ -1516,6 +1581,7 @@ export default function MatchesPage() {
                     onClick={() => {
                       setShowLinkModal(false);
                       setLinkMatchId('');
+                      setLinkGameId('');
                     }}
                     className="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded"
                   >
