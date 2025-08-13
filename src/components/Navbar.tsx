@@ -607,6 +607,21 @@ export default function Navbar({ user }: { user: any }) {
                   >
                     <div className="py-2">
                       <Link
+                        href="/rules"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">📜</span>
+                        Rules
+                      </Link>
+                      <Link
+                        href="/tournament-matches"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">🏆</span>
+                        Tournament Matches
+                      </Link>
+                      <div className="border-t border-gray-600 my-1"></div>
+                      <Link
                         href="/league/ctfpl"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
@@ -815,6 +830,29 @@ export default function Navbar({ user }: { user: any }) {
                   </button>
                   {activeMobileDropdown === 'league' && (
                     <div className="ml-4 mt-2 space-y-1">
+                      <Link
+                        href="/rules"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">📜</span>
+                        Rules
+                      </Link>
+                      <Link
+                        href="/tournament-matches"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">🏆</span>
+                        Tournament Matches
+                      </Link>
+                      <div className="border-t border-gray-600 my-2 mx-3"></div>
                       <Link
                         href="/league/ctfpl"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
@@ -1583,6 +1621,21 @@ export default function Navbar({ user }: { user: any }) {
               
               <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
                 <div className="py-3">
+                  <Link
+                    href="/rules"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">📜</span>
+                    <span className="font-medium">Rules</span>
+                  </Link>
+                  <Link
+                    href="/tournament-matches"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">🏆</span>
+                    <span className="font-medium">Tournament Matches</span>
+                  </Link>
+                  <div className="border-t border-gray-600/50 my-2 mx-4"></div>
                   <Link
                     href="/league/ctfpl"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
