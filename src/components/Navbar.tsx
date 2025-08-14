@@ -490,6 +490,7 @@ export default function Navbar({ user }: { user: any }) {
   ];
 
   const miscNavItems = [
+    { href: '/triple-threat', label: 'Triple Threat', icon: '⚡' },
     { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
@@ -517,6 +518,7 @@ export default function Navbar({ user }: { user: any }) {
   ];
 
   const publicMiscNavItems = [
+    { href: '/triple-threat', label: 'Triple Threat', icon: '⚡' },
     { href: '/champions', label: 'Hall of Champions', icon: '👑' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
@@ -618,7 +620,7 @@ export default function Navbar({ user }: { user: any }) {
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
                         <span className="mr-3">🏆</span>
-                        Tournament Matches
+                        Schedule
                       </Link>
                       <div className="border-t border-gray-600 my-1"></div>
                       <Link
@@ -626,15 +628,15 @@ export default function Navbar({ user }: { user: any }) {
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
                         <span className="mr-3">⚔️</span>
-                        CTFPL
+                        Standings
                       </Link>
-                      <Link
+                      {/* <Link
                         href="/"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
                         <span className="mr-3">🛡️</span>
                         CTFDL
-                      </Link>
+                      </Link> */}
                       <Link
                         href="/league/ratings"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
@@ -850,7 +852,7 @@ export default function Navbar({ user }: { user: any }) {
                         }}
                       >
                         <span className="mr-3">🏆</span>
-                        Tournament Matches
+                        Schedule
                       </Link>
                       <div className="border-t border-gray-600 my-2 mx-3"></div>
                       <Link
@@ -862,9 +864,9 @@ export default function Navbar({ user }: { user: any }) {
                         }}
                       >
                         <span className="mr-3">⚔️</span>
-                        CTFPL
+                        Standings
                       </Link>
-                      <Link
+                      {/* <Link
                         href="/"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
                         onClick={() => {
@@ -874,7 +876,7 @@ export default function Navbar({ user }: { user: any }) {
                       >
                         <span className="mr-3">🛡️</span>
                         CTFDL
-                      </Link>
+                      </Link> */}
                       <Link
                         href="/league/ratings"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
@@ -1633,7 +1635,7 @@ export default function Navbar({ user }: { user: any }) {
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
                     <span className="mr-3 text-lg">🏆</span>
-                    <span className="font-medium">Tournament Matches</span>
+                    <span className="font-medium">Schedule</span>
                   </Link>
                   <div className="border-t border-gray-600/50 my-2 mx-4"></div>
                   <Link
@@ -1641,15 +1643,15 @@ export default function Navbar({ user }: { user: any }) {
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
                     <span className="mr-3 text-lg">⚔️</span>
-                    <span className="font-medium">CTFPL</span>
+                    <span className="font-medium">Standings</span>
                   </Link>
-                  <Link
+                  {/* <Link
                     href="/"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
                     <span className="mr-3 text-lg">🛡️</span>
                     <span className="font-medium">CTFDL</span>
-                  </Link>
+                  </Link> */}
                   <Link
                     href="/league/ratings"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
@@ -1810,21 +1812,37 @@ export default function Navbar({ user }: { user: any }) {
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">League</h4>
                   <div className="space-y-1">
                     <Link
+                      href="/rules"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📜</span>
+                      Rules
+                    </Link>
+                    <Link
+                      href="/tournament-matches"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🏆</span>
+                      Schedule
+                    </Link>
+                    <Link
                       href="/league/ctfpl"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <span className="mr-3">⚔️</span>
-                      CTFPL
+                      Standings
                     </Link>
-                    <Link
+                    {/* <Link
                       href="/"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <span className="mr-3">🛡️</span>
                       CTFDL
-                    </Link>
+                    </Link> */}
                     <Link
                       href="/league/ratings"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"

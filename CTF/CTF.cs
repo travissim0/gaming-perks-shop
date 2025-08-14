@@ -378,7 +378,6 @@ public class PhraseExplosionManager
         return new Dictionary<string, string>(playerPhrases);
     }
 }
-
 // Extension method to create custom explosion text
     public class ProductPurchaseManager
     {
@@ -977,11 +976,20 @@ public class WebIntegration
     /// Validates if a game meets the criteria for stats export:
     /// - Two teams that have 4 or more players each
     /// - Only 1 team containing " C" and 1 team containing " T"
+    /// - Players must have actual activity (kills or deaths)
     /// </summary>
     public static bool IsValidGameForStats(List<Player> players)
     {
         if (players == null || players.Count < 8) // Minimum 8 total players (4v4)
             return false;
+            
+        // Check if any player has actual activity (kills or deaths)
+        bool hasActivity = players.Any(p => 
+            (p.StatsLastGame != null && (p.StatsLastGame.kills > 0 || p.StatsLastGame.deaths > 0)) ||
+            (p.StatsCurrentGame != null && (p.StatsCurrentGame.kills > 0 || p.StatsCurrentGame.deaths > 0))
+        );
+        if (!hasActivity)
+            return false; // Reject games with no activity
             
         // Count teams and their player counts
         var teamCounts = new Dictionary<string, int>();
@@ -1138,12 +1146,8 @@ public class WebIntegration
                    .Replace("\t", "\\t");
     }
 }
-
-
-
 // Simple test program to send sample game data to your website
 // Run this to test the integration before implementing with real game data
-
 public class TestGameData
 {
     private static readonly HttpClient httpClient = new HttpClient();
@@ -1568,7 +1572,6 @@ public class BuildManager
         return items;
     }
 }
-
 namespace InfServer.Script.GameType_CTF
 {
     using MapFlagEntry = Tuple<string, int, int>; // <Flag ID, Tile X, Tile Y>
@@ -1755,6 +1758,28 @@ namespace InfServer.Script.GameType_CTF
         private Dictionary<Player, bool> autoDropEnabled = new Dictionary<Player, bool>();
         private Dictionary<Player, bool> summonAutomationEnabled = new Dictionary<Player, bool>();
         private Dictionary<Player, int> pendingSummonRequests = new Dictionary<Player, int>();
+        
+        // Drop tracking system to prevent arena item overflow
+        private Dictionary<Player, List<Arena.ItemDrop>> squadLeaderDrops = new Dictionary<Player, List<Arena.ItemDrop>>();
+        private Dictionary<Player, List<Arena.ItemDrop>> autoDrops = new Dictionary<Player, List<Arena.ItemDrop>>();
+        
+        // Track spawn times and locations for more reliable cleanup
+        private Dictionary<Player, int> lastSpawnTime = new Dictionary<Player, int>();
+        private Dictionary<Player, Tuple<short, short>> lastSpawnLocation = new Dictionary<Player, Tuple<short, short>>();
+        
+         // Safety threshold for arena item count
+         private const int MAX_ARENA_ITEMS = 400;
+         // Auto-cleanup window for tracked drops (milliseconds)
+         private const int TRACKED_DROP_EXPIRE_MS = 60000; // 60 seconds
+        
+        // AutoPickup system
+        private Dictionary<Player, bool> autoPickupEnabled = new Dictionary<Player, bool>();
+        private Dictionary<Player, Dictionary<string, int>> autoPickupItems = new Dictionary<Player, Dictionary<string, int>>();
+        private Dictionary<Player, int> lastAutoPickupCheck = new Dictionary<Player, int>();
+        private Dictionary<Player, short> lastPlayerPosX = new Dictionary<Player, short>();
+        private Dictionary<Player, short> lastPlayerPosY = new Dictionary<Player, short>();
+        private int autoPickupCheckInterval = 1000; // 1 second in milliseconds
+        private const int PICKUP_RANGE = 16; // 1 coordinate (16x16 pixels) for autopickup
         
         // OvD Automation System
         private OvDAutomation _ovdAutomation;
@@ -2234,14 +2259,7 @@ namespace InfServer.Script.GameType_CTF
                 }
             }
         }
-
-        
-
-
-
-
 // SAVE STATE SECTION
-
 // PlayerState moved to CTF.SaveState.cs
 
 // VehicleState moved to CTF.SaveState.cs
@@ -3006,7 +3024,6 @@ namespace InfServer.Script.GameType_CTF
                 }
             }
         }
-
         private void CheckArenaItemProfile(Player sender)
         {
             HashSet<int> itemsToCheck = new HashSet<int> { 2005, 2007, 2009, 2, 9, 10, 11 };
@@ -3797,7 +3814,6 @@ public bool InitializeSUTEvent()
     
     return true;
 }
-
         /// <summary>
         /// Initialize TDM (Team Deathmatch) event
         /// </summary>
@@ -4572,7 +4588,6 @@ private void SignUpDuelerPlayers()
         }
     }
 }
-
 // Advance winners and set up next matches
 private void AdvanceToNextRound(Player winner)
 {
@@ -4926,7 +4941,6 @@ private void SpawnVehicle(string side, string location)
         arena.sendArenaMessage(string.Format("Failed to set base and exit vehicles."), -1);
     }
 }
-
         //Function to count the total number of drops in the arena
         private int CountDropsInArena(bool detailed = false)
         {
@@ -5682,7 +5696,6 @@ private Dictionary<string, int> maxRoleCountsPerTeam = new Dictionary<string, in
     { "dinf", 3 },
     { "oinf", 4 }
 };
-
 // Handle player role selection
 private void HandleRoleSelection(Player player, string roleSelection)
 {
@@ -6195,7 +6208,6 @@ private Player FindPlayerByAlias(string alias)
     }
     return null;
 }
-
         public class CommandHandler
         {
             // Dictionary to map aliases to their respective class IDs
@@ -7024,8 +7036,8 @@ private Player FindPlayerByAlias(string alias)
             { "heavy he", 20 },
             { "light he", 50 },
             //{ "fuel canister", 120 },
-            //{ "ammo rifle", 400 },
             { "ammo pistol", 500 },
+            { "ammo rifle", 400 },
             { "ammo shotgun", 200 },
             { "ammo mg", 250 },
             { "rocket", 40 },
@@ -7252,15 +7264,22 @@ private Player FindPlayerByAlias(string alias)
             // Split the item list by commas and normalize each item
             string[] items = itemList.Split(',');
             var normalizedItems = new List<string>();
+            var originalItems = new List<string>(); // Keep original items for @ prefix checking
             
             foreach (string item in items)
             {
                 // Remove quantity specifiers (e.g., ":250", "#100") and normalize
                 string cleanItem = item.Trim().ToLower();
+                string originalItem = cleanItem; // Keep original for @ prefix checking
+                
                 if (cleanItem.Contains(":"))
                     cleanItem = cleanItem.Substring(0, cleanItem.IndexOf(":"));
                 if (cleanItem.Contains("#"))
                     cleanItem = cleanItem.Substring(0, cleanItem.IndexOf("#"));
+                
+                // Store original item before removing @ prefix
+                originalItems.Add(originalItem.Trim());
+                
                 if (cleanItem.StartsWith("@"))
                     cleanItem = cleanItem.Substring(1);
                 
@@ -7276,13 +7295,26 @@ private Player FindPlayerByAlias(string alias)
                 return "Infantry";
             }
 
-            // Heavy Weapons: Item list contains heavy weapons
-            if (normalizedItems.Any(item => item == "kamenev ac mk2" || item == "kamenev sc mk2" || 
-                item == "kuchler lmg249a" || item == "maklov ac mk2" || 
-                item == "maklov lmg mk6" || item == "steiner mg94k" || 
-                item == "unittech sc 99r" || item == "micro missile launcher" || 
-                item == "mini missile launcher" || item == "mml" ||
-                item == "rpg" || item == "ac" || item == "lmg" || item == "mg"))
+            // Heavy Weapons: Item list contains heavy weapons (but exclude @ prefixed items like @mg)
+            bool hasHeavyWeapon = false;
+            for (int i = 0; i < normalizedItems.Count; i++)
+            {
+                string item = normalizedItems[i];
+                string originalItem = originalItems[i];
+                
+                if ((item == "kamenev ac mk2" || item == "maklov ac mk2" || item == "ac" || item == "ac2" || item == "ac3" || // AC variants
+                    item == "kamenev sc mk2" || item == "unittech sc 99r" || item == "sc" || item == "sc2" || // SC variants
+                    item == "kuchler lmg249a" || item == "maklov lmg mk6" || item == "steiner mg94k" || item == "mg" || item == "lmg" || // MG/LMG variants
+                    item == "micro missile launcher" || item == "mini missile launcher" || item == "mml" || item == "mml2" || // Missile launchers
+                    item == "rpg") && // RPG
+                    !originalItem.StartsWith("@"))
+                {
+                    hasHeavyWeapon = true;
+                    break;
+                }
+            }
+            
+            if (hasHeavyWeapon)
             {
                 return "Heavy Weapons";
             }
@@ -7323,10 +7355,9 @@ private Player FindPlayerByAlias(string alias)
 
             return null; // No specific class detected
         }
-
         public async Task HandleBuildCommand(Player player, string buildName, bool ignoreStoreCheck = false)
         {
-            // Can you buy from this location?
+            // Can you buy from this location? (Item restrictions are always enforced regardless of ignoreStoreCheck)
             if ((player._arena.getTerrain(player._state.positionX, player._state.positionY).storeEnabled) || (player._team.IsSpec && player._server._zoneConfig.arena.spectatorStore) || ignoreStoreCheck)
             {
                 // Get the player's current class
@@ -7616,6 +7647,29 @@ private Player FindPlayerByAlias(string alias)
                         }
                         if (storeItem != null)
                         {
+                            // Check if this item is purchasable from the store (buyPrice > 0)
+                            if (storeItem.buyPrice <= 0)
+                            {
+                                player.sendMessage(-1, String.Format("Item '{0}' cannot be purchased from the store.", storeItem.name));
+                                continue;
+                            }
+
+                            // Check if this is a restricted item that shouldn't be purchasable
+                            if (FiniteResourceItemIDs.Contains(storeItem.id))
+                            {
+                                player.sendMessage(-1, String.Format("Item '{0}' cannot be purchased from the store.", storeItem.name));
+                                continue;
+                            }
+
+                            // Also check for restricted item shorthand names
+                            if (itemName.Equals("tox", StringComparison.OrdinalIgnoreCase) ||
+                                itemName.Equals("tso", StringComparison.OrdinalIgnoreCase) ||
+                                itemName.Equals("pan", StringComparison.OrdinalIgnoreCase))
+                            {
+                                player.sendMessage(-1, String.Format("Item '{0}' cannot be purchased from the store.", itemName));
+                                continue;
+                            }
+
                             // Check for product conversions (like Rainbow CAW)
                             string finalItemName = storeItem.name;
                             try
@@ -8102,8 +8156,8 @@ private Player FindPlayerByAlias(string alias)
             return "Unknown"; // Default to "Unknown" if no skill is found
         }
         // Define the non-expiring item IDs
+        // Items that should never expire (tickExpire = 0) - these are protected from automatic expiration
         HashSet<int> nonExpiringItemIDs = new HashSet<int> { 2005, 2007, 2009, 2, 9, 10, 11 }; // Tox, Tso, Steron Injection, AutoGuns (premades)
-
         public void pollItemExpiration()
         {
             // Iterate through all items currently in the arena that are within the x/y of 610,440 > 700,640 and isn't alright at a tickExpire of 0
@@ -8120,19 +8174,20 @@ private Player FindPlayerByAlias(string alias)
                 .Where(i => (i.item.id == 2005 || i.item.id == 2007 || i.item.id == 2009) && i.quantity <= 4)
                 .ToList();
 
-            //More items to remove, all items that are quantity of 1 except item ID 23 (Sentry), 15 (Energizer), 47 (Stim Pack), 1 (Hoverboard), Autoguns, repulsor charge, steron injection
+            //More items to remove, all items that are quantity of 1 except item ID 23 (Sentry), 15 (Energizer), 47 (Stim Pack), 1 (Hoverboard), Autoguns, repulsor charge, steron injection, and Ammo MG (2001)
             var itemsToRemove2 = arena._items.Values
-                .Where(i => i.quantity == 1 && !new[] { 23, 15, 47, 1, 2, 1049, 9, 10, 11 }.Contains(i.item.id))
+                .Where(i => i.quantity == 1 && !new[] { 23, 15, 47, 1, 2, 1049, 9, 10, 11, 2001 }.Contains(i.item.id))
                 .ToList();
 
             itemsToRemove.AddRange(itemsToRemove2);
 
-            //Next set of items to remove is Ammo MG stacks less than 50
-            var itemsToRemove3 = arena._items.Values
-                .Where(i => i.item.id == 2001 && i.quantity < 50)
+            // Ammo MG single-stack rule: allow up to 5 single stacks per 700px region, and up to 15 globally
+            var ammoMGSingles = arena._items.Values
+                .Where(i => i.item.id == 2001 && i.quantity == 1)
                 .ToList();
 
-            itemsToRemove.AddRange(itemsToRemove3);
+            var itemsToRemoveMG = FilterAmmoMGSingles(ammoMGSingles, 700, 5, 15);
+            itemsToRemove.AddRange(itemsToRemoveMG);
 
             // Now safely remove the items
             foreach (var item in itemsToRemove)
@@ -8142,6 +8197,67 @@ private Player FindPlayerByAlias(string alias)
                 arena._items.Remove(item.id);
             }
             return;
+        }
+
+        /// <summary>
+        /// Filters Ammo MG single stacks to enforce regional and global limits
+        /// </summary>
+        private List<Arena.ItemDrop> FilterAmmoMGSingles(List<Arena.ItemDrop> mgSingles, int regionRadiusPx, int maxPerRegion, int maxGlobal)
+        {
+            var itemsToRemove = new List<Arena.ItemDrop>();
+
+            // Enforce global limit first: keep nearest 15 to players, remove the rest
+            if (mgSingles.Count > maxGlobal)
+            {
+                // Sort by distance to nearest player (ascending)
+                var ordered = mgSingles.OrderBy(d => GetDistanceToNearestPlayer(d.positionX, d.positionY)).ToList();
+                var keepGlobal = new HashSet<Arena.ItemDrop>(ordered.Take(maxGlobal));
+                foreach (var d in ordered.Skip(maxGlobal))
+                    itemsToRemove.Add(d);
+                // Work on the kept set for regional enforcement
+                mgSingles = keepGlobal.ToList();
+            }
+
+            // Regional enforcement: for each stack, count how many other single stacks are within regionRadiusPx.
+            // We keep up to maxPerRegion closest-to-player and remove the rest.
+            // To avoid O(n^2) worst-case repeatedly, we cluster greedily.
+            var remaining = new HashSet<Arena.ItemDrop>(mgSingles);
+            while (remaining.Count > 0)
+            {
+                var seed = remaining.First();
+                // Build region cluster
+                var cluster = mgSingles.Where(s => Distance(seed.positionX, seed.positionY, s.positionX, s.positionY) <= regionRadiusPx).ToList();
+                // Sort cluster by distance to nearest player and keep first maxPerRegion
+                var orderedCluster = cluster.OrderBy(d => GetDistanceToNearestPlayer(d.positionX, d.positionY)).ToList();
+                foreach (var d in orderedCluster.Skip(maxPerRegion))
+                {
+                    if (remaining.Contains(d)) itemsToRemove.Add(d);
+                }
+                // Remove entire cluster from remaining
+                foreach (var d in cluster)
+                    remaining.Remove(d);
+            }
+
+            return itemsToRemove;
+        }
+
+        private double GetDistanceToNearestPlayer(int x, int y)
+        {
+            double best = double.MaxValue;
+            foreach (var p in arena.Players)
+            {
+                if (p == null) continue;
+                double d = Distance(x, y, p._state.positionX, p._state.positionY);
+                if (d < best) best = d;
+            }
+            return best == double.MaxValue ? 999999 : best;
+        }
+
+        private static double Distance(int x1, int y1, int x2, int y2)
+        {
+            int dx = x1 - x2;
+            int dy = y1 - y2;
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
         public void pollSkillCheck()
@@ -8333,6 +8449,9 @@ private Player FindPlayerByAlias(string alias)
                 
                 // Process pending summon requests
                 ProcessPendingSummonRequests();
+                
+                // Process autopickup for enabled players
+                ProcessAutoPickup();
                     
                 lastPollCheckTime = DateTime.Now;
                 // Gladiator event polling
@@ -8476,7 +8595,6 @@ private Player FindPlayerByAlias(string alias)
         #endregion
 
         #region Script Functions
-
        public static void scrambleSpecificTeams(Arena arena, List<Team> teamsToScramble, bool alertArena, Script_CTF script)
         {
             // Ensure the arena and teams are valid
@@ -9103,6 +9221,10 @@ private Player FindPlayerByAlias(string alias)
 
         // Track players who have already received auto-drops to prevent duplicates
         private HashSet<string> playersWithAutoDrops = new HashSet<string>();
+        
+        // Track autodrop cooldowns to prevent rapid accumulation
+        private Dictionary<string, DateTime> autodropCooldowns = new Dictionary<string, DateTime>();
+        private const int AUTODROP_COOLDOWN_SECONDS = 30; // 30 second cooldown between autodrops
 
         /// <summary>
         /// Clears auto-drop tracking for a specific player
@@ -9110,6 +9232,369 @@ private Player FindPlayerByAlias(string alias)
         private void ClearAutoDropTracking(Player player)
         {
             playersWithAutoDrops.Remove(player._alias);
+            autodropCooldowns.Remove(player._alias);
+            lastSpawnTime.Remove(player);
+            lastSpawnLocation.Remove(player);
+            
+            // Clear drop tracking dictionaries to prevent memory leaks
+            if (squadLeaderDrops.ContainsKey(player))
+            {
+                squadLeaderDrops[player].Clear();
+                squadLeaderDrops.Remove(player);
+            }
+            
+            if (autoDrops.ContainsKey(player))
+            {
+                autoDrops[player].Clear();
+                autoDrops.Remove(player);
+            }
+            
+            // Clear autopickup tracking
+            ClearAutoPickupTracking(player);
+        }
+
+        /// <summary>
+        /// Clears autopickup tracking for a specific player
+        /// </summary>
+        private void ClearAutoPickupTracking(Player player)
+        {
+            autoPickupEnabled.Remove(player);
+            autoPickupItems.Remove(player);
+            lastAutoPickupCheck.Remove(player);
+            lastPlayerPosX.Remove(player);
+            lastPlayerPosY.Remove(player);
+        }
+
+        /// <summary>
+        /// Derives autopickup items from player's stored build or uses default items
+        /// </summary>
+        private Dictionary<string, int> DeriveAutoPickupItemsFromBuild(Player player)
+        {
+            var derivedItems = new Dictionary<string, int>();
+            
+            string buildString;
+            if (persistentBuilds.TryGetValue(player._alias, out buildString) && !string.IsNullOrEmpty(buildString))
+            {
+                // Check if it's a preset build
+                if (buildSets.ContainsKey(buildString.ToLower()))
+                {
+                    var buildData = buildSets[buildString.ToLower()];
+                    List<Tuple<string, ushort>> buildItems = buildData.Item1;
+                    
+                    foreach (var item in buildItems)
+                    {
+                        string itemName = item.Item1.ToLower();
+                        int quantity = item.Item2;
+                        
+                        // Only include items that can be picked up from ground
+                        if (IsItemPickupable(itemName))
+                        {
+                            derivedItems[itemName] = quantity;
+                        }
+                    }
+                }
+                else
+                {
+                    // Parse custom item list (like "rockets:20, ammo mg:120")
+                    var items = ParseCustomItemList(buildString);
+                    foreach (var item in items)
+                    {
+                        string itemName = item.Item1.ToLower();
+                        int quantity = item.Item2;
+                        
+                        if (IsItemPickupable(itemName))
+                        {
+                            derivedItems[itemName] = quantity;
+                        }
+                    }
+                }
+            }
+            
+            // If no items found from build, use default items from defensive drops and squad leader items
+            if (derivedItems.Count == 0)
+            {
+                // Add all defensive drops (maxAmmoQuantities)
+                foreach (var ammoType in maxAmmoQuantities)
+                {
+                    string itemName = ammoType.Key.ToLower();
+                    if (IsItemPickupable(itemName))
+                    {
+                        derivedItems[itemName] = ammoType.Value;
+                    }
+                }
+                
+                // Add all squad leader items
+                foreach (var itemType in squadLeaderItems)
+                {
+                    string itemName = itemType.Key.ToLower();
+                    if (IsItemPickupable(itemName))
+                    {
+                        derivedItems[itemName] = itemType.Value;
+                    }
+                }
+            }
+            
+            return derivedItems;
+        }
+
+        /// <summary>
+        /// Checks if an item can be picked up from the ground
+        /// </summary>
+        private bool IsItemPickupable(string itemName)
+        {
+            // Items that commonly drop and can be picked up
+            var pickupableItems = new HashSet<string>
+            {
+                // Defensive drops (maxAmmoQuantities)
+                "heavy he", "light he", "ammo pistol", "ammo rifle", "ammo shotgun", "ammo mg", 
+                "rocket", "rockets", "ap mine", "plasma mine", "tranq", "sentry",
+                
+                // Squad Leader items (squadLeaderItems)
+                "stim pack", "haywire grenade", "grapeshot mine"
+            };
+            
+            return pickupableItems.Contains(itemName.ToLower());
+        }
+
+        /// <summary>
+        /// Parses custom item list string (e.g., "rockets:20, ammo mg:120")
+        /// </summary>
+        private List<Tuple<string, int>> ParseCustomItemList(string itemList)
+        {
+            var items = new List<Tuple<string, int>>();
+            
+            if (string.IsNullOrEmpty(itemList))
+                return items;
+                
+            var parts = itemList.Split(',');
+            foreach (var part in parts)
+            {
+                var trimmedPart = part.Trim();
+                if (trimmedPart.Contains(':'))
+                {
+                    // Find the last colon to handle item names that might contain colons
+                    int lastColonIndex = trimmedPart.LastIndexOf(':');
+                    if (lastColonIndex > 0)
+                    {
+                        string itemName = trimmedPart.Substring(0, lastColonIndex).Trim();
+                        string quantityStr = trimmedPart.Substring(lastColonIndex + 1).Trim();
+                        
+                        // Handle @ prefix for special items
+                        if (itemName.StartsWith("@"))
+                        {
+                            itemName = itemName.Substring(1); // Remove @ prefix
+                        }
+                        
+                        int quantity;
+                        if (int.TryParse(quantityStr.TrimStart('#'), out quantity))
+                        {
+                            items.Add(new Tuple<string, int>(itemName, quantity));
+                        }
+                    }
+                }
+            }
+            
+            return items;
+        }
+
+        /// <summary>
+        /// Processes autopickup for all enabled players
+        /// </summary>
+        private void ProcessAutoPickup()
+        {
+            int now = Environment.TickCount;
+            
+            foreach (var kvp in autoPickupEnabled.ToList())
+            {
+                Player player = kvp.Key;
+                bool enabled = kvp.Value;
+                
+                if (!enabled || player == null || !arena.Players.Contains(player))
+                    continue;
+                    
+                // Check if enough time has passed since last check
+                int lastCheck;
+                if (lastAutoPickupCheck.TryGetValue(player, out lastCheck) && 
+                    now - lastCheck < autoPickupCheckInterval)
+                    continue;
+                    
+                // Note: Removed standing still requirement for less constrictive autopickup
+                    
+                // Update last check time
+                lastAutoPickupCheck[player] = now;
+                
+                // Get autopickup items for this player
+                Dictionary<string, int> itemsToPickup;
+                if (!autoPickupItems.TryGetValue(player, out itemsToPickup))
+                    continue;
+                    
+                // Process pickup for each configured item
+                ProcessPlayerAutoPickup(player, itemsToPickup);
+            }
+        }
+        /// <summary>
+        /// Checks if player is standing still since last check
+        /// </summary>
+        private bool IsPlayerStandingStill(Player player)
+        {
+            short currentX = player._state.positionX;
+            short currentY = player._state.positionY;
+            
+            if (lastPlayerPosX.ContainsKey(player) && lastPlayerPosY.ContainsKey(player))
+            {
+                short lastX = lastPlayerPosX[player];
+                short lastY = lastPlayerPosY[player];
+                
+                // Update position for next check
+                lastPlayerPosX[player] = currentX;
+                lastPlayerPosY[player] = currentY;
+                
+                // Check if player moved
+                return (lastX == currentX && lastY == currentY);
+            }
+            else
+            {
+                // First check, store position
+                lastPlayerPosX[player] = currentX;
+                lastPlayerPosY[player] = currentY;
+                return false; // Don't pickup on first check
+            }
+        }
+
+        /// <summary>
+        /// Processes autopickup for a specific player
+        /// </summary>
+        private void ProcessPlayerAutoPickup(Player player, Dictionary<string, int> itemsToPickup)
+        {
+            var nearbyItems = arena._items.Values.Where(item =>
+                Math.Abs(item.positionX - player._state.positionX) <= PICKUP_RANGE &&
+                Math.Abs(item.positionY - player._state.positionY) <= PICKUP_RANGE);
+                
+            foreach (var drop in nearbyItems.ToList())
+            {
+                string itemName = drop.item.name.ToLower();
+                
+                if (!itemsToPickup.ContainsKey(itemName))
+                    continue;
+                    
+                int targetQuantity = itemsToPickup[itemName];
+                int currentQuantity = player.getInventoryAmount(drop.item.id);
+                
+                if (currentQuantity >= targetQuantity)
+                    continue;
+                    
+                int neededQuantity = targetQuantity - currentQuantity;
+                int pickupQuantity = Math.Min(neededQuantity, (int)drop.quantity);
+                
+                if (pickupQuantity > 0)
+                {
+                    // Add to player inventory
+                    player.inventoryModify(drop.item, pickupQuantity);
+                    
+                    // Remove from ground
+                    if (pickupQuantity >= drop.quantity)
+                    {
+                        // Remove entire stack
+                        Helpers.Object_ItemDropUpdate(arena.Players, (ushort)drop.id, 0);
+                        arena._items.Remove(drop.id);
+                    }
+                    else
+                    {
+                        // Reduce stack quantity
+                        drop.quantity = (short)(drop.quantity - pickupQuantity);
+                        Helpers.Object_ItemDropUpdate(arena.Players, (ushort)drop.id, (ushort)drop.quantity);
+                    }
+                    
+                    player.sendMessage(0, String.Format("AutoPickup: Picked up {0}x {1}", pickupQuantity, drop.item.name));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles the autopickup command
+        /// </summary>
+        private void HandleAutoPickupCommand(Player player, string payload)
+        {
+            if (string.IsNullOrEmpty(payload))
+            {
+                // Parameterless autopickup - toggle using stored builds
+                HandleParameterlessAutoPickup(player);
+                return;
+            }
+
+            // Check if it's just a toggle command
+            if (payload.Trim().ToLower() == "off" || payload.Trim().ToLower() == "disable")
+            {
+                autoPickupEnabled[player] = false;
+                autoPickupItems.Remove(player);
+                player.sendMessage(0, "AutoPickup has been DISABLED.");
+                return;
+            }
+
+            // Parse custom item list (e.g., "rockets:#20, ammo mg:#120")
+            var customItems = ParseCustomItemList(payload);
+            if (customItems.Count == 0)
+            {
+                player.sendMessage(-1, "Invalid format. Use: ?autopickup rockets:#20, ammo mg:#120");
+                player.sendMessage(-1, "Or use ?autopickup with no parameters to auto-derive from your stored build.");
+                return;
+            }
+
+            // Convert to dictionary and filter pickupable items
+            var itemDict = new Dictionary<string, int>();
+            foreach (var item in customItems)
+            {
+                if (IsItemPickupable(item.Item1))
+                {
+                    itemDict[item.Item1.ToLower()] = item.Item2;
+                }
+            }
+
+            if (itemDict.Count == 0)
+            {
+                player.sendMessage(-1, "No valid pickupable items found in your list.");
+                return;
+            }
+
+            // Enable autopickup with custom items
+            autoPickupEnabled[player] = true;
+            autoPickupItems[player] = itemDict;
+
+            string itemsList = string.Join(", ", itemDict.Select(kvp => String.Format("{0}:{1}", kvp.Key, kvp.Value)));
+            player.sendMessage(0, String.Format("AutoPickup ENABLED for: {0}", itemsList));
+            player.sendMessage(0, "Stand still near items to automatically pick them up. Use ?autopickup off to disable.");
+        }
+
+        /// <summary>
+        /// Handles parameterless autopickup using stored builds
+        /// </summary>
+        private void HandleParameterlessAutoPickup(Player player)
+        {
+            // Check if already enabled, toggle off
+            if (autoPickupEnabled.ContainsKey(player) && autoPickupEnabled[player])
+            {
+                autoPickupEnabled[player] = false;
+                autoPickupItems.Remove(player);
+                player.sendMessage(0, "AutoPickup has been DISABLED.");
+                return;
+            }
+
+            // Try to derive items from stored build or use default items
+            var derivedItems = DeriveAutoPickupItemsFromBuild(player);
+            if (derivedItems.Count == 0)
+            {
+                player.sendMessage(-1, "No autopickup items found. Using default items from defensive drops and squad leader items.");
+                player.sendMessage(-1, "Or use ?autopickup rockets:#20, ammo mg:#120 to specify items manually.");
+                return;
+            }
+
+            // Enable autopickup with derived items
+            autoPickupEnabled[player] = true;
+            autoPickupItems[player] = derivedItems;
+
+            string itemsList = string.Join(", ", derivedItems.Select(kvp => String.Format("{0}:{1}", kvp.Key, kvp.Value)));
+            player.sendMessage(0, String.Format("AutoPickup ENABLED (from stored build): {0}", itemsList));
+            player.sendMessage(0, "Stand still near items to automatically pick them up. Use ?autopickup to toggle off.");
         }
 
         /// <summary>
@@ -9228,6 +9713,114 @@ private Player FindPlayerByAlias(string alias)
         };
 
         /// <summary>
+        /// Cleans up previously dropped items for a player - ONLY removes tracked items
+        /// </summary>
+        private void CleanupPreviousDrops(Player player, Dictionary<Player, List<Arena.ItemDrop>> dropTracker)
+        {
+            if (!dropTracker.ContainsKey(player))
+                return;
+
+            var dropsToRemove = dropTracker[player];
+            if (dropsToRemove == null)
+                return;
+
+            // Remove ONLY the tracked drops from the arena - no aggressive cleanup
+            foreach (var drop in dropsToRemove)
+            {
+                if (arena._items.ContainsKey(drop.id))
+                {
+                    // Update players about item removal
+                    Helpers.Object_ItemDropUpdate(arena.Players, drop.id, 0);
+                    // Remove from arena
+                    arena._items.Remove(drop.id);
+                }
+            }
+
+            // Clear the tracking list for this player
+            dropsToRemove.Clear();
+        }
+
+        // Snapshot helpers for precise tracking of spawned drops
+        private HashSet<ushort> SnapshotNearbyItemIds(short centerX, short centerY, int radius)
+        {
+            var ids = new HashSet<ushort>();
+            foreach (var drop in arena._items.Values)
+            {
+                if (Math.Abs(drop.positionX - centerX) <= radius && Math.Abs(drop.positionY - centerY) <= radius)
+                    ids.Add((ushort)drop.id);
+            }
+            return ids;
+        }
+
+        private void TrackSpawnedItemsBySnapshot(
+            Player player,
+            Dictionary<Player, List<Arena.ItemDrop>> dropTracker,
+            short centerX,
+            short centerY,
+            int radius,
+            HashSet<string> allowedItemNamesLower)
+        {
+            if (!dropTracker.ContainsKey(player))
+                dropTracker[player] = new List<Arena.ItemDrop>();
+
+            var afterIds = SnapshotNearbyItemIds(centerX, centerY, radius);
+            foreach (ushort id in afterIds)
+            {
+                Arena.ItemDrop dropObj;
+                if (!arena._items.TryGetValue(id, out dropObj))
+                    continue;
+
+                string nameLower = dropObj.item != null ? dropObj.item.name.ToLower() : string.Empty;
+                if (allowedItemNamesLower == null || allowedItemNamesLower.Contains(nameLower))
+                {
+                    if (!dropTracker[player].Contains(dropObj))
+                        dropTracker[player].Add(dropObj);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if arena item count is safe for spawning new items
+        /// </summary>
+        private bool IsArenaItemCountSafe()
+        {
+            return arena._items.Count < MAX_ARENA_ITEMS;
+        }
+
+        /// <summary>
+        /// Tracks newly spawned items for a player using spawn location and time
+        /// </summary>
+        private void TrackSpawnedItems(Player player, Dictionary<Player, List<Arena.ItemDrop>> dropTracker, 
+                                     short targetX, short targetY, int radius = 160)
+        {
+            if (!dropTracker.ContainsKey(player))
+                dropTracker[player] = new List<Arena.ItemDrop>();
+
+            // Record the spawn location for this player
+            lastSpawnLocation[player] = new Tuple<short, short>(targetX, targetY);
+            
+            // Find items that were spawned near the target location
+            // We'll use a more precise approach: only track items that are within the radius
+            // and match the expected item types for our drops
+            var nearbyItems = arena._items.Values.Where(item => 
+                Math.Abs(item.positionX - targetX) <= radius && 
+                Math.Abs(item.positionY - targetY) <= radius &&
+                // Only track items that are likely to be from our drops
+                (item.item.name.ToLower().Contains("mine") || 
+                 item.item.name.ToLower().Contains("grenade") || 
+                 item.item.name.ToLower().Contains("stim") ||
+                 item.item.name.ToLower().Contains("ammo") ||
+                 item.item.name.ToLower().Contains("rocket")) &&
+                // Ensure we don't track items that were already there
+                !dropTracker[player].Contains(item));
+
+            foreach (var item in nearbyItems)
+            {
+                dropTracker[player].Add(item);
+            }
+        }
+
+        /// <summary>
         /// Spawns Squad Leader items at a specific location
         /// </summary>
         private void SpawnSquadLeaderItemsAtLocation(Player player, short targetX, short targetY)
@@ -9235,6 +9828,26 @@ private Player FindPlayerByAlias(string alias)
             // Check if player has autodrop enabled
             if (!autoDropEnabled.ContainsKey(player) || !autoDropEnabled[player])
                 return;
+
+            // Safety check: Don't spawn if arena item count is too high
+            if (!IsArenaItemCountSafe())
+            {
+                player.sendMessage(0, "Cannot spawn items: Arena item limit reached (400+ items)");
+                return;
+            }
+
+            // Check autodrop cooldown to prevent rapid accumulation
+            if (autodropCooldowns.ContainsKey(player._alias))
+            {
+                TimeSpan timeSinceLastDrop = DateTime.Now - autodropCooldowns[player._alias];
+                if (timeSinceLastDrop.TotalSeconds < AUTODROP_COOLDOWN_SECONDS)
+                {
+                    return; // Still in cooldown, don't spawn items
+                }
+            }
+
+            // Clean up any previously spawned Squad Leader items for this player
+            CleanupPreviousDrops(player, squadLeaderDrops);
 
             List<Tuple<string, int>> itemsToSpawn = new List<Tuple<string, int>>();
             
@@ -9261,7 +9874,17 @@ private Player FindPlayerByAlias(string alias)
                 }
             }
 
-            // Spawn all calculated items at the target location
+            // Snapshot BEFORE spawning to support precise tracking
+            var beforeIds_SL = SnapshotNearbyItemIds(targetX, targetY, 180);
+
+            // Build allowed names set for tracking
+            var allowedNames_SL = new HashSet<string>(squadLeaderItems.Keys.Select(k => k.ToLower()));
+
+            // Spawn all calculated items at the target location (force non-stacking for deterministic cleanup)
+            // Ensure we have a tracking list for this player
+            if (!squadLeaderDrops.ContainsKey(player))
+                squadLeaderDrops[player] = new List<Arena.ItemDrop>();
+
             foreach (var itemToSpawn in itemsToSpawn)
             {
                 string itemName = itemToSpawn.Item1;
@@ -9270,14 +9893,14 @@ private Player FindPlayerByAlias(string alias)
                 ItemInfo item = AssetManager.Manager.getItemByName(itemName);
                 if (item != null)
                 {
-                    // Check if there are existing items nearby to stack with at target location
-                    if (arena.getItemCountInRange(item, targetX, targetY, 150) > 0)
+                    // Always create distinct drops to avoid merging with existing stacks
+                    // Set a fixed expire time of 60s for spawned SL drops to ensure cleanup
+                    Arena.ItemDrop created = arena.itemSpawn(item, (ushort)quantity, targetX, targetY, 0, (int)player._team._id, player);
+                    if (created != null)
                     {
-                        arena.itemStackSpawn(item, (ushort)quantity, targetX, targetY, 50, player);
-                    }
-                    else
-                    {
-                        arena.itemSpawn(item, (ushort)quantity, targetX, targetY, 0, (int)player._team._id, player);
+                        created.tickExpire = Environment.TickCount + TRACKED_DROP_EXPIRE_MS;
+                        if (!squadLeaderDrops[player].Contains(created))
+                            squadLeaderDrops[player].Add(created);
                     }
                 }
             }
@@ -9286,8 +9909,34 @@ private Player FindPlayerByAlias(string alias)
             {
                 player.sendMessage(0, String.Format("Auto-drop: Spawned {0} Squad Leader support items at ({1}, {2})", itemsToSpawn.Count, targetX, targetY));
                 
+                // Record spawn time for tracking
+                lastSpawnTime[player] = Environment.TickCount;
+                
+                // Track the newly spawned items for future cleanup with a small delay using snapshots
+                Task.Run(async () => {
+                    await Task.Delay(100); // Small delay to ensure items are spawned
+                    var afterIds_SL = SnapshotNearbyItemIds(targetX, targetY, 180);
+                    // Only keep the newly created ids (after - before)
+                    var newIds_SL = afterIds_SL.Except(beforeIds_SL).ToList();
+                    if (!squadLeaderDrops.ContainsKey(player))
+                        squadLeaderDrops[player] = new List<Arena.ItemDrop>();
+                    foreach (ushort id in newIds_SL)
+                    {
+                        Arena.ItemDrop dropObj;
+                        if (arena._items.TryGetValue(id, out dropObj))
+                        {
+                            string nameLower = dropObj.item != null ? dropObj.item.name.ToLower() : string.Empty;
+                            if (allowedNames_SL.Contains(nameLower) && !squadLeaderDrops[player].Contains(dropObj))
+                                squadLeaderDrops[player].Add(dropObj);
+                        }
+                    }
+                });
+                
                 // Mark player as having received auto-drop to prevent duplicates
                 playersWithAutoDrops.Add(player._alias);
+                
+                // Update autodrop cooldown
+                autodropCooldowns[player._alias] = DateTime.Now;
             }
         }
 
@@ -9299,6 +9948,26 @@ private Player FindPlayerByAlias(string alias)
             // Check if player has autodrop enabled
             if (!autoDropEnabled.ContainsKey(player) || !autoDropEnabled[player])
                 return;
+
+            // Safety check: Don't spawn if arena item count is too high
+            if (!IsArenaItemCountSafe())
+            {
+                player.sendMessage(0, "Cannot spawn items: Arena item limit reached (400+ items)");
+                return;
+            }
+
+            // Check autodrop cooldown to prevent rapid accumulation
+            if (autodropCooldowns.ContainsKey(player._alias))
+            {
+                TimeSpan timeSinceLastDrop = DateTime.Now - autodropCooldowns[player._alias];
+                if (timeSinceLastDrop.TotalSeconds < AUTODROP_COOLDOWN_SECONDS)
+                {
+                    return; // Still in cooldown, don't spawn items
+                }
+            }
+
+            // Clean up any previously spawned auto drop items for this player
+            CleanupPreviousDrops(player, autoDrops);
 
             // Determine if the target location is on defense (near owned flag) or offense
             bool isDefense = IsPlayerNearOwnedFlagAtLocation(player, targetX, targetY, 700);
@@ -9358,7 +10027,9 @@ private Player FindPlayerByAlias(string alias)
                 }
             }
 
-            // Spawn all calculated items at the target location
+            // Spawn all calculated items at the target location (force non-stacking for deterministic cleanup) and track immediately
+            if (!autoDrops.ContainsKey(player))
+                autoDrops[player] = new List<Arena.ItemDrop>();
             foreach (var itemToSpawn in itemsToSpawn)
             {
                 string itemName = itemToSpawn.Item1;
@@ -9367,14 +10038,12 @@ private Player FindPlayerByAlias(string alias)
                 ItemInfo item = AssetManager.Manager.getItemByName(itemName);
                 if (item != null)
                 {
-                    // Check if there are existing items nearby to stack with at target location
-                    if (arena.getItemCountInRange(item, targetX, targetY, 150) > 0)
+                    Arena.ItemDrop created = arena.itemSpawn(item, (ushort)quantity, targetX, targetY, 0, (int)player._team._id, player);
+                    if (created != null)
                     {
-                        arena.itemStackSpawn(item, (ushort)quantity, targetX, targetY, 50, player);
-                    }
-                    else
-                    {
-                        arena.itemSpawn(item, (ushort)quantity, targetX, targetY, 0, (int)player._team._id, player);
+                        created.tickExpire = Environment.TickCount + TRACKED_DROP_EXPIRE_MS;
+                        if (!autoDrops[player].Contains(created))
+                            autoDrops[player].Add(created);
                     }
                 }
             }
@@ -9383,8 +10052,16 @@ private Player FindPlayerByAlias(string alias)
             {
                 player.sendMessage(0, String.Format("Auto-drop: Spawned {0} items ({1}) at warp destination", itemsToSpawn.Count, dropType));
                 
+                // Record spawn time for tracking
+                lastSpawnTime[player] = Environment.TickCount;
+                
+                // Already tracked per-spawn above
+                
                 // Mark player as having received auto-drop to prevent duplicates
                 playersWithAutoDrops.Add(player._alias);
+                
+                // Update autodrop cooldown
+                autodropCooldowns[player._alias] = DateTime.Now;
             }
         }
 
@@ -9396,6 +10073,13 @@ private Player FindPlayerByAlias(string alias)
             // Check if player has autodrop enabled
             if (!autoDropEnabled.ContainsKey(player) || !autoDropEnabled[player])
                 return;
+
+            // Safety check: Don't spawn if arena item count is too high
+            if (!IsArenaItemCountSafe())
+            {
+                player.sendMessage(0, "Cannot spawn items: Arena item limit reached (400+ items)");
+                return;
+            }
 
             // Determine if player is on defense (near owned flag) or offense
             bool isDefense = IsPlayerNearOwnedFlag(player, 700);
@@ -9480,8 +10164,14 @@ private Player FindPlayerByAlias(string alias)
             {
                 player.sendMessage(0, String.Format("Auto-drop: Spawned {0} items ({1})", itemsToSpawn.Count, dropType));
                 
+                // Record spawn time for tracking
+                lastSpawnTime[player] = Environment.TickCount;
+                
                 // Mark player as having received auto-drop to prevent duplicates
                 playersWithAutoDrops.Add(player._alias);
+                
+                // Update autodrop cooldown
+                autodropCooldowns[player._alias] = DateTime.Now;
             }
         }
 
@@ -9490,6 +10180,13 @@ private Player FindPlayerByAlias(string alias)
         /// </summary>
         private void SpawnBuildDifferentialItems(Player player, bool isSquadLeaderScenario = false)
         {
+            // Safety check: Don't spawn if arena item count is too high
+            if (!IsArenaItemCountSafe())
+            {
+                player.sendMessage(0, "Cannot spawn items: Arena item limit reached (400+ items)");
+                return;
+            }
+
             List<Tuple<string, int>> itemsToSpawn = new List<Tuple<string, int>>();
             string dropType;
 
@@ -9518,89 +10215,36 @@ private Player FindPlayerByAlias(string alias)
             }
             else
             {
-                // Normal scenario - calculate build differential
-                dropType = "build differential";
+                // Normal scenario - spawn defensive drops (same as warp event drops)
+                dropType = "defensive drops";
                 
-                // Get player's last used build or current build
-                string buildName = "";
-                if (lastUsedBuild.ContainsKey(player))
+                // Always spawn defensive items for normal scenario (same as maxAmmoQuantities)
+                foreach (var ammoType in maxAmmoQuantities)
                 {
-                    buildName = lastUsedBuild[player];
-                }
-                else
-                {
-                    // Try to determine build from current skills
-                    if (player._skills.Values.Any(s => s.skill.SkillId == 32))
-                        buildName = "dinfcaw";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 33))
-                        buildName = "dinf";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 31))
-                        buildName = "oinfcara";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 29))
-                        buildName = "oinf";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 18))
-                        buildName = "ohvy";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 20))
-                        buildName = "dhvy";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 30))
-                        buildName = "hvyMG";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 22))
-                        buildName = "slstandard";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 23))
-                        buildName = "jtstandard";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 24))
-                        buildName = "footjt";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 25))
-                        buildName = "medstandard";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 26))
-                        buildName = "engstandard";
-                    else if (player._skills.Values.Any(s => s.skill.SkillId == 27))
-                        buildName = "infilstandard";
-                }
+                    string itemName = ammoType.Key;
+                    int maxQuantity = ammoType.Value;
 
-                if (!string.IsNullOrEmpty(buildName) && buildSets.ContainsKey(buildName))
-                {
-                    var buildData = buildSets[buildName];
-                    List<Tuple<string, ushort>> buildItems = buildData.Item1;
-
-                    // Track the ammo used by the build
-                    Dictionary<string, int> usedAmmo = new Dictionary<string, int>();
-
-                    // Iterate through the build items and record their quantities
-                    foreach (var item in buildItems)
+                    ItemInfo item = AssetManager.Manager.getItemByName(itemName);
+                    if (item != null)
                     {
-                        string ammoName = item.Item1.ToLower();
-                        if (maxAmmoQuantities.ContainsKey(ammoName))
-                        {
-                            usedAmmo[ammoName] = item.Item2;
-                        }
-                    }
+                        int currentQuantity = player.getInventoryAmount(item.id);
+                        int differential = maxQuantity - currentQuantity;
 
-                    // Calculate what's missing to reach max quantities for items in the build
-                    foreach (var ammoType in maxAmmoQuantities.Keys)
-                    {
-                        string normalizedAmmoType = ammoType.ToLower();
-                        
-                        // Only consider items that are actually in the player's build
-                        if (usedAmmo.ContainsKey(normalizedAmmoType))
-                        {
-                            int maxQuantity = maxAmmoQuantities[ammoType];
-                            
-                            ItemInfo ammoItem = AssetManager.Manager.getItemByName(ammoType);
-                            if (ammoItem != null)
-                            {
-                                int currentQuantity = player.getInventoryAmount(ammoItem.id);
-                                int differential = maxQuantity - currentQuantity;
+                        // Debug: Show differential calculation
+                        player.sendMessage(0, string.Format("Item {0}: max={1}, current={2}, differential={3}", 
+                            itemName, maxQuantity, currentQuantity, differential));
 
-                                if (differential > 0)
-                                {
-                                    itemsToSpawn.Add(new Tuple<string, int>(ammoType, differential));
-                                }
-                            }
+                        if (differential > 0)
+                        {
+                            itemsToSpawn.Add(new Tuple<string, int>(itemName, differential));
                         }
                     }
                 }
             }
+
+            // Ensure tracking list exists for this player
+            if (!autoDrops.ContainsKey(player))
+                autoDrops[player] = new List<Arena.ItemDrop>();
 
             // Spawn the differential items at player location
             foreach (var itemToSpawn in itemsToSpawn)
@@ -9608,14 +10252,17 @@ private Player FindPlayerByAlias(string alias)
                 ItemInfo item = AssetManager.Manager.getItemByName(itemToSpawn.Item1);
                 if (item != null)
                 {
-                    // Check if there are existing items nearby to stack with
-                    if (arena.getItemCountInRange(item, player._state.positionX, player._state.positionY, 150) > 0)
+                    // Use player position directly (already in correct coordinate system)
+                    short spawnX = player._state.positionX;
+                    short spawnY = player._state.positionY;
+                    
+                    // Always spawn and track explicitly with 60s expiration
+                    Arena.ItemDrop created = arena.itemSpawn(item, (ushort)itemToSpawn.Item2, spawnX, spawnY, 0, (int)player._team._id, player);
+                    if (created != null)
                     {
-                        arena.itemStackSpawn(item, (ushort)itemToSpawn.Item2, player._state.positionX, player._state.positionY, 50, player);
-                    }
-                    else
-                    {
-                        arena.itemSpawn(item, (ushort)itemToSpawn.Item2, player._state.positionX, player._state.positionY, 0, (int)player._team._id, player);
+                        created.tickExpire = Environment.TickCount + TRACKED_DROP_EXPIRE_MS;
+                        if (!autoDrops[player].Contains(created))
+                            autoDrops[player].Add(created);
                     }
                 }
             }
@@ -9624,9 +10271,19 @@ private Player FindPlayerByAlias(string alias)
             playersWithAutoDrops.Add(player._alias);
             
             // Send feedback about what type of drop was provided
-            player.sendMessage(0, string.Format("Auto-drop: Spawned {0} items!", dropType));
+            player.sendMessage(0, string.Format("Auto-drop: Spawned {0} items ({1} total items)!", dropType, itemsToSpawn.Count));
+            
+            // Debug: List what items were spawned
+            if (itemsToSpawn.Count > 0)
+            {
+                string itemList = string.Join(", ", itemsToSpawn.Select(item => string.Format("{0}x {1}", item.Item2, item.Item1)));
+                player.sendMessage(0, string.Format("Items spawned: {0}", itemList));
+            }
+            else
+            {
+                player.sendMessage(0, "No items needed to be spawned (inventory already full or no build detected).");
+            }
         }
-
         /// <summary>
         /// Handles the spawn of a player
         /// </summary>
@@ -10262,7 +10919,6 @@ private Player FindPlayerByAlias(string alias)
         // {
         //     // Convert quantity to an int regardless of whether it's a ushort or int.
         //     int qty = Convert.ToInt32(quantity);
-
         //     // If on terrain 0, and it's 5 tso or tox (item ids 2005 and 2009), subtract 5 from minedStats.
         //     if (player._arena.getTerrainID(player._state.positionX, player._state.positionY) == 0 &&
         //     (item.id == 2005 || item.id == 2009))
@@ -10278,7 +10934,6 @@ private Player FindPlayerByAlias(string alias)
         //     }
         //     return true;
         // }
-        
         [Scripts.Event("Player.Leave")]
         public void playerLeave(Player player)
         {
@@ -10477,6 +11132,9 @@ private Player FindPlayerByAlias(string alias)
                 });
             }
             
+            // Clean up drop tracking for the leaving player
+            ClearAutoDropTracking(player);
+            
             return;
         }
 
@@ -10665,6 +11323,19 @@ private Player FindPlayerByAlias(string alias)
         [Scripts.Event("Game.Start")]
         public bool StartGame()
         {
+            // Clear all drop tracking at game start to prevent item overflow
+            squadLeaderDrops.Clear();
+            autoDrops.Clear();
+            playersWithAutoDrops.Clear();
+            lastSpawnTime.Clear();
+            lastSpawnLocation.Clear();
+            
+            // Clear autopickup tracking at game start
+            autoPickupEnabled.Clear();
+            autoPickupItems.Clear();
+            lastAutoPickupCheck.Clear();
+            lastPlayerPosX.Clear();
+            lastPlayerPosY.Clear();
 
             if (arena._name.Contains("CTFDL") || arena._name.Contains("CTFPL") || arena._name.Contains("OVDL")){
                 // Disable champ item conversion for CTFDL or OVDL arenas
@@ -10958,7 +11629,6 @@ private Player FindPlayerByAlias(string alias)
 
             return true;
         }
-
         /// <summary>
         /// Called when the game ends
         /// </summary>
@@ -11381,10 +12051,8 @@ private Player FindPlayerByAlias(string alias)
                 player.sendMessage(0, string.Format("Switch operation successful. Switch is now {0}.", desiredState ? "open" : "closed"));
             });
         }
-
         // Arena boolean if ?energizer command is useable or not, starts disabled
         private bool _energizerCommandEnabled = true;
-
         /// <summary>
         /// Called when a player sends a chat command
         /// </summary>
@@ -11640,6 +12308,11 @@ private Player FindPlayerByAlias(string alias)
                         autoDropEnabled[player] = false;
                     }
                     player.sendMessage(0, String.Format("AutoDrop is now {0}. Use ?autodrop (or ?ad) again to toggle.", dropEnabled ? "ENABLED" : "DISABLED"));
+                    break;
+
+                case "autopickup":
+                case "ap":
+                    HandleAutoPickupCommand(player, payload);
                     break;
                     
                 // CTFBot debug commands for TDM events
@@ -12100,21 +12773,14 @@ private Player FindPlayerByAlias(string alias)
         private void UpdatePlayerDamageStats()
         {
             playerDamageStats.Clear();
-            // Calculate total damage dealt by each player across AutoGun turrets only
-            foreach (var turretEntry in _turretStats)
+            // Calculate total damage dealt by each player across all turrets
+            foreach (var turretData in _turretStats.Values)
             {
-                var turretName = turretEntry.Key;
-                var turretData = turretEntry.Value;
-                
-                // Only include turrets with "AutoGun" in their name
-                if (turretName != null && turretName.Contains("AutoGun"))
+                foreach (var damageEntry in turretData.DamageReceived)
                 {
-                    foreach (var damageEntry in turretData.DamageReceived)
-                    {
-                        if (!playerDamageStats.ContainsKey(damageEntry.Key))
-                            playerDamageStats[damageEntry.Key] = 0;
-                        playerDamageStats[damageEntry.Key] += damageEntry.Value;
-                    }
+                    if (!playerDamageStats.ContainsKey(damageEntry.Key))
+                        playerDamageStats[damageEntry.Key] = 0;
+                    playerDamageStats[damageEntry.Key] += damageEntry.Value;
                 }
             }
 
@@ -12124,7 +12790,6 @@ private Player FindPlayerByAlias(string alias)
                 .Take(3)
                 .ToList();
         }
-
         // Method to list weapon stats for all players or a specific player
         private void ListPlayerWeaponStats(Player requestingPlayer, string alias = null)
         {
@@ -12506,14 +13171,12 @@ private Player FindPlayerByAlias(string alias)
             // Use the helper method from Protocol.Helpers.Player instead of manual implementation
             Helpers.Player_RouteExplosion(arena.Players, (short)projectileId, posX, posY, posZ, yaw, (ushort)shooterId);
         }
-
         private Dictionary<string, Player> _projectileOwners = new Dictionary<string, Player>();
         private HashSet<int> _ignoredExplosionWeaponIds = new HashSet<int>() { 1117, 1199, 1200 };
         private int _lastExplosionTick;
         private Player _lastExplosionShooter;
         private int _lastExplosionWeaponId;
         private short _lastExplosionX, _lastExplosionY, _lastExplosionZ;
-
         /// <summary>
         /// Triggered when an explosion happens from a projectile a player fired
         /// </summary>
@@ -12527,6 +13190,17 @@ private Player FindPlayerByAlias(string alias)
             if (_championEffects != null)
             {
                 _championEffects.HandleWeaponExplosion(from, from._occupiedVehicle, usedWep, posX, posY);
+            }
+
+            // Meep's Holo-Taunt effect
+            if (from._alias == "Meep" && (usedWep.name == "Holo-Taunt GG" || usedWep.name == "Holo-Taunt EZ") && isChampEnabled)
+            {
+                // Spawn MeepMeep projectile at explosion location
+                ItemInfo.Projectile meepProjectile = AssetManager.Manager.getItemByName("MeepMeep") as ItemInfo.Projectile;
+                if (meepProjectile != null)
+                {
+                    HandleExplosionProjectile(posX, posY, posZ, meepProjectile.id, from._id, from._state.yaw);
+                }
             }
 
             // EB's hit stats for projectiles (IDs 1163 through 1166) or 1246
@@ -12616,7 +13290,7 @@ private Player FindPlayerByAlias(string alias)
             }
 
             //JACKIE's G9
-            if (from._alias == "Axidus" && usedWep.name == "Maklov g9 Sniper" && isChampEnabled){
+            if ((from._alias == "Axidus" || from._alias == "JACKIE") && usedWep.name == "Maklov g9 Sniper" && isChampEnabled){
                 // Track Jackie's G9 shots for hit detection
                 _lastExplosionTick = Environment.TickCount;
                 _lastExplosionShooter = from;
@@ -13186,11 +13860,9 @@ private Player FindPlayerByAlias(string alias)
                 TotalHits = 0;
             }
         }
-
         // Dictionary to track detailed weapon stats per player
         private Dictionary<Player, Dictionary<int, WeaponStats>> _playerWeaponStats = new Dictionary<Player, Dictionary<int, WeaponStats>>();
         private Dictionary<Player, Dictionary<int, WeaponStats>> _lastgamePlayerWeaponStats = new Dictionary<Player, Dictionary<int, WeaponStats>>();
-
         /// <summary>
         /// Triggered when a player notifies the server of an explosion
         /// </summary>
@@ -13961,44 +14633,43 @@ private Player FindPlayerByAlias(string alias)
 
             return true;
         }
-
         // Switch teams function that switches all players between T and C teams
         public void switchTeams()
         {
             int switchCount = 0;
             List<Player> playersToSwitch = new List<Player>();
 
-            // Get all teams with 2+ players that end in C or T
+            // Get all teams that end in C or T (no minimum player requirement)
             var teamsToSwitch = arena.Teams.Where(t => 
-                (t._name.EndsWith(" C") || t._name.EndsWith(" T")) &&
-                t.ActivePlayerCount >= 2
+                (t._name.EndsWith(" C") || t._name.EndsWith(" T"))
             ).ToList();
 
             // First gather all players that need to be switched
             foreach (Player p in arena.Players)
             {
+                // Skip Dueler players
+                if (GetPrimarySkillName(p) == "Dueler")
+                    continue;
+
                 string currentTeam = p._team._name;
                 string newTeam = null;
 
-                // Only process if team has 2+ players and ends with " T" or " C"
-                if (teamsToSwitch.Contains(p._team))
-                {
-                    if (currentTeam.EndsWith(" T"))
-                        newTeam = currentTeam.Substring(0, currentTeam.Length - 2) + " C";
-                    else if (currentTeam.EndsWith(" C"))
-                        newTeam = currentTeam.Substring(0, currentTeam.Length - 2) + " T";
+                // Only process if team ends with " T" or " C"
+                if (currentTeam.EndsWith(" T"))
+                    newTeam = currentTeam.Substring(0, currentTeam.Length - 2) + " C";
+                else if (currentTeam.EndsWith(" C"))
+                    newTeam = currentTeam.Substring(0, currentTeam.Length - 2) + " T";
 
-                    if (newTeam != null && newTeam != currentTeam)
+                if (newTeam != null && newTeam != currentTeam)
+                {
+                    // Check if newTeam exists in CFG.teams
+                    bool teamExists = CFG.teams.Any(t => t.name == newTeam);
+                    if (teamExists)
                     {
-                        // Check if newTeam exists in CFG.teams
-                        bool teamExists = CFG.teams.Any(t => t.name == newTeam);
-                        if (teamExists)
+                        Team targetTeam = arena.getTeamByName(newTeam);
+                        if (targetTeam != null)
                         {
-                            Team targetTeam = arena.getTeamByName(newTeam);
-                            if (targetTeam != null)
-                            {
-                                playersToSwitch.Add(p);
-                            }
+                            playersToSwitch.Add(p);
                         }
                     }
                 }
@@ -14029,7 +14700,11 @@ private Player FindPlayerByAlias(string alias)
             // Notify arena of the switch
             if (switchCount > 0)
             {
-                arena.sendArenaMessage(string.Format("Teams have been switched! ({0} players affected)", switchCount));
+                arena.sendArenaMessage(string.Format("Teams have been flipped! ({0} players affected)", switchCount));
+            }
+            else
+            {
+                arena.sendArenaMessage("No valid teams found to flip. Teams must end with ' T' or ' C'.");
             }
         }
 
@@ -14087,8 +14762,17 @@ private Player FindPlayerByAlias(string alias)
                 // Clear their auto-drop tracking to allow the test
                 playersWithAutoDrops.Remove(targetPlayer._alias);
                 
-                // Call the differential items spawn function
-                SpawnBuildDifferentialItems(targetPlayer, testSquadLeader);
+                // Call the appropriate spawn function based on scenario
+                if (testSquadLeader)
+                {
+                    // For Squad Leader test, use the Squad Leader spawn function
+                    SpawnSquadLeaderItemsAtLocation(targetPlayer, targetPlayer._state.positionX, targetPlayer._state.positionY);
+                }
+                else
+                {
+                    // For normal test, use the differential items spawn function
+                    SpawnBuildDifferentialItems(targetPlayer, false);
+                }
                 
                 targetPlayer.sendMessage(0, "Test drop completed!");
                 player.sendMessage(0, string.Format("Executed {0} test drop for {1}", 
@@ -14689,7 +15373,6 @@ private Player FindPlayerByAlias(string alias)
                     player.sendMessage(-1, string.Format("Invalid event type. Available events: {0}", string.Join(", ", Enum.GetNames(typeof(EventType)))));
                 }
             }
-
            if (command.Equals("base"))
             {
                 string[] args = payload.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -15935,7 +16618,6 @@ private Player FindPlayerByAlias(string alias)
             NotEnoughPlayers,
             Transitioning,
         }
-
         private enum CTFMode
         {
             None,
@@ -16716,7 +17398,6 @@ private Player FindPlayerByAlias(string alias)
         
         return "N/A";
     }
-    
     /// <summary>
     /// Get player stats formatted for web integration
     /// </summary>
