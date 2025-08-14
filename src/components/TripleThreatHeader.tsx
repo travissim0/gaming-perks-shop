@@ -55,16 +55,9 @@ export default function TripleThreatHeader({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && user) {
-      // Load read notifications from localStorage
-      const saved = localStorage.getItem(`tt_read_notifications_${user.id}`);
-      if (saved) {
-        setReadNotifications(new Set(JSON.parse(saved)));
-      }
-      
       checkUserTeam();
       loadNotifications();
     } else if (!user) {
@@ -72,7 +65,6 @@ export default function TripleThreatHeader({
       setTeamMembers([]);
       setNotifications([]);
       setUnreadCount(0);
-      setReadNotifications(new Set());
     }
   }, [authLoading, user]);
 
@@ -245,17 +237,11 @@ export default function TripleThreatHeader({
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 10); // Keep last 10 notifications (recent events)
       
-      // Apply persistent read status from localStorage
-      const notificationsWithReadStatus = allNotifications.map(notification => ({
-        ...notification,
-        read: notification.read || readNotifications.has(notification.id)
-      }));
+      console.log('Total notifications:', allNotifications.length);
+      console.log('Unread notifications:', allNotifications.filter(n => !n.read).length);
       
-      console.log('Total notifications:', notificationsWithReadStatus.length);
-      console.log('Unread notifications:', notificationsWithReadStatus.filter(n => !n.read).length);
-      
-      setNotifications(notificationsWithReadStatus);
-      setUnreadCount(notificationsWithReadStatus.filter(n => !n.read).length);
+      setNotifications(allNotifications);
+      setUnreadCount(allNotifications.filter(n => !n.read).length);
       
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -266,14 +252,16 @@ export default function TripleThreatHeader({
     if (!user || !userTeam) return [];
 
     try {
-      // Try RPC first, fallback to direct query
+      // Try enhanced RPC with read status first, fallback to basic RPC
       try {
-        const { data, error } = await supabase.rpc('get_tt_team_challenges', { team_id_input: userTeam.id });
+        const { data, error } = await supabase.rpc('get_tt_team_challenges_with_reads', { 
+          team_id_input: userTeam.id,
+          user_id_input: user.id
+        });
         if (error) throw error;
         
         return (data || []).map((challenge: any) => {
           const isIncoming = challenge.is_incoming;
-          const isPending = challenge.status === 'pending';
           
           return {
             id: `challenge_${challenge.id}`,
@@ -283,7 +271,30 @@ export default function TripleThreatHeader({
               ? `${challenge.challenger_team_name} wants to challenge your team`
               : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
             created_at: challenge.created_at,
-            read: !isPending, // Only pending challenges are unread
+            read: challenge.is_read, // Use database read status
+            related_team: isIncoming ? challenge.challenger_team_name : challenge.challenged_team_name,
+            challenge_id: challenge.id
+          };
+        });
+      } catch (enhancedRpcError) {
+        console.log('Enhanced RPC failed, trying basic RPC:', enhancedRpcError);
+        
+        // Fallback to basic RPC
+        const { data, error } = await supabase.rpc('get_tt_team_challenges', { team_id_input: userTeam.id });
+        if (error) throw error;
+        
+        return (data || []).map((challenge: any) => {
+          const isIncoming = challenge.is_incoming;
+          
+          return {
+            id: `challenge_${challenge.id}`,
+            type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
+            title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
+            message: isIncoming 
+              ? `${challenge.challenger_team_name} wants to challenge your team`
+              : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
+            created_at: challenge.created_at,
+            read: challenge.is_read, // Use database read status
             related_team: isIncoming ? challenge.challenger_team_name : challenge.challenged_team_name,
             challenge_id: challenge.id
           };
@@ -318,7 +329,7 @@ export default function TripleThreatHeader({
               ? `${challenge.challenger_team?.team_name} wants to challenge your team`
               : `Your challenge to ${challenge.challenged_team?.team_name} is ${challenge.status}`,
             created_at: challenge.created_at,
-            read: !isPending, // Only pending challenges are unread
+            read: !isPending, // Fallback: only pending challenges are unread
             related_team: isIncoming ? challenge.challenger_team?.team_name : challenge.challenged_team?.team_name,
             challenge_id: challenge.id
           };
@@ -338,21 +349,31 @@ export default function TripleThreatHeader({
 
   const markAsRead = async (notificationId: string) => {
     try {
-      // Add to read notifications set
-      const newReadNotifications = new Set(readNotifications);
-      newReadNotifications.add(notificationId);
-      setReadNotifications(newReadNotifications);
-      
-      // Save to localStorage
-      if (user) {
-        localStorage.setItem(`tt_read_notifications_${user.id}`, JSON.stringify([...newReadNotifications]));
-      }
-
       // Update local state immediately for better UX
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
+
+      // Mark as read in database for challenge notifications
+      if (notificationId.startsWith('challenge_') && user) {
+        const challengeId = notificationId.replace('challenge_', '');
+        
+        try {
+          const { error } = await supabase.rpc('mark_tt_challenge_read', {
+            challenge_id_input: challengeId,
+            user_id_input: user.id
+          });
+          
+          if (error) {
+            console.error('Failed to mark challenge as read in database:', error);
+          } else {
+            console.log('Successfully marked challenge as read in database:', challengeId);
+          }
+        } catch (dbError) {
+          console.error('Database error marking challenge as read:', dbError);
+        }
+      }
 
       console.log('Marked notification as read:', notificationId);
     } catch (error) {
@@ -362,21 +383,31 @@ export default function TripleThreatHeader({
 
   const markAllAsRead = async () => {
     try {
-      // Add all notification IDs to read set
-      const allNotificationIds = notifications.map(n => n.id);
-      const newReadNotifications = new Set([...readNotifications, ...allNotificationIds]);
-      setReadNotifications(newReadNotifications);
-      
-      // Save to localStorage
-      if (user) {
-        localStorage.setItem(`tt_read_notifications_${user.id}`, JSON.stringify([...newReadNotifications]));
-      }
-      
       // Update local state immediately
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
       
-      console.log('Marked all notifications as read:', allNotificationIds);
+      // Mark all challenge notifications as read in database
+      if (user) {
+        const challengeNotifications = notifications.filter(n => n.id.startsWith('challenge_'));
+        
+        for (const notification of challengeNotifications) {
+          const challengeId = notification.id.replace('challenge_', '');
+          
+          try {
+            await supabase.rpc('mark_tt_challenge_read', {
+              challenge_id_input: challengeId,
+              user_id_input: user.id
+            });
+          } catch (dbError) {
+            console.error('Error marking challenge as read:', challengeId, dbError);
+          }
+        }
+        
+        console.log('Marked all challenge notifications as read in database');
+      }
+      
+      console.log('Marked all notifications as read');
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
