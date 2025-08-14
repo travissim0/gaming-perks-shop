@@ -252,7 +252,7 @@ export default function TripleThreatHeader({
     if (!user || !userTeam) return [];
 
     try {
-      // Try enhanced RPC with read status first, fallback to basic RPC
+      // Try enhanced RPC with read status first
       try {
         const { data, error } = await supabase.rpc('get_tt_team_challenges_with_reads', { 
           team_id_input: userTeam.id,
@@ -280,60 +280,62 @@ export default function TripleThreatHeader({
         console.log('Enhanced RPC failed, trying basic RPC:', enhancedRpcError);
         
         // Fallback to basic RPC
-        const { data, error } = await supabase.rpc('get_tt_team_challenges', { team_id_input: userTeam.id });
-        if (error) throw error;
-        
-        return (data || []).map((challenge: any) => {
-          const isIncoming = challenge.is_incoming;
+        try {
+          const { data, error } = await supabase.rpc('get_tt_team_challenges', { team_id_input: userTeam.id });
+          if (error) throw error;
           
-          return {
-            id: `challenge_${challenge.id}`,
-            type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
-            title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
-            message: isIncoming 
-              ? `${challenge.challenger_team_name} wants to challenge your team`
-              : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
-            created_at: challenge.created_at,
-            read: challenge.is_read, // Use database read status
-            related_team: isIncoming ? challenge.challenger_team_name : challenge.challenged_team_name,
-            challenge_id: challenge.id
-          };
-        });
-      } catch (rpcError) {
-        console.log('RPC failed for challenges, using direct query:', rpcError);
-        
-        // Fallback to direct query
-        const { data, error } = await supabase
-          .from('tt_challenges')
-          .select(`
-            id, status, created_at, match_type,
-            challenger_team:tt_teams!tt_challenges_challenger_team_id_fkey(team_name),
-            challenged_team:tt_teams!tt_challenges_challenged_team_id_fkey(team_name)
-          `)
-          .or(`challenger_team_id.eq.${userTeam.id},challenged_team_id.eq.${userTeam.id}`)
-          .in('status', ['pending', 'accepted', 'declined'])
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (error) throw error;
-
-        return (data || []).map((challenge: any) => {
-          const isIncoming = challenge.challenged_team_id === userTeam.id;
-          const isPending = challenge.status === 'pending';
+          return (data || []).map((challenge: any) => {
+            const isIncoming = challenge.is_incoming;
+            
+            return {
+              id: `challenge_${challenge.id}`,
+              type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
+              title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
+              message: isIncoming 
+                ? `${challenge.challenger_team_name} wants to challenge your team`
+                : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
+              created_at: challenge.created_at,
+              read: challenge.is_read, // Use database read status
+              related_team: isIncoming ? challenge.challenger_team_name : challenge.challenged_team_name,
+              challenge_id: challenge.id
+            };
+          });
+        } catch (basicRpcError) {
+          console.log('Basic RPC failed, using direct query:', basicRpcError);
           
-          return {
-            id: `challenge_${challenge.id}`,
-            type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
-            title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
-            message: isIncoming 
-              ? `${challenge.challenger_team?.team_name} wants to challenge your team`
-              : `Your challenge to ${challenge.challenged_team?.team_name} is ${challenge.status}`,
-            created_at: challenge.created_at,
-            read: !isPending, // Fallback: only pending challenges are unread
-            related_team: isIncoming ? challenge.challenger_team?.team_name : challenge.challenged_team?.team_name,
-            challenge_id: challenge.id
-          };
-        });
+          // Final fallback to direct query
+          const { data, error } = await supabase
+            .from('tt_challenges')
+            .select(`
+              id, status, created_at, match_type,
+              challenger_team:tt_teams!tt_challenges_challenger_team_id_fkey(team_name),
+              challenged_team:tt_teams!tt_challenges_challenged_team_id_fkey(team_name)
+            `)
+            .or(`challenger_team_id.eq.${userTeam.id},challenged_team_id.eq.${userTeam.id}`)
+            .in('status', ['pending', 'accepted', 'declined'])
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (error) throw error;
+
+          return (data || []).map((challenge: any) => {
+            const isIncoming = challenge.challenged_team_id === userTeam.id;
+            const isPending = challenge.status === 'pending';
+            
+            return {
+              id: `challenge_${challenge.id}`,
+              type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
+              title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
+              message: isIncoming 
+                ? `${challenge.challenger_team?.team_name} wants to challenge your team`
+                : `Your challenge to ${challenge.challenged_team?.team_name} is ${challenge.status}`,
+              created_at: challenge.created_at,
+              read: !isPending, // Fallback: only pending challenges are unread
+              related_team: isIncoming ? challenge.challenger_team?.team_name : challenge.challenged_team?.team_name,
+              challenge_id: challenge.id
+            };
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading challenge notifications:', error);
