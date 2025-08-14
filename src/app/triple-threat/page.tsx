@@ -14,26 +14,42 @@ export default function TripleThreatPage() {
       />
 
       {/* Hero Section */}
-      <div className="relative pt-20 pb-16 z-10">
+      <div className="relative pt-32 pb-16 z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/8 to-transparent"></div>
-        <div className="relative max-w-6xl mx-auto px-6 text-center">
-          <div className="mb-8">
-            <h1 className="text-8xl font-black mb-4 bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent drop-shadow-2xl animate-pulse">
-              TRIPLE
-            </h1>
-            <h1 className="text-8xl font-black mb-6 bg-gradient-to-r from-pink-300 via-purple-300 to-cyan-300 bg-clip-text text-transparent drop-shadow-2xl animate-pulse" style={{ animationDelay: '0.5s' }}>
-              THREAT
-            </h1>
-          </div>
-          <div className="bg-gradient-to-r from-cyan-400/15 via-purple-500/15 to-pink-400/15 backdrop-blur-sm border border-purple-400/40 rounded-2xl p-8 max-w-4xl mx-auto shadow-2xl shadow-purple-500/20">
-            <p className="text-xl text-white/90 mb-6 leading-relaxed">
-              Competitive 3v3 Infantry matches with team-based gameplay and comprehensive statistics tracking.
-            </p>
-            <div className="flex flex-wrap justify-center gap-4 text-sm">
-              <span className="bg-cyan-400/25 border border-cyan-300/60 px-4 py-2 rounded-full text-cyan-200 shadow-lg">3 Active Players</span>
-              <span className="bg-purple-500/25 border border-purple-300/60 px-4 py-2 rounded-full text-purple-200 shadow-lg">1 Alternate</span>
-              <span className="bg-pink-400/25 border border-pink-300/60 px-4 py-2 rounded-full text-pink-200 shadow-lg">Stats Tracking</span>
+        <div className="relative max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            
+            {/* Left Side - Large Image */}
+            <div className="flex justify-center lg:justify-start">
+              <img 
+                src="/images/triple-threat/tripleThreatImage.png" 
+                alt="Triple Threat" 
+                className="w-full max-w-lg h-auto object-contain filter drop-shadow-2xl animate-pulse hover:scale-105 transition-transform duration-500"
+                style={{ 
+                  imageRendering: 'auto',
+                  mixBlendMode: 'multiply',
+                  backgroundColor: 'transparent',
+                  filter: 'drop-shadow(0 25px 25px rgb(0 0 0 / 0.15)) contrast(1.1) brightness(1.1)'
+                }}
+              />
             </div>
+
+            {/* Right Side - Descriptive Text */}
+            <div className="text-left space-y-6">
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent drop-shadow-lg">
+                The Ultimate <em className="text-yellow-300">3v3</em> Challenge
+              </h2>
+              
+              <div className="text-lg text-white/90 leading-relaxed">
+                <p>
+                  <strong className="text-cyan-300">Triple Threat</strong> is fast-paced{' '}
+                  <span className="text-yellow-300 font-semibold">3v3</span> Infantry combat with team sizes up to{' '}
+                  <span className="text-purple-300 font-semibold">4 players</span>. Compete in intense rounds where 
+                  teamwork and strategy determine victory in the ultimate competitive battlefield experience.
+                </p>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

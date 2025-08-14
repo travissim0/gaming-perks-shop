@@ -448,8 +448,8 @@ export default function TripleThreatHeader({
 
   const getPageClasses = (page: string) => {
     return currentPage === page 
-      ? "text-cyan-200 hover:text-cyan-100 transition-colors font-medium"
-      : "text-gray-300 hover:text-white transition-colors";
+      ? "px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-400/30 text-cyan-200 hover:text-cyan-100 transition-all duration-300 font-medium shadow-lg backdrop-blur-sm"
+      : "px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-300 border border-transparent hover:border-white/20 backdrop-blur-sm";
   };
 
   return (
@@ -459,9 +459,17 @@ export default function TripleThreatHeader({
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <Link href="/triple-threat" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="text-2xl font-black bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
-                TRIPLE THREAT
-              </div>
+              <img 
+                src="/images/triple-threat/tripleThreatImage.png" 
+                alt="Triple Threat" 
+                className="h-12 w-auto object-contain filter drop-shadow-lg"
+                style={{ 
+                  imageRendering: 'auto',
+                  mixBlendMode: 'multiply',
+                  backgroundColor: 'transparent',
+                  filter: 'drop-shadow(0 4px 6px rgb(0 0 0 / 0.1)) contrast(1.1) brightness(1.1)'
+                }}
+              />
             </Link>
             <nav className="flex items-center space-x-6">
               <Link href="/triple-threat" className={getPageClasses('home')}>
@@ -588,7 +596,7 @@ export default function TripleThreatHeader({
                 </div>
               )}
               
-              <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all text-sm font-medium">
+              <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all duration-300 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 backdrop-blur-sm border border-white/20">
                 ← Back to CTFPL
               </Link>
             </nav>
