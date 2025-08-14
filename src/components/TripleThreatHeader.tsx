@@ -55,9 +55,16 @@ export default function TripleThreatHeader({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!authLoading && user) {
+      // Load read notifications from localStorage
+      const saved = localStorage.getItem(`tt_read_notifications_${user.id}`);
+      if (saved) {
+        setReadNotifications(new Set(JSON.parse(saved)));
+      }
+      
       checkUserTeam();
       loadNotifications();
     } else if (!user) {
@@ -65,6 +72,7 @@ export default function TripleThreatHeader({
       setTeamMembers([]);
       setNotifications([]);
       setUnreadCount(0);
+      setReadNotifications(new Set());
     }
   }, [authLoading, user]);
 
@@ -217,11 +225,17 @@ export default function TripleThreatHeader({
   };
 
   const loadNotifications = async () => {
-    if (!user || !userTeam) return;
+    if (!user || !userTeam) {
+      console.log('Cannot load notifications - missing user or team:', { user: !!user, userTeam: !!userTeam });
+      return;
+    }
 
     try {
+      console.log('Loading notifications for team:', userTeam.team_name, userTeam.id);
+      
       // Get pending challenges for user's team
       const challenges = await loadChallengeNotifications();
+      console.log('Found challenges:', challenges.length, challenges);
       
       // Get team member events (simplified for now)
       const memberEvents = await loadMemberEvents();
@@ -231,8 +245,17 @@ export default function TripleThreatHeader({
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 10); // Keep last 10 notifications (recent events)
       
-      setNotifications(allNotifications);
-      setUnreadCount(allNotifications.filter(n => !n.read).length);
+      // Apply persistent read status from localStorage
+      const notificationsWithReadStatus = allNotifications.map(notification => ({
+        ...notification,
+        read: notification.read || readNotifications.has(notification.id)
+      }));
+      
+      console.log('Total notifications:', notificationsWithReadStatus.length);
+      console.log('Unread notifications:', notificationsWithReadStatus.filter(n => !n.read).length);
+      
+      setNotifications(notificationsWithReadStatus);
+      setUnreadCount(notificationsWithReadStatus.filter(n => !n.read).length);
       
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -248,18 +271,23 @@ export default function TripleThreatHeader({
         const { data, error } = await supabase.rpc('get_tt_team_challenges', { team_id_input: userTeam.id });
         if (error) throw error;
         
-        return (data || []).map((challenge: any) => ({
-          id: `challenge_${challenge.id}`,
-          type: challenge.is_incoming ? 'challenge_received' as const : 'challenge_accepted' as const,
-          title: challenge.is_incoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
-          message: challenge.is_incoming 
-            ? `${challenge.challenger_team_name} wants to challenge your team`
-            : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
-          created_at: challenge.created_at,
-          read: challenge.status !== 'pending', // Mark non-pending as read
-          related_team: challenge.is_incoming ? challenge.challenger_team_name : challenge.challenged_team_name,
-          challenge_id: challenge.id
-        }));
+        return (data || []).map((challenge: any) => {
+          const isIncoming = challenge.is_incoming;
+          const isPending = challenge.status === 'pending';
+          
+          return {
+            id: `challenge_${challenge.id}`,
+            type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
+            title: isIncoming ? '⚔️ Challenge Received!' : '✅ Challenge Status',
+            message: isIncoming 
+              ? `${challenge.challenger_team_name} wants to challenge your team`
+              : `Your challenge to ${challenge.challenged_team_name} is ${challenge.status}`,
+            created_at: challenge.created_at,
+            read: !isPending, // Only pending challenges are unread
+            related_team: isIncoming ? challenge.challenger_team_name : challenge.challenged_team_name,
+            challenge_id: challenge.id
+          };
+        });
       } catch (rpcError) {
         console.log('RPC failed for challenges, using direct query:', rpcError);
         
@@ -279,7 +307,9 @@ export default function TripleThreatHeader({
         if (error) throw error;
 
         return (data || []).map((challenge: any) => {
-          const isIncoming = challenge.challenged_team_id === userTeam.id || challenge.challenged_team?.id === userTeam.id;
+          const isIncoming = challenge.challenged_team_id === userTeam.id;
+          const isPending = challenge.status === 'pending';
+          
           return {
             id: `challenge_${challenge.id}`,
             type: isIncoming ? 'challenge_received' as const : 'challenge_accepted' as const,
@@ -288,7 +318,7 @@ export default function TripleThreatHeader({
               ? `${challenge.challenger_team?.team_name} wants to challenge your team`
               : `Your challenge to ${challenge.challenged_team?.team_name} is ${challenge.status}`,
             created_at: challenge.created_at,
-            read: challenge.status !== 'pending', // Mark non-pending as read
+            read: !isPending, // Only pending challenges are unread
             related_team: isIncoming ? challenge.challenger_team?.team_name : challenge.challenged_team?.team_name,
             challenge_id: challenge.id
           };
@@ -307,15 +337,49 @@ export default function TripleThreatHeader({
   };
 
   const markAsRead = async (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    try {
+      // Add to read notifications set
+      const newReadNotifications = new Set(readNotifications);
+      newReadNotifications.add(notificationId);
+      setReadNotifications(newReadNotifications);
+      
+      // Save to localStorage
+      if (user) {
+        localStorage.setItem(`tt_read_notifications_${user.id}`, JSON.stringify([...newReadNotifications]));
+      }
+
+      // Update local state immediately for better UX
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+
+      console.log('Marked notification as read:', notificationId);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
+  const markAllAsRead = async () => {
+    try {
+      // Add all notification IDs to read set
+      const allNotificationIds = notifications.map(n => n.id);
+      const newReadNotifications = new Set([...readNotifications, ...allNotificationIds]);
+      setReadNotifications(newReadNotifications);
+      
+      // Save to localStorage
+      if (user) {
+        localStorage.setItem(`tt_read_notifications_${user.id}`, JSON.stringify([...newReadNotifications]));
+      }
+      
+      // Update local state immediately
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+      
+      console.log('Marked all notifications as read:', allNotificationIds);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
   };
 
   const handleChallengeResponse = async (challengeId: string, response: 'accept' | 'decline') => {
@@ -444,11 +508,12 @@ export default function TripleThreatHeader({
                                     <span className="text-xs text-gray-500">
                                       {new Date(notification.created_at).toLocaleDateString()} {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
-                                    {notification.type === 'challenge_received' && notification.challenge_id && (
+                                    {notification.type === 'challenge_received' && !notification.read && notification.challenge_id && (
                                       <div className="flex space-x-2">
                                         <button 
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            console.log('Accepting challenge:', notification.challenge_id);
                                             handleChallengeResponse(notification.challenge_id!, 'accept');
                                           }}
                                           className="bg-green-600/80 hover:bg-green-600 text-white text-xs px-2 py-1 rounded transition-colors"
@@ -458,6 +523,7 @@ export default function TripleThreatHeader({
                                         <button 
                                           onClick={(e) => {
                                             e.stopPropagation();
+                                            console.log('Declining challenge:', notification.challenge_id);
                                             handleChallengeResponse(notification.challenge_id!, 'decline');
                                           }}
                                           className="bg-red-600/80 hover:bg-red-600 text-white text-xs px-2 py-1 rounded transition-colors"
