@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import TripleThreatBackground from '@/components/TripleThreatBackground';
 
 interface Team {
   id: string;
@@ -36,6 +37,7 @@ export default function TripleThreatSignupPage() {
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [hoveredTeamMembers, setHoveredTeamMembers] = useState<{ [teamId: string]: TeamMember[] }>({});
 
   // Form states
   const [createForm, setCreateForm] = useState({
@@ -174,6 +176,30 @@ export default function TripleThreatSignupPage() {
     } catch (error) {
       console.error('Error loading team members:', error);
     }
+  };
+
+  const loadTeamMembersForHover = async (teamId: string) => {
+    // Don't reload if we already have the data
+    if (hoveredTeamMembers[teamId]) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('get_tt_team_members', { team_id_input: teamId });
+      if (error) throw error;
+      setHoveredTeamMembers(prev => ({
+        ...prev,
+        [teamId]: data || []
+      }));
+    } catch (error) {
+      console.error('Error loading team members for hover:', error);
+    }
+  };
+
+  const handleTeamClick = (teamId: string) => {
+    // For now, show team info in a modal or expanded view
+    // TODO: Create a dedicated Triple Threat team detail page
+    console.log('Clicked team:', teamId);
+    // Could expand to show more details or redirect to a team-specific page
+    // For now, do nothing since we don't have individual TT team pages yet
   };
 
   const handleCreateTeam = async (e: React.FormEvent) => {
@@ -371,23 +397,23 @@ export default function TripleThreatSignupPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <TripleThreatBackground opacity={0.15}>
         <div className="flex items-center justify-center pt-20">
-          <div className="text-xl animate-pulse">Loading...</div>
+          <div className="text-xl animate-pulse text-white">Loading...</div>
         </div>
-      </div>
+      </TripleThreatBackground>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <TripleThreatBackground opacity={0.18}>
         {/* Custom Triple Threat Header */}
-        <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-cyan-500/30">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-black/85 backdrop-blur-md border-b border-cyan-400/40">
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between">
               <Link href="/triple-threat" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-                <div className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                <div className="text-2xl font-black bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
                   TRIPLE THREAT
                 </div>
               </Link>
@@ -398,13 +424,13 @@ export default function TripleThreatSignupPage() {
                 <Link href="/triple-threat/rules" className="text-gray-300 hover:text-white transition-colors">
                   Rules
                 </Link>
-                <Link href="/triple-threat/signup" className="text-cyan-300 hover:text-cyan-100 transition-colors font-medium">
+                <Link href="/triple-threat/signup" className="text-cyan-200 hover:text-cyan-100 transition-colors font-medium">
                   Teams
                 </Link>
                 <Link href="/triple-threat/matches" className="text-gray-300 hover:text-white transition-colors">
                   Matches
                 </Link>
-                <Link href="/" className="bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 px-4 py-2 rounded-lg transition-all text-sm font-medium">
+                <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all text-sm font-medium">
                   ← Back to CTFPL
                 </Link>
               </nav>
@@ -415,24 +441,23 @@ export default function TripleThreatSignupPage() {
           <div className="text-center py-20">
             <h1 className="text-4xl font-bold mb-4">Please Sign In</h1>
             <p className="text-gray-400 mb-8">You need to be logged in to create or join a Triple Threat team.</p>
-            <Link href="/auth/login" className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors">
+            <Link href="/auth/login" className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-400 hover:to-purple-400 px-6 py-3 rounded-lg transition-colors">
               Sign In
             </Link>
           </div>
         </div>
-      </div>
+      </TripleThreatBackground>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden">
-      
+    <TripleThreatBackground opacity={0.18}>
       {/* Custom Triple Threat Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-cyan-500/30">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black/85 backdrop-blur-md border-b border-cyan-400/40">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <Link href="/triple-threat" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              <div className="text-2xl font-black bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
                 TRIPLE THREAT
               </div>
             </Link>
@@ -443,13 +468,13 @@ export default function TripleThreatSignupPage() {
               <Link href="/triple-threat/rules" className="text-gray-300 hover:text-white transition-colors">
                 Rules
               </Link>
-              <Link href="/triple-threat/signup" className="text-cyan-300 hover:text-cyan-100 transition-colors font-medium">
+              <Link href="/triple-threat/signup" className="text-cyan-200 hover:text-cyan-100 transition-colors font-medium">
                 Teams
               </Link>
               <Link href="/triple-threat/matches" className="text-gray-300 hover:text-white transition-colors">
                 Matches
               </Link>
-              <Link href="/" className="bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 px-4 py-2 rounded-lg transition-all text-sm font-medium">
+              <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all text-sm font-medium">
                 ← Back to CTFPL
               </Link>
             </nav>
@@ -457,35 +482,15 @@ export default function TripleThreatSignupPage() {
         </div>
       </header>
       
-      {/* Animated Background */}
-      <div className="fixed inset-0 opacity-20">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-purple-900/20 to-pink-900/20"></div>
-        <div className="absolute top-0 left-0 w-full h-full">
-          {[...Array(40)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute bg-purple-400/10 rounded-full animate-pulse"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                width: `${Math.random() * 3 + 1}px`,
-                height: `${Math.random() * 3 + 1}px`,
-                animationDelay: `${Math.random() * 3}s`,
-                animationDuration: `${Math.random() * 4 + 3}s`
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
       {/* Header */}
       <div className="relative pt-20 pb-12 z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/8 to-transparent"></div>
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <h1 className="text-6xl font-black mb-6 bg-gradient-to-r from-purple-400 via-cyan-400 to-pink-400 bg-clip-text text-transparent drop-shadow-2xl">
+          <h1 className="text-6xl font-black mb-6 bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent drop-shadow-2xl">
             TEAM SIGNUP
           </h1>
-          <div className="bg-gradient-to-r from-purple-500/10 to-cyan-500/10 backdrop-blur-sm border border-purple-500/30 rounded-2xl p-6">
-            <p className="text-xl text-purple-100">
+          <div className="bg-gradient-to-r from-cyan-400/15 via-purple-500/15 to-pink-400/15 backdrop-blur-sm border border-purple-400/40 rounded-2xl p-6 shadow-2xl shadow-purple-500/20">
+            <p className="text-xl text-white/90">
               Create or join a team to compete in Triple Threat tournaments
             </p>
           </div>
@@ -496,71 +501,90 @@ export default function TripleThreatSignupPage() {
 
       <div className="max-w-6xl mx-auto px-6 pb-20 relative z-10">
         
-        {/* User's Current Team */}
+        {/* User's Current Team - Compact Horizontal Layout */}
         {userTeam && (
-          <div className="bg-green-800/20 border border-green-500/30 rounded-xl p-6 mb-8">
-            <h2 className="text-2xl font-bold text-green-400 mb-4 flex items-center">
-              <span className="mr-3">✅</span>
-              Your Team: {userTeam.team_name}
-            </h2>
-            
-            {userTeam.team_banner_url && (
-              <div className="mb-4">
-                <img 
-                  src={userTeam.team_banner_url} 
-                  alt={`${userTeam.team_name} banner`}
-                  className="w-full max-w-md max-h-40 object-contain rounded-lg border border-cyan-400/30"
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <p className="text-gray-300 mb-2">
-                  <strong>Owner:</strong> {userTeam.owner_alias}
-                </p>
-                <p className="text-gray-300 mb-2">
-                  <strong>Created:</strong> {new Date(userTeam.created_at).toLocaleDateString()}
-                </p>
-                <p className="text-gray-300">
-                  <strong>Members:</strong> {teamMembers.length} / {userTeam.max_players}
-                </p>
+          <div className="bg-green-800/20 border border-green-500/30 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              {/* Team Info - Left Section */}
+              <div className="flex items-center space-x-4 min-w-0 flex-1">
+                {/* Team Banner - Small */}
+                {userTeam.team_banner_url && (
+                  <img 
+                    src={userTeam.team_banner_url} 
+                    alt={`${userTeam.team_name} banner`}
+                    className="w-12 h-12 object-cover rounded-lg border border-cyan-400/30 flex-shrink-0"
+                  />
+                )}
+                
+                {/* Team Details */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="text-green-400 text-lg">✅</span>
+                    <h2 className="text-lg font-bold text-green-400 truncate">{userTeam.team_name}</h2>
+                  </div>
+                  <div className="flex items-center space-x-4 text-xs text-white/90">
+                    <span>👑 {userTeam.owner_alias}</span>
+                    <span>👥 {teamMembers.length}/{userTeam.max_players}</span>
+                    <span className="hidden sm:inline">📅 {new Date(userTeam.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Team Members</h3>
-                <div className="space-y-2">
-                  {teamMembers.map((member) => (
-                    <div key={member.id} className="flex items-center space-x-3">
-                      {member.player_avatar && (
+              {/* Team Members - Horizontal List */}
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <span className="text-xs text-white/70 hidden sm:inline">Members:</span>
+                <div className="flex items-center -space-x-1">
+                  {teamMembers.slice(0, 6).map((member, index) => (
+                    <div 
+                      key={member.id}
+                      className="relative group"
+                      style={{ zIndex: 10 - index }}
+                    >
+                      {member.player_avatar ? (
                         <img 
                           src={member.player_avatar} 
                           alt={member.player_alias}
-                          className="w-8 h-8 rounded-full"
+                          className="w-8 h-8 rounded-full border-2 border-gray-700 hover:border-cyan-400 transition-colors"
                         />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full border-2 border-gray-700 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center text-xs">
+                          {member.player_alias.charAt(0).toUpperCase()}
+                        </div>
                       )}
-                      <span className="text-gray-300">
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
                         {member.player_alias}
-                        {member.role === 'owner' && (
-                          <span className="text-yellow-400 ml-2 text-sm">(Owner)</span>
-                        )}
-                      </span>
+                        {member.role === 'owner' && <span className="text-yellow-400 ml-1">👑</span>}
+                      </div>
                     </div>
                   ))}
+                  {teamMembers.length > 6 && (
+                    <div className="w-8 h-8 rounded-full border-2 border-gray-600 bg-gray-800 flex items-center justify-center text-xs text-white/90">
+                      +{teamMembers.length - 6}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {userTeam.owner_id !== user.id && (
-              <div className="mt-6">
-                <button
-                  onClick={handleLeaveTeam}
-                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors"
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <button 
+                  onClick={() => console.log('View team details:', userTeam.id)}
+                  className="bg-cyan-600/40 hover:bg-cyan-600/60 border border-cyan-400/60 px-3 py-1.5 rounded-lg text-sm transition-colors text-white font-medium backdrop-blur-sm"
+                  title="Team details (coming soon)"
                 >
-                  Leave Team
+                  Team Info
                 </button>
+                {userTeam.owner_id !== user.id && (
+                  <button
+                    onClick={handleLeaveTeam}
+                    className="bg-red-600/40 hover:bg-red-600/60 border border-red-400/60 px-3 py-1.5 rounded-lg text-sm transition-colors text-white font-medium backdrop-blur-sm"
+                  >
+                    Leave
+                  </button>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -574,7 +598,7 @@ export default function TripleThreatSignupPage() {
               <div className="text-center">
                 <div className="text-4xl mb-4">🆕</div>
                 <h3 className="text-xl font-bold text-purple-400 mb-2">Create New Team</h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-white/80 text-sm">
                   Start your own pod with a unique name and password protection
                 </p>
               </div>
@@ -587,7 +611,7 @@ export default function TripleThreatSignupPage() {
               <div className="text-center">
                 <div className="text-4xl mb-4">🤝</div>
                 <h3 className="text-xl font-bold text-blue-400 mb-2">Join Existing Team</h3>
-                <p className="text-gray-300 text-sm">
+                <p className="text-white/80 text-sm">
                   Join a team that has space and you know the password
                 </p>
               </div>
@@ -606,7 +630,7 @@ export default function TripleThreatSignupPage() {
                   type="text"
                   value={createForm.teamName}
                   onChange={(e) => setCreateForm({ ...createForm, teamName: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-gray-800/80 border border-gray-500 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 text-white backdrop-blur-sm"
                   placeholder="Enter team name (3-50 characters)"
                   minLength={3}
                   maxLength={50}
@@ -620,7 +644,7 @@ export default function TripleThreatSignupPage() {
                   type="password"
                   value={createForm.teamPassword}
                   onChange={(e) => setCreateForm({ ...createForm, teamPassword: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-gray-800/80 border border-gray-500 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 text-white backdrop-blur-sm"
                   placeholder="Enter team password (minimum 6 characters)"
                   minLength={6}
                   required
@@ -633,7 +657,7 @@ export default function TripleThreatSignupPage() {
                   type="password"
                   value={createForm.confirmPassword}
                   onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-gray-800/80 border border-gray-500 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 text-white backdrop-blur-sm"
                   placeholder="Confirm team password"
                   required
                 />
@@ -645,7 +669,7 @@ export default function TripleThreatSignupPage() {
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-gray-800/80 border border-gray-500 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-purple-400 text-white backdrop-blur-sm"
                 />
                 {createForm.bannerFile && (
                   <p className="mt-2 text-sm text-green-400">
@@ -757,7 +781,12 @@ export default function TripleThreatSignupPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {teams.map((team) => (
-                <div key={team.id} className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-600/30 hover:border-cyan-400/50 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-cyan-500/20">
+                <div 
+                  key={team.id} 
+                  className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-600/30 hover:border-cyan-400/50 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-cyan-500/20"
+                  onClick={() => handleTeamClick(team.id)}
+                  onMouseEnter={() => loadTeamMembersForHover(team.id)}
+                >
                   
                   {/* Background Image */}
                   <div className="absolute inset-0">
@@ -815,6 +844,35 @@ export default function TripleThreatSignupPage() {
                           {new Date(team.created_at).toLocaleDateString()}
                         </div>
                       </div>
+
+                      {/* Member List on Hover */}
+                      {hoveredTeamMembers[team.id] && hoveredTeamMembers[team.id].length > 0 && (
+                        <div className="mb-3 max-h-20 overflow-y-auto">
+                          <div className="text-xs text-gray-300 mb-1">Members:</div>
+                          <div className="space-y-1">
+                            {hoveredTeamMembers[team.id].slice(0, 4).map((member) => (
+                              <div key={member.id} className="flex items-center space-x-2 text-xs">
+                                {member.player_avatar && (
+                                  <img 
+                                    src={member.player_avatar} 
+                                    alt={member.player_alias}
+                                    className="w-4 h-4 rounded-full"
+                                  />
+                                )}
+                                <span className="text-gray-300 truncate flex-1">
+                                  {member.player_alias}
+                                  {member.role === 'owner' && <span className="text-yellow-400 ml-1">👑</span>}
+                                </span>
+                              </div>
+                            ))}
+                            {hoveredTeamMembers[team.id].length > 4 && (
+                              <div className="text-xs text-gray-400">
+                                +{hoveredTeamMembers[team.id].length - 4} more...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Join Button */}
                       {team.member_count < team.max_players && (
@@ -848,6 +906,6 @@ export default function TripleThreatSignupPage() {
         </div>
 
       </div>
-    </div>
+    </TripleThreatBackground>
   );
 }

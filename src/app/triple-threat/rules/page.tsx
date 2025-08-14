@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import TripleThreatBackground from '@/components/TripleThreatBackground';
+import TripleThreatHeader from '@/components/TripleThreatHeader';
 
 export default function TripleThreatRulesPage() {
   const { user, loading } = useAuth();
@@ -98,80 +100,88 @@ export default function TripleThreatRulesPage() {
     }
   };
 
+  const downloadRulesPDF = () => {
+    if (rulesDocument) {
+      // If we have an uploaded PDF, download it
+      const link = document.createElement('a');
+      link.href = rulesDocument;
+      link.download = 'Triple-Threat-Rules.pdf';
+      link.click();
+    } else {
+      // Generate a basic rules PDF content
+      const rulesContent = `
+Triple Threat League Rules
+
+OVERVIEW
+The Triple Threat League is a competitive 3v3 Infantry tournament system designed for organized team competition.
+
+TEAM COMPOSITION
+- Maximum 4 players per team (3 active + 1 alternate)
+- Teams must have a unique name and password
+- Team owners can manage membership
+
+MATCH STRUCTURE
+- Best-of-3 series format
+- Standard Infantry CTF rules apply
+- Matches can be friendly or tournament-based
+
+TOURNAMENT SYSTEM
+- Multiple tournament types supported
+- Registration deadlines enforced
+- Bracket generation and tracking
+
+CHALLENGE SYSTEM
+- Teams can challenge other teams
+- Challenges must be accepted/declined
+- Successful challenges create scheduled matches
+
+For complete rules and updates, visit the Triple Threat section of CTFPL.
+      `;
+      
+      const blob = new Blob([rulesContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Triple-Threat-Rules.txt';
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success('Rules downloaded!');
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <TripleThreatBackground opacity={0.15}>
         <div className="flex items-center justify-center pt-20">
-          <div className="text-xl animate-pulse">Loading...</div>
+          <div className="text-xl animate-pulse text-white">Loading...</div>
         </div>
-      </div>
+      </TripleThreatBackground>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden">
-      
-      {/* Custom Triple Threat Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-cyan-500/30">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/triple-threat" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                TRIPLE THREAT
-              </div>
-            </Link>
-            <nav className="flex items-center space-x-6">
-              <Link href="/triple-threat" className="text-gray-300 hover:text-white transition-colors">
-                Home
-              </Link>
-              <Link href="/triple-threat/rules" className="text-cyan-300 hover:text-cyan-100 transition-colors font-medium">
-                Rules
-              </Link>
-              <Link href="/triple-threat/signup" className="text-gray-300 hover:text-white transition-colors">
-                Teams
-              </Link>
-              <Link href="/triple-threat/matches" className="text-gray-300 hover:text-white transition-colors">
-                Matches
-              </Link>
-              <Link href="/" className="bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 px-4 py-2 rounded-lg transition-all text-sm font-medium">
-                ← Back to CTFPL
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
-      
-      {/* Animated Background */}
-      <div className="fixed inset-0 opacity-20">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 via-purple-900/20 to-pink-900/20"></div>
-        <div className="absolute top-0 left-0 w-full h-full">
-          {[...Array(30)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute bg-cyan-400/10 rounded-full animate-pulse"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                width: `${Math.random() * 3 + 1}px`,
-                height: `${Math.random() * 3 + 1}px`,
-                animationDelay: `${Math.random() * 3}s`,
-                animationDuration: `${Math.random() * 4 + 3}s`
-              }}
-            />
-          ))}
-        </div>
-      </div>
+    <TripleThreatBackground opacity={0.18}>
+      <TripleThreatHeader 
+        currentPage="rules" 
+        showTeamStatus={true}
+      />
 
       {/* Header */}
       <div className="relative pt-20 pb-12 z-10">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <h1 className="text-6xl font-black mb-6 bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent drop-shadow-2xl">
+          <h1 className="text-6xl font-black mb-6 bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent drop-shadow-2xl">
             RULES
           </h1>
-          <div className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10 backdrop-blur-sm border border-cyan-500/30 rounded-2xl p-6">
-            <p className="text-xl text-cyan-100">
+          <div className="bg-gradient-to-r from-cyan-400/15 via-purple-500/15 to-pink-400/15 backdrop-blur-sm border border-purple-400/40 rounded-2xl p-6 shadow-2xl shadow-purple-500/20">
+            <p className="text-xl text-white/90 mb-4">
               Tournament rules and competition guidelines for Triple Threat
             </p>
+            <button
+              onClick={downloadRulesPDF}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-6 py-3 rounded-lg transition-all font-bold text-white shadow-lg hover:shadow-xl"
+            >
+              📥 Download Rules
+            </button>
           </div>
         </div>
       </div>
@@ -277,11 +287,11 @@ export default function TripleThreatRulesPage() {
               </div>
             </div>
 
-            <div className="text-center mt-8 p-6 bg-gradient-to-r from-cyan-500/5 to-purple-500/5 rounded-xl border border-cyan-400/20">
-              <p className="text-cyan-100/70 mb-4">
+            <div className="text-center mt-8 p-6 bg-gradient-to-r from-cyan-400/10 via-purple-500/10 to-pink-400/10 rounded-xl border border-purple-400/30 shadow-lg">
+              <p className="text-white/80 mb-4">
                 Complete tournament rules and guidelines will be provided to all registered teams.
               </p>
-              <p className="text-sm text-cyan-200/50">
+              <p className="text-sm text-gray-300/70">
                 For questions about rules or tournaments, contact the administrators.
               </p>
             </div>
@@ -289,6 +299,6 @@ export default function TripleThreatRulesPage() {
         )}
 
       </div>
-    </div>
+    </TripleThreatBackground>
   );
 }

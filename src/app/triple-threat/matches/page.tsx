@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import TripleThreatBackground from '@/components/TripleThreatBackground';
+import TripleThreatHeader, { Team, TeamMember } from '@/components/TripleThreatHeader';
 
 interface Match {
   id: string;
@@ -33,15 +35,24 @@ interface Tournament {
   registration_deadline: string | null;
 }
 
+// Team and challenge creation logic has moved to the Teams page
+
 export default function TripleThreatMatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [userTeam, setUserTeam] = useState<Team | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleTeamLoaded = (team: Team | null, members: TeamMember[]) => {
+    setUserTeam(team);
+    setTeamMembers(members);
+  };
 
   const loadData = async () => {
     try {
@@ -109,6 +120,8 @@ export default function TripleThreatMatchesPage() {
       console.error('Error loading tournaments:', error);
     }
   };
+
+  // Removed checkUserTeam, team/member loading, and handleCreateMatch
 
   const groupMatchesByDate = (matches: Match[]) => {
     const grouped: { [key: string]: Match[] } = {};
@@ -279,11 +292,11 @@ export default function TripleThreatMatchesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <TripleThreatBackground opacity={0.15}>
         <div className="flex items-center justify-center pt-20">
-          <div className="text-xl animate-pulse">Loading matches...</div>
+          <div className="text-xl animate-pulse text-white">Loading matches...</div>
         </div>
-      </div>
+      </TripleThreatBackground>
     );
   }
 
@@ -291,48 +304,26 @@ export default function TripleThreatMatchesPage() {
   const hasMatches = Object.keys(groupedMatches).length > 0;
 
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden">
-      
-      {/* Custom Triple Threat Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-cyan-500/30">
-        <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/triple-threat" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                TRIPLE THREAT
-              </div>
-            </Link>
-            <nav className="flex items-center space-x-6">
-              <Link href="/triple-threat" className="text-gray-300 hover:text-white transition-colors">
-                Home
-              </Link>
-              <Link href="/triple-threat/rules" className="text-gray-300 hover:text-white transition-colors">
-                Rules
-              </Link>
-              <Link href="/triple-threat/signup" className="text-gray-300 hover:text-white transition-colors">
-                Teams
-              </Link>
-              <Link href="/triple-threat/matches" className="text-cyan-300 hover:text-cyan-100 transition-colors font-medium">
-                Matches
-              </Link>
-              <Link href="/" className="bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 px-4 py-2 rounded-lg transition-all text-sm font-medium">
-                ← Back to CTFPL
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+    <TripleThreatBackground opacity={0.18}>
+      <TripleThreatHeader 
+        currentPage="matches" 
+        showTeamStatus={true}
+        onTeamLoaded={handleTeamLoaded}
+      />
       
       {/* Header */}
-      <div className="bg-gradient-to-br from-blue-900 via-purple-900 to-gray-900 pt-20 pb-12">
+      <div className="relative pt-20 pb-12 z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/8 to-transparent"></div>
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center">
-            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-cyan-300 via-purple-300 to-pink-300 bg-clip-text text-transparent drop-shadow-2xl">
               ⚔️ Match Schedule
             </h1>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              View upcoming matches, results, and tournament brackets for Triple Threat competitions
-            </p>
+            <div className="bg-gradient-to-r from-cyan-400/15 via-purple-500/15 to-pink-400/15 backdrop-blur-sm border border-purple-400/40 rounded-2xl p-6 max-w-3xl mx-auto shadow-2xl shadow-purple-500/20">
+              <p className="text-xl text-white/90">
+                View upcoming matches, results, and tournament brackets for Triple Threat competitions
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -340,19 +331,33 @@ export default function TripleThreatMatchesPage() {
       {/* Quick Navigation Links */}
       <div className="max-w-6xl mx-auto px-6 -mt-6 relative z-10 mb-8">
         <div className="flex justify-center gap-4">
-          <Link href="/triple-threat" className="bg-purple-600/20 border border-purple-500/30 px-4 py-2 rounded-lg hover:border-purple-400/50 transition-all">
+          <Link href="/triple-threat" className="bg-purple-500/20 border border-purple-400/40 px-4 py-2 rounded-lg hover:border-purple-300/60 transition-all shadow-lg">
             ← Back to Triple Threat
           </Link>
-          <Link href="/triple-threat/rules" className="bg-yellow-600/20 border border-yellow-500/30 px-4 py-2 rounded-lg hover:border-yellow-400/50 transition-all">
+          <Link href="/triple-threat/rules" className="bg-cyan-500/20 border border-cyan-400/40 px-4 py-2 rounded-lg hover:border-cyan-300/60 transition-all shadow-lg">
             📜 Rules
           </Link>
-          <Link href="/triple-threat/signup" className="bg-blue-600/20 border border-blue-500/30 px-4 py-2 rounded-lg hover:border-blue-400/50 transition-all">
+          <Link href="/triple-threat/teams" className="bg-pink-500/20 border border-pink-400/40 px-4 py-2 rounded-lg hover:border-pink-300/60 transition-all shadow-lg">
             🛡️ Team Signup
           </Link>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 pb-20">
+        
+        {/* Team Status - now handled by unified header */}
+        {userTeam && (
+          <div className="bg-green-800/20 border border-green-500/30 rounded-xl p-4 mb-6">
+            <div className="text-center">
+              <p className="text-green-200 text-sm">
+                ✅ You're on team <span className="font-bold text-green-400">{userTeam.team_name}</span>
+              </p>
+              <p className="text-gray-300 text-xs mt-1">
+                Go to the <Link href="/triple-threat/teams" className="text-cyan-400 hover:text-cyan-300 underline">Teams page</Link> to challenge other teams
+              </p>
+            </div>
+          </div>
+        )}
         
         {/* Tournament Overview */}
         {tournaments.length > 0 && (
@@ -445,8 +450,8 @@ export default function TripleThreatMatchesPage() {
                 ? 'No matches have been scheduled yet.' 
                 : `No ${selectedFilter} matches found.`}
             </p>
-            <Link 
-              href="/triple-threat/signup" 
+          <Link 
+            href="/triple-threat/teams" 
               className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors"
             >
               Create a Team to Get Started
@@ -480,8 +485,8 @@ export default function TripleThreatMatchesPage() {
             <p className="text-gray-300 mb-6">
               Join the Triple Threat league and face off against the best teams in Infantry.
             </p>
-            <Link 
-              href="/triple-threat/signup" 
+          <Link 
+            href="/triple-threat/teams" 
               className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 px-8 py-3 rounded-lg transition-all font-bold"
             >
               Create or Join a Team
@@ -490,6 +495,6 @@ export default function TripleThreatMatchesPage() {
         )}
 
       </div>
-    </div>
+    </TripleThreatBackground>
   );
 }
