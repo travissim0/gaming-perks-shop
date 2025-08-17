@@ -24,7 +24,7 @@ BEGIN
         t.team_name,
         t.team_banner_url,
         t.owner_id,
-        COALESCE(p.in_game_alias, p.display_name, 'Unknown') as owner_alias,
+        COALESCE(p.in_game_alias, 'Unknown') as owner_alias,
         t.created_at,
         t.max_players,
         COALESCE(tm.member_count, 0) as member_count,
@@ -62,7 +62,7 @@ BEGIN
     SELECT 
         tm.id,
         tm.player_id,
-        COALESCE(p.in_game_alias, p.display_name, 'Unknown') as player_alias,
+        COALESCE(p.in_game_alias, 'Unknown') as player_alias,
         p.avatar_url as player_avatar,
         tm.joined_at,
         tm.role
@@ -98,7 +98,7 @@ BEGIN
         t.team_name,
         t.team_banner_url,
         t.owner_id,
-        COALESCE(p.in_game_alias, p.display_name, 'Unknown') as owner_alias,
+        COALESCE(p.in_game_alias, 'Unknown') as owner_alias,
         t.created_at,
         t.max_players,
         tm.role as user_role

@@ -543,6 +543,8 @@ export default function TripleThreatTeamsPage() {
   };
 
   const handleDisbandTeam = async (teamId: string, teamName: string) => {
+    if (!user) return;
+    
     const confirmed = confirm(`Are you sure you want to disband "${teamName}"? This action cannot be undone and will remove all members from the team.`);
     if (!confirmed) return;
 
@@ -575,6 +577,8 @@ export default function TripleThreatTeamsPage() {
   };
 
   const handleLeaveTeamFromHover = async (teamId: string, teamName: string) => {
+    if (!user) return;
+    
     const confirmed = confirm(`Are you sure you want to leave "${teamName}"?`);
     if (!confirmed) return;
 
