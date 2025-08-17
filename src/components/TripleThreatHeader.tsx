@@ -27,13 +27,17 @@ interface TeamMember {
 
 interface Notification {
   id: string;
-  type: 'challenge_received' | 'challenge_accepted' | 'challenge_declined' | 'team_member_joined' | 'team_member_left' | 'new_team_created';
+  type: 'challenge_received' | 'challenge_accepted' | 'challenge_declined' | 'team_member_joined' | 'team_member_left' | 'team_created';
   title: string;
   message: string;
   created_at: string;
   read: boolean;
   related_team?: string;
-  related_user?: string;
+  related_user?: {
+    id: string;
+    alias: string;
+    avatar_url: string | null;
+  };
   challenge_id?: string;
 }
 
@@ -583,6 +587,28 @@ export default function TripleThreatHeader({
                               onClick={() => markAsRead(notification.id)}
                             >
                               <div className="flex items-start space-x-3">
+                                <div className="flex-shrink-0">
+                                  {notification.related_user && (
+                                    <img 
+                                      src={notification.related_user.avatar_url || '/default-avatar.png'} 
+                                      alt={notification.related_user.alias || 'User'}
+                                      className="w-8 h-8 rounded-full border border-gray-600"
+                                      onError={(e) => {
+                                        e.currentTarget.src = '/default-avatar.png';
+                                      }}
+                                    />
+                                  )}
+                                  {!notification.related_user && (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center text-lg border border-gray-600">
+                                      {notification.type === 'challenge_received' && '⚔️'}
+                                      {notification.type === 'challenge_accepted' && '✅'}
+                                      {notification.type === 'challenge_declined' && '❌'}
+                                      {notification.type === 'team_member_joined' && '👥'}
+                                      {notification.type === 'team_member_left' && '👋'}
+                                      {notification.type === 'team_created' && '🆕'}
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="flex-1">
                                   <div className="flex items-center space-x-2 mb-1">
                                     <h4 className="font-medium text-white text-sm">{notification.title}</h4>
@@ -642,6 +668,40 @@ export default function TripleThreatHeader({
                 </div>
               )}
               
+              {/* User Avatar with Hover */}
+              {user && (
+                <div className="relative group">
+                  {user.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt={user.user_metadata?.in_game_alias || user.email || 'User'}
+                      className="w-9 h-9 rounded-full border-2 border-gray-600 hover:border-cyan-400 transition-colors cursor-pointer"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border-2 border-gray-600 hover:border-cyan-400 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer">
+                      {(user.user_metadata?.in_game_alias || user.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  
+                  {/* Hover Tooltip */}
+                  <div className="absolute top-full right-0 mt-2 bg-gray-900/95 backdrop-blur-sm border border-gray-600/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 min-w-[200px] z-50">
+                    <div className="text-sm">
+                      <div className="text-white font-medium mb-1">
+                        {user.user_metadata?.in_game_alias || 'No Alias Set'}
+                      </div>
+                      <div className="text-gray-400 text-xs">
+                        {user.email}
+                      </div>
+                      {userTeam && (
+                        <div className="text-cyan-400 text-xs mt-2 pt-2 border-t border-gray-600/50">
+                          Team: {userTeam.team_name}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all duration-300 text-sm font-medium shadow-lg hover:shadow-xl transform hover:scale-105 backdrop-blur-sm border border-white/20">
                 ← Back to CTFPL
               </Link>

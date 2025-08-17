@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 import TripleThreatBackground from '@/components/TripleThreatBackground';
 import TripleThreatHeader, { Team, TeamMember } from '@/components/TripleThreatHeader';
 
@@ -22,6 +23,19 @@ interface Match {
   match_type: string;
   round_name: string | null;
   tournament_name: string | null;
+  team1_owner_id?: string;
+  team2_owner_id?: string;
+  pending_proposals?: ScheduleProposal[];
+}
+
+interface ScheduleProposal {
+  id: string;
+  proposer_id: string;
+  proposer_alias: string;
+  proposed_time: string;
+  message: string | null;
+  status: string;
+  created_at: string;
 }
 
 interface Tournament {
@@ -38,12 +52,20 @@ interface Tournament {
 // Team and challenge creation logic has moved to the Teams page
 
 export default function TripleThreatMatchesPage() {
+  const { user } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [userTeam, setUserTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    date: '',
+    time: '21:00', // Default to 9:00 PM EST
+    message: ''
+  });
 
   useEffect(() => {
     loadData();
@@ -74,8 +96,8 @@ export default function TripleThreatMatchesPage() {
         .select(`
           id, tournament_id, team1_id, team2_id, scheduled_time, status, 
           winner_team_id, match_type, round_name,
-          team1:tt_teams!tt_matches_team1_id_fkey(team_name, team_banner_url),
-          team2:tt_teams!tt_matches_team2_id_fkey(team_name, team_banner_url),
+          team1:tt_teams!tt_matches_team1_id_fkey(team_name, team_banner_url, owner_id),
+          team2:tt_teams!tt_matches_team2_id_fkey(team_name, team_banner_url, owner_id),
           winner:tt_teams!tt_matches_winner_team_id_fkey(team_name),
           tournament:tt_tournaments(tournament_name)
         `)
@@ -83,23 +105,60 @@ export default function TripleThreatMatchesPage() {
 
       if (error) throw error;
 
-      const formattedMatches: Match[] = (data || []).map((match: any) => ({
-        id: match.id,
-        tournament_id: match.tournament_id,
-        team1_id: match.team1_id,
-        team2_id: match.team2_id,
-        team1_name: match.team1?.team_name || 'Unknown Team',
-        team2_name: match.team2?.team_name || 'Unknown Team',
-        team1_banner: match.team1?.team_banner_url,
-        team2_banner: match.team2?.team_banner_url,
-        scheduled_time: match.scheduled_time,
-        status: match.status,
-        winner_team_id: match.winner_team_id,
-        winner_team_name: match.winner?.team_name,
-        match_type: match.match_type,
-        round_name: match.round_name,
-        tournament_name: match.tournament?.tournament_name
-      }));
+      // Get schedule proposals for all matches
+      const matchIds = (data || []).map((match: any) => match.id);
+      let proposalsData = [];
+      
+      if (matchIds.length > 0) {
+        const { data: proposals, error: proposalsError } = await supabase
+          .from('tt_match_schedule_proposals')
+          .select(`
+            id, match_id, proposer_id, proposed_time, message, status, created_at,
+            proposer:profiles!tt_match_schedule_proposals_proposer_id_fkey(in_game_alias)
+          `)
+          .in('match_id', matchIds)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+          
+        if (!proposalsError) {
+          proposalsData = proposals || [];
+        }
+      }
+
+      const formattedMatches: Match[] = (data || []).map((match: any) => {
+        const matchProposals = proposalsData
+          .filter((p: any) => p.match_id === match.id)
+          .map((p: any) => ({
+            id: p.id,
+            proposer_id: p.proposer_id,
+            proposer_alias: p.proposer?.in_game_alias || 'Unknown',
+            proposed_time: p.proposed_time,
+            message: p.message,
+            status: p.status,
+            created_at: p.created_at
+          }));
+
+        return {
+          id: match.id,
+          tournament_id: match.tournament_id,
+          team1_id: match.team1_id,
+          team2_id: match.team2_id,
+          team1_name: match.team1?.team_name || 'Unknown Team',
+          team2_name: match.team2?.team_name || 'Unknown Team',
+          team1_banner: match.team1?.team_banner_url,
+          team2_banner: match.team2?.team_banner_url,
+          team1_owner_id: match.team1?.owner_id,
+          team2_owner_id: match.team2?.owner_id,
+          scheduled_time: match.scheduled_time,
+          status: match.status,
+          winner_team_id: match.winner_team_id,
+          winner_team_name: match.winner?.team_name,
+          match_type: match.match_type,
+          round_name: match.round_name,
+          tournament_name: match.tournament?.tournament_name,
+          pending_proposals: matchProposals,
+        };
+      });
 
       setMatches(formattedMatches);
     } catch (error) {
@@ -121,7 +180,113 @@ export default function TripleThreatMatchesPage() {
     }
   };
 
-  // Removed checkUserTeam, team/member loading, and handleCreateMatch
+  // Scheduling functions
+  const generateTimeOptions = () => {
+    const times = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const displayTime = new Date(`2000-01-01T${timeString}`).toLocaleTimeString([], { 
+          hour: 'numeric', 
+          minute: '2-digit' 
+        });
+        times.push({ value: timeString, display: displayTime });
+      }
+    }
+    return times;
+  };
+
+  const handleProposeSchedule = async (match: Match) => {
+    if (!userTeam) return;
+    
+    setSelectedMatch(match);
+    setScheduleForm({
+      date: '',
+      time: '21:00', // Default to 9:00 PM EST
+      message: ''
+    });
+    setShowScheduleModal(true);
+  };
+
+  const submitScheduleProposal = async () => {
+    if (!selectedMatch || !user || !scheduleForm.date || !scheduleForm.time) return;
+
+    try {
+      // Create date in EST timezone
+      const proposedDateTime = new Date(`${scheduleForm.date}T${scheduleForm.time}`);
+      // Note: The backend function will handle EST conversion
+      
+      const { data, error } = await supabase.rpc('propose_match_schedule', {
+        match_id_input: selectedMatch.id,
+        proposer_id: user.id,
+        proposed_time_input: proposedDateTime.toISOString(),
+        message_input: scheduleForm.message || null
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert('Schedule proposal sent successfully!');
+        setShowScheduleModal(false);
+        setSelectedMatch(null);
+        loadMatches(); // Reload to show updated status
+      } else {
+        alert('Failed to propose schedule: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error proposing schedule:', error);
+      alert('Failed to propose schedule: ' + error.message);
+    }
+  };
+
+  const isTeamOwner = (match: Match) => {
+    if (!user) return false;
+    return match.team1_owner_id === user.id || match.team2_owner_id === user.id;
+  };
+
+  const handleScheduleResponse = async (proposalId: string, action: 'accept' | 'reject') => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase.rpc('respond_to_schedule_proposal', {
+        proposal_id_input: proposalId,
+        responder_id: user.id,
+        response_action: action,
+        message_input: null
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert(`Schedule ${action}ed successfully!`);
+        loadMatches(); // Reload to show updated status
+      } else {
+        alert('Failed to respond: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error responding to schedule:', error);
+      alert('Failed to respond: ' + error.message);
+    }
+  };
+
+  const handleCounterProposal = async (originalProposalId: string) => {
+    if (!user) return;
+    
+    // Find the match for this proposal
+    const match = matches.find(m => 
+      m.pending_proposals?.some(p => p.id === originalProposalId)
+    );
+    
+    if (!match) return;
+    
+    setSelectedMatch(match);
+    setScheduleForm({
+      date: '',
+      time: '21:00', // Default to 9:00 PM EST
+      message: ''
+    });
+    setShowScheduleModal(true);
+  };
 
   const groupMatchesByDate = (matches: Match[]) => {
     const grouped: { [key: string]: Match[] } = {};
@@ -269,21 +434,108 @@ export default function TripleThreatMatchesPage() {
           </div>
         </div>
 
+        {/* Schedule Proposals Section */}
+        {(match.pending_proposals?.length > 0 || (!match.scheduled_time && isTeamOwner(match))) && (
+          <div className="border-t border-gray-600/50 pt-3 mt-3">
+            {/* Show pending proposals */}
+            {match.pending_proposals?.map((proposal) => {
+              const isMyProposal = proposal.proposer_id === user?.id;
+              const canRespond = !isMyProposal && isTeamOwner(match);
+              
+              return (
+                <div key={proposal.id} className="mb-3 p-3 bg-gray-800/30 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm">
+                      <span className="text-cyan-400">📅 Schedule Proposed</span>
+                      <span className="text-gray-400 ml-2">by {proposal.proposer_alias}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {new Date(proposal.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <div className="text-white font-medium mb-1">
+                    {new Date(proposal.proposed_time).toLocaleDateString()} at{' '}
+                    {new Date(proposal.proposed_time).toLocaleTimeString([], { 
+                      hour: 'numeric', 
+                      minute: '2-digit' 
+                    })} EST
+                  </div>
+                  
+                  {proposal.message && (
+                    <div className="text-gray-300 text-sm mb-2">
+                      💬 {proposal.message}
+                    </div>
+                  )}
+                  
+                  {canRespond && (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleScheduleResponse(proposal.id, 'accept')}
+                        className="bg-green-600/80 hover:bg-green-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                      >
+                        ✅ Accept
+                      </button>
+                      <button
+                        onClick={() => handleCounterProposal(proposal.id)}
+                        className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                      >
+                        📅 Counter
+                      </button>
+                      <button
+                        onClick={() => handleScheduleResponse(proposal.id, 'reject')}
+                        className="bg-red-600/80 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                      >
+                        ❌ Reject
+                      </button>
+                    </div>
+                  )}
+                  
+                  {isMyProposal && (
+                    <div className="text-xs text-gray-500">
+                      Waiting for response from other team...
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            
+            {/* Propose Schedule Button */}
+            {!match.scheduled_time && isTeamOwner(match) && match.pending_proposals?.length === 0 && (
+              <button
+                onClick={() => handleProposeSchedule(match)}
+                className="bg-cyan-600/80 hover:bg-cyan-600 text-white text-xs px-3 py-1 rounded transition-colors"
+              >
+                📅 Propose Schedule
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Match Footer */}
-        <div className="border-t border-gray-600/50 pt-3">
+        <div className="border-t border-gray-600/50 pt-3 mt-3">
           <div className="flex justify-between items-center text-sm text-gray-400">
             <div>
               {match.scheduled_time ? (
-                new Date(match.scheduled_time).toLocaleDateString()
+                <>
+                  <span className="text-green-400">🕒 Scheduled: </span>
+                  {new Date(match.scheduled_time).toLocaleDateString()} at{' '}
+                  {new Date(match.scheduled_time).toLocaleTimeString([], { 
+                    hour: 'numeric', 
+                    minute: '2-digit' 
+                  })} EST
+                </>
               ) : (
-                'Unscheduled'
+                <span className="text-orange-400">⏰ Needs Scheduling</span>
               )}
             </div>
-            {isCompleted && match.winner_team_name && (
-              <div className="text-green-400">
-                🏆 {match.winner_team_name} wins
-              </div>
-            )}
+            <div className="flex items-center space-x-2">
+              {isCompleted && match.winner_team_name && (
+                <div className="text-green-400">
+                  🏆 {match.winner_team_name} wins
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -495,6 +747,106 @@ export default function TripleThreatMatchesPage() {
         )}
 
       </div>
+
+      {/* Schedule Proposal Modal */}
+      {showScheduleModal && selectedMatch && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-600/50 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                📅 Propose Match Schedule
+              </h3>
+              <button
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setSelectedMatch(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-center mb-4 p-3 bg-gray-800/50 rounded-lg">
+                <div className="text-sm text-gray-400 mb-1">Match</div>
+                <div className="font-medium text-white">
+                  {selectedMatch.team1_name} vs {selectedMatch.team2_name}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={scheduleForm.date}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, date: e.target.value })}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Time (15-minute intervals)
+                </label>
+                <select
+                  value={scheduleForm.time}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, time: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                  required
+                >
+                  <option value="">Select time...</option>
+                  {generateTimeOptions().map((time) => (
+                    <option key={time.value} value={time.value}>
+                      {time.display}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Message (Optional)
+                </label>
+                <textarea
+                  value={scheduleForm.message}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, message: e.target.value })}
+                  placeholder="Add a message for the other team..."
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors resize-none"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setSelectedMatch(null);
+                }}
+                className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitScheduleProposal}
+                disabled={!scheduleForm.date || !scheduleForm.time}
+                className="flex-1 py-2 px-4 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Propose Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </TripleThreatBackground>
   );
 }

@@ -481,6 +481,36 @@ export default function TripleThreatSignupPage() {
               <Link href="/triple-threat/matches" className="text-gray-300 hover:text-white transition-colors">
                 Matches
               </Link>
+              
+              {/* User Avatar with Hover */}
+              {user && (
+                <div className="relative group">
+                  {user.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt={user.user_metadata?.in_game_alias || user.email || 'User'}
+                      className="w-9 h-9 rounded-full border-2 border-gray-600 hover:border-cyan-400 transition-colors cursor-pointer"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border-2 border-gray-600 hover:border-cyan-400 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer">
+                      {(user.user_metadata?.in_game_alias || user.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  
+                  {/* Hover Tooltip */}
+                  <div className="absolute top-full right-0 mt-2 bg-gray-900/95 backdrop-blur-sm border border-gray-600/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 min-w-[200px] z-50">
+                    <div className="text-sm">
+                      <div className="text-white font-medium mb-1">
+                        {user.user_metadata?.in_game_alias || 'No Alias Set'}
+                      </div>
+                      <div className="text-gray-400 text-xs">
+                        {user.email}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <Link href="/" className="bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 hover:from-cyan-400 hover:via-purple-400 hover:to-pink-400 px-4 py-2 rounded-lg transition-all text-sm font-medium">
                 ← Back to CTFPL
               </Link>

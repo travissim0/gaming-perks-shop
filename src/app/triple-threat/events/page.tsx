@@ -26,6 +26,13 @@ export default function TripleThreatEventsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [limit, setLimit] = useState(25);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    date: '',
+    time: '',
+    message: ''
+  });
 
   useEffect(() => {
     if (!authLoading) {
@@ -117,6 +124,87 @@ export default function TripleThreatEventsPage() {
         return '🏅';
       default:
         return '📝';
+    }
+  };
+
+  const generateTimeOptions = () => {
+    const times = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 15) {
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const displayTime = new Date(`2000-01-01T${timeString}`).toLocaleTimeString([], { 
+          hour: 'numeric', 
+          minute: '2-digit' 
+        });
+        times.push({ value: timeString, display: displayTime });
+      }
+    }
+    return times;
+  };
+
+  const handleScheduleResponse = async (event: Event, action: 'accept' | 'reject' | 'counter') => {
+    if (!user || !event.metadata?.proposal_id) return;
+
+    try {
+      if (action === 'counter') {
+        setSelectedEvent(event);
+        setScheduleForm({
+          date: '',
+          time: '',
+          message: ''
+        });
+        setShowScheduleModal(true);
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('respond_to_schedule_proposal', {
+        proposal_id_input: event.metadata.proposal_id,
+        responder_id: user.id,
+        response_action: action,
+        message_input: null
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert(`Schedule ${action}ed successfully!`);
+        loadEvents(); // Reload events
+      } else {
+        alert('Failed to respond: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error responding to schedule:', error);
+      alert('Failed to respond: ' + error.message);
+    }
+  };
+
+  const submitCounterProposal = async () => {
+    if (!selectedEvent || !user || !scheduleForm.date || !scheduleForm.time) return;
+
+    try {
+      const proposedDateTime = new Date(`${scheduleForm.date}T${scheduleForm.time}`);
+      
+      const { data, error } = await supabase.rpc('respond_to_schedule_proposal', {
+        proposal_id_input: selectedEvent.metadata.proposal_id,
+        responder_id: user.id,
+        response_action: 'counter',
+        counter_time_input: proposedDateTime.toISOString(),
+        message_input: scheduleForm.message || null
+      });
+
+      if (error) throw error;
+
+      if (data && data.success) {
+        alert('Counter proposal sent successfully!');
+        setShowScheduleModal(false);
+        setSelectedEvent(null);
+        loadEvents();
+      } else {
+        alert('Failed to send counter proposal: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Error sending counter proposal:', error);
+      alert('Failed to send counter proposal: ' + error.message);
     }
   };
 
@@ -329,6 +417,39 @@ export default function TripleThreatEventsPage() {
                           {event.metadata.status}
                         </span>
                       )}
+                      
+                      {/* Schedule Response Buttons */}
+                      {event.event_type === 'schedule_proposed' && !event.is_read && event.metadata?.proposal_id && (
+                        <div className="flex space-x-2 mt-3 pt-3 border-t border-gray-600/50">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleScheduleResponse(event, 'accept');
+                            }}
+                            className="bg-green-600/80 hover:bg-green-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                          >
+                            ✅ Accept
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleScheduleResponse(event, 'counter');
+                            }}
+                            className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                          >
+                            📅 Counter
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleScheduleResponse(event, 'reject');
+                            }}
+                            className="bg-red-600/80 hover:bg-red-600 text-white text-xs px-3 py-1 rounded transition-colors"
+                          >
+                            ❌ Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -346,6 +467,105 @@ export default function TripleThreatEventsPage() {
             >
               Load More Events
             </button>
+          </div>
+        )}
+
+        {/* Counter Proposal Modal */}
+        {showScheduleModal && selectedEvent && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-600/50 rounded-2xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white">
+                  📅 Counter Propose Time
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setSelectedEvent(null);
+                  }}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <div className="text-center mb-4 p-3 bg-gray-800/50 rounded-lg">
+                  <div className="text-sm text-gray-400 mb-1">Original Proposal</div>
+                  <div className="font-medium text-white text-sm">
+                    {selectedEvent.description}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Counter Date
+                  </label>
+                  <input
+                    type="date"
+                    value={scheduleForm.date}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, date: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Counter Time (EST, 15-minute intervals)
+                  </label>
+                  <select
+                    value={scheduleForm.time}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, time: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white focus:outline-none focus:border-cyan-400 transition-colors"
+                    required
+                  >
+                    <option value="">Select time...</option>
+                    {generateTimeOptions().map((time) => (
+                      <option key={time.value} value={time.value}>
+                        {time.display}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Message (Optional)
+                  </label>
+                  <textarea
+                    value={scheduleForm.message}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, message: e.target.value })}
+                    placeholder="Explain why you're proposing a different time..."
+                    className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors resize-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setSelectedEvent(null);
+                  }}
+                  className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitCounterProposal}
+                  disabled={!scheduleForm.date || !scheduleForm.time}
+                  className="flex-1 py-2 px-4 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send Counter
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
