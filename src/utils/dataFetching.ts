@@ -332,6 +332,7 @@ export const queries = {
             inviter:profiles!squad_invites_invited_by_fkey(in_game_alias)
           `)
           .eq('invited_player_id', userId)
+          .neq('invited_by', userId) // EXCLUDE join requests (where user invited themselves)
           .eq('status', 'pending')
           .gt('expires_at', new Date().toISOString())
           .limit(10);

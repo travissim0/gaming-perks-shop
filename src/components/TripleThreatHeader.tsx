@@ -70,9 +70,32 @@ export default function TripleThreatHeader({
 
   useEffect(() => {
     if (user && userTeam) {
-      // Set up real-time subscription for notifications
-      const interval = setInterval(loadNotifications, 30000); // Check every 30 seconds
-      return () => clearInterval(interval);
+      // Set up more frequent polling for notifications (every 5 seconds)
+      const interval = setInterval(loadNotifications, 5000);
+      
+      // Set up real-time subscription for tt_challenges table
+      const challengeSubscription = supabase
+        .channel('challenge-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tt_challenges',
+            filter: `challenged_team_id=eq.${userTeam.id}`
+          },
+          (payload) => {
+            console.log('Real-time challenge update:', payload);
+            // Reload notifications when challenges are created/updated
+            loadNotifications();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        clearInterval(interval);
+        challengeSubscription.unsubscribe();
+      };
     }
   }, [user, userTeam]);
 
@@ -416,7 +439,12 @@ export default function TripleThreatHeader({
   };
 
   const handleChallengeResponse = async (challengeId: string, response: 'accept' | 'decline') => {
-    if (!user) return;
+    if (!user) {
+      console.error('No user found for challenge response');
+      return;
+    }
+
+    console.log('Attempting to respond to challenge:', { challengeId, response, userId: user.id });
 
     try {
       const { data, error } = await supabase.rpc('respond_to_tt_challenge', {
@@ -425,24 +453,42 @@ export default function TripleThreatHeader({
         response_input: response
       });
 
-      if (error) throw error;
+      console.log('RPC response:', { data, error });
 
-      if (data && data.length > 0) {
-        const result = data[0];
-        if (result.success) {
+      if (error) {
+        console.error('RPC error details:', {
+          message: error?.message || 'Unknown error',
+          details: error?.details || null,
+          hint: error?.hint || null,
+          code: error?.code || null
+        });
+        throw error;
+      }
+
+      if (data) {
+        console.log('Response data:', data);
+        if (data.success) {
           // Remove the notification and reload notifications
           setNotifications(prev => prev.filter(n => n.challenge_id !== challengeId));
           setUnreadCount(prev => Math.max(0, prev - 1));
           loadNotifications(); // Reload to get updated status
           
           // Show success message
-          console.log('Challenge response successful:', result.message);
+          console.log('Challenge response successful:', data.message);
         } else {
-          console.error('Challenge response failed:', result.error);
+          console.error('Challenge response failed:', data.error);
         }
+      } else {
+        console.error('No data returned from RPC call');
       }
-    } catch (error) {
-      console.error('Error responding to challenge:', error);
+    } catch (error: any) {
+      console.error('Error responding to challenge:', {
+        message: error?.message || 'Unknown error',
+        details: error?.details || null,
+        hint: error?.hint || null,
+        code: error?.code || null,
+        error: error || null
+      });
     }
   };
 

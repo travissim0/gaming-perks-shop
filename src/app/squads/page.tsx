@@ -696,6 +696,7 @@ export default function SquadsPage() {
         .select(`
           id,
           squad_id,
+          invited_by,
           message,
           created_at,
           expires_at,
@@ -712,6 +713,7 @@ export default function SquadsPage() {
           )
         `)
         .eq('invited_player_id', user.id)
+        .neq('invited_by', user.id) // EXCLUDE join requests (where user invited themselves)
         .eq('status', 'pending')
         .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false });

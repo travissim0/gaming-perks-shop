@@ -31,13 +31,13 @@ export default function Register() {
     }
 
     // Username validation
-    if (!inGameAlias) {
+    if (!inGameAlias || inGameAlias.trim().length === 0) {
       errors.inGameAlias = 'Username/Main Alias is required';
-    } else if (inGameAlias.length < 1) {
-      errors.inGameAlias = 'Username/Main Alias must be at least 1 character';
-    } else if (inGameAlias.length > 30) {
+    } else if (inGameAlias.trim().length < 2) {
+      errors.inGameAlias = 'Username/Main Alias must be at least 2 characters';
+    } else if (inGameAlias.trim().length > 30) {
       errors.inGameAlias = 'Username/Main Alias must be less than 30 characters';
-    } else if (!/^[a-zA-Z0-9_-]+$/.test(inGameAlias)) {
+    } else if (!/^[a-zA-Z0-9_-]+$/.test(inGameAlias.trim())) {
       errors.inGameAlias = 'Username/Main Alias can only contain letters, numbers, underscores, and hyphens';
     }
 

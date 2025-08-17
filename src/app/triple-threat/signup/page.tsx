@@ -355,23 +355,30 @@ export default function TripleThreatSignupPage() {
     const confirmed = confirm('Are you sure you want to leave this team?');
     if (!confirmed) return;
 
+    toast.loading('Leaving team...', { id: 'leave-team' });
+
     try {
-      const { error } = await supabase
-        .from('tt_team_members')
-        .update({ is_active: false })
-        .eq('team_id', userTeam.id)
-        .eq('player_id', user.id);
+      const { data, error } = await supabase.rpc('tt_leave_team', {
+        user_id_input: user.id
+      });
 
       if (error) throw error;
 
-      toast.success('Successfully left the team');
-      setUserTeam(null);
-      setTeamMembers([]);
-      loadTeams();
-
+      if (data) {
+        if (data.success) {
+          toast.success(data.message || 'Successfully left team!', { id: 'leave-team' });
+          setUserTeam(null);
+          setTeamMembers([]);
+          loadTeams();
+        } else {
+          toast.error(data.error || 'Failed to leave team', { id: 'leave-team' });
+        }
+      } else {
+        toast.error('Unexpected response from server', { id: 'leave-team' });
+      }
     } catch (error: any) {
       console.error('Error leaving team:', error);
-      toast.error('Failed to leave team: ' + error.message);
+      toast.error('Failed to leave team: ' + error.message, { id: 'leave-team' });
     }
   };
 

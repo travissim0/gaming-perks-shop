@@ -34,6 +34,7 @@ export default function TripleThreatTeamsPage() {
   const [userTeam, setUserTeam] = useState<Team | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showJoinForm, setShowJoinForm] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -315,12 +316,11 @@ export default function TripleThreatTeamsPage() {
 
         if (error) throw error;
         
-        if (data && data.length > 0) {
-          const result = data[0];
-          if (result.success) {
-            toast.success(result.message || 'Challenge sent successfully!', { id: 'challenge' });
+        if (data) {
+          if (data.success) {
+            toast.success(data.message || 'Challenge sent successfully!', { id: 'challenge' });
           } else {
-            toast.error(result.error || 'Failed to create challenge', { id: 'challenge' });
+            toast.error(data.error || 'Failed to create challenge', { id: 'challenge' });
           }
         } else {
           toast.error('Unexpected response from server', { id: 'challenge' });
@@ -376,19 +376,235 @@ export default function TripleThreatTeamsPage() {
       return;
     }
 
-    // For now, show a message that this requires RPC functions
-    toast.error('Team joining functionality requires RPC functions to be set up. Please create the RPC functions first.');
+    setUploading(true);
+    toast.loading('Joining team...', { id: 'join-team' });
+
+    try {
+      const { data, error } = await supabase.rpc('join_tt_team', {
+        team_id_input: teamId,
+        user_id_input: user.id,
+        password_input: password
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        if (data.success) {
+          toast.success(data.message || 'Successfully joined team!', { id: 'join-team' });
+          setShowJoinForm(false);
+          setJoinForm({ teamId: '', password: '' });
+          // Reload everything to update counts and team status
+          await Promise.all([
+            checkUserTeam(),
+            loadTeams()
+          ]);
+        } else {
+          toast.error(data.error || 'Failed to join team', { id: 'join-team' });
+        }
+      } else {
+        toast.error('Unexpected response from server', { id: 'join-team' });
+      }
+    } catch (error: any) {
+      console.error('Error joining team:', error);
+      toast.error('Failed to join team: ' + error.message, { id: 'join-team' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCreateTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    if (createForm.teamPassword !== createForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (createForm.teamPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setUploading(true);
+    toast.loading('Creating team...', { id: 'create-team' });
+
+    try {
+      let bannerUrl = null;
+
+      // Upload banner if provided
+      if (createForm.bannerFile) {
+        const fileExt = createForm.bannerFile.name.split('.').pop();
+        const fileName = `team_${Date.now()}.${fileExt}`;
+        const filePath = `triple-threat-banners/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, createForm.bannerFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        bannerUrl = urlData.publicUrl;
+      }
+
+      // Create team with encrypted password
+      const { data: team, error: teamError } = await supabase
+        .from('tt_teams')
+        .insert({
+          team_name: createForm.teamName,
+          team_password_hash: createForm.teamPassword, // Will be encrypted by database trigger
+          team_banner_url: bannerUrl,
+          owner_id: user.id
+        })
+        .select()
+        .single();
+
+      if (teamError) throw teamError;
+
+      // Add owner as team member
+      const { error: memberError } = await supabase
+        .from('tt_team_members')
+        .insert({
+          team_id: team.id,
+          player_id: user.id,
+          role: 'owner'
+        });
+
+      if (memberError) throw memberError;
+
+      toast.success('Team created successfully!', { id: 'create-team' });
+      setShowCreateForm(false);
+      setCreateForm({ teamName: '', teamPassword: '', confirmPassword: '', bannerFile: null });
+      // Reload everything to ensure new team appears and user status updates
+      await Promise.all([
+        loadTeams(),
+        checkUserTeam()
+      ]);
+
+    } catch (error: any) {
+      console.error('Error creating team:', error);
+      if (error.code === '23505') {
+        toast.error('Team name already exists', { id: 'create-team' });
+      } else {
+        toast.error('Failed to create team: ' + error.message, { id: 'create-team' });
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      setCreateForm({ ...createForm, bannerFile: file });
+    }
   };
 
   const handleLeaveTeam = async () => {
-    if (!user) return;
+    if (!user || !userTeam) return;
 
-    // For now, show a message that this requires RPC functions
-    toast.error('Team leaving functionality requires RPC functions to be set up. Please create the RPC functions first.');
+    const confirmed = confirm('Are you sure you want to leave this team?');
+    if (!confirmed) return;
+
+    toast.loading('Leaving team...', { id: 'leave-team' });
+
+    try {
+      const { data, error } = await supabase.rpc('tt_leave_team', {
+        user_id_input: user.id
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        if (data.success) {
+          toast.success(data.message || 'Successfully left team!', { id: 'leave-team' });
+          setUserTeam(null);
+          setTeamMembers([]);
+          // Reload teams to update member counts
+          await loadTeams();
+        } else {
+          toast.error(data.error || 'Failed to leave team', { id: 'leave-team' });
+        }
+      } else {
+        toast.error('Unexpected response from server', { id: 'leave-team' });
+      }
+    } catch (error: any) {
+      console.error('Error leaving team:', error);
+      toast.error('Failed to leave team: ' + error.message, { id: 'leave-team' });
+    }
   };
 
-  // ... (rest of the component - create team functions, form handlers, etc.)
-  // For brevity, I'll focus on the key changes for now
+  const handleDisbandTeam = async (teamId: string, teamName: string) => {
+    const confirmed = confirm(`Are you sure you want to disband "${teamName}"? This action cannot be undone and will remove all members from the team.`);
+    if (!confirmed) return;
+
+    toast.loading('Disbanding team...', { id: 'disband-team' });
+
+    try {
+      const { data, error } = await supabase.rpc('tt_disband_team', {
+        user_id_input: user.id
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        if (data.success) {
+          toast.success(data.message || 'Team disbanded successfully!', { id: 'disband-team' });
+          setUserTeam(null);
+          setTeamMembers([]);
+          // Reload teams to update the list and remove disbanded team
+          await loadTeams();
+        } else {
+          toast.error(data.error || 'Failed to disband team', { id: 'disband-team' });
+        }
+      } else {
+        toast.error('Unexpected response from server', { id: 'disband-team' });
+      }
+    } catch (error: any) {
+      console.error('Error disbanding team:', error);
+      toast.error('Failed to disband team: ' + error.message, { id: 'disband-team' });
+    }
+  };
+
+  const handleLeaveTeamFromHover = async (teamId: string, teamName: string) => {
+    const confirmed = confirm(`Are you sure you want to leave "${teamName}"?`);
+    if (!confirmed) return;
+
+    toast.loading('Leaving team...', { id: 'leave-team' });
+
+    try {
+      const { data, error } = await supabase.rpc('tt_leave_team', {
+        user_id_input: user.id
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        if (data.success) {
+          toast.success(data.message || 'Successfully left team!', { id: 'leave-team' });
+          setUserTeam(null);
+          setTeamMembers([]);
+          // Reload teams to update member counts
+          await loadTeams();
+        } else {
+          toast.error(data.error || 'Failed to leave team', { id: 'leave-team' });
+        }
+      } else {
+        toast.error('Unexpected response from server', { id: 'leave-team' });
+      }
+    } catch (error: any) {
+      console.error('Error leaving team:', error);
+      toast.error('Failed to leave team: ' + error.message, { id: 'leave-team' });
+    }
+  };
 
   if (authLoading) {
     return (
@@ -537,12 +753,19 @@ export default function TripleThreatTeamsPage() {
                 >
                   ⚔️ Matches
                 </Link>
-                {userTeam.owner_id !== user.id && (
+                {userTeam.owner_id === user.id ? (
+                  <button
+                    onClick={() => handleDisbandTeam(userTeam.id, userTeam.team_name)}
+                    className="bg-red-600/40 hover:bg-red-600/60 border border-red-400/60 px-3 py-1.5 rounded-lg text-sm transition-colors text-white font-medium backdrop-blur-sm"
+                  >
+                    🗑️ Disband
+                  </button>
+                ) : (
                   <button
                     onClick={handleLeaveTeam}
                     className="bg-red-600/40 hover:bg-red-600/60 border border-red-400/60 px-3 py-1.5 rounded-lg text-sm transition-colors text-white font-medium backdrop-blur-sm"
                   >
-                    Leave
+                    🚪 Leave
                   </button>
                 )}
               </div>
@@ -719,6 +942,35 @@ export default function TripleThreatTeamsPage() {
                             ⚔️ Challenge
                           </button>
                         )}
+
+                        {/* Leave/Disband Button (only if user is on this team) */}
+                        {userTeam && userTeam.id === team.id && (
+                          <>
+                            {userTeam.owner_id === user.id ? (
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDisbandTeam(team.id, team.team_name);
+                                }}
+                                className="flex-1 bg-gradient-to-r from-red-600/80 to-red-700/80 hover:from-red-500/80 hover:to-red-600/80 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 text-sm backdrop-blur-sm relative z-30"
+                              >
+                                🗑️ Disband Team
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleLeaveTeamFromHover(team.id, team.team_name);
+                                }}
+                                className="flex-1 bg-gradient-to-r from-orange-600/80 to-red-600/80 hover:from-orange-500/80 hover:to-red-500/80 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 text-sm backdrop-blur-sm relative z-30"
+                              >
+                                🚪 Leave Team
+                              </button>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -739,6 +991,178 @@ export default function TripleThreatTeamsPage() {
         </div>
 
       </div>
+
+      {/* Join Team Modal */}
+      {showJoinForm && (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-600/50 rounded-2xl p-6 w-full max-w-md">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-white">
+              {selectedTeam ? `Join ${selectedTeam.team_name}` : 'Join Team'}
+            </h3>
+            <button
+              onClick={() => {
+                setShowJoinForm(false);
+                setSelectedTeam(null);
+                setJoinForm({ teamId: '', password: '' });
+              }}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (selectedTeam) {
+              handleJoinTeam(selectedTeam.id, joinForm.password);
+            }
+          }}>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Team Password
+              </label>
+              <input
+                type="password"
+                value={joinForm.password}
+                onChange={(e) => setJoinForm({ ...joinForm, password: e.target.value })}
+                className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                placeholder="Enter team password"
+                required
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowJoinForm(false);
+                  setSelectedTeam(null);
+                  setJoinForm({ teamId: '', password: '' });
+                }}
+                className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={uploading || !joinForm.password.trim()}
+                className="flex-1 py-2 px-4 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? 'Joining...' : 'Join Team'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      )}
+
+      {/* Create Team Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-600/50 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">Create New Team</h3>
+              <button
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setCreateForm({ teamName: '', teamPassword: '', confirmPassword: '', bannerFile: null });
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTeam} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Team Name
+                </label>
+                <input
+                  type="text"
+                  value={createForm.teamName}
+                  onChange={(e) => setCreateForm({ ...createForm, teamName: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                  placeholder="Enter team name (3-50 characters)"
+                  minLength={3}
+                  maxLength={50}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Team Password
+                </label>
+                <input
+                  type="password"
+                  value={createForm.teamPassword}
+                  onChange={(e) => setCreateForm({ ...createForm, teamPassword: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                  placeholder="Enter team password (minimum 6 characters)"
+                  minLength={6}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={createForm.confirmPassword}
+                  onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 transition-colors"
+                  placeholder="Confirm team password"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Team Banner (Optional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg text-white file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:bg-gray-700 file:text-gray-300 hover:file:bg-gray-600"
+                />
+                {createForm.bannerFile && (
+                  <p className="mt-2 text-sm text-green-400">
+                    📁 {createForm.bannerFile.name}
+                  </p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Max 5MB. Supports: JPG, PNG, GIF, WebP
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setCreateForm({ teamName: '', teamPassword: '', confirmPassword: '', bannerFile: null });
+                  }}
+                  className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading || !createForm.teamName.trim() || !createForm.teamPassword.trim()}
+                  className="flex-1 py-2 px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? 'Creating...' : 'Create Team'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </TripleThreatBackground>
   );
 }

@@ -211,7 +211,7 @@ export const getSquadInvitations = async (userId: string) => {
   try {
     const operation = async () => {
       const { data, error } = await supabase
-        .from('squad_invitations')
+        .from('squad_invites')
         .select(`
           *,
           squads (
@@ -222,6 +222,7 @@ export const getSquadInvitations = async (userId: string) => {
           )
         `)
         .eq('invited_player_id', userId)
+        .neq('invited_by', userId) // EXCLUDE join requests (where user invited themselves)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 

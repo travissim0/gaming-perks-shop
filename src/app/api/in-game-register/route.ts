@@ -26,6 +26,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate alias format and length
+    const trimmedAlias = alias.trim();
+    if (trimmedAlias.length < 2) {
+      console.error('❌ Alias too short');
+      return NextResponse.json(
+        { error: 'In-game alias must be at least 2 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (trimmedAlias.length > 30) {
+      console.error('❌ Alias too long');
+      return NextResponse.json(
+        { error: 'In-game alias must be less than 30 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedAlias)) {
+      console.error('❌ Invalid alias format');
+      return NextResponse.json(
+        { error: 'In-game alias can only contain letters, numbers, underscores, and hyphens' },
+        { status: 400 }
+      );
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -60,7 +86,7 @@ export async function POST(req: NextRequest) {
     const { data: existingProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id')
-      .eq('in_game_alias', alias)
+      .eq('in_game_alias', trimmedAlias)
       .maybeSingle();
 
     if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
@@ -81,12 +107,12 @@ export async function POST(req: NextRequest) {
 
     // Send invitation email directly (this creates the user and sends email in one step)
     console.log('📧 Sending invitation email...');
-    const redirectUrl = `https://freeinf.org/auth/complete-registration?alias=${encodeURIComponent(alias)}`;
+    const redirectUrl = `https://freeinf.org/auth/complete-registration?alias=${encodeURIComponent(trimmedAlias)}`;
     
     const { data: inviteData, error: emailError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: redirectUrl,
       data: {
-        in_game_alias: alias,
+        in_game_alias: trimmedAlias,
         registration_source: 'in_game',
         registration_timestamp: new Date().toISOString(),
         password_set: false
@@ -136,7 +162,7 @@ export async function POST(req: NextRequest) {
         {
           id: newUser.id,
           email: email,
-          in_game_alias: alias,
+          in_game_alias: trimmedAlias,
           registration_status: 'pending_verification'
         }
       ]);
@@ -157,7 +183,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: 'Registration initiated successfully',
       data: {
-        alias: alias,
+        alias: trimmedAlias,
         email: email,
         status: 'pending_verification',
         instructions: 'Check your email to complete registration and set your password',

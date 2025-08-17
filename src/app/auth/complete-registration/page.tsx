@@ -67,6 +67,19 @@ function CompleteRegistrationContent() {
     try {
       console.log('🔧 Starting registration completion...');
 
+      // Validate alias is provided
+      if (!alias || alias.trim().length === 0) {
+        setError('In-game alias is required. Please contact support if this field is missing.');
+        setLoading(false);
+        return;
+      }
+
+      if (alias.trim().length < 2) {
+        setError('In-game alias must be at least 2 characters long');
+        setLoading(false);
+        return;
+      }
+
       // Validate passwords
       if (password.length < 6) {
         setError('Password must be at least 6 characters long');
@@ -80,7 +93,7 @@ function CompleteRegistrationContent() {
         return;
       }
 
-      console.log('✅ Password validation passed');
+      console.log('✅ Password and alias validation passed');
 
       // Update user password
       console.log('🔑 Updating user password...');
@@ -100,13 +113,14 @@ function CompleteRegistrationContent() {
 
       console.log('✅ Password updated successfully');
 
-      // Update profile status
-      console.log('📝 Updating profile status...');
+      // Update profile status and ensure alias is set
+      console.log('📝 Updating profile status and alias...');
       const { data: session } = await supabase.auth.getSession();
       if (session.session?.user) {
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
+            in_game_alias: alias.trim(), // Ensure alias is set in profile
             registration_status: 'completed',
             updated_at: new Date().toISOString()
           })
@@ -114,8 +128,8 @@ function CompleteRegistrationContent() {
 
         if (profileError) {
           console.error('❌ Profile update error:', profileError);
-          // Don't fail the registration for this, but show a warning
-          console.warn('Profile update failed but continuing with registration');
+          // Since alias is required, this is now a critical error
+          throw new Error(`Failed to save in-game alias: ${profileError.message}`);
         } else {
           console.log('✅ Profile updated successfully');
         }
