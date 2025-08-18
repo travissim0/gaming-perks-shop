@@ -275,7 +275,7 @@ export default function NewsPage() {
                         
                         <div className="flex items-center justify-between">
                           <div className="flex items-center text-sm text-gray-500">
-                            <span>By {post.author_name || post.author_alias}</span>
+                            <span>By {post.author_alias || post.author_name}</span>
                             <span className="mx-2">•</span>
                             <span>{formatDate(post.published_at)}</span>
                             <span className="mx-2">•</span>

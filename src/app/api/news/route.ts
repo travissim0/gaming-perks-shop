@@ -124,7 +124,6 @@ export async function GET(request: NextRequest) {
 
             posts = [{
               ...postData,
-              author_alias: postData.author_name, // Fallback
               is_read,
               read_at,
               reaction_counts
@@ -250,7 +249,6 @@ export async function GET(request: NextRequest) {
 
           posts = postsData.map(post => ({
             ...post,
-            author_alias: post.author_name, // Fallback
             is_read: !!readPostsMap[post.id],
             read_at: readPostsMap[post.id] || null,
             reaction_counts: reactionsByPost[post.id] || {}
