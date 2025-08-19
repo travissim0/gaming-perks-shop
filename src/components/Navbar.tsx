@@ -645,6 +645,13 @@ export default function Navbar({ user }: { user: any }) {
                         Ratings
                       </Link>
                       <Link
+                        href="/league/match-reports"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">📝</span>
+                        Match Reports
+                      </Link>
+                      <Link
                         href="/event-log"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
@@ -887,6 +894,17 @@ export default function Navbar({ user }: { user: any }) {
                       >
                         <span className="mr-3">📊</span>
                         Ratings
+                      </Link>
+                      <Link
+                        href="/league/match-reports"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">📝</span>
+                        Match Reports
                       </Link>
                       <Link
                         href="/event-log"
@@ -1660,6 +1678,13 @@ export default function Navbar({ user }: { user: any }) {
                     <span className="font-medium">Ratings</span>
                   </Link>
                   <Link
+                    href="/league/match-reports"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">📝</span>
+                    <span className="font-medium">Match Reports</span>
+                  </Link>
+                  <Link
                     href="/event-log"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
@@ -1850,6 +1875,14 @@ export default function Navbar({ user }: { user: any }) {
                     >
                       <span className="mr-3">📊</span>
                       Ratings
+                    </Link>
+                    <Link
+                      href="/league/match-reports"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📝</span>
+                      Match Reports
                     </Link>
                     <Link
                       href="/event-log"

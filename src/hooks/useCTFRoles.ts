@@ -8,7 +8,8 @@ export type CTFRoleType =
   | 'ctf_head_referee'
   | 'ctf_referee'
   | 'ctf_recorder'
-  | 'ctf_commentator';
+  | 'ctf_commentator'
+  | 'ctf_analyst';
 
 export interface CTFRole {
   id: string;

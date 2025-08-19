@@ -151,6 +151,12 @@ export interface PlayerRatingWithDetails extends PlayerRating {
   player_alias: string;
 }
 
+export interface MatchReportWithDetails extends MatchReport {
+  squad_a_banner_url?: string | null;
+  squad_b_banner_url?: string | null;
+  creator_alias: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -178,6 +184,41 @@ export interface News {
   updated_at: string;
 }
 
+export interface MatchReport {
+  id: string;
+  title: string;
+  squad_a_id?: string | null;
+  squad_b_id?: string | null;
+  squad_a_name: string;
+  squad_b_name: string;
+  match_summary: string;
+  match_highlights_video_url?: string | null;
+  match_date: string;
+  season_name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchPlayerRating {
+  id: string;
+  match_report_id: string;
+  player_alias: string;
+  player_id?: string | null;
+  class_position: string;
+  performance_description: string;
+  highlight_clip_url?: string | null;
+  kills: number;
+  deaths: number;
+  turret_damage?: number | null;
+  rating_before: number;
+  rating_adjustment: number;
+  rating_after: number;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // =============================================================================
 // ENUMS
 // =============================================================================
@@ -187,7 +228,8 @@ export type CtfRoleType =
   | 'ctf_head_referee'
   | 'ctf_referee'
   | 'ctf_recorder'
-  | 'ctf_commentator';
+  | 'ctf_commentator'
+  | 'ctf_analyst';
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
@@ -278,7 +320,7 @@ export interface SquadMemberQueryResult {
 // =============================================================================
 
 export function isValidCtfRole(role: string): role is CtfRoleType {
-  return ['ctf_admin', 'ctf_head_referee', 'ctf_referee', 'ctf_recorder', 'ctf_commentator'].includes(role);
+  return ['ctf_admin', 'ctf_head_referee', 'ctf_referee', 'ctf_recorder', 'ctf_commentator', 'ctf_analyst'].includes(role);
 }
 
 export function isValidSkillLevel(level: string): level is SkillLevel {
