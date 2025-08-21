@@ -83,7 +83,10 @@ export default function AddPlayerRatingPage() {
       if (!error && profile) {
         const permission = profile?.is_admin || 
                           profile?.ctf_role === 'ctf_admin' || 
-                          profile?.ctf_role === 'ctf_analyst';
+                          profile?.ctf_role === 'ctf_analyst' ||
+                          profile?.ctf_role === 'ctf_analyst_commentator' ||
+                          profile?.ctf_role === 'ctf_analyst_commentator_referee' ||
+                          profile?.ctf_role === 'ctf_analyst_referee';
         setHasPermission(permission);
         
         if (!permission) {

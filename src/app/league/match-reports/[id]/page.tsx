@@ -142,7 +142,7 @@ export default function MatchReportDetailPage() {
         setHasPermission(
           profile?.is_admin || 
           profile?.ctf_role === 'ctf_admin' || 
-          profile?.ctf_role === 'ctf_analyst'
+          (profile?.ctf_role && profile?.ctf_role.includes('analyst'))
         );
       }
     } catch (error) {
@@ -310,12 +310,12 @@ export default function MatchReportDetailPage() {
             <div className="text-6xl mb-4">❌</div>
             <h2 className="text-2xl font-bold text-red-400 mb-4">Error Loading Match Report</h2>
             <p className="text-gray-400 mb-6">{error || 'Match report not found'}</p>
-            <button 
-              onClick={() => router.push('/league/match-reports')}
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300"
+            <Link 
+              href="/league/match-reports"
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
             >
               Back to Match Reports
-            </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -328,109 +328,148 @@ export default function MatchReportDetailPage() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
-            <button 
-              onClick={() => router.push('/league/match-reports')}
+            <Link 
+              href="/league/match-reports"
               className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-2 transition-colors"
             >
               <span>←</span>
               <span>Back to Match Reports</span>
-            </button>
+            </Link>
             
             {hasPermission && (
-              <Link href={`/league/match-reports/${report.id}/edit`}>
-                <button className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-300">
-                  ✏️ Edit Report
-                </button>
+              <Link 
+                href={`/league/match-reports/${report.id}/edit`}
+                className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
+              >
+                ✏️ Edit Report
               </Link>
             )}
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
             {report.title}
           </h1>
-          
-          <div className="flex flex-wrap items-center gap-4 text-gray-400">
-            <span>📅 {formatDate(report.match_date)}</span>
-            <span>🏆 {report.season_name}</span>
-            <span>📊 By {report.creator_alias}</span>
-            <span>{formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}</span>
-          </div>
         </div>
 
-        {/* Squad vs Squad Section */}
+        {/* Main Content: Video + Squad Info & Summary */}
         <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-center">
-            {/* Squad A */}
-            <div className="lg:col-span-2 text-center">
-              <div className="aspect-square w-32 mx-auto rounded-xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-4 shadow-lg">
-                {report.squad_a_banner_url ? (
-                  <img 
-                    src={report.squad_a_banner_url} 
-                    alt={`${report.squad_a_name} banner`} 
-                    className="w-full h-full object-cover opacity-70" 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Half: Highlights Video */}
+            <div className="space-y-4">
+              <h3 className="text-2xl font-bold text-cyan-400 flex items-center">
+                <span className="mr-2">🎬</span>
+                Match Highlights
+              </h3>
+              {report.match_highlights_video_url && getEmbedCode(report.match_highlights_video_url) ? (
+                <div className="aspect-video rounded-lg overflow-hidden border border-gray-600 shadow-lg">
+                  <iframe
+                    src={getEmbedCode(report.match_highlights_video_url)}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    title="Match Highlights"
                   />
-                ) : (
-                  <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
-                    <span className="text-4xl text-gray-500">🛡️</span>
+                </div>
+              ) : (
+                <div className="aspect-video rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
+                  <div className="text-center text-gray-400">
+                    <div className="text-6xl mb-4">🎥</div>
+                    <div className="text-lg">No highlights video available</div>
+                    <div className="text-sm text-gray-500 mt-2">Video will appear here when added</div>
                   </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/15 via-transparent to-transparent" />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.45)]">
-                {report.squad_a_name}
-              </h2>
+                </div>
+              )}
             </div>
 
-            {/* VS Center */}
-            <div className="lg:col-span-1 text-center">
-              <div className="text-4xl md:text-6xl font-bold text-gray-400 mb-2">VS</div>
-              <div className="w-24 h-1 bg-gradient-to-r from-cyan-500 to-purple-500 mx-auto rounded"></div>
-            </div>
-
-            {/* Squad B */}
-            <div className="lg:col-span-2 text-center">
-              <div className="aspect-square w-32 mx-auto rounded-xl border border-purple-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-4 shadow-lg">
-                {report.squad_b_banner_url ? (
-                  <img 
-                    src={report.squad_b_banner_url} 
-                    alt={`${report.squad_b_name} banner`} 
-                    className="w-full h-full object-cover opacity-70" 
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
-                    <span className="text-4xl text-gray-500">🛡️</span>
+            {/* Right Half: Squad vs Squad + Match Summary */}
+            <div className="space-y-6">
+              {/* Squad vs Squad Section */}
+              <div className="bg-gray-900/30 border border-gray-600 rounded-lg p-6">
+                <div className="grid grid-cols-3 gap-4 items-center">
+                  {/* Squad A */}
+                  <div className="text-center">
+                    <div className="aspect-square w-20 mx-auto rounded-lg border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-3 shadow-lg">
+                      {report.squad_a_banner_url ? (
+                        <img 
+                          src={report.squad_a_banner_url} 
+                          alt={`${report.squad_a_name} banner`} 
+                          className="w-full h-full object-cover opacity-70" 
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
+                          <span className="text-2xl text-gray-500">🛡️</span>
+                        </div>
+                      )}
+                    </div>
+                    <h2 className="text-lg font-bold text-cyan-400">
+                      {report.squad_a_name}
+                    </h2>
                   </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-tl from-purple-500/15 via-transparent to-transparent" />
+
+                  {/* VS Center */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-400 mb-1">VS</div>
+                    <div className="w-16 h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 mx-auto rounded"></div>
+                  </div>
+
+                  {/* Squad B */}
+                  <div className="text-center">
+                    <div className="aspect-square w-20 mx-auto rounded-lg border border-purple-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-3 shadow-lg">
+                      {report.squad_b_banner_url ? (
+                        <img 
+                          src={report.squad_b_banner_url} 
+                          alt={`${report.squad_b_name} banner`} 
+                          className="w-full h-full object-cover opacity-70" 
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
+                          <span className="text-2xl text-gray-500">🛡️</span>
+                        </div>
+                      )}
+                    </div>
+                    <h2 className="text-lg font-bold text-purple-400">
+                      {report.squad_b_name}
+                    </h2>
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]">
-                {report.squad_b_name}
-              </h2>
+
+              {/* Match Analysis */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold text-white flex items-center">
+                  <span className="mr-2">📋</span>
+                  Match Analysis
+                </h3>
+                <div className="bg-gray-900/50 border border-gray-600 rounded-lg p-6">
+                  <div className="text-lg text-gray-300 leading-relaxed mb-6">
+                    "{report.match_summary}"
+                  </div>
+                  
+                  {/* Match Metadata */}
+                  <div className="pt-4 border-t border-gray-600">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center space-x-2 text-gray-400">
+                        <span>📅</span>
+                        <span>{formatDate(report.match_date)}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-gray-400">
+                        <span>🏆</span>
+                        <span>{report.season_name}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-gray-400">
+                        <span>📊</span>
+                        <span>By {report.creator_alias}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-gray-400">
+                        <span>🕒</span>
+                        <span>{formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Match Summary */}
-        <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8 mb-8">
-          <h3 className="text-2xl font-bold text-white mb-6">Match Summary</h3>
-          <div className="text-xl text-gray-300 italic leading-relaxed mb-6">
-            "{report.match_summary}"
-          </div>
-          
-          {/* Main Highlights Video */}
-          {report.match_highlights_video_url && getEmbedCode(report.match_highlights_video_url) && (
-            <div className="mt-8">
-              <h4 className="text-xl font-semibold text-cyan-400 mb-4">🎬 Match Highlights</h4>
-              <div className="aspect-video rounded-lg overflow-hidden">
-                <iframe
-                  src={getEmbedCode(report.match_highlights_video_url)}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Player Ratings */}

@@ -51,7 +51,7 @@ export default function CreateMatchReportPage() {
       if (!error && profile) {
         const permission = profile?.is_admin || 
                           profile?.ctf_role === 'ctf_admin' || 
-                          profile?.ctf_role === 'ctf_analyst';
+                          (profile?.ctf_role && profile?.ctf_role.includes('analyst'));
         setHasPermission(permission);
         
         if (!permission) {
@@ -153,10 +153,11 @@ export default function CreateMatchReportPage() {
             <div className="text-6xl mb-4">🚫</div>
             <h2 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h2>
             <p className="text-gray-400 mb-6">You do not have permission to create match reports</p>
-            <Link href="/league/match-reports">
-              <button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                Back to Match Reports
-              </button>
+            <Link 
+              href="/league/match-reports"
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
+            >
+              Back to Match Reports
             </Link>
           </div>
         </div>

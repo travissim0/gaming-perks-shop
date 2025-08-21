@@ -15,6 +15,7 @@ export default function MatchReportsPage() {
   const [seasonFilter, setSeasonFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [hasPermission, setHasPermission] = useState(false);
+  const [permissionLoading, setPermissionLoading] = useState(true);
 
   useEffect(() => {
     fetchReports();
@@ -24,6 +25,7 @@ export default function MatchReportsPage() {
   const checkPermissions = async () => {
     if (!user) {
       setHasPermission(false);
+      setPermissionLoading(false);
       return;
     }
 
@@ -38,11 +40,13 @@ export default function MatchReportsPage() {
         setHasPermission(
           profile?.is_admin || 
           profile?.ctf_role === 'ctf_admin' || 
-          profile?.ctf_role === 'ctf_analyst'
+          (profile?.ctf_role && profile?.ctf_role.includes('analyst'))
         );
       }
     } catch (error) {
       console.error('Error checking permissions:', error);
+    } finally {
+      setPermissionLoading(false);
     }
   };
 
@@ -137,7 +141,7 @@ export default function MatchReportsPage() {
               </p>
             </div>
             
-            {hasPermission && (
+            {!permissionLoading && hasPermission && (
               <Link href="/league/match-reports/create">
                 <button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-cyan-500/20">
                   📝 Create Match Report
@@ -217,7 +221,7 @@ export default function MatchReportsPage() {
                 ? 'Try adjusting your search filters' 
                 : 'Match reports will appear here once analysts create them'}
             </p>
-            {hasPermission && (
+            {!permissionLoading && hasPermission && (
               <Link href="/league/match-reports/create">
                 <button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300">
                   Create First Report

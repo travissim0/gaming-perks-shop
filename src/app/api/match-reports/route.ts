@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const hasPermission = profile.is_admin || 
                          profile.ctf_role === 'ctf_admin' || 
-                         profile.ctf_role === 'ctf_analyst';
+                         (profile.ctf_role && profile.ctf_role.includes('analyst'));
 
     console.log('Permission check:', {
       is_admin: profile.is_admin,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         debug: {
           is_admin: profile.is_admin,
           ctf_role: profile.ctf_role,
-          required_roles: ['admin', 'ctf_admin', 'ctf_analyst']
+          required_roles: ['admin', 'ctf_admin', 'any role containing "analyst"']
         }
       }, { status: 403 });
     }
@@ -129,8 +129,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the match report
-    const { data: newReport, error: insertError } = await supabase
+    // Create authenticated supabase client with user's session
+    const authSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      }
+    );
+
+    // Create the match report using authenticated client
+    const { data: newReport, error: insertError } = await authSupabase
       .from('match_reports')
       .insert({
         title,

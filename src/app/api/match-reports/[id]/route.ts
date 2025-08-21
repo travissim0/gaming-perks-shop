@@ -94,6 +94,9 @@ export async function PUT(
     const hasPermission = profile.is_admin || 
                          profile.ctf_role === 'ctf_admin' || 
                          profile.ctf_role === 'ctf_analyst' ||
+                         profile.ctf_role === 'ctf_analyst_commentator' ||
+                         profile.ctf_role === 'ctf_analyst_commentator_referee' ||
+                         profile.ctf_role === 'ctf_analyst_referee' ||
                          existingReport.created_by === user.id;
 
     if (!hasPermission) {
@@ -180,7 +183,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    const hasPermission = profile.is_admin || profile.ctf_role === 'ctf_admin';
+    const hasPermission = profile.is_admin || profile.ctf_role === 'ctf_admin' || profile.ctf_role === 'ctf_analyst_commentator_referee';
 
     if (!hasPermission) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });

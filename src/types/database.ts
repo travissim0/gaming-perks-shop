@@ -229,7 +229,10 @@ export type CtfRoleType =
   | 'ctf_referee'
   | 'ctf_recorder'
   | 'ctf_commentator'
-  | 'ctf_analyst';
+  | 'ctf_analyst'
+  | 'ctf_analyst_commentator'
+  | 'ctf_analyst_commentator_referee'
+  | 'ctf_analyst_referee';
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
@@ -320,7 +323,7 @@ export interface SquadMemberQueryResult {
 // =============================================================================
 
 export function isValidCtfRole(role: string): role is CtfRoleType {
-  return ['ctf_admin', 'ctf_head_referee', 'ctf_referee', 'ctf_recorder', 'ctf_commentator', 'ctf_analyst'].includes(role);
+  return ['ctf_admin', 'ctf_head_referee', 'ctf_referee', 'ctf_recorder', 'ctf_commentator', 'ctf_analyst', 'ctf_analyst_commentator', 'ctf_analyst_commentator_referee', 'ctf_analyst_referee'].includes(role);
 }
 
 export function isValidSkillLevel(level: string): level is SkillLevel {

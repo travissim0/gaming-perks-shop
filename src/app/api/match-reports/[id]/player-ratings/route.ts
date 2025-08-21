@@ -73,7 +73,10 @@ export async function POST(
 
     const hasPermission = profile.is_admin || 
                          profile.ctf_role === 'ctf_admin' || 
-                         profile.ctf_role === 'ctf_analyst';
+                         profile.ctf_role === 'ctf_analyst' ||
+                         profile.ctf_role === 'ctf_analyst_commentator' ||
+                         profile.ctf_role === 'ctf_analyst_commentator_referee' ||
+                         profile.ctf_role === 'ctf_analyst_referee';
 
     if (!hasPermission) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
