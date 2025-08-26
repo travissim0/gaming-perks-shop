@@ -28,8 +28,8 @@ interface PlayerEvent {
 }
 
 const EVENT_ICONS: Record<string, string> = {
-  'squad_joined': '➕',
-  'squad_left': '➖',
+  'squad_joined': '+',
+  'squad_left': '−',
   'squad_kicked': '🦵',
   'squad_promoted': '⬆️',
   'squad_demoted': '⬇️',
@@ -45,7 +45,7 @@ const EVENT_ICONS: Record<string, string> = {
 
 const EVENT_COLORS: Record<string, string> = {
   'squad_joined': 'text-green-400',
-  'squad_left': 'text-yellow-400',
+  'squad_left': 'text-red-400',
   'squad_kicked': 'text-red-400',
   'squad_promoted': 'text-blue-400',
   'squad_demoted': 'text-orange-400',
@@ -182,7 +182,8 @@ export default function PlayerEventLogPage() {
         return (
           <span className="text-white">
             <PlayerLink>{playerName}</PlayerLink>
-            <span className="text-gray-300"> joined {squadType} </span>
+            <span className="text-green-400"> joined</span>
+            <span className="text-gray-300"> {squadType} </span>
             {squadName && <SquadLink>{squadName}</SquadLink>}
             <span className="text-gray-400"> as {event.event_data?.role || 'player'}</span>
           </span>
@@ -192,7 +193,8 @@ export default function PlayerEventLogPage() {
         return (
           <span className="text-white">
             <PlayerLink>{playerName}</PlayerLink>
-            <span className="text-gray-300"> left squad </span>
+            <span className="text-red-400"> left</span>
+            <span className="text-gray-300"> squad </span>
             {squadName && <SquadLink>{squadName}</SquadLink>}
           </span>
         );
@@ -480,7 +482,7 @@ export default function PlayerEventLogPage() {
                 <div key={event.id} className="p-4 hover:bg-gray-700/20 transition-colors">
                   <div className="flex items-center space-x-3">
                     {/* Event Icon */}
-                    <div className={`text-xl flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'text-gray-400'}`}>
+                    <div className={`text-2xl font-bold flex-shrink-0 ${EVENT_COLORS[event.event_type] || 'text-gray-400'}`}>
                       {EVENT_ICONS[event.event_type] || '📋'}
                     </div>
 

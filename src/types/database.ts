@@ -364,4 +364,46 @@ const { data } = await supabase
   `)
   .eq('is_active', true)
   .returns<FreeAgentQueryResult[]>();
-*/ 
+*/
+
+// =============================================================================
+// EXPENSE TRACKING TYPES
+// =============================================================================
+
+export type ExpenseCategory = 
+  | 'website_hosting'
+  | 'server_hosting'
+  | 'ai_development_subscription'
+  | 'ai_development_usage'
+  | 'other';
+
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: number;
+  currency: string;
+  expense_date: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  is_recurring: boolean;
+  recurring_period?: string;
+  provider?: string;
+  notes?: string;
+}
+
+export interface FinancialOverview {
+  period: string;
+  total_revenue: number;
+  total_donations: number;
+  total_orders: number;
+  total_expenses: number;
+  website_costs: number;
+  server_costs: number;
+  ai_subscription_costs: number;
+  ai_usage_costs: number;
+  other_costs: number;
+  net_profit: number;
+  profit_margin: number;
+} 

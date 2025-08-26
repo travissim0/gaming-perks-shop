@@ -637,6 +637,17 @@ export default function AdminDashboard() {
               </Link>
 
               <Link
+                href="/admin/financials"
+                className="flex items-center gap-4 px-4 py-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/20"
+              >
+                <span className="text-3xl">📈</span>
+                <div>
+                  <div className="font-semibold">Financial Dashboard</div>
+                  <div className="text-xs text-emerald-400">Revenue vs expenses tracking</div>
+                </div>
+              </Link>
+
+              <Link
                 href="/admin/videos"
                 className="flex items-center gap-4 px-4 py-3 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20"
               >
