@@ -701,6 +701,28 @@ export default function AdminDashboard() {
                   <div className="text-xs text-pink-400">Manage squad analysis</div>
                 </div>
               </Link>
+
+              <Link
+                href="/admin/roster-lock"
+                className="flex items-center gap-4 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-red-500/20"
+              >
+                <span className="text-3xl">🔒</span>
+                <div>
+                  <div className="font-semibold">Roster Lock</div>
+                  <div className="text-xs text-red-400">Season roster management</div>
+                </div>
+              </Link>
+
+              <Link
+                href="/admin/league-stats"
+                className="flex items-center gap-4 px-4 py-3 bg-teal-600/20 hover:bg-teal-600/30 border border-teal-500/30 text-teal-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-teal-500/20"
+              >
+                <span className="text-3xl">📈</span>
+                <div>
+                  <div className="font-semibold">League Stats</div>
+                  <div className="text-xs text-teal-400">CSV import & analytics</div>
+                </div>
+              </Link>
             </div>
             
             <div className="mt-6">

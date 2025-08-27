@@ -10,7 +10,7 @@ import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
 import { toast } from 'react-hot-toast';
 
-export default function Navbar({ user }: { user: any }) {
+export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobileMenuChange?: (open: boolean) => void }) {
   const router = useRouter();
   const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -47,6 +47,13 @@ export default function Navbar({ user }: { user: any }) {
   
   // Check if user has test zone access
   const { hasTestZoneAccess } = useTestZoneAccess(user?.id);
+
+  // Notify parent component when mobile menu state changes
+  useEffect(() => {
+    if (onMobileMenuChange) {
+      onMobileMenuChange(isMobileMenuOpen);
+    }
+  }, [isMobileMenuOpen, onMobileMenuChange]);
 
   // Function to check pending squad requests for captain/co-captain
   const checkPendingSquadRequests = async () => {

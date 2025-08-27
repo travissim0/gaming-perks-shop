@@ -417,6 +417,32 @@ export default function CTFAdminPage() {
                           </div>
                         </div>
                       </a>
+
+                      <a
+                        href="/admin/roster-lock"
+                        className="bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">🔒</div>
+                          <div>
+                            <div className="font-semibold">Roster Lock</div>
+                            <div className="text-sm text-orange-200">Season roster management</div>
+                          </div>
+                        </div>
+                      </a>
+
+                      <a
+                        href="/admin/league-stats"
+                        className="bg-teal-600 hover:bg-teal-700 text-white p-4 rounded-lg transition-all duration-200 hover:scale-105 group"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="text-2xl">📈</div>
+                          <div>
+                            <div className="font-semibold">League Stats</div>
+                            <div className="text-sm text-teal-200">CSV import & analytics</div>
+                          </div>
+                        </div>
+                      </a>
                     </div>
                   </div>
 

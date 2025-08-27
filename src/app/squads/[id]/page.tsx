@@ -96,6 +96,17 @@ export default function SquadDetailPage() {
   // Mobile-friendly confirmation modal state
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
 
+  // Roster lock status
+  const [rosterLockStatus, setRosterLockStatus] = useState<{
+    isLocked: boolean;
+    reason?: string;
+    seasonNumber?: number;
+    seasonName?: string;
+  } | null>(null);
+
+  // Derived roster lock status for easier usage
+  const isRosterLocked = rosterLockStatus?.isLocked || false;
+
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
     isLoading: pageLoading,
@@ -110,6 +121,7 @@ export default function SquadDetailPage() {
   useEffect(() => {
     if (squadId && !loading) {
       loadAllData();
+      loadRosterLockStatus();
     }
   }, [squadId, loading]);
 
@@ -381,6 +393,13 @@ export default function SquadDetailPage() {
     setIsRequesting(true);
     
     try {
+      // Check if roster is locked before allowing join request
+      if (isRosterLocked) {
+        toast.error('Squad applications are currently disabled due to roster lock');
+        setIsRequesting(false);
+        return;
+      }
+
       // First check if there's already a pending request
       const { data: existingRequest, error: checkError } = await supabase
         .from('squad_invites')
@@ -607,6 +626,54 @@ export default function SquadDetailPage() {
       setUserProfile(data);
     } catch (error) {
       console.error('Error loading user profile:', error);
+    }
+  };
+
+  const loadRosterLockStatus = async () => {
+    try {
+      // First find the active season, then get its roster lock status
+      const { data: activeSeason, error: seasonError } = await supabase
+        .from('ctfpl_seasons')
+        .select('id, season_number, season_name')
+        .eq('status', 'active')
+        .single();
+
+      if (seasonError || !activeSeason) {
+        setRosterLockStatus({ isLocked: false });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('season_roster_locks')
+        .select('is_locked, reason')
+        .eq('season_id', activeSeason.id)
+        .eq('is_current', true)
+        .limit(1);
+
+      if (error) {
+        console.error('Error loading roster lock status:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const lock = data[0] as any;
+        setRosterLockStatus({
+          isLocked: lock.is_locked || false,
+          reason: lock.reason || undefined,
+          seasonNumber: activeSeason.season_number,
+          seasonName: activeSeason.season_name || undefined
+        });
+      } else {
+        // No roster lock record found for active season, default to unlocked
+        setRosterLockStatus({
+          isLocked: false,
+          seasonNumber: activeSeason.season_number,
+          seasonName: activeSeason.season_name || undefined
+        });
+      }
+    } catch (error: any) {
+      console.error('Exception loading roster lock status:', error);
+      setRosterLockStatus({ isLocked: false });
     }
   };
 
@@ -1231,17 +1298,23 @@ export default function SquadDetailPage() {
                     {(canRequestToJoin() || hasExistingRequest) && !isCurrentMember() && (
                       <div className="flex flex-col gap-2">
                         <button
-                          onClick={hasExistingRequest ? undefined : requestToJoin}
-                          disabled={isRequesting || hasExistingRequest}
+                          onClick={hasExistingRequest || isRosterLocked ? undefined : requestToJoin}
+                          disabled={isRequesting || hasExistingRequest || isRosterLocked}
                           className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed ${
                             hasExistingRequest 
                               ? 'bg-gradient-to-r from-yellow-600 to-amber-600 text-white cursor-default'
+                              : isRosterLocked
+                              ? 'bg-gradient-to-r from-red-600 to-red-700 text-white cursor-not-allowed opacity-50'
                               : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white'
                           }`}
                         >
                           {hasExistingRequest ? (
                             <span className="flex items-center gap-2">
                               ⏳ Request Pending
+                            </span>
+                          ) : isRosterLocked ? (
+                            <span className="flex items-center gap-2">
+                              🔒 Applications Disabled
                             </span>
                           ) : isRequesting ? (
                             <span className="flex items-center gap-2">
@@ -1252,6 +1325,15 @@ export default function SquadDetailPage() {
                             '📤 Request to Join'
                           )}
                         </button>
+                        
+                        {/* Roster Lock Warning */}
+                        {isRosterLocked && (
+                          <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
+                            <span className="text-red-400 text-sm">
+                              🔒 Squad applications are currently disabled due to roster lock.
+                            </span>
+                          </div>
+                        )}
                         
                         {/* Squad Capacity Info */}
                         {squad && squad.members && (

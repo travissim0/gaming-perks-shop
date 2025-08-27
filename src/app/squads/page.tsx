@@ -89,6 +89,12 @@ export default function SquadsPage() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [selectedInvitee, setSelectedInvitee] = useState('');
   const [pendingInvitesError, setPendingInvitesError] = useState(false);
+  const [rosterLockStatus, setRosterLockStatus] = useState<{
+    isLocked: boolean;
+    reason?: string;
+    seasonNumber?: number;
+    seasonName?: string;
+  } | null>(null);
   
   // Squad filtering states
   const [showInactiveSquads, setShowInactiveSquads] = useState(false);
@@ -257,11 +263,12 @@ export default function SquadsPage() {
       console.log('🚀 loadInitialData: Set loading to true');
       
       // Load public data that everyone can see
-      console.log('🚀 loadInitialData: Loading public data (squads + free agents + all players)...');
+      console.log('🚀 loadInitialData: Loading public data (squads + free agents + all players + roster lock status)...');
       const results = await Promise.allSettled([
         loadAllSquads(),
         user ? loadFreeAgents() : Promise.resolve(), // Only load free agents for authenticated users
-        user ? loadAllPlayers() : Promise.resolve() // Only load all players for authenticated users
+        user ? loadAllPlayers() : Promise.resolve(), // Only load all players for authenticated users
+        loadRosterLockStatus() // Load roster lock status for everyone
       ]);
 
       console.log('🚀 loadInitialData: Public data results:', results.map(r => r.status));
@@ -651,6 +658,72 @@ export default function SquadsPage() {
       
       if (isMountedRef.current) {
         setFreeAgents([]);
+      }
+    }
+  };
+
+  const loadRosterLockStatus = async () => {
+    if (!isMountedRef.current) return;
+    
+    try {
+      console.log('🔒 loadRosterLockStatus: Loading roster lock status...');
+      
+      // Get active season roster lock status (current records only)
+      // First find the active season, then get its roster lock status
+      const { data: activeSeason, error: seasonError } = await supabase
+        .from('ctfpl_seasons')
+        .select('id, season_number, season_name')
+        .eq('status', 'active')
+        .single();
+
+      if (seasonError || !activeSeason) {
+        console.log('🔒 No active season found, defaulting to unlocked');
+        setRosterLockStatus({ isLocked: false });
+        return;
+      }
+
+      console.log('🔒 Found active season:', activeSeason);
+
+      const { data, error } = await supabase
+        .from('season_roster_locks')
+        .select('is_locked, reason')
+        .eq('season_id', activeSeason.id)
+        .eq('is_current', true)
+        .limit(1);
+
+      console.log('🔒 loadRosterLockStatus: Query result:', { data, error });
+
+      if (error) {
+        console.error('❌ Error loading roster lock status:', error);
+        return;
+      }
+
+      if (!isMountedRef.current) return;
+
+      if (data && data.length > 0) {
+        const lock = data[0] as any;
+        setRosterLockStatus({
+          isLocked: lock.is_locked || false,
+          reason: lock.reason || undefined,
+          seasonNumber: activeSeason.season_number,
+          seasonName: activeSeason.season_name || undefined
+        });
+        console.log('🔒 Roster lock status loaded:', lock.is_locked ? 'LOCKED' : 'UNLOCKED');
+      } else {
+        // No roster lock record found for active season, default to unlocked
+        setRosterLockStatus({
+          isLocked: false,
+          seasonNumber: activeSeason.season_number,
+          seasonName: activeSeason.season_name || undefined
+        });
+        console.log('🔒 No roster lock record found for active season - defaulting to unlocked');
+      }
+    } catch (error: any) {
+      console.error('❌ Exception loading roster lock status:', error);
+      if (isMountedRef.current) {
+        setRosterLockStatus({
+          isLocked: false
+        });
       }
     }
   };
@@ -1224,6 +1297,15 @@ export default function SquadsPage() {
 
   const invitePlayer = async () => {
     if (!selectedInvitee || !userSquad) return;
+
+    // Check if roster is locked for the current active season
+    if (rosterLockStatus?.isLocked) {
+      toast.error(
+        `🔒 Roster is currently locked for Season ${rosterLockStatus.seasonNumber}${rosterLockStatus.seasonName ? ` (${rosterLockStatus.seasonName})` : ''}. Squad invitations are not allowed during this period.`,
+        { duration: 6000 }
+      );
+      return;
+    }
 
     try {
       // First check if there's already a pending invitation for this player to this squad
@@ -2016,7 +2098,22 @@ export default function SquadsPage() {
          {/* All Squads Section */}
          <div className="bg-gray-800 rounded-lg p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-            <h2 className="text-3xl font-bold text-cyan-400 tracking-wider">All Squads</h2>
+            <div>
+              <h2 className="text-3xl font-bold text-cyan-400 tracking-wider">All Squads</h2>
+              {rosterLockStatus && (
+                <div className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                  rosterLockStatus.isLocked 
+                    ? 'bg-red-900/30 border border-red-500/50 text-red-300' 
+                    : 'bg-green-900/30 border border-green-500/50 text-green-300'
+                }`}>
+                  {rosterLockStatus.isLocked ? '🔒' : '🔓'}
+                  <span>
+                    Season {rosterLockStatus.seasonNumber} Roster: {rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}
+                    {rosterLockStatus.seasonName && ` - ${rosterLockStatus.seasonName}`}
+                  </span>
+                </div>
+              )}
+            </div>
             
             {/* Controls: view toggle + legend */}
             <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -2368,6 +2465,20 @@ export default function SquadsPage() {
                   </p>
                 </div>
               )}
+
+              {rosterLockStatus?.isLocked && (
+                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-red-400">🔒</span>
+                    <span className="text-red-300 font-medium text-sm">Roster Locked</span>
+                  </div>
+                  <p className="text-red-200 text-xs">
+                    Squad invitations are currently disabled for Season {rosterLockStatus.seasonNumber}
+                    {rosterLockStatus.seasonName && ` (${rosterLockStatus.seasonName})`}. 
+                    Please try again when the roster lock is lifted.
+                  </p>
+                </div>
+              )}
               
               <form onSubmit={invitePlayer}>
                 <div className="mb-6">
@@ -2375,8 +2486,13 @@ export default function SquadsPage() {
                   <select
                     value={selectedInvitee}
                     onChange={(e) => setSelectedInvitee(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
+                    className={`w-full border rounded px-3 py-2 ${
+                      rosterLockStatus?.isLocked 
+                        ? 'bg-gray-600 border-gray-500 text-gray-400 cursor-not-allowed' 
+                        : 'bg-gray-700 border-gray-600'
+                    }`}
                     required
+                    disabled={rosterLockStatus?.isLocked}
                   >
                     <option value="">Choose a player...</option>
                     {allPlayers
@@ -2412,13 +2528,20 @@ export default function SquadsPage() {
                 <div className="flex gap-3">
                   <button
                     type="submit"
+                    disabled={rosterLockStatus?.isLocked}
                     className={`flex-1 py-2 rounded font-medium transition-all duration-300 ${
-                      userSquad?.is_legacy 
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white'
-                        : 'bg-green-600 hover:bg-green-700 text-white'
+                      rosterLockStatus?.isLocked
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : userSquad?.is_legacy 
+                          ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white'
+                          : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
-                    {userSquad?.is_legacy ? '🏛️ Send Legacy Invite' : 'Send Invitation'}
+                    {rosterLockStatus?.isLocked 
+                      ? '🔒 Invites Disabled' 
+                      : userSquad?.is_legacy 
+                        ? '🏛️ Send Legacy Invite' 
+                        : 'Send Invitation'}
                   </button>
                   <button
                     type="button"

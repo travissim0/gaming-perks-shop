@@ -59,8 +59,8 @@ export default function CTFPLStandingsPage() {
   const [seasonStats, setSeasonStats] = useState({
     totalMatches: 0,
     totalSquads: 0,
-    averageMatchesPerSquad: 0,
     topWinRate: 0,
+    totalRegulationGames: 0,
     totalOvertimeGames: 0,
     averagePointsPerSquad: 0
   });
@@ -147,8 +147,8 @@ export default function CTFPLStandingsPage() {
       // Calculate season statistics
       const totalSquads = standingsData.length;
       const totalMatches = standingsData.reduce((sum, team) => sum + team.matches_played, 0);
-      const averageMatches = totalSquads > 0 ? totalMatches / totalSquads : 0;
       const topWinRate = standingsData.length > 0 ? standingsData[0].win_percentage : 0;
+      const totalRegulationGames = standingsData.reduce((sum, team) => sum + team.regulation_wins, 0);
       const totalOvertimeGames = standingsData.reduce((sum, team) => sum + team.overtime_wins + team.overtime_losses, 0);
       const totalPoints = standingsData.reduce((sum, team) => sum + team.points, 0);
       const averagePoints = totalSquads > 0 ? totalPoints / totalSquads : 0;
@@ -156,8 +156,8 @@ export default function CTFPLStandingsPage() {
       setSeasonStats({
         totalMatches: Math.floor(totalMatches / 2), // Divide by 2 since each match involves 2 teams
         totalSquads,
-        averageMatchesPerSquad: Math.round(averageMatches * 10) / 10,
         topWinRate: Math.round(topWinRate * 10) / 10,
+        totalRegulationGames,
         totalOvertimeGames,
         averagePointsPerSquad: Math.round(averagePoints * 10) / 10
       });
@@ -549,18 +549,18 @@ export default function CTFPLStandingsPage() {
                 <p className="text-xl font-bold text-white">{seasonStats.totalMatches}</p>
               </div>
             </div>
-            <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-xl p-4 border border-purple-500/30">
-              <div className="text-center">
-                <Calendar className="w-6 h-6 text-purple-400 mx-auto mb-2" />
-                <p className="text-gray-400 text-xs">Avg Matches</p>
-                <p className="text-xl font-bold text-white">{seasonStats.averageMatchesPerSquad}</p>
-              </div>
-            </div>
             <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 rounded-xl p-4 border border-yellow-500/30">
               <div className="text-center">
                 <Crown className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
                 <p className="text-gray-400 text-xs">Top Win Rate</p>
                 <p className="text-xl font-bold text-white">{seasonStats.topWinRate}%</p>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-xl p-4 border border-purple-500/30">
+              <div className="text-center">
+                <Shield className="w-6 h-6 text-purple-400 mx-auto mb-2" />
+                <p className="text-gray-400 text-xs">RW Games</p>
+                <p className="text-xl font-bold text-white">{seasonStats.totalRegulationGames}</p>
               </div>
             </div>
             <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-xl p-4 border border-orange-500/30">

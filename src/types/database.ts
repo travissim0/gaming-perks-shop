@@ -114,6 +114,29 @@ export interface SquadInvite {
   status: 'pending' | 'accepted' | 'declined';
   created_at: string;
   expires_at: string;
+  responded_at?: string | null;
+  decline_reason?: string | null;
+}
+
+export interface SeasonRosterLock {
+  id: number;
+  season_id: string;
+  is_locked: boolean;
+  locked_at: string | null;
+  unlocked_at: string | null;
+  locked_by: string | null;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeasonRosterLockWithSeason extends SeasonRosterLock {
+  season?: {
+    id: string;
+    season_number: number;
+    season_name: string | null;
+    status: 'upcoming' | 'active' | 'completed';
+  };
 }
 
 export interface SquadRating {
