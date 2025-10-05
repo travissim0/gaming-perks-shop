@@ -56,7 +56,7 @@ export default function TripleThreatPage() {
 
       {/* Mission Control Cards */}
       <div className="max-w-6xl mx-auto px-6 -mt-8 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
           
           {/* Rules */}
           <Link href="/triple-threat/rules" className="group relative">
@@ -95,6 +95,20 @@ export default function TripleThreatPage() {
                 <h3 className="text-2xl font-bold text-pink-200 mb-4">MATCHES</h3>
                 <p className="text-pink-100/90">
                   View upcoming matches and tournament results.
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          {/* Stats */}
+          <Link href="/triple-threat/stats" className="group relative">
+            <div className="bg-gradient-to-br from-yellow-400/10 to-orange-600/20 backdrop-blur-sm border border-yellow-300/50 rounded-2xl p-8 hover:scale-105 transition-all duration-500 hover:border-yellow-200/70 hover:shadow-2xl hover:shadow-yellow-400/30">
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/0 to-yellow-400/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="relative text-center">
+                <div className="text-5xl mb-6 filter drop-shadow-lg">📊</div>
+                <h3 className="text-2xl font-bold text-yellow-200 mb-4">STATS</h3>
+                <p className="text-yellow-100/90">
+                  View player leaderboards and performance statistics.
                 </p>
               </div>
             </div>

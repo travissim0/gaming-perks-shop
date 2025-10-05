@@ -42,7 +42,7 @@ interface Notification {
 }
 
 interface TripleThreatHeaderProps {
-  currentPage?: 'home' | 'rules' | 'teams' | 'matches' | 'events';
+  currentPage?: 'home' | 'rules' | 'teams' | 'matches' | 'events' | 'stats';
   showTeamStatus?: boolean;
   onTeamLoaded?: (team: Team | null, members: TeamMember[]) => void;
 }
@@ -536,6 +536,9 @@ export default function TripleThreatHeader({
               </Link>
               <Link href="/triple-threat/events" className={getPageClasses('events')}>
                 Events
+              </Link>
+              <Link href="/triple-threat/stats" className={getPageClasses('stats')}>
+                Stats
               </Link>
               
               {/* Notification Bell */}

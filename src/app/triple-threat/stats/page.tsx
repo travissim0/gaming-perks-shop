@@ -5,7 +5,7 @@ import TripleThreatBackground from '@/components/TripleThreatBackground';
 import TripleThreatHeader from '@/components/TripleThreatHeader';
 
 interface PlayerRecord {
-  player_id: string;
+  player_id: string | null;
   player_alias: string;
   game_wins: number;
   game_losses: number;
@@ -20,7 +20,7 @@ interface PlayerRecord {
 }
 
 interface TopPlayer {
-  player_id: string;
+  player_id: string | null;
   player_alias: string;
   game_wins: number;
   game_losses: number;
@@ -186,7 +186,7 @@ export default function TripleThreatStatsPage() {
             ) : (
               <div className="space-y-3">
                 {topGameWins.map((player, index) => (
-                  <div key={player.player_id} className="flex items-center justify-between bg-black/20 rounded-lg p-4">
+                  <div key={player.player_id || player.player_alias || index} className="flex items-center justify-between bg-black/20 rounded-lg p-4">
                     <div className="flex items-center space-x-3">
                       <div className="text-2xl font-bold text-cyan-300">#{index + 1}</div>
                       <div>
@@ -221,7 +221,7 @@ export default function TripleThreatStatsPage() {
             ) : (
               <div className="space-y-3">
                 {topSeriesWins.map((player, index) => (
-                  <div key={player.player_id} className="flex items-center justify-between bg-black/20 rounded-lg p-4">
+                  <div key={player.player_id || player.player_alias || index} className="flex items-center justify-between bg-black/20 rounded-lg p-4">
                     <div className="flex items-center space-x-3">
                       <div className="text-2xl font-bold text-purple-300">#{index + 1}</div>
                       <div>
@@ -348,8 +348,8 @@ export default function TripleThreatStatsPage() {
                         </td>
                       </tr>
                     ) : (
-                      allPlayers.map((player) => (
-                        <tr key={player.player_id} className="border-b border-gray-700/50 hover:bg-white/5 transition-colors">
+                      allPlayers.map((player, index) => (
+                        <tr key={player.player_id || player.player_alias || index} className="border-b border-gray-700/50 hover:bg-white/5 transition-colors">
                           <td className="py-3 font-medium text-white">{player.player_alias}</td>
                           <td className="py-3 text-center">
                             <span className="text-green-400 font-semibold">{player.game_wins}</span>
