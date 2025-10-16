@@ -186,8 +186,11 @@ export default function ZoneManagementPage() {
               zoneKey = 'league_-_usl_test_1';
               break;
             case 'League - USL Test 2':
-              zoneKey = 'league_-_usl_test_2';
-              break;
+                zoneKey = 'league_-_usl_test_2';
+                break;
+            case 'Bots - Zombie Zone':
+                  zoneKey = 'zz';
+                  break;
           }
           
           if (zoneKey) {
