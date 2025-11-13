@@ -49,6 +49,7 @@ next-env.d.ts
 # Configuration files with sensitive data
 supabase-config.json
 *-config.json
+!zones-config.json
 *.config.json
 
 # Large directories that shouldn't be in git
@@ -57,6 +58,7 @@ node_modules/
 ngrok/
 stripe-cli/
 public/
+!public/zones-config.json
 # Allow specific header video and sounds
 !public/CTFPL-Website-Header-1.webm
 !public/sounds/

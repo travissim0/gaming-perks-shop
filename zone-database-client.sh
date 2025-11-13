@@ -75,72 +75,31 @@ update_zone_status() {
     # Only log errors or zone status changes, not routine updates
     local debug_mode="${DEBUG_ZONE_CLIENT:-false}"
     
-    # Build zones data
-    local zones_data=""
-    local first=true
+    # Call zone-manager.sh to get status (uses zones-config.json for mappings)
+    local zones_json=$(cd /var/www/gaming-perks-shop && bash zone-manager.sh status-all 2>/dev/null)
+    local manager_exit_code=$?
     
-    for dir in "$ZONES_DIR"/*; do
-        if [ -d "$dir" ]; then
-            zone_name=$(basename "$dir")
-            
-            if [ "$debug_mode" = "true" ]; then
-                echo "Found directory: $zone_name"
-            fi
-            
-            # Skip filtered directories
-            if is_filtered_directory "$zone_name"; then
-                if [ "$debug_mode" = "true" ]; then
-                    echo "  -> FILTERED OUT"
-                fi
-                continue
-            fi
-            
-            if [ "$debug_mode" = "true" ]; then
-                echo "  -> INCLUDED"
-            fi
-            
-            # Map to short name
-            short_name=""
-            case "$zone_name" in
-                "CTF - Twin Peaks 2.0") short_name="ctf" ;;
-                "CTF - Twin Peaks Classic") short_name="tp" ;;
-                "League - USL Matches") short_name="usl" ;;
-                "League - USL Secondary") short_name="usl2" ;;
-                "Skirmish - Minimaps") short_name="skMini" ;;
-                "Sports - GravBall") short_name="grav" ;;
-                "Arcade - The Arena") short_name="arena" ;;
-                *) short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]') ;;
-            esac
-            
-            if [ "$debug_mode" = "true" ]; then
-                echo "  -> Short name: $short_name"
-            fi
-            
-            if is_zone_running "$short_name"; then
-                status="RUNNING"
-            else
-                status="STOPPED"
-            fi
-            
-            if [ "$debug_mode" = "true" ]; then
-                echo "  -> Status: $status"
-            fi
-            
-            if [ "$first" = true ]; then
-                first=false
-            else
-                zones_data="${zones_data},"
-            fi
-            
-            zones_data="${zones_data}\"${short_name}\":{\"name\":\"${zone_name}\",\"status\":\"${status}\",\"last_checked\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\"}"
-        fi
-    done
+    if [ $manager_exit_code -ne 0 ] || [ -z "$zones_json" ]; then
+        log_message " Failed to get zone status from zone-manager.sh (exit code: $manager_exit_code)"
+        return 1
+    fi
+    
+    if [ "$debug_mode" = "true" ]; then
+        echo "DEBUG: zone-manager.sh output:"
+        echo "$zones_json"
+    fi
+    
+    # Validate JSON output
+    if ! echo "$zones_json" | jq empty 2>/dev/null; then
+        log_message " Invalid JSON from zone-manager.sh"
+        return 1
+    fi
     
     # Create the full status record
     local status_record=$(cat << EOF
 {
   "id": "current",
-  "zones_data": {${zones_data}},
+  "zones_data": $zones_json,
   "hostname": "$(hostname)",
   "source": "zone-database-client",
   "last_update": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
@@ -149,7 +108,6 @@ EOF
 )
     
     if [ "$debug_mode" = "true" ]; then
-        echo "DEBUG: Final zones_data string: '${zones_data}'"
         echo "DEBUG: Sending JSON to database:"
         echo "$status_record"
     fi
