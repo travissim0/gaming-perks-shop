@@ -6,7 +6,25 @@
 
 ACTION=$1
 ZONE_NAME=$2
-ZONES_DIR="/root/Infantry/Zones"
+
+# Determine script directory for config file location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/zones-config.json"
+
+# Load configuration
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    echo "ERROR: jq is not installed. Please install it: apt-get install jq"
+    exit 1
+fi
+
+# Read zones directory from config
+ZONES_DIR=$(jq -r '.zones_dir' "$CONFIG_FILE")
 LOG_FILE="/root/Infantry/logs/zone-manager.log"
 
 # Create logs directory if it doesn't exist
@@ -17,36 +35,31 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
-# Function to get zone directory mapping
+# Function to get zone directory mapping from config
 get_zone_directory() {
     local zone=$1
-    case "$zone" in
-        "ctf")
-            echo "$ZONES_DIR/CTF - Twin Peaks 2.0"
-            ;;
-        "tp")
-            echo "$ZONES_DIR/CTF - Twin Peaks Classic"
-            ;;
-        "usl")
-            echo "$ZONES_DIR/League - USL Matches"
-            ;;
-        "usl2")
-            echo "$ZONES_DIR/League - USL Secondary"
-            ;;
-        "skMini")
-            echo "$ZONES_DIR/Skirmish - Minimaps"
-            ;;
-        "grav")
-            echo "$ZONES_DIR/Sports - GravBall"
-            ;;
-        "arena")
-            echo "$ZONES_DIR/Arcade - The Arena"
-            ;;
-        *)
-            # Try to find directory by name
-            find "$ZONES_DIR" -type d -name "*$zone*" | head -1
-            ;;
-    esac
+    
+    # Try to find zone in config file
+    local directory=$(jq -r --arg key "$zone" '.zones[] | select(.key == $key) | .directory' "$CONFIG_FILE")
+    
+    if [ -n "$directory" ] && [ "$directory" != "null" ]; then
+        echo "$ZONES_DIR/$directory"
+    else
+        # Fallback: Try to find directory by name
+        find "$ZONES_DIR" -type d -name "*$zone*" | head -1
+    fi
+}
+
+# Function to get zone name from key
+get_zone_name() {
+    local zone=$1
+    jq -r --arg key "$zone" '.zones[] | select(.key == $key) | .name' "$CONFIG_FILE"
+}
+
+# Function to get zone key from name
+get_zone_key() {
+    local name=$1
+    jq -r --arg name "$name" '.zones[] | select(.name == $name) | .key' "$CONFIG_FILE"
 }
 
 # Function to check if zone is running
@@ -150,7 +163,7 @@ get_zone_status() {
 is_filtered_directory() {
     local dir_name=$1
     case "$dir_name" in
-        "BIN"|"Blobs"|"Global"|"assets"|"net8.0"|"TEST ZONES")
+        "BIN"|"Blobs"|"Global"|"assets"|"net8.0"|"TEST ZONES"|"League - USL Test 1"|"League - USL Test 2")
             return 0  # Should be filtered (excluded)
             ;;
         *)
@@ -185,18 +198,13 @@ get_all_zones_status() {
                 continue
             fi
             
-            # Try to map to short name
-            short_name=""
-            case "$zone_name" in
-                "CTF - Twin Peaks 2.0") short_name="ctf" ;;
-                "CTF - Twin Peaks Classic") short_name="tp" ;;
-                "League - USL Matches") short_name="usl" ;;
-                "League - USL Secondary") short_name="usl2" ;;
-                "Skirmish - Minimaps") short_name="skMini" ;;
-                "Sports - GravBall") short_name="gb" ;;
-                "Arcade - The Arena") short_name="arena" ;;
-                *) short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]') ;;
-            esac
+            # Try to map to short name using config
+            short_name=$(get_zone_key "$zone_name")
+            
+            # If not found in config, use fallback conversion
+            if [ -z "$short_name" ] || [ "$short_name" = "null" ]; then
+                short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
+            fi
             
             status=$(get_zone_status "$short_name")
             

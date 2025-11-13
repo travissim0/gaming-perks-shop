@@ -142,6 +142,24 @@ export default function ZoneManagementPage() {
     }
   };
 
+  // Load zone configuration
+  const [zoneConfig, setZoneConfig] = useState<{[name: string]: string}>({});
+  
+  useEffect(() => {
+    // Load zones config on mount
+    fetch('/zones-config.json')
+      .then(res => res.json())
+      .then(config => {
+        // Create a mapping of zone names to keys
+        const nameToKey: {[name: string]: string} = {};
+        config.zones.forEach((zone: any) => {
+          nameToKey[zone.name] = zone.key;
+        });
+        setZoneConfig(nameToKey);
+      })
+      .catch(err => console.error('Failed to load zones config:', err));
+  }, []);
+
   // Add function to fetch server player data
   const fetchServerPlayerData = async () => {
     try {
@@ -150,47 +168,29 @@ export default function ZoneManagementPage() {
         const data = await response.json();
         const playerCounts: {[key: string]: number} = {};
         
-        // Map server zones to our zone keys based on exact API titles
+        // Map server zones to our zone keys using config
         data.zones.forEach((zone: any) => {
           const title = zone.title;
-          let zoneKey = '';
           
-          // Map exact zone titles from API to our zone keys
-          switch (title) {
-            case 'CTF - Twin Peaks 2.0':
-              zoneKey = 'ctf';
-              break;
-            case 'CTF - Twin Peaks Classic':
-              zoneKey = 'tp';
-              break;
-            case 'USL - Apollo':
-            case 'League - USL Matches':
-              zoneKey = 'usl';
-              break;
-            case 'USL - Y Station':
-            case 'League - USL Secondary':
-              zoneKey = 'usl2';
-              break;
-            case 'SK - Minimaps':
-            case 'Skirmish - Minimaps':
-              zoneKey = 'skMini';
-              break;
-            case 'Sports - GravBall PvK':
-            case 'Sports - GravBall':
-              zoneKey = 'grav';
-              break;
-            case 'Arcade - The Arena':
-              zoneKey = 'arena';
-              break;
-            case 'League - USL Test 1':
-              zoneKey = 'league_-_usl_test_1';
-              break;
-            case 'League - USL Test 2':
-                zoneKey = 'league_-_usl_test_2';
+          // Try to find exact match in config
+          let zoneKey = zoneConfig[title];
+          
+          // Handle alternate naming (legacy API names)
+          if (!zoneKey) {
+            switch (title) {
+              case 'USL - Apollo':
+                zoneKey = zoneConfig['League - USL Matches'];
                 break;
-            case 'Bots - Zombie Zone':
-                  zoneKey = 'bots_-_zombie_zone';
-                  break;
+              case 'USL - Y Station':
+                zoneKey = zoneConfig['League - USL Secondary'];
+                break;
+              case 'SK - Minimaps':
+                zoneKey = zoneConfig['Skirmish - Minimaps'];
+                break;
+              case 'Sports - GravBall PvK':
+                zoneKey = zoneConfig['Sports - GravBall'];
+                break;
+            }
           }
           
           if (zoneKey) {
