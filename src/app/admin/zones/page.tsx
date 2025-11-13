@@ -189,7 +189,7 @@ export default function ZoneManagementPage() {
                 zoneKey = 'league_-_usl_test_2';
                 break;
             case 'Bots - Zombie Zone':
-                  zoneKey = 'zz';
+                  zoneKey = 'bots_-_zombie_zone';
                   break;
           }
           
