@@ -67,6 +67,8 @@ generate_zone_status() {
                 "Skirmish - Minimaps") short_name="skMini" ;;
                 "Sports - GravBall") short_name="grav" ;;
                 "Arcade - The Arena") short_name="arena" ;;
+                "TEST ZONE - Molo") short_name="tzmolo" ;;
+                "Bots - Zombie Zone") short_name="zz" ;;
                 *) short_name=$(echo "$zone_name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]') ;;
             esac
             
@@ -133,6 +135,8 @@ get_zone_directory() {
         "skMini") echo "$ZONES_DIR/Skirmish - Minimaps" ;;
         "grav") echo "$ZONES_DIR/Sports - GravBall" ;;
         "arena") echo "$ZONES_DIR/Arcade - The Arena" ;;
+        "tzmolo") echo "$ZONES_DIR/TEST ZONE - Molo" ;;
+        "zz") echo "$ZONES_DIR/Bots - Zombie Zone" ;;
         *) find "$ZONES_DIR" -type d -name "*$zone*" | head -1 ;;
     esac
 }

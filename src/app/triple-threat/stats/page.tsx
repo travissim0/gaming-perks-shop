@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import TripleThreatBackground from '@/components/TripleThreatBackground';
 import TripleThreatHeader from '@/components/TripleThreatHeader';
+import PlayerProfileModal from '@/components/triple-threat/PlayerProfileModal';
+import { StatCardsGrid } from '@/components/triple-threat/StatCards';
+import RecentSeriesList from '@/components/triple-threat/RecentSeriesList';
 
 interface PlayerRecord {
   player_id: string | null;
@@ -15,6 +18,9 @@ interface PlayerRecord {
   total_series: number;
   game_win_rate: number;
   series_win_rate: number;
+  kills?: number;
+  deaths?: number;
+  kd_ratio?: number;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +34,9 @@ interface TopPlayer {
   win_rate: number;
   series_wins: number;
   series_losses: number;
+  kills?: number;
+  deaths?: number;
+  kd_ratio?: number;
   updated_at: string;
 }
 
@@ -41,6 +50,7 @@ export default function TripleThreatStatsPage() {
   const [sortBy, setSortBy] = useState('game_wins');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ alias: string; stats: PlayerRecord | TopPlayer } | null>(null);
 
   useEffect(() => {
     loadStats();
@@ -168,6 +178,21 @@ export default function TripleThreatStatsPage() {
           </p>
         </div>
 
+        {/* Stat Cards */}
+        <StatCardsGrid
+          totalGames={allPlayers.reduce((sum, p) => sum + p.total_games, 0)}
+          totalPlayers={allPlayers.length}
+          totalSeries={allPlayers.reduce((sum, p) => sum + p.total_series, 0)}
+          avgKdRatio={allPlayers.length > 0 
+            ? allPlayers.reduce((sum, p) => sum + (p.kd_ratio || 0), 0) / allPlayers.length 
+            : 0}
+        />
+
+        {/* Recent Series */}
+        <div className="mb-12">
+          <RecentSeriesList />
+        </div>
+
         {/* Top 5 Leaderboards */}
         <div className="grid lg:grid-cols-2 gap-8 mb-12">
           
@@ -190,7 +215,12 @@ export default function TripleThreatStatsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="text-2xl font-bold text-cyan-300">#{index + 1}</div>
                       <div>
-                        <div className="font-semibold text-white">{player.player_alias}</div>
+                        <button
+                          onClick={() => setSelectedPlayer({ alias: player.player_alias, stats: player })}
+                          className="font-semibold text-white hover:text-cyan-300 transition-colors text-left"
+                        >
+                          {player.player_alias}
+                        </button>
                         <div className="text-sm text-gray-400">
                           {player.total_games} games • {player.win_rate}% win rate
                         </div>
@@ -225,7 +255,12 @@ export default function TripleThreatStatsPage() {
                     <div className="flex items-center space-x-3">
                       <div className="text-2xl font-bold text-purple-300">#{index + 1}</div>
                       <div>
-                        <div className="font-semibold text-white">{player.player_alias}</div>
+                        <button
+                          onClick={() => setSelectedPlayer({ alias: player.player_alias, stats: player })}
+                          className="font-semibold text-white hover:text-purple-300 transition-colors text-left"
+                        >
+                          {player.player_alias}
+                        </button>
                         <div className="text-sm text-gray-400">
                           {player.series_wins + player.series_losses} series • {player.series_win_rate}% win rate
                         </div>
@@ -281,6 +316,8 @@ export default function TripleThreatStatsPage() {
                       <option value="series_wins">Series Wins</option>
                       <option value="game_win_rate">Game Win Rate</option>
                       <option value="series_win_rate">Series Win Rate</option>
+                      <option value="kills">Kills</option>
+                      <option value="kd_ratio">K/D Ratio</option>
                       <option value="player_alias">Player Name</option>
                       <option value="updated_at">Last Updated</option>
                     </select>
@@ -319,6 +356,18 @@ export default function TripleThreatStatsPage() {
                       </th>
                       <th 
                         className="pb-3 cursor-pointer hover:text-cyan-300 transition-colors text-center"
+                        onClick={() => handleSort('kills')}
+                      >
+                        K/D {getSortIcon('kills')}
+                      </th>
+                      <th 
+                        className="pb-3 cursor-pointer hover:text-cyan-300 transition-colors text-center"
+                        onClick={() => handleSort('kd_ratio')}
+                      >
+                        K/D Ratio {getSortIcon('kd_ratio')}
+                      </th>
+                      <th 
+                        className="pb-3 cursor-pointer hover:text-cyan-300 transition-colors text-center"
                         onClick={() => handleSort('game_win_rate')}
                       >
                         Game Win % {getSortIcon('game_win_rate')}
@@ -340,7 +389,7 @@ export default function TripleThreatStatsPage() {
                   <tbody>
                     {allPlayers.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-8">
+                        <td colSpan={8} className="text-center py-8">
                           <div className="text-4xl mb-4">📊</div>
                           <p className="text-gray-400">
                             {searchTerm ? 'No players found matching your search' : 'No player records available yet'}
@@ -350,7 +399,14 @@ export default function TripleThreatStatsPage() {
                     ) : (
                       allPlayers.map((player, index) => (
                         <tr key={player.player_id || player.player_alias || index} className="border-b border-gray-700/50 hover:bg-white/5 transition-colors">
-                          <td className="py-3 font-medium text-white">{player.player_alias}</td>
+                          <td className="py-3 font-medium">
+                            <button
+                              onClick={() => setSelectedPlayer({ alias: player.player_alias, stats: player })}
+                              className="text-white hover:text-cyan-300 transition-colors"
+                            >
+                              {player.player_alias}
+                            </button>
+                          </td>
                           <td className="py-3 text-center">
                             <span className="text-green-400 font-semibold">{player.game_wins}</span>
                             <span className="text-gray-400 mx-1">/</span>
@@ -360,6 +416,16 @@ export default function TripleThreatStatsPage() {
                             <span className="text-green-400 font-semibold">{player.series_wins}</span>
                             <span className="text-gray-400 mx-1">/</span>
                             <span className="text-red-400 font-semibold">{player.series_losses}</span>
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className="text-cyan-400 font-semibold">{player.kills || 0}</span>
+                            <span className="text-gray-400 mx-1">/</span>
+                            <span className="text-orange-400 font-semibold">{player.deaths || 0}</span>
+                          </td>
+                          <td className="py-3 text-center">
+                            <span className={`font-semibold ${(player.kd_ratio || 0) >= 1.0 ? 'text-green-400' : 'text-yellow-400'}`}>
+                              {(player.kd_ratio || 0).toFixed(2)}
+                            </span>
                           </td>
                           <td className="py-3 text-center">
                             <span className={`font-semibold ${player.game_win_rate >= 50 ? 'text-green-400' : 'text-yellow-400'}`}>
@@ -391,6 +457,16 @@ export default function TripleThreatStatsPage() {
           )}
         </div>
       </div>
+
+      {/* Player Profile Modal */}
+      {selectedPlayer && (
+        <PlayerProfileModal
+          playerAlias={selectedPlayer.alias}
+          isOpen={!!selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+          aggregateStats={selectedPlayer.stats}
+        />
+      )}
     </TripleThreatBackground>
   );
 }

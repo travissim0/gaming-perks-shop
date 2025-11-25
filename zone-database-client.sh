@@ -199,19 +199,20 @@ complete_command() {
 # Zone action execution functions
 get_zone_directory() {
     local zone=$1
-    case "$zone" in
-        "ctf") echo "$ZONES_DIR/CTF - Twin Peaks 2.0" ;;
-        "tp") echo "$ZONES_DIR/CTF - Twin Peaks Classic" ;;
-        "usl") echo "$ZONES_DIR/League - USL Matches" ;;
-        "usl2") echo "$ZONES_DIR/League - USL Secondary" ;;
-        "skMini") echo "$ZONES_DIR/Skirmish - Minimaps" ;;
-        "grav") echo "$ZONES_DIR/Sports - GravBall" ;;
-        "arena") echo "$ZONES_DIR/Arcade - The Arena" ;;
-        *) 
-            # Try to find directory by name
-            find "$ZONES_DIR" -type d -name "*$zone*" | head -1
-            ;;
-    esac
+    local config_file="/var/www/gaming-perks-shop/zones-config.json"
+    
+    # Try to find zone in config file
+    if [ -f "$config_file" ] && command -v jq &> /dev/null; then
+        local directory=$(jq -r --arg key "$zone" '.zones[] | select(.key == $key) | .directory' "$config_file" 2>/dev/null)
+        
+        if [ -n "$directory" ] && [ "$directory" != "null" ]; then
+            echo "$ZONES_DIR/$directory"
+            return 0
+        fi
+    fi
+    
+    # Fallback: Try to find directory by name
+    find "$ZONES_DIR" -type d -name "*$zone*" | head -1
 }
 
 execute_zone_action() {

@@ -39,6 +39,11 @@
       "key": "zz",
       "name": "Bots - Zombie Zone",
       "directory": "Bots - Zombie Zone"
+    },
+    {
+      "key": "tzmolo",
+      "name": "TEST ZONE - Molo",
+      "directory": "TEST ZONE - Molo"
     }
   ],
   "zones_dir": "/root/Infantry/Zones",
