@@ -1,0 +1,10 @@
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:  zones: ActiveZone[];
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:    zones: [],
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:            <source src="/CTFPL-Website-Header-1.webm" type="video/webm" />
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:            <source src="/CTFPL-Website-Header-1.mp4" type="video/mp4" />
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:              {/* Server Status - Detailed with zones */}
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:                  {serverData.zones.length > 0 && (
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:                      {serverData.zones.map((zone, index) => (
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:                          <span className="text-gray-300 truncate">{zone.title}</span>
+C:\Users\Travis\gaming-perks-shop\src\app\page.tsx:                          <span className="text-cyan-400 font-mono font-bold">{zone.playerCount}</span>
+grep: 2: No such file or directory
