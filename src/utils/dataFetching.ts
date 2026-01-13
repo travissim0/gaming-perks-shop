@@ -347,14 +347,14 @@ export const queries = {
     return supabaseQuery(
       async () => {
         const query = getCachedSupabase()
-          .from('donations')
-          .select('amount, donor_name, message, created_at')
+          .from('donation_transactions')
+          .select('amount_cents, kofi_from_name, customer_name, donation_message, created_at')
           .eq('status', 'completed')
           .order('created_at', { ascending: false })
           .limit(limit);
         return await query;
       },
-      { 
+      {
         errorMessage: 'Failed to load recent donations',
         useCache: true,
         cacheKey: `recent_donations_${limit}`

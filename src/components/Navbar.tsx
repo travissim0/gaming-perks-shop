@@ -122,8 +122,8 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       
       const { data: donations, error: donationsError } = await supabase
-        .from('donations')
-        .select('id, amount, donor_name, created_at')
+        .from('donation_transactions')
+        .select('id, amount_cents, kofi_from_name, customer_name, created_at')
         .gte('created_at', oneDayAgo)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -131,7 +131,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
       // Get recent orders/purchases
       const { data: orders, error: ordersError } = await supabase
         .from('product_purchases')
-        .select('id, amount, user_id, created_at, profiles(in_game_alias)')
+        .select('id, amount, user_id, created_at')
         .gte('created_at', oneDayAgo)
         .order('created_at', { ascending: false })
         .limit(5);
