@@ -40,11 +40,11 @@ export async function GET(req: NextRequest) {
 
     console.log(`✅ Query successful - found ${donations?.length || 0} donations`);
 
-    // Format the response - protect donor identity by not exposing real names
+    // Format the response
     const formattedDonations = donations?.map(donation => ({
       amount: Math.round(donation.amount_cents / 100),
       currency: donation.currency || 'usd',
-      customerName: 'Supporter', // Privacy: Don't expose real names from Ko-fi
+      customerName: donation.kofi_from_name || donation.customer_name || 'Anonymous',
       message: donation.donation_message || '',
       date: donation.created_at,
       paymentMethod: donation.payment_method || 'kofi'
