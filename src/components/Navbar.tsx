@@ -130,8 +130,8 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
 
       // Get recent orders/purchases
       const { data: orders, error: ordersError } = await supabase
-        .from('product_purchases')
-        .select('id, amount, user_id, created_at')
+        .from('user_products')
+        .select('id, user_id, product_id, created_at')
         .gte('created_at', oneDayAgo)
         .order('created_at', { ascending: false })
         .limit(5);
@@ -246,21 +246,23 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     // Subscribe to new donations
     const donationsSubscription = supabase
       .channel('admin-donations')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'donations' 
-        }, 
+      .on('postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'donation_transactions'
+        },
         (payload) => {
           const newDonation = payload.new as any;
           setDonationNotifications(prev => [newDonation, ...prev.slice(0, 4)]);
-          
+
           // Show browser notification if permission granted and supported
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             try {
+              const amount = Math.round((newDonation.amount_cents || 0) / 100);
+              const donorName = newDonation.kofi_from_name || newDonation.customer_name || 'Anonymous';
               new Notification('New Donation!', {
-                body: `$${newDonation.amount} from ${newDonation.donor_name || 'Anonymous'}`,
+                body: `$${amount} from ${donorName}`,
                 icon: '/favicon.ico'
               });
             } catch (error) {
@@ -274,34 +276,34 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     // Subscribe to new orders
     const ordersSubscription = supabase
       .channel('admin-orders')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'product_purchases' 
-        }, 
+      .on('postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'user_products'
+        },
         async (payload) => {
           const newOrder = payload.new as any;
-          
+
           // Get user profile for the order
           const { data: profile } = await supabase
             .from('profiles')
             .select('in_game_alias')
             .eq('id', newOrder.user_id)
             .single();
-          
+
           const orderWithProfile = {
             ...newOrder,
             profiles: profile
           };
-          
+
           setOrderNotifications(prev => [orderWithProfile, ...prev.slice(0, 4)]);
-          
+
           // Show browser notification if permission granted and supported
           if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             try {
               new Notification('New Order!', {
-                body: `$${newOrder.amount} from ${profile?.in_game_alias || 'User'}`,
+                body: `Order from ${profile?.in_game_alias || 'User'}`,
                 icon: '/favicon.ico'
               });
             } catch (error) {
