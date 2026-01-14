@@ -109,10 +109,7 @@ export default function CTFPLCard() {
       <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
         <div className="flex items-center gap-2">
           <span className="text-yellow-400 text-lg">⏸️</span>
-          <div>
-            <p className="text-yellow-400 text-sm font-medium">Season Currently Inactive</p>
-            <p className="text-gray-400 text-xs">New season coming soon!</p>
-          </div>
+          <p className="text-yellow-400 text-sm font-medium">Season Currently Inactive</p>
         </div>
       </div>
 

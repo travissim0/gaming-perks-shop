@@ -112,19 +112,34 @@ export default function NeutralNavbar() {
               </div>
             </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-6">
+            {/* Desktop Navigation - Stylized League Buttons */}
+            <div className="hidden md:flex items-center gap-4">
+              {/* CTFPL Button - Blue/Cyan theme */}
               <Link
                 href="/league/ctfpl"
-                className="text-gray-300 hover:text-cyan-400 transition-colors font-medium"
+                className="group relative px-4 py-2 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 hover:from-blue-600/40 hover:to-cyan-600/40 border border-blue-500/50 hover:border-cyan-400 rounded-lg transition-all duration-300"
               >
-                CTFPL
+                <span className="flex items-center gap-2">
+                  <span className="text-blue-400 group-hover:text-cyan-300 transition-colors">🏆</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 group-hover:from-blue-300 group-hover:to-cyan-300">
+                    CTFPL
+                  </span>
+                </span>
+                <div className="absolute inset-0 rounded-lg bg-cyan-400/0 group-hover:bg-cyan-400/5 transition-colors" />
               </Link>
+
+              {/* Triple Threat Button - Orange/Red theme */}
               <Link
                 href="/triple-threat"
-                className="text-gray-300 hover:text-orange-400 transition-colors font-medium"
+                className="group relative px-4 py-2 bg-gradient-to-r from-orange-600/20 to-red-600/20 hover:from-orange-600/40 hover:to-red-600/40 border border-orange-500/50 hover:border-orange-400 rounded-lg transition-all duration-300"
               >
-                Triple Threat
+                <span className="flex items-center gap-2">
+                  <span className="text-orange-400 group-hover:text-orange-300 transition-colors">⚡</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400 group-hover:from-orange-300 group-hover:to-red-300">
+                    Triple Threat
+                  </span>
+                </span>
+                <div className="absolute inset-0 rounded-lg bg-orange-400/0 group-hover:bg-orange-400/5 transition-colors" />
               </Link>
             </div>
 
@@ -317,20 +332,29 @@ export default function NeutralNavbar() {
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div className="md:hidden bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
-          <div className="px-4 py-4 space-y-2">
+          <div className="px-4 py-4 space-y-3">
+            {/* CTFPL - Mobile */}
             <Link
               href="/league/ctfpl"
-              className="block px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gray-800/50 rounded-lg transition-colors"
+              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-lg transition-all"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              CTFPL League
+              <span className="text-xl">🏆</span>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                CTFPL League
+              </span>
             </Link>
+
+            {/* Triple Threat - Mobile */}
             <Link
               href="/triple-threat"
-              className="block px-4 py-3 text-gray-300 hover:text-orange-400 hover:bg-gray-800/50 rounded-lg transition-colors"
+              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-600/20 to-red-600/20 border border-orange-500/30 rounded-lg transition-all"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              Triple Threat
+              <span className="text-xl">⚡</span>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400">
+                Triple Threat
+              </span>
             </Link>
             {!user && (
               <>
