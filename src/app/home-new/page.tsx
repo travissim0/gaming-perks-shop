@@ -156,7 +156,7 @@ export default function HomeNew() {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'numeric',
       day: 'numeric',
-      year: 'numeric'
+      year: '2-digit'
     });
   };
 

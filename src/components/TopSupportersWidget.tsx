@@ -378,12 +378,12 @@ function SupporterRow({
       </div>
 
       <div className="relative z-10">
-        <div className="pr-20"> {/* Add right padding to avoid overlap with amount */}
-          <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+        <div className="pr-20 flex items-baseline gap-3"> {/* Add right padding to avoid overlap with amount */}
+          <div className={`text-white font-bold ${nameTextSizes[rankIndex]} text-left flex-shrink-0`}>
             {supporter.name}
           </div>
           {supporter.message && (
-            <p className="text-gray-300 text-sm mt-1">
+            <p className="text-gray-300 text-sm truncate italic">
               "{supporter.message}"
             </p>
           )}
