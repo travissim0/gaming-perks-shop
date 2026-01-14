@@ -13,7 +13,9 @@ interface NewsPost {
   subtitle: string;
   content: any;
   featured_image_url: string;
+  author_id: string;
   author_name: string;
+  author_alias?: string;
   status: string;
   featured: boolean;
   view_count: number;
@@ -50,7 +52,7 @@ export default function HomeNewsSection() {
     checkAdmin();
   }, [user]);
 
-  // Fetch news posts
+  // Fetch news posts with author profiles
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -62,7 +64,32 @@ export default function HomeNewsSection() {
           .limit(10);
 
         if (error) throw error;
-        setPosts(data || []);
+
+        // Fetch author aliases for all posts
+        if (data && data.length > 0) {
+          const authorIds = [...new Set(data.map((p: any) => p.author_id).filter(Boolean))];
+
+          if (authorIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, in_game_alias')
+              .in('id', authorIds);
+
+            const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.in_game_alias]));
+
+            // Add author_alias to each post
+            const postsWithAlias = data.map((post: any) => ({
+              ...post,
+              author_alias: profileMap.get(post.author_id) || post.author_name
+            }));
+
+            setPosts(postsWithAlias);
+          } else {
+            setPosts(data || []);
+          }
+        } else {
+          setPosts([]);
+        }
       } catch (error) {
         console.error('Failed to fetch news:', error);
       } finally {
@@ -123,19 +150,45 @@ export default function HomeNewsSection() {
     return null;
   };
 
-  const handlePostCreated = () => {
+  const handlePostCreated = async () => {
     // Refresh posts after creating a new one
     setIsLoading(true);
-    supabase
-      .from('news_posts')
-      .select('*')
-      .eq('status', 'published')
-      .order('published_at', { ascending: false })
-      .limit(10)
-      .then(({ data }) => {
-        setPosts(data || []);
-        setIsLoading(false);
-      });
+    try {
+      const { data } = await supabase
+        .from('news_posts')
+        .select('*')
+        .eq('status', 'published')
+        .order('published_at', { ascending: false })
+        .limit(10);
+
+      if (data && data.length > 0) {
+        const authorIds = [...new Set(data.map((p: any) => p.author_id).filter(Boolean))];
+
+        if (authorIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, in_game_alias')
+            .in('id', authorIds);
+
+          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.in_game_alias]));
+
+          const postsWithAlias = data.map((post: any) => ({
+            ...post,
+            author_alias: profileMap.get(post.author_id) || post.author_name
+          }));
+
+          setPosts(postsWithAlias);
+        } else {
+          setPosts(data || []);
+        }
+      } else {
+        setPosts([]);
+      }
+    } catch (error) {
+      console.error('Failed to refresh posts:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -242,10 +295,10 @@ export default function HomeNewsSection() {
                         <Calendar className="w-3 h-3" />
                         {formatDate(post.published_at || post.created_at)}
                       </span>
-                      {post.author_name && (
+                      {(post.author_alias || post.author_name) && (
                         <span className="flex items-center gap-1">
                           <User className="w-3 h-3" />
-                          {post.author_name}
+                          {post.author_alias || post.author_name}
                         </span>
                       )}
                       {post.tags && post.tags.length > 0 && (
