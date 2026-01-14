@@ -54,6 +54,8 @@ export async function GET(request: NextRequest) {
         game_losses,
         series_wins,
         series_losses,
+        kills,
+        deaths,
         created_at,
         updated_at
       `);
@@ -85,12 +87,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate additional stats for each player
-    const enrichedData = (data || []).map(player => {
+    const enrichedData = (data || []).map((player: any) => {
       const totalGames = player.game_wins + player.game_losses;
       const totalSeries = player.series_wins + player.series_losses;
-      
+      const kills = player.kills || 0;
+      const deaths = player.deaths || 0;
+      const kdRatio = deaths > 0 ? Math.round((kills / deaths) * 100) / 100 : kills;
+
       return {
         ...player,
+        kills,
+        deaths,
+        kd_ratio: kdRatio,
         total_games: totalGames,
         total_series: totalSeries,
         game_win_rate: totalGames > 0 ? Math.round((player.game_wins / totalGames) * 100 * 100) / 100 : 0,

@@ -44,6 +44,12 @@ export default function TripleThreatStatsPage() {
   const [topGameWins, setTopGameWins] = useState<TopPlayer[]>([]);
   const [topSeriesWins, setTopSeriesWins] = useState<TopPlayer[]>([]);
   const [allPlayers, setAllPlayers] = useState<PlayerRecord[]>([]);
+  const [aggregateStats, setAggregateStats] = useState<{ totalGames: number; totalPlayers: number; totalSeries: number; avgKdRatio: number }>({
+    totalGames: 0,
+    totalPlayers: 0,
+    totalSeries: 0,
+    avgKdRatio: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,10 +73,11 @@ export default function TripleThreatStatsPage() {
       setLoading(true);
       setError(null);
 
-      // Load top 5 game wins and series wins
-      const [gameWinsResponse, seriesWinsResponse] = await Promise.all([
+      // Load top 5 game wins, series wins, AND all players for aggregate stats
+      const [gameWinsResponse, seriesWinsResponse, allPlayersResponse] = await Promise.all([
         fetch('/api/triple-threat/stats?type=top-game-wins&limit=5'),
-        fetch('/api/triple-threat/stats?type=top-series-wins&limit=5')
+        fetch('/api/triple-threat/stats?type=top-series-wins&limit=5'),
+        fetch('/api/triple-threat/stats?type=all&limit=1000') // Load all for aggregate calculations
       ]);
 
       if (!gameWinsResponse.ok || !seriesWinsResponse.ok) {
@@ -79,9 +86,24 @@ export default function TripleThreatStatsPage() {
 
       const gameWinsData = await gameWinsResponse.json();
       const seriesWinsData = await seriesWinsResponse.json();
+      const allPlayersData = await allPlayersResponse.json();
 
       setTopGameWins(gameWinsData.data || []);
       setTopSeriesWins(seriesWinsData.data || []);
+
+      // Calculate aggregate stats from all players
+      const players = allPlayersData.data || [];
+      const totalGames = players.reduce((sum: number, p: PlayerRecord) => sum + (p.total_games || 0), 0);
+      const totalSeries = players.reduce((sum: number, p: PlayerRecord) => sum + (p.total_series || 0), 0);
+      const totalKdRatio = players.reduce((sum: number, p: PlayerRecord) => sum + (p.kd_ratio || 0), 0);
+      const avgKdRatio = players.length > 0 ? totalKdRatio / players.length : 0;
+
+      setAggregateStats({
+        totalGames,
+        totalPlayers: players.length,
+        totalSeries,
+        avgKdRatio
+      });
 
     } catch (err: any) {
       console.error('Error loading stats:', err);
@@ -180,12 +202,10 @@ export default function TripleThreatStatsPage() {
 
         {/* Stat Cards */}
         <StatCardsGrid
-          totalGames={allPlayers.reduce((sum, p) => sum + p.total_games, 0)}
-          totalPlayers={allPlayers.length}
-          totalSeries={allPlayers.reduce((sum, p) => sum + p.total_series, 0)}
-          avgKdRatio={allPlayers.length > 0 
-            ? allPlayers.reduce((sum, p) => sum + (p.kd_ratio || 0), 0) / allPlayers.length 
-            : 0}
+          totalGames={aggregateStats.totalGames}
+          totalPlayers={aggregateStats.totalPlayers}
+          totalSeries={aggregateStats.totalSeries}
+          avgKdRatio={aggregateStats.avgKdRatio}
         />
 
         {/* Recent Series */}
