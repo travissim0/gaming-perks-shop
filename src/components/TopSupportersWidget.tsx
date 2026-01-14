@@ -19,12 +19,14 @@ interface TopSupportersWidgetProps {
   showAdminControls?: boolean;
   maxSupporters?: number;
   className?: string;
+  compact?: boolean;
 }
 
-export default function TopSupportersWidget({ 
-  showAdminControls = false, 
+export default function TopSupportersWidget({
+  showAdminControls = false,
   maxSupporters = 10,
-  className = ""
+  className = "",
+  compact = false
 }: TopSupportersWidgetProps) {
   const { user } = useAuth();
   const [supporters, setSupporters] = useState<Supporter[]>([]);
@@ -194,6 +196,7 @@ export default function TopSupportersWidget({
               onMoveUp={() => handleMoveUp(index)}
               onMoveDown={() => handleMoveDown(index)}
               formatAmount={formatAmount}
+              compact={compact}
             />
             ))
           )}
@@ -210,6 +213,7 @@ interface SupporterRowProps {
   isAdmin: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  compact?: boolean;
   onEdit: () => void;
   onSave: (newData: Partial<Supporter>) => void;
   onMoveUp: () => void;
@@ -228,7 +232,8 @@ function SupporterRow({
   onSave,
   onMoveUp,
   onMoveDown,
-  formatAmount
+  formatAmount,
+  compact = false
 }: SupporterRowProps) {
   const [tempName, setTempName] = useState(supporter.name);
   const [tempAmount, setTempAmount] = useState(supporter.amount);
@@ -322,20 +327,56 @@ function SupporterRow({
     );
   }
 
+  // Compact mode - single line with inline message
+  if (compact) {
+    const compactColors = ['text-yellow-400', 'text-gray-300', 'text-amber-500', 'text-blue-400', 'text-purple-400'];
+    const compactBorders = [
+      'border-yellow-500/30',
+      'border-gray-400/30',
+      'border-amber-500/30',
+      'border-blue-500/20',
+      'border-purple-500/20',
+      'border-cyan-500/20',
+      'border-gray-500/20',
+      'border-gray-600/20',
+      'border-gray-600/20',
+      'border-gray-600/20'
+    ];
+
+    return (
+      <div className={`flex items-center gap-2 p-2 rounded-lg border bg-gray-800/40 hover:bg-gray-800/60 transition-colors ${compactBorders[Math.min(index, compactBorders.length - 1)]}`}>
+        <span className="text-lg flex-shrink-0">{supporter.medal}</span>
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <span className="text-white font-semibold text-sm truncate">
+            {supporter.name}
+          </span>
+          {supporter.message && (
+            <span className="text-gray-400 text-xs truncate italic">
+              "{supporter.message}"
+            </span>
+          )}
+        </div>
+        <span className={`font-bold text-sm flex-shrink-0 ${compactColors[Math.min(index, compactColors.length - 1)]}`}>
+          {formatAmount(supporter.amount, supporter.currency)}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className={`relative overflow-hidden rounded-lg border transition-all duration-300 shadow-lg hover:shadow-2xl ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
       {/* Massive background trophy icon with opacity */}
       <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
         <div className="text-9xl">{supporter.medal}</div>
       </div>
-      
+
       {/* Money amount in top right corner */}
       <div className="absolute top-2 right-2 z-20">
         <div className={`font-bold ${rankIndex < 3 ? trophyColors[rankIndex] : 'text-cyan-300'} ${amountTextSizes[rankIndex]}`}>
           {formatAmount(supporter.amount, supporter.currency)}
         </div>
       </div>
-      
+
       <div className="relative z-10">
         <div className="pr-20"> {/* Add right padding to avoid overlap with amount */}
           <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>

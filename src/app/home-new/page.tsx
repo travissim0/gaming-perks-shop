@@ -177,7 +177,7 @@ export default function HomeNew() {
 
       {/* Main Content - News (left) + Donations (right) */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
           {/* News Section - Takes 3 columns */}
           <div className="lg:col-span-3">
@@ -185,80 +185,80 @@ export default function HomeNew() {
           </div>
 
           {/* Right Sidebar - Donations/Orders (compact) + Top Supporters (prominent) */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Donations & Orders - Side by Side, Compact */}
-            <div className="grid grid-cols-2 gap-2">
-              {/* Recent Donations - Compact */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Donations & Orders - Side by Side */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Recent Donations */}
               <div className="bg-gray-800/50 rounded-lg border border-yellow-500/20 overflow-hidden">
-                <div className="px-2 py-1.5 border-b border-gray-700/50">
-                  <h3 className="text-xs font-bold text-yellow-400">Donations</h3>
+                <div className="px-3 py-2 border-b border-gray-700/50">
+                  <h3 className="text-sm font-bold text-yellow-400">Recent Donations</h3>
                 </div>
                 {isLoadingFinancials ? (
                   <div className="p-2 space-y-1">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                      <div key={i} className="animate-pulse h-10 bg-gray-700/30 rounded"></div>
                     ))}
                   </div>
                 ) : recentDonations.length > 0 ? (
-                  <div className="p-1.5 space-y-1">
-                    {recentDonations.slice(0, 4).map((donation) => (
-                      <div key={donation.id} className="bg-gray-700/30 rounded p-1.5">
-                        <div className="flex justify-between items-center">
-                          <span className="text-white text-xs truncate max-w-[50px]">
+                  <div className="p-2 space-y-1.5">
+                    {recentDonations.slice(0, 5).map((donation) => (
+                      <div key={donation.id} className="bg-gray-700/30 rounded p-2 flex justify-between items-center">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white text-sm truncate block">
                             {donation.customerName}
                           </span>
-                          <span className="text-yellow-400 font-bold text-xs">
-                            ${donation.amount.toFixed(0)}
+                          <span className="text-gray-500 text-xs">
+                            {formatDate(donation.date)}
                           </span>
                         </div>
-                        <div className="text-gray-500 text-[10px]">
-                          {formatDate(donation.date)}
-                        </div>
+                        <span className="text-yellow-400 font-bold text-sm ml-2">
+                          ${donation.amount.toFixed(0)}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-2 text-center text-gray-500 text-xs">None</div>
+                  <div className="p-3 text-center text-gray-500 text-xs">None</div>
                 )}
               </div>
 
-              {/* Recent Orders - Compact */}
+              {/* Recent Orders */}
               <div className="bg-gray-800/50 rounded-lg border border-green-500/20 overflow-hidden">
-                <div className="px-2 py-1.5 border-b border-gray-700/50">
-                  <h3 className="text-xs font-bold text-green-400">Orders</h3>
+                <div className="px-3 py-2 border-b border-gray-700/50">
+                  <h3 className="text-sm font-bold text-green-400">Recent Orders</h3>
                 </div>
                 {isLoadingFinancials ? (
                   <div className="p-2 space-y-1">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                      <div key={i} className="animate-pulse h-10 bg-gray-700/30 rounded"></div>
                     ))}
                   </div>
                 ) : recentOrders.length > 0 ? (
-                  <div className="p-1.5 space-y-1">
-                    {recentOrders.slice(0, 4).map((order) => (
-                      <div key={order.id} className="bg-gray-700/30 rounded p-1.5">
-                        <div className="flex justify-between items-center">
-                          <span className="text-white text-xs truncate max-w-[50px]">
+                  <div className="p-2 space-y-1.5">
+                    {recentOrders.slice(0, 5).map((order) => (
+                      <div key={order.id} className="bg-gray-700/30 rounded p-2 flex justify-between items-center">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white text-sm truncate block">
                             {order.customerName}
                           </span>
-                          <span className="text-green-400 font-bold text-xs">
-                            ${order.amount.toFixed(0)}
+                          <span className="text-gray-400 text-xs truncate block">
+                            {order.productName}
                           </span>
                         </div>
-                        <div className="text-gray-500 text-[10px]">
-                          {formatDate(order.date)}
-                        </div>
+                        <span className="text-green-400 font-bold text-sm ml-2">
+                          ${order.amount.toFixed(0)}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-2 text-center text-gray-500 text-xs">None</div>
+                  <div className="p-3 text-center text-gray-500 text-xs">None</div>
                 )}
               </div>
             </div>
 
-            {/* Top Supporters - Full Width, Prominent */}
-            <TopSupportersWidget maxSupporters={5} />
+            {/* Top Supporters - Full Width, Compact with inline messages */}
+            <TopSupportersWidget maxSupporters={10} compact={true} />
           </div>
         </div>
       </div>
