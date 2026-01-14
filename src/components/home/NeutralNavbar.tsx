@@ -5,38 +5,65 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { Bell, Menu, X, User, LogOut, Settings } from 'lucide-react';
 
 export default function NeutralNavbar() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showAdminDropdown, setShowAdminDropdown] = useState(false);
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const userDropdownRef = useRef<HTMLDivElement>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isCtfAdmin, setIsCtfAdmin] = useState(false);
+  const [isMediaManager, setIsMediaManager] = useState(false);
+  const [isZoneAdmin, setIsZoneAdmin] = useState(false);
+  const [isSiteAdmin, setIsSiteAdmin] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
-  // Fetch user profile
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+  const adminDropdownRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  // Fetch user profile and permissions
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
 
-      const { data } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
-        .select('in_game_alias, avatar_url')
+        .select('in_game_alias, avatar_url, is_admin, ctf_role, is_media_manager, is_zone_admin, site_admin')
         .eq('id', user.id)
         .single();
 
-      if (data) setUserProfile(data);
+      if (profile) {
+        setUserProfile(profile);
+        setUserAvatar(profile.avatar_url);
+        setIsAdmin(profile.is_admin || false);
+        setIsCtfAdmin(profile.is_admin || profile.ctf_role === 'ctf_admin');
+        setIsMediaManager(profile.is_media_manager || false);
+        setIsZoneAdmin(profile.is_admin || profile.is_zone_admin || profile.ctf_role === 'ctf_admin' || profile.ctf_role === 'ctf_head_referee');
+        setIsSiteAdmin(profile.site_admin || false);
+      }
     };
 
     fetchProfile();
   }, [user]);
 
-  // Click outside to close dropdown
+  // Click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (userDropdownRef.current && !userDropdownRef.current.contains(target)) {
         setShowUserDropdown(false);
+      }
+      if (adminDropdownRef.current && !adminDropdownRef.current.contains(target)) {
+        setShowAdminDropdown(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
+        setShowNotificationDropdown(false);
       }
     };
 
@@ -48,6 +75,8 @@ export default function NeutralNavbar() {
     await signOut();
     router.push('/');
   };
+
+  const hasAdminAccess = isAdmin || isCtfAdmin || isMediaManager || isZoneAdmin || isSiteAdmin;
 
   return (
     <nav className="relative z-50">
@@ -99,50 +128,163 @@ export default function NeutralNavbar() {
               </Link>
             </div>
 
-            {/* Right Side - Auth */}
-            <div className="flex items-center gap-4">
+            {/* Right Side - Utilities (matching original navbar) */}
+            <div className="flex items-center space-x-3">
               {user ? (
-                <div className="relative" ref={userDropdownRef}>
-                  <button
-                    onClick={() => setShowUserDropdown(!showUserDropdown)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition-colors border border-gray-700/50"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                      {userProfile?.in_game_alias?.charAt(0)?.toUpperCase() || 'U'}
-                    </div>
-                    <span className="hidden sm:block text-gray-200 text-sm">
-                      {userProfile?.in_game_alias || 'User'}
-                    </span>
-                  </button>
+                <>
+                  {/* Notifications Bell */}
+                  <div className="relative" ref={notificationRef}>
+                    <button
+                      onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
+                      className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
+                    >
+                      <Bell className="w-5 h-5" />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
 
-                  {showUserDropdown && (
-                    <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
-                      <Link
-                        href="/profile"
-                        className="flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-gray-700/50 transition-colors"
-                        onClick={() => setShowUserDropdown(false)}
-                      >
-                        <User className="w-4 h-4" />
-                        Profile
-                      </Link>
-                      <Link
-                        href="/dashboard"
-                        className="flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-gray-700/50 transition-colors"
-                        onClick={() => setShowUserDropdown(false)}
-                      >
-                        <User className="w-4 h-4" />
-                        Dashboard
-                      </Link>
+                    {showNotificationDropdown && (
+                      <div className="absolute right-0 top-full mt-1 w-72 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
+                        <div className="py-2">
+                          <div className="px-4 py-2 border-b border-gray-600/50">
+                            <h3 className="text-sm font-medium text-white">Notifications</h3>
+                          </div>
+                          <div className="px-4 py-6 text-center text-gray-400">
+                            <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No new notifications</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Donate Button */}
+                  <Link
+                    href="/donate"
+                    className="px-3 py-1.5 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white text-sm font-medium rounded-lg transition-all hover:scale-105"
+                  >
+                    💰 Donate
+                  </Link>
+
+                  {/* Admin Dropdown */}
+                  {hasAdminAccess && (
+                    <div className="relative" ref={adminDropdownRef}>
                       <button
-                        onClick={handleSignOut}
-                        className="flex items-center gap-2 w-full px-4 py-3 text-red-400 hover:bg-gray-700/50 transition-colors"
+                        onClick={() => setShowAdminDropdown(!showAdminDropdown)}
+                        className="flex items-center space-x-1 px-2 py-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold rounded-lg transition-all duration-300 border border-red-500/30 hover:shadow-lg hover:shadow-red-500/20"
                       >
-                        <LogOut className="w-4 h-4" />
-                        Sign Out
+                        <span>⚙️</span>
+                        <span className="hidden sm:inline">Admin</span>
+                        <svg className={`w-3 h-3 transition-transform duration-300 ${showAdminDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
                       </button>
+
+                      {showAdminDropdown && (
+                        <div className="absolute right-0 top-full mt-1 min-w-48 bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl z-50 backdrop-blur-sm">
+                          <div className="py-2">
+                            {isAdmin && (
+                              <Link
+                                href="/admin"
+                                className="flex items-center px-3 py-2 text-gray-300 hover:text-red-400 hover:bg-red-600/10 transition-all text-sm"
+                                onClick={() => setShowAdminDropdown(false)}
+                              >
+                                <span className="mr-2">🛡️</span>
+                                Site Admin
+                              </Link>
+                            )}
+                            {(isAdmin || isZoneAdmin) && (
+                              <Link
+                                href="/admin/zones"
+                                className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-orange-600/10 transition-all text-sm"
+                                onClick={() => setShowAdminDropdown(false)}
+                              >
+                                <span className="mr-2">🖥️</span>
+                                Zones
+                              </Link>
+                            )}
+                            {isCtfAdmin && (
+                              <Link
+                                href="/admin/ctf"
+                                className="flex items-center px-3 py-2 text-gray-300 hover:text-indigo-400 hover:bg-indigo-600/10 transition-all text-sm"
+                                onClick={() => setShowAdminDropdown(false)}
+                              >
+                                <span className="mr-2">⚔️</span>
+                                CTF Admin
+                              </Link>
+                            )}
+                            {(isAdmin || isMediaManager || isSiteAdmin) && (
+                              <Link
+                                href="/admin/videos"
+                                className="flex items-center px-3 py-2 text-gray-300 hover:text-pink-400 hover:bg-pink-600/10 transition-all text-sm"
+                                onClick={() => setShowAdminDropdown(false)}
+                              >
+                                <span className="mr-2">🎬</span>
+                                Media
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+
+                  {/* User Avatar Dropdown */}
+                  <div className="relative" ref={userDropdownRef}>
+                    <button
+                      onClick={() => setShowUserDropdown(!showUserDropdown)}
+                      className="flex items-center"
+                    >
+                      {userAvatar ? (
+                        <img
+                          src={userAvatar}
+                          alt="Avatar"
+                          className="w-10 h-10 rounded-full border-2 border-gray-600 hover:border-cyan-400 transition-colors object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white font-bold border-2 border-gray-600 hover:border-cyan-400 transition-colors">
+                          {userProfile?.in_game_alias?.charAt(0)?.toUpperCase() || 'U'}
+                        </div>
+                      )}
+                    </button>
+
+                    {showUserDropdown && (
+                      <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                        <div className="px-4 py-3 border-b border-gray-700">
+                          <p className="text-sm font-medium text-white truncate">
+                            {userProfile?.in_game_alias || 'User'}
+                          </p>
+                        </div>
+                        <Link
+                          href="/profile"
+                          className="flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-gray-700/50 transition-colors"
+                          onClick={() => setShowUserDropdown(false)}
+                        >
+                          <User className="w-4 h-4" />
+                          Profile
+                        </Link>
+                        <Link
+                          href="/dashboard"
+                          className="flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-gray-700/50 transition-colors"
+                          onClick={() => setShowUserDropdown(false)}
+                        >
+                          <Settings className="w-4 h-4" />
+                          Dashboard
+                        </Link>
+                        <button
+                          onClick={handleSignOut}
+                          className="flex items-center gap-2 w-full px-4 py-3 text-red-400 hover:bg-gray-700/50 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="flex items-center gap-2">
                   <Link
@@ -190,6 +332,24 @@ export default function NeutralNavbar() {
             >
               Triple Threat
             </Link>
+            {!user && (
+              <>
+                <Link
+                  href="/login"
+                  className="block px-4 py-3 text-gray-300 hover:text-white hover:bg-gray-800/50 rounded-lg transition-colors"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/register"
+                  className="block px-4 py-3 text-cyan-400 hover:text-cyan-300 hover:bg-gray-800/50 rounded-lg transition-colors font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Register
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

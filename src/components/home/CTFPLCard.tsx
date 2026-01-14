@@ -105,6 +105,17 @@ export default function CTFPLCard() {
       linkTo="/league/ctfpl"
       linkText="View Full League"
     >
+      {/* Season Status Banner */}
+      <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+        <div className="flex items-center gap-2">
+          <span className="text-yellow-400 text-lg">⏸️</span>
+          <div>
+            <p className="text-yellow-400 text-sm font-medium">Season Currently Inactive</p>
+            <p className="text-gray-400 text-xs">New season coming soon!</p>
+          </div>
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="animate-pulse space-y-3">
           <div className="h-4 bg-gray-700 rounded w-3/4"></div>
