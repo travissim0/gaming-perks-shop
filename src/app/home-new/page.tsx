@@ -257,8 +257,8 @@ export default function HomeNew() {
               </div>
             </div>
 
-            {/* Top Supporters - Full Width, Compact with inline messages */}
-            <TopSupportersWidget maxSupporters={10} compact={true} />
+            {/* Top Supporters - Full Width with tiered styling */}
+            <TopSupportersWidget maxSupporters={10} />
           </div>
         </div>
       </div>
