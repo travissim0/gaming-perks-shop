@@ -8,12 +8,36 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Handle OPTIONS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-api-key',
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify the request is from the game server using the service role key
     const authHeader = request.headers.get('Authorization');
     const apiKeyHeader = request.headers.get('apikey');
-    
+
+    // Debug: Log all headers received
+    console.log('=== Triple Threat Game Stats Request ===');
+    console.log('Headers received:');
+    request.headers.forEach((value, key) => {
+      // Don't log full key values for security, just presence
+      if (key.toLowerCase() === 'authorization' || key.toLowerCase() === 'apikey') {
+        console.log(`  ${key}: [present, length=${value.length}]`);
+      } else {
+        console.log(`  ${key}: ${value.substring(0, 50)}`);
+      }
+    });
+
     if (!authHeader || !apiKeyHeader) {
       console.log('Missing auth headers:', { authHeader: !!authHeader, apiKeyHeader: !!apiKeyHeader });
       return NextResponse.json({ error: 'Missing authentication headers' }, { status: 401 });
