@@ -246,7 +246,7 @@ export default function HomeNewsSection() {
                 <div className="flex gap-4">
                   {/* Thumbnail or Video */}
                   {(post.featured_image_url || youtubeId) && (
-                    <div className="flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-gray-900">
+                    <div className="flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
                       {youtubeId ? (
                         <a
                           href={videoUrl}
@@ -257,7 +257,7 @@ export default function HomeNewsSection() {
                           <img
                             src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`}
                             alt={post.title}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain"
                           />
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/20 transition-colors">
                             <Play className="w-8 h-8 text-white fill-white" />
@@ -267,7 +267,7 @@ export default function HomeNewsSection() {
                         <img
                           src={post.featured_image_url}
                           alt={post.title}
-                          className="w-full h-full object-cover"
+                          className="max-w-full max-h-full object-contain"
                         />
                       ) : null}
                     </div>
