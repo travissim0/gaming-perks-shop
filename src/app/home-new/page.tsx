@@ -176,7 +176,7 @@ export default function HomeNew() {
       />
 
       {/* Main Content - News (left) + Donations (right) */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
           {/* News Section - Takes 3 columns */}
@@ -196,22 +196,20 @@ export default function HomeNew() {
                 {isLoadingFinancials ? (
                   <div className="p-2 space-y-1">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-10 bg-gray-700/30 rounded"></div>
+                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
                     ))}
                   </div>
                 ) : recentDonations.length > 0 ? (
-                  <div className="p-2 space-y-1.5">
+                  <div className="p-2 space-y-1">
                     {recentDonations.slice(0, 5).map((donation) => (
-                      <div key={donation.id} className="bg-gray-700/30 rounded p-2 flex justify-between items-center">
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white text-sm truncate block">
-                            {donation.customerName}
-                          </span>
-                          <span className="text-gray-500 text-xs">
-                            {formatDate(donation.date)}
-                          </span>
-                        </div>
-                        <span className="text-yellow-400 font-bold text-sm ml-2">
+                      <div key={donation.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
+                        <span className="text-white text-sm truncate flex-1 min-w-0">
+                          {donation.customerName}
+                        </span>
+                        <span className="text-gray-500 text-xs whitespace-nowrap">
+                          {formatDate(donation.date)}
+                        </span>
+                        <span className="text-yellow-400 font-bold text-sm whitespace-nowrap">
                           ${donation.amount.toFixed(0)}
                         </span>
                       </div>
@@ -230,22 +228,23 @@ export default function HomeNew() {
                 {isLoadingFinancials ? (
                   <div className="p-2 space-y-1">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-10 bg-gray-700/30 rounded"></div>
+                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
                     ))}
                   </div>
                 ) : recentOrders.length > 0 ? (
-                  <div className="p-2 space-y-1.5">
+                  <div className="p-2 space-y-1">
                     {recentOrders.slice(0, 5).map((order) => (
-                      <div key={order.id} className="bg-gray-700/30 rounded p-2 flex justify-between items-center">
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white text-sm truncate block">
-                            {order.customerName}
-                          </span>
-                          <span className="text-gray-400 text-xs truncate block">
-                            {order.productName}
-                          </span>
-                        </div>
-                        <span className="text-green-400 font-bold text-sm ml-2">
+                      <div key={order.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
+                        <span className="text-white text-sm truncate min-w-0" style={{ flex: '1 1 0' }}>
+                          {order.customerName}
+                        </span>
+                        <span className="text-gray-400 text-xs truncate min-w-0" style={{ flex: '1.5 1 0' }}>
+                          {order.productName}
+                        </span>
+                        <span className="text-gray-500 text-xs whitespace-nowrap">
+                          {formatDate(order.date)}
+                        </span>
+                        <span className="text-green-400 font-bold text-sm whitespace-nowrap">
                           ${order.amount.toFixed(0)}
                         </span>
                       </div>
@@ -265,7 +264,7 @@ export default function HomeNew() {
 
       {/* Footer */}
       <footer className="mt-12 border-t border-gray-800/50 py-6 bg-gray-950/50">
-        <div className="max-w-7xl mx-auto px-4 text-center">
+        <div className="max-w-[1600px] mx-auto px-4 text-center">
           <div className="text-xl font-black tracking-wider mb-1">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
               FREE INFANTRY
