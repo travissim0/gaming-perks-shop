@@ -22,41 +22,54 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse body first so we can check for auth_key in body
+    const body = await request.json();
+
     // Verify the request is from the game server using the service role key
+    // Check headers first, then fall back to body (for edge networks that strip headers)
     const authHeader = request.headers.get('Authorization');
     const apiKeyHeader = request.headers.get('apikey');
+    const bodyAuthKey = body.auth_key;
 
-    // Debug: Log all headers received
+    // Debug logging
     console.log('=== Triple Threat Game Stats Request ===');
-    console.log('Headers received:');
-    request.headers.forEach((value, key) => {
-      // Don't log full key values for security, just presence
-      if (key.toLowerCase() === 'authorization' || key.toLowerCase() === 'apikey') {
-        console.log(`  ${key}: [present, length=${value.length}]`);
-      } else {
-        console.log(`  ${key}: ${value.substring(0, 50)}`);
-      }
+    console.log('Auth sources:', {
+      authHeader: !!authHeader,
+      apiKeyHeader: !!apiKeyHeader,
+      bodyAuthKey: !!bodyAuthKey
     });
 
-    if (!authHeader || !apiKeyHeader) {
-      console.log('Missing auth headers:', { authHeader: !!authHeader, apiKeyHeader: !!apiKeyHeader });
-      return NextResponse.json({ error: 'Missing authentication headers' }, { status: 401 });
-    }
-
-    // Verify the service role key
+    // Get the expected key
     const expectedKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!expectedKey) {
       console.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    const providedKey = authHeader.replace('Bearer ', '');
-    if (providedKey !== expectedKey || apiKeyHeader !== expectedKey) {
-      console.log('Invalid service key provided');
-      return NextResponse.json({ error: 'Invalid authentication' }, { status: 401 });
+    // Try to authenticate from multiple sources
+    let authenticated = false;
+
+    // Method 1: Headers (preferred)
+    if (authHeader && apiKeyHeader) {
+      const providedKey = authHeader.replace('Bearer ', '');
+      if (providedKey === expectedKey && apiKeyHeader === expectedKey) {
+        authenticated = true;
+        console.log('Authenticated via headers');
+      }
     }
 
-    const body = await request.json();
+    // Method 2: Body auth_key (fallback for edge networks)
+    if (!authenticated && bodyAuthKey) {
+      if (bodyAuthKey === expectedKey) {
+        authenticated = true;
+        console.log('Authenticated via body auth_key');
+      }
+    }
+
+    if (!authenticated) {
+      console.log('Authentication failed - no valid credentials found');
+      return NextResponse.json({ error: 'Missing or invalid authentication' }, { status: 401 });
+    }
     console.log('Received game stats payload:', JSON.stringify(body, null, 2));
 
     const { 
