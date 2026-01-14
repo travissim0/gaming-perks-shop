@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
 import DynamicHeroCarousel from '@/components/home/DynamicHeroCarousel';
 import ServerStatusBar from '@/components/home/ServerStatusBar';
 import HomeNewsSection from '@/components/home/HomeNewsSection';
+import TopSupportersWidget from '@/components/TopSupportersWidget';
 
 interface ServerStats {
   totalPlayers: number;
@@ -39,14 +39,8 @@ interface RecentOrder {
   id: string;
   customerName: string;
   productName: string;
-  email: string;
   amount: number;
   date: string;
-}
-
-interface TopSupporter {
-  name: string;
-  totalAmount: number;
 }
 
 export default function HomeNew() {
@@ -58,7 +52,6 @@ export default function HomeNew() {
   });
   const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
-  const [topSupporters, setTopSupporters] = useState<TopSupporter[]>([]);
   const [isLoadingFinancials, setIsLoadingFinancials] = useState(true);
 
   // Fetch server status
@@ -143,21 +136,10 @@ export default function HomeNew() {
               id: o.id,
               customerName: profile?.in_game_alias || 'Unknown',
               productName: product?.name || 'Unknown Product',
-              email: profile?.email || '',
               amount: (product?.price || 0) / 100,
               date: o.created_at
             };
           }));
-        }
-
-        // Fetch top supporters
-        const response = await fetch('/api/supporters');
-        const supportersData = await response.json();
-        if (supportersData.topSupporters) {
-          setTopSupporters(supportersData.topSupporters.slice(0, 5).map((s: any) => ({
-            name: s.name,
-            totalAmount: s.totalAmount
-          })));
         }
 
       } catch (error) {
@@ -202,127 +184,81 @@ export default function HomeNew() {
             <HomeNewsSection />
           </div>
 
-          {/* Right Sidebar - Donations, Orders, Top Supporters */}
+          {/* Right Sidebar - Donations/Orders (compact) + Top Supporters (prominent) */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Recent Donations */}
-            <div className="bg-gray-800/50 rounded-lg border border-yellow-500/30 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-700/50">
-                <h3 className="text-sm font-bold text-white">Recent Donations</h3>
-              </div>
-              {isLoadingFinancials ? (
-                <div className="p-4 space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="animate-pulse h-14 bg-gray-700/30 rounded"></div>
-                  ))}
+            {/* Donations & Orders - Side by Side, Compact */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Recent Donations - Compact */}
+              <div className="bg-gray-800/50 rounded-lg border border-yellow-500/20 overflow-hidden">
+                <div className="px-2 py-1.5 border-b border-gray-700/50">
+                  <h3 className="text-xs font-bold text-yellow-400">Donations</h3>
                 </div>
-              ) : recentDonations.length > 0 ? (
-                <div className="p-3 space-y-2">
-                  {recentDonations.map((donation) => (
-                    <div key={donation.id} className="bg-gray-700/30 rounded-lg p-2.5 border border-gray-600/30">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-white text-sm font-medium truncate max-w-[100px]">
-                          {donation.customerName}
-                        </span>
-                        <span className="text-yellow-400 font-bold text-sm">
-                          ${donation.amount.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs text-gray-400">
-                        <span>{donation.paymentMethod}</span>
-                        <span>{formatDate(donation.date)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 text-center text-gray-500 text-sm">No recent donations</div>
-              )}
-            </div>
-
-            {/* Recent Orders */}
-            <div className="bg-gray-800/50 rounded-lg border border-green-500/30 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-700/50">
-                <h3 className="text-sm font-bold text-white">Recent Orders</h3>
-              </div>
-              {isLoadingFinancials ? (
-                <div className="p-4 space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="animate-pulse h-16 bg-gray-700/30 rounded"></div>
-                  ))}
-                </div>
-              ) : recentOrders.length > 0 ? (
-                <div className="p-3 space-y-2">
-                  {recentOrders.map((order) => (
-                    <div key={order.id} className="bg-gray-700/30 rounded-lg p-2.5 border border-gray-600/30">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-white text-sm font-medium truncate max-w-[100px]">
-                          {order.customerName}
-                        </span>
-                        <span className="text-green-400 font-bold text-sm">
-                          ${order.amount.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="text-gray-300 text-xs mb-1 truncate">
-                        {order.productName}
-                      </div>
-                      <div className="flex justify-between items-center text-xs text-gray-400">
-                        <span className="truncate max-w-[100px]">{order.email}</span>
-                        <span>{formatDate(order.date)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 text-center text-gray-500 text-sm">No recent orders</div>
-              )}
-            </div>
-
-            {/* Top Supporters */}
-            <div className="bg-gray-800/50 rounded-lg border border-purple-500/30 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-700/50">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>🏆</span>
-                  Top Supporters
-                </h3>
-              </div>
-              {isLoadingFinancials ? (
-                <div className="p-4 space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
-                  ))}
-                </div>
-              ) : topSupporters.length > 0 ? (
-                <div className="p-3 space-y-1.5">
-                  {topSupporters.map((supporter, index) => {
-                    const medals = ['🥇', '🥈', '🥉', '🏅', '🏅'];
-                    const colors = ['text-yellow-400', 'text-gray-300', 'text-amber-600', 'text-purple-400', 'text-purple-400'];
-                    return (
-                      <div key={index} className="flex items-center justify-between py-1.5 px-2 bg-gray-700/30 rounded">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{medals[index]}</span>
-                          <span className="text-white text-sm truncate max-w-[90px]">
-                            {supporter.name}
+                {isLoadingFinancials ? (
+                  <div className="p-2 space-y-1">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                    ))}
+                  </div>
+                ) : recentDonations.length > 0 ? (
+                  <div className="p-1.5 space-y-1">
+                    {recentDonations.slice(0, 4).map((donation) => (
+                      <div key={donation.id} className="bg-gray-700/30 rounded p-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-white text-xs truncate max-w-[50px]">
+                            {donation.customerName}
+                          </span>
+                          <span className="text-yellow-400 font-bold text-xs">
+                            ${donation.amount.toFixed(0)}
                           </span>
                         </div>
-                        <span className={`font-bold text-sm ${colors[index]}`}>
-                          ${supporter.totalAmount.toFixed(2)}
-                        </span>
+                        <div className="text-gray-500 text-[10px]">
+                          {formatDate(donation.date)}
+                        </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-2 text-center text-gray-500 text-xs">None</div>
+                )}
+              </div>
+
+              {/* Recent Orders - Compact */}
+              <div className="bg-gray-800/50 rounded-lg border border-green-500/20 overflow-hidden">
+                <div className="px-2 py-1.5 border-b border-gray-700/50">
+                  <h3 className="text-xs font-bold text-green-400">Orders</h3>
                 </div>
-              ) : (
-                <div className="p-4 text-center text-gray-500 text-sm">No supporters yet</div>
-              )}
-              <div className="px-3 pb-3">
-                <Link
-                  href="/donate"
-                  className="block w-full text-center py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded text-sm transition-colors"
-                >
-                  Support Us
-                </Link>
+                {isLoadingFinancials ? (
+                  <div className="p-2 space-y-1">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                    ))}
+                  </div>
+                ) : recentOrders.length > 0 ? (
+                  <div className="p-1.5 space-y-1">
+                    {recentOrders.slice(0, 4).map((order) => (
+                      <div key={order.id} className="bg-gray-700/30 rounded p-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-white text-xs truncate max-w-[50px]">
+                            {order.customerName}
+                          </span>
+                          <span className="text-green-400 font-bold text-xs">
+                            ${order.amount.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="text-gray-500 text-[10px]">
+                          {formatDate(order.date)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-2 text-center text-gray-500 text-xs">None</div>
+                )}
               </div>
             </div>
+
+            {/* Top Supporters - Full Width, Prominent */}
+            <TopSupportersWidget maxSupporters={5} />
           </div>
         </div>
       </div>
