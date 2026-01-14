@@ -3,15 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
-import Navbar from '@/components/Navbar';
+import NeutralNavbar from '@/components/home/NeutralNavbar';
 import DynamicHeroCarousel from '@/components/home/DynamicHeroCarousel';
 import ServerStatusBar from '@/components/home/ServerStatusBar';
-import ZoneCard from '@/components/home/ZoneCard';
 import CTFPLCard from '@/components/home/CTFPLCard';
 import TripleThreatCard from '@/components/home/TripleThreatCard';
 import CommunityZonesCard from '@/components/home/CommunityZonesCard';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
-import NewsSection from '@/components/NewsSection';
 import { useDonationMode } from '@/hooks/useDonationMode';
 
 interface ServerStats {
@@ -64,13 +62,14 @@ export default function HomeNew() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black">
-      <Navbar />
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
+      {/* Neutral Navbar - No CTFPL branding */}
+      <NeutralNavbar />
 
-      {/* Dynamic Hero Carousel */}
+      {/* Dynamic Space Hero Carousel - Compact */}
       <DynamicHeroCarousel />
 
-      {/* Server Status Bar */}
+      {/* Server Status Bar - Now higher up */}
       <ServerStatusBar
         totalPlayers={serverData.stats.totalPlayers}
         zones={serverData.zones}
@@ -82,9 +81,11 @@ export default function HomeNew() {
 
         {/* Zone Cards Section */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
             <span className="text-3xl">🎮</span>
-            Active Leagues & Zones
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+              Active Leagues & Zones
+            </span>
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -99,107 +100,102 @@ export default function HomeNew() {
           </div>
         </div>
 
-        {/* Community Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* News Section - Takes 2 columns on large screens */}
-          <div className="lg:col-span-2">
-            <div className="bg-gray-800/50 rounded-xl border border-blue-500/30 p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span className="text-2xl">📰</span>
-                Latest News & Updates
-              </h3>
-              <NewsSection maxPosts={4} showFeaturedOnly={true} />
-            </div>
-          </div>
-
-          {/* Right Column - Donations & Supporters */}
-          <div className="space-y-6">
-            {/* Recent Donations */}
-            <div className="bg-gray-800/50 rounded-xl border border-yellow-500/30 p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span className="text-2xl">💝</span>
+        {/* Community Support Section - Simplified without News */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Recent Donations */}
+          <div className="bg-gray-800/50 rounded-xl border border-yellow-500/30 p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-2xl">💝</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
                 Recent Supporters
-              </h3>
-              {recentDonations && recentDonations.length > 0 ? (
-                <div className="space-y-3">
-                  {recentDonations.slice(0, 5).map((donation: any, index: number) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-yellow-500/20"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-yellow-400 text-lg">💖</span>
-                        <span className="text-gray-200 font-medium">
-                          {donation.customerName || 'Anonymous'}
-                        </span>
-                      </div>
-                      <span className="text-yellow-400 font-bold">
-                        ${donation.amount}
+              </span>
+            </h3>
+            {recentDonations && recentDonations.length > 0 ? (
+              <div className="space-y-3">
+                {recentDonations.slice(0, 5).map((donation: any, index: number) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-yellow-500/20 hover:border-yellow-500/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-yellow-400 text-lg">💖</span>
+                      <span className="text-gray-200 font-medium">
+                        {donation.customerName || 'Anonymous'}
                       </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-400 text-center py-4">No recent donations</p>
-              )}
-              <Link
-                href="/donate"
-                className="mt-4 block w-full text-center py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-colors"
-              >
-                Support the Community
-              </Link>
-            </div>
+                    <span className="text-yellow-400 font-bold">
+                      ${donation.amount}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 text-center py-4">No recent donations</p>
+            )}
+            <Link
+              href="/donate"
+              className="mt-4 block w-full text-center py-3 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 hover:from-yellow-500/30 hover:to-orange-500/30 text-yellow-400 rounded-lg transition-all font-medium border border-yellow-500/30"
+            >
+              Support the Community
+            </Link>
+          </div>
 
-            {/* Top Supporters Widget */}
-            <div className="bg-gray-800/50 rounded-xl border border-purple-500/30 p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span className="text-2xl">🏆</span>
+          {/* Top Supporters Widget */}
+          <div className="bg-gray-800/50 rounded-xl border border-purple-500/30 p-6">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="text-2xl">🏆</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
                 Top Supporters
-              </h3>
-              <TopSupportersWidget maxSupporters={5} />
-            </div>
+              </span>
+            </h3>
+            <TopSupportersWidget maxSupporters={5} />
           </div>
         </div>
 
         {/* Quick Links Footer */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Link
             href="/squads"
-            className="flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-purple-500/30 hover:bg-purple-500/20 transition-colors text-white"
+            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all text-white"
           >
-            <span className="text-2xl">🛡️</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">🛡️</span>
             <span className="font-medium">Squads</span>
           </Link>
           <Link
             href="/matches"
-            className="flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-green-500/30 hover:bg-green-500/20 transition-colors text-white"
+            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10 transition-all text-white"
           >
-            <span className="text-2xl">⚔️</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">⚔️</span>
             <span className="font-medium">Matches</span>
           </Link>
           <Link
             href="/stats"
-            className="flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-blue-500/30 hover:bg-blue-500/20 transition-colors text-white"
+            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/10 transition-all text-white"
           >
-            <span className="text-2xl">📊</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">📊</span>
             <span className="font-medium">Stats</span>
           </Link>
           <Link
             href="/forum"
-            className="flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors text-white"
+            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all text-white"
           >
-            <span className="text-2xl">💬</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">💬</span>
             <span className="font-medium">Forum</span>
           </Link>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="mt-16 border-t border-gray-800 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center text-gray-500">
-          <p>Free Infantry Community Hub</p>
-          <p className="text-sm mt-2">Supporting all zones and leagues</p>
+      <footer className="mt-16 border-t border-gray-800/50 py-8 bg-gray-950/50">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <div className="text-2xl font-black tracking-wider mb-2">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
+              FREE INFANTRY
+            </span>
+          </div>
+          <p className="text-gray-500 text-sm">
+            Community Gaming Hub • All Zones Welcome
+          </p>
         </div>
       </footer>
     </div>

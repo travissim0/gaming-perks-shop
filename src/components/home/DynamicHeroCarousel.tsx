@@ -1,65 +1,72 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 
 interface HeroSlide {
   id: string;
   title: string;
   subtitle: string;
-  description: string;
   buttonText: string;
   buttonLink: string;
-  gradient: string;
-  icon: string;
+  accentColor: string;
+  glowColor: string;
 }
 
 const heroSlides: HeroSlide[] = [
   {
     id: 'infantry',
     title: 'FREE INFANTRY',
-    subtitle: 'Community Gaming Hub',
-    description: 'Join the ultimate Infantry community - compete, connect, and conquer',
-    buttonText: 'Get Started',
-    buttonLink: '/squads',
-    gradient: 'from-cyan-600/20 via-blue-600/20 to-purple-600/20',
-    icon: '🎮',
+    subtitle: 'The Ultimate Gaming Community Hub',
+    buttonText: 'Join Now',
+    buttonLink: '/register',
+    accentColor: 'from-cyan-400 to-blue-500',
+    glowColor: 'rgba(34, 211, 238, 0.5)',
   },
   {
     id: 'ctfpl',
     title: 'CTFPL LEAGUE',
-    subtitle: 'Capture The Flag Competition',
-    description: 'Squad-based competitive league with seasons, standings, and glory',
+    subtitle: 'Squad-Based Capture The Flag Competition',
     buttonText: 'View League',
     buttonLink: '/league/ctfpl',
-    gradient: 'from-blue-600/20 via-cyan-600/20 to-blue-600/20',
-    icon: '🏆',
+    accentColor: 'from-blue-400 to-purple-500',
+    glowColor: 'rgba(59, 130, 246, 0.5)',
   },
   {
     id: 'triple-threat',
     title: 'TRIPLE THREAT',
-    subtitle: '3v3 Competitive Arena',
-    description: 'Fast-paced 3v3 matches - form a team, challenge rivals, climb the ranks',
+    subtitle: '3v3 Fast-Paced Arena Combat',
     buttonText: 'Enter Arena',
     buttonLink: '/triple-threat',
-    gradient: 'from-orange-600/20 via-red-600/20 to-orange-600/20',
-    icon: '⚡',
-  },
-  {
-    id: 'community',
-    title: 'JOIN THE COMMUNITY',
-    subtitle: 'Squads, Stats & More',
-    description: 'Create or join a squad, track your stats, and become a legend',
-    buttonText: 'Explore',
-    buttonLink: '/squads',
-    gradient: 'from-purple-600/20 via-pink-600/20 to-purple-600/20',
-    icon: '🛡️',
+    accentColor: 'from-orange-400 to-red-500',
+    glowColor: 'rgba(251, 146, 60, 0.5)',
   },
 ];
+
+// Generate stars once
+const generateStars = (count: number, layer: number) => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `star-${layer}-${i}`,
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    size: layer === 1 ? Math.random() * 2 + 1 : layer === 2 ? Math.random() * 1.5 + 0.5 : Math.random() + 0.3,
+    opacity: layer === 1 ? Math.random() * 0.5 + 0.5 : layer === 2 ? Math.random() * 0.4 + 0.3 : Math.random() * 0.3 + 0.2,
+    animationDuration: `${Math.random() * 3 + 2}s`,
+    animationDelay: `${Math.random() * 2}s`,
+  }));
+};
 
 export default function DynamicHeroCarousel() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  // Generate star layers (memoized to prevent regeneration)
+  const stars = useMemo(() => ({
+    layer1: generateStars(50, 1),  // Large, bright stars
+    layer2: generateStars(100, 2), // Medium stars
+    layer3: generateStars(150, 3), // Small, dim stars
+  }), []);
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
@@ -68,105 +75,222 @@ export default function DynamicHeroCarousel() {
   const goToSlide = (index: number) => {
     setCurrentSlide(index);
     setIsAutoPlaying(false);
-    // Resume auto-play after 10 seconds of inactivity
     setTimeout(() => setIsAutoPlaying(true), 10000);
   };
 
   // Auto-advance slides
   useEffect(() => {
     if (!isAutoPlaying) return;
-
-    const interval = setInterval(nextSlide, 6000);
+    const interval = setInterval(nextSlide, 5000);
     return () => clearInterval(interval);
   }, [isAutoPlaying, nextSlide]);
+
+  // Parallax effect on mouse move
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 20;
+      const y = (e.clientY / window.innerHeight - 0.5) * 20;
+      setMousePosition({ x, y });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   const slide = heroSlides[currentSlide];
 
   return (
-    <div className="relative overflow-hidden">
-      {/* Background Gradient */}
+    <div className="relative h-64 md:h-80 overflow-hidden bg-gray-950">
+
+      {/* Deep Space Background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950" />
+
+      {/* Nebula Effect */}
       <div
-        className={`absolute inset-0 bg-gradient-to-r ${slide.gradient} transition-all duration-1000`}
+        className="absolute inset-0 opacity-30"
+        style={{
+          background: `radial-gradient(ellipse at ${50 + mousePosition.x * 0.5}% ${50 + mousePosition.y * 0.5}%, ${slide.glowColor} 0%, transparent 50%)`,
+          transition: 'background 0.3s ease-out',
+        }}
       />
 
-      {/* Animated Background Pattern */}
-      <div className="absolute inset-0 opacity-10">
-        <div
-          className="absolute inset-0"
+      {/* Star Layer 3 - Distant (slowest parallax) */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${mousePosition.x * 0.1}px, ${mousePosition.y * 0.1}px)`,
+          transition: 'transform 0.5s ease-out',
+        }}
+      >
+        {stars.layer3.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Star Layer 2 - Mid distance */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${mousePosition.x * 0.3}px, ${mousePosition.y * 0.3}px)`,
+          transition: 'transform 0.4s ease-out',
+        }}
+      >
+        {stars.layer2.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white animate-pulse"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Star Layer 1 - Close (fastest parallax) */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${mousePosition.x * 0.6}px, ${mousePosition.y * 0.6}px)`,
+          transition: 'transform 0.3s ease-out',
+        }}
+      >
+        {stars.layer1.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white animate-pulse"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+              boxShadow: `0 0 ${star.size * 2}px rgba(255, 255, 255, 0.5)`,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Shooting Stars */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="shooting-star absolute w-1 h-1 bg-white rounded-full opacity-0"
           style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            animation: 'shooting-star 3s ease-in-out infinite',
+            animationDelay: '0s',
+            top: '20%',
+            left: '-10%',
+          }}
+        />
+        <div className="shooting-star absolute w-0.5 h-0.5 bg-cyan-300 rounded-full opacity-0"
+          style={{
+            animation: 'shooting-star 4s ease-in-out infinite',
+            animationDelay: '2s',
+            top: '40%',
+            left: '-10%',
           }}
         />
       </div>
 
-      {/* Content */}
-      <div className="relative max-w-7xl mx-auto px-4 py-16 md:py-24">
-        <div className="text-center">
-          {/* Icon */}
-          <div className="text-6xl md:text-8xl mb-4 animate-bounce">
-            {slide.icon}
-          </div>
+      {/* Content Container */}
+      <div className="relative h-full flex flex-col items-center justify-center px-4 text-center">
 
-          {/* Title */}
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 tracking-tight">
-            {slide.title}
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-xl md:text-2xl text-gray-300 mb-4">
-            {slide.subtitle}
-          </p>
-
-          {/* Description */}
-          <p className="text-gray-400 max-w-2xl mx-auto mb-8">
-            {slide.description}
-          </p>
-
-          {/* CTA Button */}
-          <Link
-            href={slide.buttonLink}
-            className="inline-flex items-center gap-2 px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/30 rounded-full text-white font-semibold transition-all duration-300 hover:scale-105"
+        {/* Title */}
+        <h1 className="text-3xl md:text-5xl font-black tracking-wider mb-2">
+          <span
+            className={`text-transparent bg-clip-text bg-gradient-to-r ${slide.accentColor}`}
+            style={{
+              textShadow: `0 0 30px ${slide.glowColor}`,
+              filter: 'drop-shadow(0 0 10px currentColor)',
+            }}
           >
+            {slide.title}
+          </span>
+        </h1>
+
+        {/* Subtitle */}
+        <p className="text-gray-300 text-sm md:text-lg mb-6 max-w-md">
+          {slide.subtitle}
+        </p>
+
+        {/* CTA Button */}
+        <Link
+          href={slide.buttonLink}
+          className={`group relative px-6 py-3 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white overflow-hidden transition-all duration-300 hover:scale-105`}
+          style={{
+            boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
+          }}
+        >
+          <span className="relative z-10 flex items-center gap-2">
             {slide.buttonText}
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
             </svg>
-          </Link>
-        </div>
+          </span>
+
+          {/* Button glow effect */}
+          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+        </Link>
 
         {/* Navigation Dots */}
-        <div className="flex justify-center gap-2 mt-12">
-          {heroSlides.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                index === currentSlide
-                  ? 'bg-white w-8'
-                  : 'bg-white/30 hover:bg-white/50'
-              }`}
-              aria-label={`Go to slide ${index + 1}`}
-            />
-          ))}
-        </div>
-
-        {/* Slide Indicators */}
-        <div className="flex justify-center gap-4 mt-4">
+        <div className="flex items-center gap-3 mt-6">
           {heroSlides.map((s, index) => (
             <button
               key={s.id}
               onClick={() => goToSlide(index)}
-              className={`text-xs px-3 py-1 rounded-full transition-all duration-300 ${
-                index === currentSlide
-                  ? 'bg-white/20 text-white'
-                  : 'text-gray-500 hover:text-gray-300'
+              className={`relative transition-all duration-300 ${
+                index === currentSlide ? 'scale-110' : 'hover:scale-105'
               }`}
+              aria-label={`Go to ${s.id} slide`}
             >
-              {s.id.toUpperCase()}
+              <div
+                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                  index === currentSlide
+                    ? `bg-gradient-to-r ${s.accentColor} shadow-lg`
+                    : 'bg-gray-600 hover:bg-gray-500'
+                }`}
+                style={index === currentSlide ? { boxShadow: `0 0 10px ${s.glowColor}` } : {}}
+              />
             </button>
           ))}
         </div>
       </div>
+
+      {/* CSS for shooting star animation */}
+      <style jsx>{`
+        @keyframes shooting-star {
+          0% {
+            transform: translateX(0) translateY(0);
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+          }
+          90% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateX(calc(100vw + 200px)) translateY(100px);
+            opacity: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }
