@@ -152,37 +152,6 @@ export default function HomeNew() {
           </div>
         </div>
 
-        {/* Quick Links Footer */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Link
-            href="/squads"
-            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all text-white"
-          >
-            <span className="text-2xl group-hover:scale-110 transition-transform">🛡️</span>
-            <span className="font-medium">Squads</span>
-          </Link>
-          <Link
-            href="/matches"
-            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-green-500/30 hover:border-green-500/50 hover:bg-green-500/10 transition-all text-white"
-          >
-            <span className="text-2xl group-hover:scale-110 transition-transform">⚔️</span>
-            <span className="font-medium">Matches</span>
-          </Link>
-          <Link
-            href="/stats"
-            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-blue-500/30 hover:border-blue-500/50 hover:bg-blue-500/10 transition-all text-white"
-          >
-            <span className="text-2xl group-hover:scale-110 transition-transform">📊</span>
-            <span className="font-medium">Stats</span>
-          </Link>
-          <Link
-            href="/forum"
-            className="group flex items-center justify-center gap-2 p-4 bg-gray-800/50 rounded-xl border border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all text-white"
-          >
-            <span className="text-2xl group-hover:scale-110 transition-transform">💬</span>
-            <span className="font-medium">Forum</span>
-          </Link>
-        </div>
       </div>
 
       {/* Footer */}

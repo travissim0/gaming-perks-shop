@@ -97,24 +97,6 @@ export default function NeutralNavbar() {
               >
                 Triple Threat
               </Link>
-              <Link
-                href="/squads"
-                className="text-gray-300 hover:text-purple-400 transition-colors font-medium"
-              >
-                Squads
-              </Link>
-              <Link
-                href="/stats"
-                className="text-gray-300 hover:text-blue-400 transition-colors font-medium"
-              >
-                Stats
-              </Link>
-              <Link
-                href="/forum"
-                className="text-gray-300 hover:text-green-400 transition-colors font-medium"
-              >
-                Forum
-              </Link>
             </div>
 
             {/* Right Side - Auth */}
@@ -207,27 +189,6 @@ export default function NeutralNavbar() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Triple Threat
-            </Link>
-            <Link
-              href="/squads"
-              className="block px-4 py-3 text-gray-300 hover:text-purple-400 hover:bg-gray-800/50 rounded-lg transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Squads
-            </Link>
-            <Link
-              href="/stats"
-              className="block px-4 py-3 text-gray-300 hover:text-blue-400 hover:bg-gray-800/50 rounded-lg transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Stats
-            </Link>
-            <Link
-              href="/forum"
-              className="block px-4 py-3 text-gray-300 hover:text-green-400 hover:bg-gray-800/50 rounded-lg transition-colors"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Forum
             </Link>
           </div>
         </div>
