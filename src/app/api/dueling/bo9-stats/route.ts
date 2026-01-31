@@ -147,7 +147,7 @@ async function handleRoundResult(body: any) {
 }
 
 async function handleSeriesComplete(body: any) {
-  const required = ['series_id', 'player1_alias', 'player2_alias', 'winner_alias'];
+  const required = ['series_id', 'player1_alias', 'player2_alias'];
   for (const field of required) {
     if (!body[field]) {
       return NextResponse.json(
@@ -163,7 +163,8 @@ async function handleSeriesComplete(body: any) {
       series_id: body.series_id,
       player1_alias: body.player1_alias,
       player2_alias: body.player2_alias,
-      winner_alias: body.winner_alias,
+      winner_alias: body.winner_alias || null,
+      completion_reason: body.completion_reason ?? 'COMPLETED',
       final_score: body.final_score ?? null,
       total_rounds: body.total_rounds ?? null,
       total_duration_seconds: body.total_duration_seconds ?? null,
@@ -188,7 +189,8 @@ async function handleSeriesComplete(body: any) {
     );
   }
 
-  console.log(`BO9 Stats: Series ${body.series_id} completed - ${body.winner_alias} wins ${body.final_score}`);
+  const reason = body.completion_reason || 'COMPLETED';
+  console.log(`BO9 Stats: Series ${body.series_id} ended (${reason}) - ${body.winner_alias || 'no winner'} ${body.final_score}`);
   return NextResponse.json(
     { success: true, message: 'Series recorded', series_id: body.series_id },
     { headers: corsHeaders }

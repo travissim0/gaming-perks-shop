@@ -13,6 +13,7 @@ interface BO9Series {
   player1_alias: string;
   player2_alias: string;
   winner_alias: string;
+  completion_reason: string;
   final_score: string;
   total_rounds: number;
   total_duration_seconds: number;
@@ -81,6 +82,16 @@ function accuracyColor(pct: number): string {
   if (pct >= 50) return 'text-yellow-400';
   if (pct >= 30) return 'text-orange-400';
   return 'text-red-400';
+}
+
+function reasonBadge(reason: string): { label: string; className: string } | null {
+  if (!reason || reason === 'COMPLETED') return null;
+  switch (reason.toUpperCase()) {
+    case 'FORFEIT': return { label: 'Forfeit', className: 'bg-orange-500/20 text-orange-400' };
+    case 'LEFT': return { label: 'Left', className: 'bg-red-500/20 text-red-400' };
+    case 'SPECTATED': return { label: 'Spectated', className: 'bg-yellow-500/20 text-yellow-400' };
+    default: return { label: reason, className: 'bg-gray-500/20 text-gray-400' };
+  }
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────────
@@ -336,6 +347,8 @@ function SeriesCard({
   roundsLoading: boolean;
 }) {
   const p1IsWinner = series.winner_alias === series.player1_alias;
+  const p2IsWinner = series.winner_alias === series.player2_alias;
+  const badge = reasonBadge(series.completion_reason);
 
   return (
     <motion.div
@@ -358,13 +371,18 @@ function SeriesCard({
               <span className="text-blue-300 font-mono text-lg font-bold shrink-0">
                 {series.final_score || '—'}
               </span>
-              <span className={`font-semibold truncate ${!p1IsWinner ? 'text-green-400' : 'text-white'}`}>
+              <span className={`font-semibold truncate ${p2IsWinner ? 'text-green-400' : 'text-white'}`}>
                 {series.player2_alias}
               </span>
             </div>
             {series.winner_alias && (
               <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0 hidden sm:inline">
                 W: {series.winner_alias}
+              </span>
+            )}
+            {badge && (
+              <span className={`text-xs ${badge.className} px-2 py-0.5 rounded-full shrink-0`}>
+                {badge.label}
               </span>
             )}
           </div>
@@ -413,7 +431,7 @@ function SeriesCard({
                     />
                     <PlayerSummary
                       alias={series.player2_alias}
-                      isWinner={!p1IsWinner}
+                      isWinner={p2IsWinner}
                       kills={series.player2_total_kills}
                       shotsFired={series.player2_total_shots_fired}
                       shotsHit={series.player2_total_shots_hit}
@@ -492,6 +510,9 @@ function SeriesCard({
                     <span>Started: {formatDateTime(series.started_at)}</span>
                     <span>Completed: {formatDateTime(series.completed_at)}</span>
                     <span>Total: {formatDuration(series.total_duration_seconds)}</span>
+                    {series.completion_reason && series.completion_reason !== 'COMPLETED' && (
+                      <span className="text-orange-400">Ended: {series.completion_reason}</span>
+                    )}
                   </div>
                 </>
               )}
