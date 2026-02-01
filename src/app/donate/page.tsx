@@ -10,6 +10,12 @@ import MobilePaymentInfo from '@/components/MobilePaymentInfo';
 import { useDonationMode } from '@/hooks/useDonationMode';
 import supportersCache from '@/lib/supporters-cache.json';
 
+interface TopSupporter {
+  name: string;
+  totalAmount: number;
+  contributionCount: number;
+}
+
 export default function DonatePage() {
   const { user } = useAuth();
   const [selectedAmount, setSelectedAmount] = useState<number>(10);
@@ -17,9 +23,29 @@ export default function DonatePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [donationPurpose, setDonationPurpose] = useState<string>('general');
-  
-  // Use the donation mode hook - using 'supporters' to match the supporters page
+
+  // Use the donation mode hook for recent supporters list
   const { donations: recentDonations, isUsingCache } = useDonationMode('supporters', 9);
+
+  // Fetch aggregated top supporters directly from API
+  const [topSupporters, setTopSupporters] = useState<TopSupporter[]>([]);
+
+  useEffect(() => {
+    const fetchTopSupporters = async () => {
+      try {
+        const res = await fetch('/api/supporters', { cache: 'no-cache' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.topSupporters) {
+            setTopSupporters(data.topSupporters.slice(0, 3));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load top supporters:', err);
+      }
+    };
+    fetchTopSupporters();
+  }, []);
 
   const predefinedAmounts = [5, 10, 25, 50, 100];
   
@@ -258,92 +284,34 @@ export default function DonatePage() {
                 <div className="mb-6">
                   <h3 className="text-xl font-bold text-white mb-4 text-center">🏆 Top Supporters</h3>
                   <div className="space-y-3">
-                    {recentDonations.length > 0 ? (
+                    {topSupporters.length > 0 ? (
                       (() => {
-                        // Group donations by amount to handle ties
-                        const sortedDonations = recentDonations
-                          .slice()
-                          .sort((a, b) => b.amount - a.amount);
-                        
-                        // Get unique amounts and group supporters by amount
-                        const amountGroups: { [key: string]: any[] } = {};
-                        sortedDonations.forEach(donation => {
-                          const amount = Math.round(donation.amount * 100) / 100;
-                          const amountKey = amount.toFixed(2);
-                          if (!amountGroups[amountKey]) {
-                            amountGroups[amountKey] = [];
-                          }
-                          amountGroups[amountKey].push({...donation, amount});
-                        });
-                        
-                        // Get the top 3 unique amounts
-                        const topAmounts = Object.keys(amountGroups)
-                          .map(key => parseFloat(key))
-                          .sort((a, b) => b - a)
-                          .slice(0, 3);
-                        
                         const trophyIcons = ['🥇', '🥈', '🥉'];
                         const trophyColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
-                        const nameTextSizes = ['text-xl', 'text-lg', 'text-base']; // Mobile-optimized sizes
-                        const amountTextSizes = ['text-lg', 'text-base', 'text-sm']; // Mobile-optimized sizes
-                        const paddingSizes = ['p-4', 'p-3', 'p-3']; 
+                        const nameTextSizes = ['text-xl', 'text-lg', 'text-base'];
+                        const amountTextSizes = ['text-lg', 'text-base', 'text-sm'];
+                        const paddingSizes = ['p-4', 'p-3', 'p-3'];
                         const cardThemes = [
-                          'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30', // Gold
-                          'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',       // Silver
-                          'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30'    // Bronze
+                          'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30',
+                          'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',
+                          'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30'
                         ];
-                        
-                        return topAmounts.map((amount, rankIndex) => {
-                          const supporters = amountGroups[amount.toFixed(2)];
-                          const isMultiple = supporters.length > 1;
-                          
-                          if (isMultiple) {
-                            return (
-                              <div key={`mobile-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                                  <div className="text-9xl">{trophyIcons[rankIndex]}</div>
-                                </div>
-                                <div className="relative z-10">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                      <div className="grid grid-cols-1 gap-1">
-                                        {supporters.map((supporter, idx) => {
-                                          const displayName = supporter.customerName || 'Anonymous Supporter';
-                                          return (
-                                            <div key={`mobile-supporter-${idx}`} className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
-                                              {displayName}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                    <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
-                                      ${amount.toFixed(2)}
-                                    </div>
-                                  </div>
-                                </div>
+
+                        return topSupporters.map((supporter, rankIndex) => (
+                          <div key={`mobile-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
+                            <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                              <div className="text-9xl">{trophyIcons[rankIndex]}</div>
+                            </div>
+                            <div className="relative z-10 flex items-center justify-between">
+                              <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+                                {supporter.name}
                               </div>
-                            );
-                          } else {
-                            const supporter = supporters[0];
-                            const displayName = supporter.customerName || 'Anonymous Supporter';
-                            return (
-                              <div key={`mobile-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                                  <div className="text-9xl">{trophyIcons[rankIndex]}</div>
-                                </div>
-                                <div className="relative z-10 flex items-center justify-between">
-                                  <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
-                                    {displayName}
-                                  </div>
-                                  <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
-                                    ${supporter.amount.toFixed(2)}
-                                  </div>
-                                </div>
+                              <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
+                                ${supporter.totalAmount.toFixed(2)}
                               </div>
-                            );
-                          }
-                        });
+                            </div>
+                          </div>
+                        ));
                       })()
                     ) : (
                       <div className="text-center py-6">
@@ -359,9 +327,9 @@ export default function DonatePage() {
                 <div className="border-t border-gray-700/50 pt-4">
                   <h3 className="text-sm font-bold text-white mb-3 text-center">Recent Supporters</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {recentDonations.length > 3 ? (
+                    {recentDonations.length > 0 ? (
                       <>
-                        {recentDonations.slice(3, 9).map((donation, index) => {
+                        {recentDonations.slice(0, 6).map((donation, index) => {
                           const displayName = donation.customerName || 'Anonymous Supporter';
                           const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                           const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
@@ -399,92 +367,34 @@ export default function DonatePage() {
                   <div className="col-span-2">
                     <h3 className="text-xl font-bold text-white mb-3 text-center">🏆 Top Supporters</h3>
                     <div className="space-y-2">
-                      {recentDonations.length > 0 ? (
+                      {topSupporters.length > 0 ? (
                         (() => {
-                          // Group donations by amount to handle ties
-                          const sortedDonations = recentDonations
-                            .slice()
-                            .sort((a, b) => b.amount - a.amount);
-                          
-                          // Get unique amounts and group supporters by amount
-                          const amountGroups: { [key: string]: any[] } = {};
-                          sortedDonations.forEach(donation => {
-                            const amount = Math.round(donation.amount * 100) / 100;
-                            const amountKey = amount.toFixed(2);
-                            if (!amountGroups[amountKey]) {
-                              amountGroups[amountKey] = [];
-                            }
-                            amountGroups[amountKey].push({...donation, amount});
-                          });
-                          
-                          // Get the top 3 unique amounts
-                          const topAmounts = Object.keys(amountGroups)
-                            .map(key => parseFloat(key))
-                            .sort((a, b) => b - a)
-                            .slice(0, 3);
-                          
                           const trophyIcons = ['🥇', '🥈', '🥉'];
                           const trophyColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
-                          const nameTextSizes = ['text-2xl', 'text-xl', 'text-lg']; // Desktop sizes
-                          const amountTextSizes = ['text-xl', 'text-lg', 'text-base']; // Desktop sizes
-                          const paddingSizes = ['p-4', 'p-3.5', 'p-3']; 
+                          const nameTextSizes = ['text-2xl', 'text-xl', 'text-lg'];
+                          const amountTextSizes = ['text-xl', 'text-lg', 'text-base'];
+                          const paddingSizes = ['p-4', 'p-3.5', 'p-3'];
                           const cardThemes = [
-                            'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30', // Gold
-                            'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',       // Silver
-                            'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30'    // Bronze
+                            'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30',
+                            'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30',
+                            'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30'
                           ];
-                          
-                          return topAmounts.map((amount, rankIndex) => {
-                            const supporters = amountGroups[amount.toFixed(2)];
-                            const isMultiple = supporters.length > 1;
-                            
-                            if (isMultiple) {
-                              return (
-                                <div key={`desktop-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                                    <div className="text-9xl">{trophyIcons[rankIndex]}</div>
-                                  </div>
-                                  <div className="relative z-10">
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1">
-                                        <div className="grid grid-cols-1 gap-1">
-                                          {supporters.map((supporter, idx) => {
-                                            const displayName = supporter.customerName || 'Anonymous Supporter';
-                                            return (
-                                              <div key={`desktop-supporter-${idx}`} className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
-                                                {displayName}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                      <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
-                                        ${amount.toFixed(2)}
-                                      </div>
-                                    </div>
-                                  </div>
+
+                          return topSupporters.map((supporter, rankIndex) => (
+                            <div key={`desktop-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
+                              <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                                <div className="text-9xl">{trophyIcons[rankIndex]}</div>
+                              </div>
+                              <div className="relative z-10 flex items-center justify-between">
+                                <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
+                                  {supporter.name}
                                 </div>
-                              );
-                            } else {
-                              const supporter = supporters[0];
-                              const displayName = supporter.customerName || 'Anonymous Supporter';
-                              return (
-                                <div key={`desktop-rank-${rankIndex}`} className={`relative overflow-hidden rounded-lg ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-                                    <div className="text-9xl">{trophyIcons[rankIndex]}</div>
-                                  </div>
-                                  <div className="relative z-10 flex items-center justify-between">
-                                    <div className={`text-white font-bold ${nameTextSizes[rankIndex]} truncate text-left`}>
-                                      {displayName}
-                                    </div>
-                                    <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
-                                      ${supporter.amount.toFixed(2)}
-                                    </div>
-                                  </div>
+                                <div className={`font-bold ${trophyColors[rankIndex]} ${amountTextSizes[rankIndex]} text-right ml-4`}>
+                                  ${supporter.totalAmount.toFixed(2)}
                                 </div>
-                              );
-                            }
-                          });
+                              </div>
+                            </div>
+                          ));
                         })()
                       ) : (
                         <div className="text-center py-6">
@@ -500,9 +410,9 @@ export default function DonatePage() {
                   <div className="col-span-1">
                     <h3 className="text-sm font-bold text-white mb-3 text-center">Recent</h3>
                     <div className="space-y-1.5">
-                      {recentDonations.length > 3 ? (
+                      {recentDonations.length > 0 ? (
                         <>
-                          {recentDonations.slice(3, 9).map((donation, index) => {
+                          {recentDonations.slice(0, 6).map((donation, index) => {
                             const displayName = donation.customerName || 'Anonymous Supporter';
                             const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
                             const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
