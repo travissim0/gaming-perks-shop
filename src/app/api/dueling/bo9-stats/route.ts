@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleRoundResult(body: any) {
-  const required = ['series_id', 'round_number', 'winner_alias', 'loser_alias'];
+  const required = ['series_id', 'round_number'];
   for (const field of required) {
     if (!body[field] && body[field] !== 0) {
       return NextResponse.json(
@@ -116,8 +116,9 @@ async function handleRoundResult(body: any) {
     .insert({
       series_id: body.series_id,
       round_number: body.round_number,
-      winner_alias: body.winner_alias,
-      loser_alias: body.loser_alias,
+      winner_alias: body.winner_alias || null,
+      loser_alias: body.loser_alias || null,
+      is_draw: body.is_draw ?? false,
       winner_hp_remaining: body.winner_hp_remaining ?? null,
       duration_seconds: body.duration_seconds ?? null,
       winner_shots_fired: body.winner_shots_fired ?? null,
@@ -167,6 +168,7 @@ async function handleSeriesComplete(body: any) {
       completion_reason: body.completion_reason ?? 'COMPLETED',
       final_score: body.final_score ?? null,
       total_rounds: body.total_rounds ?? null,
+      draws: body.draws ?? 0,
       total_duration_seconds: body.total_duration_seconds ?? null,
       player1_total_shots_fired: body.player1_total_shots_fired ?? null,
       player1_total_shots_hit: body.player1_total_shots_hit ?? null,

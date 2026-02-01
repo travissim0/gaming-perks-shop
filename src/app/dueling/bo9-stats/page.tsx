@@ -15,6 +15,7 @@ interface BO9Series {
   winner_alias: string;
   completion_reason: string;
   final_score: string;
+  draws: number;
   total_rounds: number;
   total_duration_seconds: number;
   player1_total_shots_fired: number;
@@ -36,6 +37,7 @@ interface BO9Round {
   round_number: number;
   winner_alias: string;
   loser_alias: string;
+  is_draw: boolean;
   winner_hp_remaining: number;
   duration_seconds: number;
   winner_shots_fired: number;
@@ -374,6 +376,11 @@ function SeriesCard({
               <span className={`font-semibold truncate ${p2IsWinner ? 'text-green-400' : 'text-white'}`}>
                 {series.player2_alias}
               </span>
+              {series.draws > 0 && (
+                <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full shrink-0">
+                  {series.draws}T
+                </span>
+              )}
             </div>
             {series.winner_alias && (
               <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full shrink-0 hidden sm:inline">
@@ -460,6 +467,7 @@ function SeriesCard({
                         </thead>
                         <tbody>
                           {rounds.map((round) => {
+                            const isDraw = round.is_draw;
                             const wAcc = round.winner_shots_fired > 0
                               ? Math.round((round.winner_shots_hit / round.winner_shots_fired) * 100)
                               : 0;
@@ -468,29 +476,36 @@ function SeriesCard({
                               : 0;
 
                             return (
-                              <tr key={round.id || round.round_number} className="border-b border-white/5 hover:bg-white/5">
+                              <tr
+                                key={round.id || round.round_number}
+                                className={`border-b border-white/5 ${isDraw ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-white/5'}`}
+                              >
                                 <td className="py-2 px-2 font-mono text-blue-300">{round.round_number}</td>
                                 <td className="py-2 px-2">
-                                  <span className="text-green-400 font-medium">{round.winner_alias}</span>
+                                  {isDraw ? (
+                                    <span className="text-amber-400 font-medium">TIE</span>
+                                  ) : (
+                                    <span className="text-green-400 font-medium">{round.winner_alias}</span>
+                                  )}
                                 </td>
                                 <td className="py-2 px-2 text-right font-mono">
-                                  {round.winner_hp_remaining != null ? round.winner_hp_remaining : '—'}
+                                  {isDraw ? '—' : (round.winner_hp_remaining != null ? round.winner_hp_remaining : '—')}
                                 </td>
                                 <td className="py-2 px-2 text-right">{formatDuration(round.duration_seconds)}</td>
-                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${accuracyColor(wAcc)}`}>
-                                  {wAcc}%
+                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-blue-300' : accuracyColor(wAcc)}`}>
+                                  {isDraw ? '—' : `${wAcc}%`}
                                 </td>
-                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${accuracyColor(lAcc)}`}>
-                                  {lAcc}%
-                                </td>
-                                <td className="py-2 px-2 text-right hidden md:table-cell text-blue-200">
-                                  {round.winner_shots_hit ?? 0}/{round.winner_shots_fired ?? 0}
+                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-blue-300' : accuracyColor(lAcc)}`}>
+                                  {isDraw ? '—' : `${lAcc}%`}
                                 </td>
                                 <td className="py-2 px-2 text-right hidden md:table-cell text-blue-200">
-                                  {round.loser_shots_hit ?? 0}/{round.loser_shots_fired ?? 0}
+                                  {isDraw ? '—' : `${round.winner_shots_hit ?? 0}/${round.winner_shots_fired ?? 0}`}
                                 </td>
-                                <td className="py-2 px-2 text-right font-mono">{round.winner_kills ?? 0}</td>
-                                <td className="py-2 px-2 text-right font-mono">{round.loser_kills ?? 0}</td>
+                                <td className="py-2 px-2 text-right hidden md:table-cell text-blue-200">
+                                  {isDraw ? '—' : `${round.loser_shots_hit ?? 0}/${round.loser_shots_fired ?? 0}`}
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono">{isDraw ? '—' : (round.winner_kills ?? 0)}</td>
+                                <td className="py-2 px-2 text-right font-mono">{isDraw ? '—' : (round.loser_kills ?? 0)}</td>
                                 <td className="py-2 px-2 text-right font-mono text-cyan-400">
                                   {round.player1_series_score}-{round.player2_series_score}
                                 </td>
