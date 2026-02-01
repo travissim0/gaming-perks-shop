@@ -420,8 +420,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(csv, {
         status: 200,
         headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="bo9-dueling-stats.csv"',
+          'Content-Type': 'text/plain; charset=utf-8',
           'Cache-Control': 'no-store',
         },
       });
