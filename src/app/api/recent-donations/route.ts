@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   console.log('🔍 Recent donations API called');
   
@@ -56,6 +58,8 @@ export async function GET(req: NextRequest) {
       donations: formattedDonations,
       count: formattedDonations.length,
       status: 'success'
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     });
 
   } catch (error: any) {

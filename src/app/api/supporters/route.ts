@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 interface Supporter {
   id: string;
   type: 'donation' | 'purchase';
@@ -195,6 +197,8 @@ export async function GET(req: NextRequest) {
       },
       topSupporters,
       count: supporters.length,
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     });
 
   } catch (error: any) {
