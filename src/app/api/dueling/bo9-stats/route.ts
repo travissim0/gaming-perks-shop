@@ -371,6 +371,62 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // ── CSV export for external sites ──
+    if (type === 'csv') {
+      const { data: allSeries, error } = await supabaseAdmin
+        .from('dueling_bo9_series')
+        .select('*')
+        .order('completed_at', { ascending: false });
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to fetch series', details: error.message }, { status: 500 });
+      }
+
+      const rows = (allSeries || []).map((s: any) => {
+        const p1Acc = s.player1_total_shots_fired > 0
+          ? Math.round((s.player1_total_shots_hit / s.player1_total_shots_fired) * 10000) / 100
+          : 0;
+        const p2Acc = s.player2_total_shots_fired > 0
+          ? Math.round((s.player2_total_shots_hit / s.player2_total_shots_fired) * 10000) / 100
+          : 0;
+
+        return [
+          csvEscape(s.player1_alias || ''),
+          csvEscape(s.player2_alias || ''),
+          s.final_score || '',
+          csvEscape(s.winner_alias || ''),
+          s.series_id,
+          s.completion_reason || 'COMPLETED',
+          s.total_rounds ?? '',
+          s.draws ?? 0,
+          s.player1_total_kills ?? '',
+          s.player2_total_kills ?? '',
+          s.player1_total_shots_fired ?? '',
+          s.player1_total_shots_hit ?? '',
+          p1Acc,
+          s.player2_total_shots_fired ?? '',
+          s.player2_total_shots_hit ?? '',
+          p2Acc,
+          s.total_duration_seconds ?? '',
+          csvEscape(s.arena_name || ''),
+          s.started_at || '',
+          s.completed_at || '',
+        ].join(',');
+      });
+
+      const header = 'Player1,Player2,Score,Winner,UID,CompletionReason,TotalRounds,Draws,P1Kills,P2Kills,P1ShotsFired,P1ShotsHit,P1Accuracy,P2ShotsFired,P2ShotsHit,P2Accuracy,DurationSeconds,Arena,StartedAt,CompletedAt';
+      const csv = header + '\n' + rows.join('\n');
+
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="bo9-dueling-stats.csv"',
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     return NextResponse.json({ error: `Unknown type: ${type}` }, { status: 400 });
 
   } catch (error) {
@@ -380,4 +436,12 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Escape a value for CSV (wrap in quotes if it contains commas, quotes, or newlines)
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
 }
