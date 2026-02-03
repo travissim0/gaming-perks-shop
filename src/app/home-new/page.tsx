@@ -31,7 +31,7 @@ interface RecentDonation {
   customerName: string;
   amount: number;
   paymentMethod: string;
-  date: string;
+  dates: string[];
   message?: string;
 }
 
@@ -158,41 +158,38 @@ export default function HomeNew() {
         const donationsJson = await donationsRes.json();
 
         if (donationsJson.donations && donationsJson.donations.length > 0) {
-          // Aggregate by donor name: sum amounts, keep most recent message/date
-          const donorMap = new Map<string, { total: number; latestDate: string; latestMessage: string; paymentMethod: string }>();
+          // Group consecutive donations from the same person (already sorted newest-first)
+          const groups: { name: string; total: number; dates: string[]; message: string; paymentMethod: string }[] = [];
           for (const d of donationsJson.donations) {
             const name = d.customerName || 'Anonymous';
-            const existing = donorMap.get(name);
-            if (existing) {
-              existing.total += d.amount;
-              if (new Date(d.date) > new Date(existing.latestDate)) {
-                existing.latestDate = d.date;
-                existing.latestMessage = d.message || '';
+            const lastGroup = groups[groups.length - 1];
+            if (lastGroup && lastGroup.name === name) {
+              // Same person consecutively — merge
+              lastGroup.total += d.amount;
+              lastGroup.dates.push(d.date);
+              if (!lastGroup.message && d.message) {
+                lastGroup.message = d.message;
               }
             } else {
-              donorMap.set(name, {
+              groups.push({
+                name,
                 total: d.amount,
-                latestDate: d.date,
-                latestMessage: d.message || '',
+                dates: [d.date],
+                message: d.message || '',
                 paymentMethod: d.paymentMethod || 'kofi',
               });
             }
           }
 
-          // Sort by most recent donation date, take top 3
-          const aggregated = Array.from(donorMap.entries())
-            .sort((a, b) => new Date(b[1].latestDate).getTime() - new Date(a[1].latestDate).getTime())
-            .slice(0, 3)
-            .map(([name, info], i) => ({
-              id: `donor-${i}`,
-              customerName: name,
-              amount: info.total,
-              paymentMethod: info.paymentMethod,
-              date: info.latestDate,
-              message: info.latestMessage || undefined,
-            }));
-
-          setRecentDonations(aggregated);
+          // Take the first 3 consecutive groups
+          setRecentDonations(groups.slice(0, 3).map((g, i) => ({
+            id: `donor-${i}`,
+            customerName: g.name,
+            amount: g.total,
+            paymentMethod: g.paymentMethod,
+            dates: g.dates,
+            message: g.message || undefined,
+          })));
         }
 
         // Fetch recent orders with profile and product info
@@ -489,6 +486,9 @@ export default function HomeNew() {
                             </span>
                             <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
                               ${donation.amount.toFixed(0)}
+                            </span>
+                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
+                              {donation.dates.map(d => formatDate(d)).join(', ')}
                             </span>
                           </div>
                           {donation.message && (
