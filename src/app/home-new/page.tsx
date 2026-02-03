@@ -450,7 +450,7 @@ export default function HomeNew() {
 
         {/* Main Content Grid: Left Sidebar | Center News | Right Sidebar */}
         <div className="max-w-[1600px] mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:items-start">
 
             {/* Left Sidebar: Carousel + Donations + Supporters */}
             <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
@@ -481,14 +481,14 @@ export default function HomeNew() {
                         <div key={donation.id} className="group px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
                           <div className="flex items-center gap-1.5">
                             <div className="w-0.5 h-3 bg-amber-500/30 rounded-full group-hover:bg-amber-400/50 transition-colors flex-shrink-0" />
+                            <span className="text-gray-600 text-[10px] whitespace-nowrap flex-shrink-0">
+                              {donation.dates.map(d => formatDate(d)).join(', ')}
+                            </span>
                             <span className="text-gray-300 text-xs truncate flex-1 min-w-0">
                               {donation.customerName}
                             </span>
                             <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
                               ${donation.amount.toFixed(0)}
-                            </span>
-                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
-                              {donation.dates.map(d => formatDate(d)).join(', ')}
                             </span>
                           </div>
                           {donation.message && (
