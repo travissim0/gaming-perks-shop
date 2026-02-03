@@ -255,7 +255,7 @@ export default function BO9StatsPage() {
               <LeaderboardList title="Most Wins" entries={leaderboards.most_wins} statKey="wins" />
               <LeaderboardList title="Win Rate" entries={leaderboards.highest_win_rate} statKey="win_rate" />
               <LeaderboardList title="Most Played" entries={leaderboards.most_played} statKey="played" />
-              <LeaderboardList title="Accuracy" entries={leaderboards.highest_accuracy} statKey="accuracy" />
+              <LeaderboardList title="Accuracy" entries={leaderboards.highest_accuracy} statKey="accuracy" showRecord={false} />
               <SeriesLeaderboardList title="Fastest Series" entries={leaderboards.fastest_series} />
               <SeriesLeaderboardList title="Longest Series" entries={leaderboards.longest_series} />
             </div>
@@ -607,10 +607,12 @@ function LeaderboardList({
   title,
   entries,
   statKey,
+  showRecord = true,
 }: {
   title: string;
   entries: PlayerLeaderEntry[];
   statKey: 'wins' | 'win_rate' | 'played' | 'accuracy';
+  showRecord?: boolean;
 }) {
   const getStat = (e: PlayerLeaderEntry) => {
     switch (statKey) {
@@ -637,7 +639,9 @@ function LeaderboardList({
               </span>
               <span className="flex-1 text-sm text-white truncate">{entry.alias}</span>
               <span className="text-xs font-mono text-cyan-400 font-bold">{getStat(entry)}</span>
-              <span className="text-xs font-mono text-blue-400 w-10 text-right">{entry.series_won}-{entry.series_lost}</span>
+              {showRecord && (
+                <span className="text-xs font-mono text-blue-400 w-10 text-right">{entry.series_won}-{entry.series_lost}</span>
+              )}
             </div>
           ))}
         </div>
