@@ -514,110 +514,126 @@ function ExpandablePostRow({
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
 
   return (
-    <div
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
-      className={`transition-all duration-300 ${!isLast ? 'border-b border-gray-700/20' : ''}`}
-    >
-      {/* Collapsed: minimal list row */}
-      <div className={`transition-all duration-300 ${isExpanded ? 'hidden' : 'block'}`}>
+    <div className={`${!isLast ? 'border-b border-gray-700/20' : ''}`}>
+      {/* Row: title links to post, arrow area triggers expand */}
+      <div className="flex items-center">
         <Link
           href={`/news/${post.id}`}
-          className="group flex items-center justify-between px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200"
+          className="group flex items-center gap-3 flex-1 min-w-0 px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200"
         >
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/40 group-hover:bg-cyan-400 transition-colors shrink-0" />
-            <span className="text-sm text-gray-200 font-medium truncate group-hover:text-cyan-300 transition-colors">
-              {post.title}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 shrink-0 ml-3">
-            <span className="text-xs text-cyan-500/50 font-medium">
-              {formatDate(post.published_at || post.created_at)}
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-cyan-400 transition-colors" />
-          </div>
+          <div className={`w-1.5 h-1.5 rounded-full transition-colors shrink-0 ${isExpanded ? 'bg-cyan-400' : 'bg-cyan-500/40 group-hover:bg-cyan-400'}`} />
+          <span className="text-sm text-gray-200 font-medium truncate group-hover:text-cyan-300 transition-colors">
+            {post.title}
+          </span>
         </Link>
+        <div className="flex items-center gap-2 shrink-0 pr-2">
+          <span className="text-xs text-cyan-500/50 font-medium">
+            {formatDate(post.published_at || post.created_at)}
+          </span>
+          {/* Expand trigger — only this area activates expansion */}
+          <div
+            onMouseEnter={() => onHover(true)}
+            onMouseLeave={() => onHover(false)}
+            className={`p-2 rounded-lg transition-all duration-300 cursor-pointer ${isExpanded ? 'bg-cyan-500/15' : 'hover:bg-cyan-500/10'}`}
+          >
+            <ChevronRight className={`w-4 h-4 transition-all duration-300 ${isExpanded ? 'rotate-90 text-cyan-400' : 'text-gray-600 hover:text-cyan-400'}`} />
+          </div>
+        </div>
       </div>
 
-      {/* Expanded: full content card — only mount when expanded to avoid rendering issues */}
-      {isExpanded && (
-        <article className="bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
+      {/* Expanded content — smooth grid-rows animation */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateRows: isExpanded ? '1fr' : '0fr',
+          transition: 'grid-template-rows 400ms cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        <div className="overflow-hidden">
+          <article
+            className="bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm"
+            style={{
+              opacity: isExpanded ? 1 : 0,
+              transition: 'opacity 300ms ease-in-out',
+              transitionDelay: isExpanded ? '150ms' : '0ms',
+            }}
+          >
+            <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
 
-          {/* YouTube Embed */}
-          {youtubeId && (
-            <div className="relative w-full aspect-video bg-gray-900">
-              <iframe
-                src={`https://www.youtube.com/embed/${youtubeId}`}
-                title={post.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full"
-              />
-            </div>
-          )}
-
-          {/* Featured Image */}
-          {post.featured_image_url && !youtubeId && (
-            <div className="relative w-full max-h-60 overflow-hidden bg-gray-900">
-              <img
-                src={post.featured_image_url}
-                alt={post.title}
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
-            </div>
-          )}
-
-          <div className="p-6">
-            {/* Tags */}
-            {post.tags && post.tags.length > 0 && (
-              <div className="flex gap-2 mb-3">
-                {post.tags.map((tag) => (
-                  <span key={tag} className="px-2.5 py-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider">
-                    {tag}
-                  </span>
-                ))}
+            {/* YouTube Embed — only load when expanded */}
+            {isExpanded && youtubeId && (
+              <div className="relative w-full aspect-video bg-gray-900">
+                <iframe
+                  src={`https://www.youtube.com/embed/${youtubeId}`}
+                  title={post.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full"
+                />
               </div>
             )}
 
-            <h3 className="text-xl md:text-2xl font-black mb-2 leading-tight">
-              <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-                {post.title}
-              </Link>
-            </h3>
-
-            {post.subtitle && (
-              <p className="text-cyan-100/60 text-sm mb-4 font-medium">{post.subtitle}</p>
+            {/* Featured Image */}
+            {post.featured_image_url && !youtubeId && (
+              <div className="relative w-full max-h-60 overflow-hidden bg-gray-900">
+                <img
+                  src={post.featured_image_url}
+                  alt={post.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
+              </div>
             )}
 
-            <div className="prose prose-invert max-w-none mb-4">
-              {renderFullContent(post.content)}
-            </div>
-
-            <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2">
-              <span className="flex items-center gap-1.5 text-cyan-400/70">
-                <Calendar className="w-3.5 h-3.5" />
-                {formatDate(post.published_at || post.created_at)}
-              </span>
-              {(post.author_alias || post.author_name) && (
-                <span className="flex items-center gap-1.5 text-purple-400/70">
-                  <User className="w-3.5 h-3.5" />
-                  {post.author_alias || post.author_name}
-                </span>
+            <div className="p-6">
+              {/* Tags */}
+              {post.tags && post.tags.length > 0 && (
+                <div className="flex gap-2 mb-3">
+                  {post.tags.map((tag) => (
+                    <span key={tag} className="px-2.5 py-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               )}
-              <Link
-                href={`/news/${post.id}`}
-                className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
-              >
-                Permalink <ChevronRight className="w-3 h-3" />
-              </Link>
+
+              <h3 className="text-xl md:text-2xl font-black mb-2 leading-tight">
+                <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                  {post.title}
+                </Link>
+              </h3>
+
+              {post.subtitle && (
+                <p className="text-cyan-100/60 text-sm mb-4 font-medium">{post.subtitle}</p>
+              )}
+
+              <div className="prose prose-invert max-w-none mb-4">
+                {renderFullContent(post.content)}
+              </div>
+
+              <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2">
+                <span className="flex items-center gap-1.5 text-cyan-400/70">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {formatDate(post.published_at || post.created_at)}
+                </span>
+                {(post.author_alias || post.author_name) && (
+                  <span className="flex items-center gap-1.5 text-purple-400/70">
+                    <User className="w-3.5 h-3.5" />
+                    {post.author_alias || post.author_name}
+                  </span>
+                )}
+                <Link
+                  href={`/news/${post.id}`}
+                  className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
+                >
+                  Permalink <ChevronRight className="w-3 h-3" />
+                </Link>
+              </div>
             </div>
-          </div>
-        </article>
-      )}
+          </article>
+        </div>
+      </div>
     </div>
   );
 }
