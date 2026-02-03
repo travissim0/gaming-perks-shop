@@ -153,22 +153,23 @@ export default function HomeNew() {
       try {
         setIsLoadingFinancials(true);
 
-        // 30-day rolling window
+        // 30-day rolling window (filter client-side to avoid RLS issues with .gte())
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
 
-        // Fetch recent donations (last 30 days)
+        // Fetch recent donations
         const { data: donationsData } = await supabase
           .from('donation_transactions')
           .select('id, amount_cents, customer_name, kofi_from_name, payment_method, created_at, donation_message')
           .eq('status', 'completed')
-          .gte('created_at', thirtyDaysAgoISO)
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(20);
 
         if (donationsData) {
-          setRecentDonations(donationsData.map((d: any) => ({
+          const recentDonos = donationsData
+            .filter((d: any) => new Date(d.created_at) >= thirtyDaysAgo)
+            .slice(0, 5);
+          setRecentDonations(recentDonos.map((d: any) => ({
             id: d.id,
             customerName: d.kofi_from_name || d.customer_name || 'Anonymous',
             amount: d.amount_cents / 100,
@@ -178,45 +179,49 @@ export default function HomeNew() {
           })));
         }
 
-        // Fetch recent orders with profile and product info (last 30 days)
+        // Fetch recent orders with profile and product info
         const { data: ordersData } = await supabase
           .from('user_products')
           .select('id, user_id, product_id, created_at')
-          .gte('created_at', thirtyDaysAgoISO)
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(20);
 
         if (ordersData && ordersData.length > 0) {
-          // Get unique user IDs and product IDs
-          const userIds = [...new Set(ordersData.map((o: any) => o.user_id))];
-          const productIds = [...new Set(ordersData.map((o: any) => o.product_id))];
+          // Filter to last 30 days client-side
+          const recentOrdersData = ordersData.filter((o: any) => new Date(o.created_at) >= thirtyDaysAgo);
 
-          // Fetch profiles
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, email, in_game_alias')
-            .in('id', userIds);
+          if (recentOrdersData.length > 0) {
+            // Get unique user IDs and product IDs
+            const userIds = [...new Set(recentOrdersData.map((o: any) => o.user_id))];
+            const productIds = [...new Set(recentOrdersData.map((o: any) => o.product_id))];
 
-          // Fetch products
-          const { data: products } = await supabase
-            .from('products')
-            .select('id, name, price')
-            .in('id', productIds);
+            // Fetch profiles
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, email, in_game_alias')
+              .in('id', userIds);
 
-          const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-          const productsMap = new Map((products || []).map((p: any) => [p.id, p]));
+            // Fetch products
+            const { data: products } = await supabase
+              .from('products')
+              .select('id, name, price')
+              .in('id', productIds);
 
-          setRecentOrders(ordersData.map((o: any) => {
-            const profile = profilesMap.get(o.user_id);
-            const product = productsMap.get(o.product_id);
-            return {
-              id: o.id,
-              customerName: profile?.in_game_alias || 'Unknown',
-              productName: product?.name || 'Unknown Product',
-              amount: (product?.price || 0) / 100,
-              date: o.created_at
-            };
-          }));
+            const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+            const productsMap = new Map((products || []).map((p: any) => [p.id, p]));
+
+            setRecentOrders(recentOrdersData.slice(0, 5).map((o: any) => {
+              const profile = profilesMap.get(o.user_id);
+              const product = productsMap.get(o.product_id);
+              return {
+                id: o.id,
+                customerName: profile?.in_game_alias || 'Unknown',
+                productName: product?.name || 'Unknown Product',
+                amount: (product?.price || 0) / 100,
+                date: o.created_at
+              };
+            }));
+          }
         }
 
       } catch (error) {
