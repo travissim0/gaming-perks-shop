@@ -81,6 +81,13 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
     layer3: generateStars(150, 3),
   }), [compact]);
 
+  // Compact mode starfield - dense, multi-parallax
+  const compactStars = useMemo(() => !compact ? null : ({
+    far: generateStars(60, 3),
+    mid: generateStars(35, 2),
+    close: generateStars(18, 1),
+  }), [compact]);
+
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
   }, []);
@@ -116,12 +123,55 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
   // ─── Compact Mode ────────────────────────────────────────────────────────
   if (compact) {
     return (
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm">
-        {/* Nebula glow - stronger */}
+      <div className="relative overflow-hidden rounded-xl border border-white/10">
+        {/* Own deep space background */}
+        <div className="absolute inset-0" style={{
+          background: 'linear-gradient(180deg, #050510 0%, #0a0e1a 50%, #050510 100%)',
+        }} />
+
+        {/* Far star layer - slowest drift */}
+        <div className="absolute inset-0 compact-drift-far">
+          {compactStars?.far.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+            }} />
+          ))}
+        </div>
+
+        {/* Mid star layer - medium drift + twinkle */}
+        <div className="absolute inset-0 compact-drift-mid">
+          {compactStars?.mid.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white animate-pulse" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }} />
+          ))}
+        </div>
+
+        {/* Close star layer - fastest drift + bright glow */}
+        <div className="absolute inset-0 compact-drift-close">
+          {compactStars?.close.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white animate-pulse" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+              boxShadow: `0 0 ${star.size * 3}px rgba(255,255,255,0.5)`,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }} />
+          ))}
+        </div>
+
+        {/* Nebula glow - follows slide color */}
         <div
           className="absolute inset-0 opacity-30"
           style={{
-            background: `radial-gradient(ellipse at 50% 50%, ${slide.glowColor} 0%, transparent 70%)`,
+            background: `radial-gradient(ellipse at 50% 50%, ${slide.glowColor} 0%, transparent 60%)`,
             transition: 'background 0.5s ease-out',
           }}
         />
@@ -135,31 +185,37 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
           }}
         />
 
-        {/* Content - doubled height */}
-        <div className="relative flex flex-col items-center justify-center px-6 py-16 text-center">
-          <h2 className="text-3xl md:text-4xl font-black tracking-wider mb-2">
+        {/* Internal shooting star */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="compact-shoot-1" />
+          <div className="compact-shoot-2" />
+        </div>
+
+        {/* Content */}
+        <div className="relative flex flex-col items-center justify-center px-6 py-20 text-center">
+          <h2 className="text-3xl md:text-4xl font-black tracking-wider mb-3">
             <span
               className={`text-transparent bg-clip-text bg-gradient-to-r ${slide.accentColor}`}
-              style={{ filter: 'drop-shadow(0 0 12px currentColor)' }}
+              style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
             >
               {slide.title}
             </span>
           </h2>
 
-          <p className="text-gray-400 text-sm md:text-base mb-6 max-w-sm">
+          <p className="text-gray-300 text-sm md:text-base mb-7 max-w-sm">
             {slide.subtitle}
           </p>
 
           <Link
             href={slide.buttonLink}
-            className={`group relative px-5 py-2.5 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105`}
+            className={`group relative px-6 py-3 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white overflow-hidden transition-all duration-300 hover:scale-105`}
             style={{
               boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
             }}
           >
-            <span className="relative z-10 flex items-center gap-1.5">
+            <span className="relative z-10 flex items-center gap-2">
               {slide.buttonText}
-              <svg className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </span>
@@ -167,7 +223,7 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
           </Link>
 
           {/* Navigation Dots */}
-          <div className="flex items-center gap-2 mt-6">
+          <div className="flex items-center gap-3 mt-7">
             {heroSlides.map((s, index) => (
               <button
                 key={s.id}
@@ -176,17 +232,69 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
                 aria-label={`Go to ${s.id} slide`}
               >
                 <div
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
                     index === currentSlide
                       ? `bg-gradient-to-r ${s.accentColor} shadow-lg`
                       : 'bg-gray-600 hover:bg-gray-500'
                   }`}
-                  style={index === currentSlide ? { boxShadow: `0 0 8px ${s.glowColor}` } : {}}
+                  style={index === currentSlide ? { boxShadow: `0 0 10px ${s.glowColor}` } : {}}
                 />
               </button>
             ))}
           </div>
         </div>
+
+        {/* Compact carousel animations */}
+        <style jsx>{`
+          .compact-drift-far {
+            animation: cDriftFar 20s ease-in-out infinite;
+          }
+          .compact-drift-mid {
+            animation: cDriftMid 12s ease-in-out infinite;
+          }
+          .compact-drift-close {
+            animation: cDriftClose 8s ease-in-out infinite;
+          }
+          @keyframes cDriftFar {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(3px, -2px); }
+            66% { transform: translate(-2px, 2px); }
+          }
+          @keyframes cDriftMid {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(-5px, 4px); }
+            66% { transform: translate(4px, -3px); }
+          }
+          @keyframes cDriftClose {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(8px, -5px); }
+            66% { transform: translate(-6px, 4px); }
+          }
+          .compact-shoot-1, .compact-shoot-2 {
+            position: absolute;
+            height: 1px;
+            border-radius: 999px;
+            opacity: 0;
+          }
+          .compact-shoot-1 {
+            top: 25%; left: -40px; width: 40px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+            box-shadow: 0 0 4px rgba(255,255,255,0.3);
+            animation: cShoot 7s ease-in-out infinite 2s;
+          }
+          .compact-shoot-2 {
+            top: 60%; left: -30px; width: 30px;
+            background: linear-gradient(90deg, transparent, rgba(100,200,255,0.5), transparent);
+            box-shadow: 0 0 3px rgba(100,200,255,0.2);
+            animation: cShoot 10s ease-in-out infinite 6s;
+          }
+          @keyframes cShoot {
+            0% { transform: translateX(0) rotate(-20deg); opacity: 0; }
+            5% { opacity: 1; }
+            25% { transform: translateX(700px) rotate(-20deg); opacity: 0; }
+            100% { opacity: 0; }
+          }
+        `}</style>
       </div>
     );
   }

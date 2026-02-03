@@ -82,6 +82,28 @@ const generateEnhancedStars = (count: number, type: 'dust' | 'medium' | 'bright'
   });
 };
 
+// Warp stars - radiate outward from center for traveling-through-space effect
+const generateWarpStars = (count: number) => {
+  return Array.from({ length: count }, (_, i) => {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 800 + Math.random() * 800;
+    // Small random offset from center for natural spread
+    const originX = (Math.random() - 0.5) * 80;
+    const originY = (Math.random() - 0.5) * 80;
+    return {
+      id: `warp-${i}`,
+      originX,
+      originY,
+      dx: Math.cos(angle) * distance,
+      dy: Math.sin(angle) * distance,
+      size: Math.random() * 1.5 + 0.5,
+      duration: Math.random() * 6 + 4,
+      delay: Math.random() * 10,
+      color: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)],
+    };
+  });
+};
+
 export default function HomeNew() {
   const { user } = useAuth();
   const [serverData, setServerData] = useState<ServerData>({
@@ -93,12 +115,13 @@ export default function HomeNew() {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [isLoadingFinancials, setIsLoadingFinancials] = useState(true);
 
-  // Enhanced page-wide starfield
+  // Enhanced page-wide starfield + warp stars
   const pageStars = useMemo(() => ({
     dust: generateEnhancedStars(150, 'dust'),
     medium: generateEnhancedStars(80, 'medium'),
     bright: generateEnhancedStars(40, 'bright'),
     feature: generateEnhancedStars(8, 'feature'),
+    warp: generateWarpStars(70),
   }), []);
 
   // Fetch server status
@@ -290,6 +313,24 @@ export default function HomeNew() {
           </div>
         ))}
 
+        {/* Warp stars - traveling through space, radiating from center outward */}
+        {pageStars.warp.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full"
+            style={{
+              left: `calc(50% + ${star.originX}px)`,
+              top: `calc(50% + ${star.originY}px)`,
+              width: star.size,
+              height: star.size,
+              backgroundColor: star.color,
+              ['--warp-x' as string]: `${star.dx}px`,
+              ['--warp-y' as string]: `${star.dy}px`,
+              animation: `warpTravel ${star.duration}s linear infinite ${star.delay}s`,
+            }}
+          />
+        ))}
+
         {/* Shooting stars */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="shooting-star-1" />
@@ -359,6 +400,13 @@ export default function HomeNew() {
           8% { opacity: 0.8; }
           10% { transform: translateX(calc(100vw + 200px)) translateY(60px) rotate(-15deg); opacity: 0; }
           100% { opacity: 0; }
+        }
+        @keyframes warpTravel {
+          0% { transform: translate(0, 0) scale(0.1); opacity: 0; }
+          5% { opacity: 0.3; }
+          40% { opacity: 0.7; }
+          80% { opacity: 0.9; }
+          100% { transform: translate(var(--warp-x), var(--warp-y)) scale(2.5); opacity: 0; }
         }
       `}</style>
 
