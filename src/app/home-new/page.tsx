@@ -556,7 +556,7 @@ export default function HomeNew() {
             </div>
 
             {/* Right Sidebar: Zone Population — top padding aligns with first news card */}
-            <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[5rem]">
+            <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[4.875rem]">
               {/* Zone Population Panel */}
               <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
                 {/* Top gradient accent */}
