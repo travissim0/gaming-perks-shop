@@ -37,7 +37,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-3 text-gray-200/90 leading-relaxed">
+        <p key={key} className="mb-4 text-gray-200/90 text-base leading-relaxed">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
@@ -131,7 +131,7 @@ function renderFullContent(content: any): React.ReactNode {
   if (typeof content === 'string') {
     return (
       <div
-        className="text-gray-300 text-sm leading-relaxed prose prose-invert max-w-none"
+        className="text-gray-300 text-base leading-relaxed prose prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: content }}
       />
     );
@@ -140,7 +140,7 @@ function renderFullContent(content: any): React.ReactNode {
   // TipTap ProseMirror JSON
   if (content.type === 'doc' && content.content) {
     return (
-      <div className="text-sm leading-relaxed">
+      <div className="text-base leading-relaxed">
         {content.content.map((node: any, i: number) => renderProseMirrorNode(node, i))}
       </div>
     );
@@ -244,8 +244,8 @@ export default function HomeNewsSection() {
   }
 
   const latestPost = posts[0] || null;
-  const olderPosts = posts.slice(1, 5);
-  const remainingPosts = posts.slice(5);
+  const olderPosts = posts.slice(1);
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
 
   return (
     <div className="space-y-5">
@@ -286,39 +286,18 @@ export default function HomeNewsSection() {
           {/* ─── Hero Post (Latest) ─── */}
           {latestPost && <HeroPost post={latestPost} formatDate={formatDate} />}
 
-          {/* ─── Secondary Posts (2-column grid) ─── */}
+          {/* ─── Older Posts (list with hover-expand) ─── */}
           {olderPosts.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {olderPosts.map((post) => (
-                <CompactPostCard key={post.id} post={post} formatDate={formatDate} />
-              ))}
-            </div>
-          )}
-
-          {/* ─── Remaining Posts (minimal list) ─── */}
-          {remainingPosts.length > 0 && (
             <div className="rounded-xl border border-gray-600/15 overflow-hidden">
-              {remainingPosts.map((post, i) => (
-                <Link
+              {olderPosts.map((post, i) => (
+                <ExpandablePostRow
                   key={post.id}
-                  href={`/news/${post.id}`}
-                  className={`group flex items-center justify-between px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200 ${
-                    i < remainingPosts.length - 1 ? 'border-b border-gray-700/20' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/40 group-hover:bg-cyan-400 transition-colors shrink-0" />
-                    <span className="text-sm text-gray-200 font-medium truncate group-hover:text-cyan-300 transition-colors">
-                      {post.title}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0 ml-3">
-                    <span className="text-xs text-cyan-500/50 font-medium">
-                      {formatDate(post.published_at || post.created_at)}
-                    </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-cyan-400 transition-colors" />
-                  </div>
-                </Link>
+                  post={post}
+                  formatDate={formatDate}
+                  isExpanded={expandedPostId === post.id}
+                  onHover={(hovered) => setExpandedPostId(hovered ? post.id : null)}
+                  isLast={i === olderPosts.length - 1}
+                />
               ))}
             </div>
           )}
@@ -387,7 +366,7 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
       )}
 
       {/* Content */}
-      <div className="p-6">
+      <div className="p-8">
         {/* Tags */}
         {post.tags && post.tags.length > 0 && (
           <div className="flex gap-2 mb-3">
@@ -504,6 +483,133 @@ function CompactPostCard({ post, formatDate }: { post: NewsPost; formatDate: (d:
         </div>
       </article>
     </Link>
+  );
+}
+
+// ─── Expandable Post Row ─────────────────────────────────────────────────────
+
+function ExpandablePostRow({
+  post,
+  formatDate,
+  isExpanded,
+  onHover,
+  isLast,
+}: {
+  post: NewsPost;
+  formatDate: (d: string) => string;
+  isExpanded: boolean;
+  onHover: (hovered: boolean) => void;
+  isLast: boolean;
+}) {
+  const videoUrl = post.metadata?.video_url;
+  const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
+
+  return (
+    <div
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`transition-all duration-300 ${!isLast ? 'border-b border-gray-700/20' : ''}`}
+    >
+      {/* Collapsed: minimal list row */}
+      <div className={`transition-all duration-300 ${isExpanded ? 'hidden' : 'block'}`}>
+        <Link
+          href={`/news/${post.id}`}
+          className="group flex items-center justify-between px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/40 group-hover:bg-cyan-400 transition-colors shrink-0" />
+            <span className="text-sm text-gray-200 font-medium truncate group-hover:text-cyan-300 transition-colors">
+              {post.title}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 ml-3">
+            <span className="text-xs text-cyan-500/50 font-medium">
+              {formatDate(post.published_at || post.created_at)}
+            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-cyan-400 transition-colors" />
+          </div>
+        </Link>
+      </div>
+
+      {/* Expanded: full content card */}
+      <div className={`transition-all duration-300 overflow-hidden ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <article className="bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm">
+          <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
+
+          {/* YouTube Embed */}
+          {youtubeId && (
+            <div className="relative w-full aspect-video bg-gray-900">
+              <iframe
+                src={`https://www.youtube.com/embed/${youtubeId}`}
+                title={post.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full"
+              />
+            </div>
+          )}
+
+          {/* Featured Image */}
+          {post.featured_image_url && !youtubeId && (
+            <div className="relative w-full max-h-60 overflow-hidden bg-gray-900">
+              <img
+                src={post.featured_image_url}
+                alt={post.title}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
+            </div>
+          )}
+
+          <div className="p-6">
+            {/* Tags */}
+            {post.tags && post.tags.length > 0 && (
+              <div className="flex gap-2 mb-3">
+                {post.tags.map((tag) => (
+                  <span key={tag} className="px-2.5 py-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <h3 className="text-xl md:text-2xl font-black mb-2 leading-tight">
+              <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                {post.title}
+              </Link>
+            </h3>
+
+            {post.subtitle && (
+              <p className="text-cyan-100/60 text-sm mb-4 font-medium">{post.subtitle}</p>
+            )}
+
+            <div className="prose prose-invert max-w-none mb-4">
+              {renderFullContent(post.content)}
+            </div>
+
+            <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2">
+              <span className="flex items-center gap-1.5 text-cyan-400/70">
+                <Calendar className="w-3.5 h-3.5" />
+                {formatDate(post.published_at || post.created_at)}
+              </span>
+              {(post.author_alias || post.author_name) && (
+                <span className="flex items-center gap-1.5 text-purple-400/70">
+                  <User className="w-3.5 h-3.5" />
+                  {post.author_alias || post.author_name}
+                </span>
+              )}
+              <Link
+                href={`/news/${post.id}`}
+                className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
+              >
+                Permalink <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
   );
 }
 
