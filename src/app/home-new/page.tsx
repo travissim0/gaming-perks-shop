@@ -558,8 +558,11 @@ export default function HomeNew() {
             {/* Right Sidebar: Zone Population — top padding aligns with first news card */}
             <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[5.5rem]">
               {/* Zone Population Panel */}
-              <div className="bg-gray-900/60 backdrop-blur-sm rounded-xl border border-cyan-500/15 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-800/80">
+              <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
+                {/* Top gradient accent */}
+                <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
+
+                <div className="px-4 py-3 border-b border-cyan-500/10">
                   <div className="flex items-center justify-center gap-2.5">
                     <div className="w-1 h-6 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
                     <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
@@ -572,9 +575,9 @@ export default function HomeNew() {
                     serverData.zones.map((zone, index) => (
                       <div
                         key={index}
-                        className="group flex items-center justify-between px-3 py-2 rounded-lg border border-gray-800/50 hover:bg-gray-800/40 transition-colors"
+                        className="group flex items-center justify-between px-3 py-2 rounded-lg border border-gray-700/30 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all duration-200"
                       >
-                        <span className="text-gray-300 text-sm truncate">{zone.title}</span>
+                        <span className="text-gray-300 text-sm truncate group-hover:text-gray-200">{zone.title}</span>
                         <span className={`font-bold text-sm ${zone.playerCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
                           {zone.playerCount}
                         </span>
