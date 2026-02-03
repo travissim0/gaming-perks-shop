@@ -137,6 +137,44 @@ function reasonBadge(reason: string): { label: string; className: string } | nul
   }
 }
 
+const MEDAL_STYLES = [
+  { emoji: '\u{1F947}', border: 'border-yellow-500/50', bg: 'bg-yellow-500/10', glow: 'shadow-yellow-500/20', text: 'text-yellow-400' },
+  { emoji: '\u{1F948}', border: 'border-gray-400/50', bg: 'bg-gray-400/10', glow: 'shadow-gray-400/20', text: 'text-gray-300' },
+  { emoji: '\u{1F949}', border: 'border-amber-600/50', bg: 'bg-amber-600/10', glow: 'shadow-amber-600/20', text: 'text-amber-500' },
+];
+
+function getPlayerStatValue(entry: PlayerLeaderEntry, tab: LeaderboardTab): number {
+  switch (tab) {
+    case 'most_wins': return entry.series_won;
+    case 'most_played': return entry.series_played;
+    case 'highest_accuracy': return entry.accuracy_pct;
+    case 'highest_win_rate': return entry.win_rate;
+    default: return 0;
+  }
+}
+
+function formatPlayerStat(entry: PlayerLeaderEntry, tab: LeaderboardTab): string {
+  switch (tab) {
+    case 'most_wins': return `${entry.series_won} Wins`;
+    case 'most_played': return `${entry.series_played} Played`;
+    case 'highest_accuracy': return `${entry.accuracy_pct}%`;
+    case 'highest_win_rate': return `${entry.win_rate}%`;
+    default: return '';
+  }
+}
+
+function getStatBarColor(tab: LeaderboardTab): string {
+  switch (tab) {
+    case 'most_wins': return 'bg-green-500';
+    case 'most_played': return 'bg-blue-500';
+    case 'highest_accuracy': return 'bg-purple-500';
+    case 'highest_win_rate': return 'bg-cyan-500';
+    case 'fastest_series': return 'bg-orange-500';
+    case 'longest_series': return 'bg-red-500';
+    default: return 'bg-cyan-500';
+  }
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────────
 
 export default function BO9StatsPage() {
@@ -296,84 +334,163 @@ export default function BO9StatsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="p-4 pt-0">
               {(['fastest_series', 'longest_series'] as LeaderboardTab[]).includes(activeTab) ? (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-blue-300 border-b border-white/10">
-                      <th className="text-left py-2 px-4 w-8">#</th>
-                      <th className="text-left py-2 px-2">Matchup</th>
-                      <th className="text-right py-2 px-2">Score</th>
-                      <th className="text-right py-2 px-2">Duration</th>
-                      <th className="text-right py-2 px-4 hidden sm:table-cell">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(leaderboards[activeTab as 'fastest_series' | 'longest_series'] as SeriesLeaderEntry[]).map((entry, i) => {
-                      const badge = reasonBadge(entry.completion_reason || '');
-                      return (
-                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="py-2 px-4 font-mono text-blue-300">{i + 1}</td>
-                          <td className="py-2 px-2">
-                            <span className={entry.winner_alias === entry.player1_alias ? 'text-green-400 font-medium' : 'text-white'}>
-                              {entry.player1_alias}
-                            </span>
-                            <span className="text-blue-400 mx-1">vs</span>
-                            <span className={entry.winner_alias === entry.player2_alias ? 'text-green-400 font-medium' : 'text-white'}>
-                              {entry.player2_alias}
-                            </span>
-                            {badge && (
-                              <span className={`text-xs ${badge.className} px-1.5 py-0.5 rounded-full ml-2`}>
-                                {badge.label}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono text-cyan-400">{entry.final_score}</td>
-                          <td className="py-2 px-2 text-right font-mono">{formatDuration(entry.total_duration_seconds)}</td>
-                          <td className="py-2 px-4 text-right text-blue-300 hidden sm:table-cell">{formatDate(entry.completed_at)}</td>
-                        </tr>
-                      );
-                    })}
-                    {(leaderboards[activeTab as 'fastest_series' | 'longest_series'] as SeriesLeaderEntry[]).length === 0 && (
-                      <tr><td colSpan={5} className="text-center py-6 text-blue-300">No data yet</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                (() => {
+                  const entries = leaderboards[activeTab as 'fastest_series' | 'longest_series'] as SeriesLeaderEntry[];
+                  if (entries.length === 0) return <p className="text-center py-8 text-blue-300">No data yet</p>;
+                  const top3 = entries.slice(0, 3);
+                  const rest = entries.slice(3);
+                  const maxDur = entries[activeTab === 'fastest_series' ? entries.length - 1 : 0]?.total_duration_seconds || 1;
+                  const barColor = getStatBarColor(activeTab);
+
+                  return (
+                    <>
+                      {/* Podium */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                        {top3.map((entry, i) => {
+                          const medal = MEDAL_STYLES[i];
+                          const badge = reasonBadge(entry.completion_reason || '');
+                          return (
+                            <div key={i} className={`relative rounded-xl border ${medal.border} ${medal.bg} p-4 shadow-lg ${medal.glow}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-2xl">{medal.emoji}</span>
+                                <span className={`text-xs font-bold ${medal.text}`}>#{i + 1}</span>
+                                {badge && <span className={`text-xs ${badge.className} px-1.5 py-0.5 rounded-full`}>{badge.label}</span>}
+                              </div>
+                              <div className="mb-1">
+                                <span className={entry.winner_alias === entry.player1_alias ? 'text-green-400 font-semibold' : 'text-white font-medium'}>
+                                  {entry.player1_alias}
+                                </span>
+                                <span className="text-blue-400 mx-1 text-sm">vs</span>
+                                <span className={entry.winner_alias === entry.player2_alias ? 'text-green-400 font-semibold' : 'text-white font-medium'}>
+                                  {entry.player2_alias}
+                                </span>
+                              </div>
+                              <div className="text-2xl font-bold text-white mb-1">{formatDuration(entry.total_duration_seconds)}</div>
+                              <div className="flex items-center gap-3 text-xs text-blue-300">
+                                <span className="font-mono text-cyan-400">{entry.final_score}</span>
+                                <span>{formatDate(entry.completed_at)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Remaining rows with bars */}
+                      {rest.length > 0 && (
+                        <div className="space-y-1.5">
+                          {rest.map((entry, i) => {
+                            const rank = i + 4;
+                            const pct = activeTab === 'fastest_series'
+                              ? ((maxDur - entry.total_duration_seconds) / maxDur) * 100
+                              : (entry.total_duration_seconds / maxDur) * 100;
+                            const badge = reasonBadge(entry.completion_reason || '');
+                            return (
+                              <div key={rank} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
+                                <span className="w-6 text-right font-mono text-sm text-blue-400">{rank}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm text-white truncate">
+                                      <span className={entry.winner_alias === entry.player1_alias ? 'text-green-400' : ''}>
+                                        {entry.player1_alias}
+                                      </span>
+                                      <span className="text-blue-400 mx-1">vs</span>
+                                      <span className={entry.winner_alias === entry.player2_alias ? 'text-green-400' : ''}>
+                                        {entry.player2_alias}
+                                      </span>
+                                    </span>
+                                    {badge && <span className={`text-xs ${badge.className} px-1 py-0.5 rounded-full shrink-0`}>{badge.label}</span>}
+                                  </div>
+                                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                    <div className={`h-full ${barColor} rounded-full transition-all duration-500`} style={{ width: `${Math.max(5, pct)}%` }} />
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="text-sm font-mono font-bold text-white">{formatDuration(entry.total_duration_seconds)}</div>
+                                  <div className="text-xs text-blue-400 font-mono">{entry.final_score}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-blue-300 border-b border-white/10">
-                      <th className="text-left py-2 px-4 w-8">#</th>
-                      <th className="text-left py-2 px-2">Player</th>
-                      <th className="text-right py-2 px-2">
-                        {activeTab === 'highest_accuracy' ? 'Accuracy' :
-                         activeTab === 'most_played' ? 'Played' :
-                         activeTab === 'most_wins' ? 'Wins' : 'Win Rate'}
-                      </th>
-                      <th className="text-right py-2 px-4">W-L Record</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(leaderboards[activeTab as 'highest_accuracy' | 'most_played' | 'most_wins' | 'highest_win_rate'] as PlayerLeaderEntry[]).map((entry, i) => (
-                      <tr key={i} className="border-b border-white/5 hover:bg-white/5">
-                        <td className="py-2 px-4 font-mono text-blue-300">{i + 1}</td>
-                        <td className="py-2 px-2 font-medium text-white">{entry.alias}</td>
-                        <td className="py-2 px-2 text-right font-mono text-cyan-400">
-                          {activeTab === 'highest_accuracy' ? `${entry.accuracy_pct}%` :
-                           activeTab === 'most_played' ? entry.series_played :
-                           activeTab === 'most_wins' ? entry.series_won :
-                           `${entry.win_rate}%`}
-                        </td>
-                        <td className="py-2 px-4 text-right font-mono text-blue-200">
-                          {entry.series_won}-{entry.series_lost}
-                        </td>
-                      </tr>
-                    ))}
-                    {(leaderboards[activeTab as 'highest_accuracy' | 'most_played' | 'most_wins' | 'highest_win_rate'] as PlayerLeaderEntry[]).length === 0 && (
-                      <tr><td colSpan={4} className="text-center py-6 text-blue-300">No data yet</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                (() => {
+                  const playerTab = activeTab as 'highest_accuracy' | 'most_played' | 'most_wins' | 'highest_win_rate';
+                  const entries = leaderboards[playerTab] as PlayerLeaderEntry[];
+                  if (entries.length === 0) return <p className="text-center py-8 text-blue-300">No data yet</p>;
+                  const top3 = entries.slice(0, 3);
+                  const rest = entries.slice(3);
+                  const maxVal = getPlayerStatValue(entries[0], activeTab) || 1;
+                  const barColor = getStatBarColor(activeTab);
+
+                  return (
+                    <>
+                      {/* Podium */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                        {top3.map((entry, i) => {
+                          const medal = MEDAL_STYLES[i];
+                          const statVal = getPlayerStatValue(entry, activeTab);
+                          const pct = (activeTab === 'highest_accuracy' || activeTab === 'highest_win_rate')
+                            ? statVal
+                            : (statVal / maxVal) * 100;
+
+                          return (
+                            <div key={i} className={`relative rounded-xl border ${medal.border} ${medal.bg} p-4 shadow-lg ${medal.glow}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-2xl">{medal.emoji}</span>
+                                  <span className={`text-xs font-bold ${medal.text}`}>#{i + 1}</span>
+                                </div>
+                                <span className="text-xs font-mono text-blue-300">{entry.series_won}W-{entry.series_lost}L</span>
+                              </div>
+                              <div className="text-lg font-semibold text-white mb-1 truncate">{entry.alias}</div>
+                              <div className="text-2xl font-bold text-cyan-400 mb-2">{formatPlayerStat(entry, activeTab)}</div>
+                              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div className={`h-full ${barColor} rounded-full transition-all duration-500`} style={{ width: `${Math.max(5, pct)}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Remaining rows with bars */}
+                      {rest.length > 0 && (
+                        <div className="space-y-1.5">
+                          {rest.map((entry, i) => {
+                            const rank = i + 4;
+                            const statVal = getPlayerStatValue(entry, activeTab);
+                            const pct = (activeTab === 'highest_accuracy' || activeTab === 'highest_win_rate')
+                              ? statVal
+                              : (statVal / maxVal) * 100;
+
+                            return (
+                              <div key={rank} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
+                                <span className="w-6 text-right font-mono text-sm text-blue-400">{rank}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-sm font-medium text-white truncate">{entry.alias}</span>
+                                    <span className="text-xs font-mono text-blue-300 shrink-0 ml-2">{entry.series_won}W-{entry.series_lost}L</span>
+                                  </div>
+                                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                    <div className={`h-full ${barColor} rounded-full transition-all duration-500`} style={{ width: `${Math.max(5, pct)}%` }} />
+                                  </div>
+                                </div>
+                                <div className="text-sm font-mono font-bold text-cyan-400 shrink-0 w-16 text-right">
+                                  {formatPlayerStat(entry, activeTab)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()
               )}
             </div>
           </motion.div>
