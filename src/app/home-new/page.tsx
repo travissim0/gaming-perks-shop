@@ -555,8 +555,8 @@ export default function HomeNew() {
               <HomeNewsSection />
             </div>
 
-            {/* Right Sidebar: Zone Population */}
-            <div className="lg:col-span-1 space-y-4 order-3">
+            {/* Right Sidebar: Zone Population — top padding aligns with first news card */}
+            <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[5.5rem]">
               {/* Zone Population Panel */}
               <div className="bg-gray-900/60 backdrop-blur-sm rounded-xl border border-cyan-500/15 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800/80">
