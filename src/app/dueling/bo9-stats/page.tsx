@@ -251,7 +251,7 @@ export default function BO9StatsPage() {
             className="mb-8"
           >
             <h2 className="text-xl font-bold text-cyan-400 mb-4">Top 10 Leaderboards</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:[grid-template-columns:1fr_1fr_1fr_1fr_1.5fr_1.5fr] gap-3">
               <LeaderboardList title="Most Wins" entries={leaderboards.most_wins} statKey="wins" />
               <LeaderboardList title="Win Rate" entries={leaderboards.highest_win_rate} statKey="win_rate" />
               <LeaderboardList title="Most Played" entries={leaderboards.most_played} statKey="played" />
