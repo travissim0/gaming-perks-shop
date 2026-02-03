@@ -57,6 +57,46 @@ interface AggregateStats {
   avg_accuracy_pct: number;
 }
 
+interface SeriesLeaderEntry {
+  player1_alias: string;
+  player2_alias: string;
+  winner_alias: string;
+  final_score: string;
+  total_duration_seconds: number;
+  completion_reason?: string;
+  completed_at: string;
+}
+
+interface PlayerLeaderEntry {
+  alias: string;
+  series_played: number;
+  series_won: number;
+  series_lost: number;
+  win_rate: number;
+  accuracy_pct: number;
+  total_kills: number;
+}
+
+interface LeaderboardData {
+  fastest_series: SeriesLeaderEntry[];
+  longest_series: SeriesLeaderEntry[];
+  highest_accuracy: PlayerLeaderEntry[];
+  most_played: PlayerLeaderEntry[];
+  most_wins: PlayerLeaderEntry[];
+  highest_win_rate: PlayerLeaderEntry[];
+}
+
+type LeaderboardTab = 'most_wins' | 'highest_win_rate' | 'most_played' | 'highest_accuracy' | 'fastest_series' | 'longest_series';
+
+const LEADERBOARD_TABS: { key: LeaderboardTab; label: string }[] = [
+  { key: 'most_wins', label: 'Most Wins' },
+  { key: 'highest_win_rate', label: 'Win Rate' },
+  { key: 'most_played', label: 'Most Played' },
+  { key: 'highest_accuracy', label: 'Accuracy' },
+  { key: 'fastest_series', label: 'Fastest' },
+  { key: 'longest_series', label: 'Longest' },
+];
+
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDuration(totalSeconds: number): string {
@@ -117,11 +157,16 @@ export default function BO9StatsPage() {
   // Pagination
   const [pagination, setPagination] = useState({ total: 0, offset: 0, limit: 20, hasMore: false });
 
+  // Leaderboards
+  const [leaderboards, setLeaderboards] = useState<LeaderboardData | null>(null);
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>('most_wins');
+
   // ── Data loading ──
 
   useEffect(() => {
     loadAggregates();
     loadRecentSeries();
+    loadLeaderboards();
   }, []);
 
   useEffect(() => {
@@ -135,6 +180,16 @@ export default function BO9StatsPage() {
       if (json.success) setAggregates(json.data);
     } catch (err) {
       console.error('Failed to load aggregates:', err);
+    }
+  };
+
+  const loadLeaderboards = async () => {
+    try {
+      const res = await fetch('/api/dueling/bo9-stats?type=leaderboards');
+      const json = await res.json();
+      if (json.success) setLeaderboards(json.data);
+    } catch (err) {
+      console.error('Failed to load leaderboards:', err);
     }
   };
 
@@ -223,6 +278,116 @@ export default function BO9StatsPage() {
           <StatCard label="Avg Duration" value={formatDuration(aggregates.avg_series_duration_seconds)} />
           <StatCard label="Avg Accuracy" value={`${aggregates.avg_accuracy_pct}%`} />
         </motion.div>
+
+        {/* Leaderboards */}
+        {leaderboards && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 mb-8 overflow-hidden"
+          >
+            <div className="p-4 pb-0">
+              <h2 className="text-xl font-bold text-cyan-400 mb-3">Top 10 Leaderboards</h2>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {LEADERBOARD_TABS.map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === tab.key
+                        ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/25'
+                        : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              {(['fastest_series', 'longest_series'] as LeaderboardTab[]).includes(activeTab) ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-blue-300 border-b border-white/10">
+                      <th className="text-left py-2 px-4 w-8">#</th>
+                      <th className="text-left py-2 px-2">Matchup</th>
+                      <th className="text-right py-2 px-2">Score</th>
+                      <th className="text-right py-2 px-2">Duration</th>
+                      <th className="text-right py-2 px-4 hidden sm:table-cell">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leaderboards[activeTab as 'fastest_series' | 'longest_series'] as SeriesLeaderEntry[]).map((entry, i) => {
+                      const badge = reasonBadge(entry.completion_reason || '');
+                      return (
+                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="py-2 px-4 font-mono text-blue-300">{i + 1}</td>
+                          <td className="py-2 px-2">
+                            <span className={entry.winner_alias === entry.player1_alias ? 'text-green-400 font-medium' : 'text-white'}>
+                              {entry.player1_alias}
+                            </span>
+                            <span className="text-blue-400 mx-1">vs</span>
+                            <span className={entry.winner_alias === entry.player2_alias ? 'text-green-400 font-medium' : 'text-white'}>
+                              {entry.player2_alias}
+                            </span>
+                            {badge && (
+                              <span className={`text-xs ${badge.className} px-1.5 py-0.5 rounded-full ml-2`}>
+                                {badge.label}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono text-cyan-400">{entry.final_score}</td>
+                          <td className="py-2 px-2 text-right font-mono">{formatDuration(entry.total_duration_seconds)}</td>
+                          <td className="py-2 px-4 text-right text-blue-300 hidden sm:table-cell">{formatDate(entry.completed_at)}</td>
+                        </tr>
+                      );
+                    })}
+                    {(leaderboards[activeTab as 'fastest_series' | 'longest_series'] as SeriesLeaderEntry[]).length === 0 && (
+                      <tr><td colSpan={5} className="text-center py-6 text-blue-300">No data yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-blue-300 border-b border-white/10">
+                      <th className="text-left py-2 px-4 w-8">#</th>
+                      <th className="text-left py-2 px-2">Player</th>
+                      <th className="text-right py-2 px-2">
+                        {activeTab === 'highest_accuracy' ? 'Accuracy' :
+                         activeTab === 'most_played' ? 'Played' :
+                         activeTab === 'most_wins' ? 'Wins' : 'Win Rate'}
+                      </th>
+                      <th className="text-right py-2 px-4">W-L Record</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leaderboards[activeTab as 'highest_accuracy' | 'most_played' | 'most_wins' | 'highest_win_rate'] as PlayerLeaderEntry[]).map((entry, i) => (
+                      <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-4 font-mono text-blue-300">{i + 1}</td>
+                        <td className="py-2 px-2 font-medium text-white">{entry.alias}</td>
+                        <td className="py-2 px-2 text-right font-mono text-cyan-400">
+                          {activeTab === 'highest_accuracy' ? `${entry.accuracy_pct}%` :
+                           activeTab === 'most_played' ? entry.series_played :
+                           activeTab === 'most_wins' ? entry.series_won :
+                           `${entry.win_rate}%`}
+                        </td>
+                        <td className="py-2 px-4 text-right font-mono text-blue-200">
+                          {entry.series_won}-{entry.series_lost}
+                        </td>
+                      </tr>
+                    ))}
+                    {(leaderboards[activeTab as 'highest_accuracy' | 'most_played' | 'most_wins' | 'highest_win_rate'] as PlayerLeaderEntry[]).length === 0 && (
+                      <tr><td colSpan={4} className="text-center py-6 text-blue-300">No data yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Search & Sort Bar */}
         <motion.div

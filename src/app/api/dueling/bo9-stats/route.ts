@@ -371,6 +371,112 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // ── Leaderboards (Top 10 across categories) ──
+    if (type === 'leaderboards') {
+      const { data: allSeries, error } = await supabaseAdmin
+        .from('dueling_bo9_series')
+        .select('*')
+        .order('completed_at', { ascending: false });
+
+      if (error) {
+        return NextResponse.json({ error: 'Failed to fetch series', details: error.message }, { status: 500 });
+      }
+
+      const series = allSeries || [];
+
+      // --- Series-level leaderboards ---
+      const completedWithDuration = series.filter(
+        (s: any) => s.completion_reason === 'COMPLETED' && s.total_duration_seconds > 0
+      );
+
+      const fastest_series = [...completedWithDuration]
+        .sort((a: any, b: any) => a.total_duration_seconds - b.total_duration_seconds)
+        .slice(0, 10)
+        .map((s: any) => ({
+          player1_alias: s.player1_alias,
+          player2_alias: s.player2_alias,
+          winner_alias: s.winner_alias,
+          final_score: s.final_score,
+          total_duration_seconds: s.total_duration_seconds,
+          completed_at: s.completed_at,
+        }));
+
+      const allWithDuration = series.filter((s: any) => s.total_duration_seconds > 0);
+      const longest_series = [...allWithDuration]
+        .sort((a: any, b: any) => b.total_duration_seconds - a.total_duration_seconds)
+        .slice(0, 10)
+        .map((s: any) => ({
+          player1_alias: s.player1_alias,
+          player2_alias: s.player2_alias,
+          winner_alias: s.winner_alias,
+          final_score: s.final_score,
+          total_duration_seconds: s.total_duration_seconds,
+          completion_reason: s.completion_reason,
+          completed_at: s.completed_at,
+        }));
+
+      // --- Player-level leaderboards ---
+      const playerMap: Record<string, {
+        alias: string; series_played: number; series_won: number; series_lost: number;
+        total_kills: number; total_shots_fired: number; total_shots_hit: number;
+      }> = {};
+
+      for (const s of series) {
+        const p1 = s.player1_alias;
+        if (!playerMap[p1]) playerMap[p1] = { alias: p1, series_played: 0, series_won: 0, series_lost: 0, total_kills: 0, total_shots_fired: 0, total_shots_hit: 0 };
+        playerMap[p1].series_played++;
+        if (s.winner_alias === p1) playerMap[p1].series_won++; else playerMap[p1].series_lost++;
+        playerMap[p1].total_kills += s.player1_total_kills || 0;
+        playerMap[p1].total_shots_fired += s.player1_total_shots_fired || 0;
+        playerMap[p1].total_shots_hit += s.player1_total_shots_hit || 0;
+
+        const p2 = s.player2_alias;
+        if (!playerMap[p2]) playerMap[p2] = { alias: p2, series_played: 0, series_won: 0, series_lost: 0, total_kills: 0, total_shots_fired: 0, total_shots_hit: 0 };
+        playerMap[p2].series_played++;
+        if (s.winner_alias === p2) playerMap[p2].series_won++; else playerMap[p2].series_lost++;
+        playerMap[p2].total_kills += s.player2_total_kills || 0;
+        playerMap[p2].total_shots_fired += s.player2_total_shots_fired || 0;
+        playerMap[p2].total_shots_hit += s.player2_total_shots_hit || 0;
+      }
+
+      const players = Object.values(playerMap).map(p => ({
+        ...p,
+        win_rate: p.series_played > 0 ? Math.round((p.series_won / p.series_played) * 10000) / 100 : 0,
+        accuracy_pct: p.total_shots_fired > 0 ? Math.round((p.total_shots_hit / p.total_shots_fired) * 10000) / 100 : 0,
+      }));
+
+      const MIN_SERIES = 3;
+
+      const toPlayerEntry = (p: typeof players[0]) => ({
+        alias: p.alias, series_played: p.series_played, series_won: p.series_won,
+        series_lost: p.series_lost, win_rate: p.win_rate, accuracy_pct: p.accuracy_pct,
+        total_kills: p.total_kills,
+      });
+
+      const highest_accuracy = [...players]
+        .filter(p => p.series_played >= MIN_SERIES && p.total_shots_fired > 0)
+        .sort((a, b) => b.accuracy_pct - a.accuracy_pct)
+        .slice(0, 10).map(toPlayerEntry);
+
+      const most_played = [...players]
+        .sort((a, b) => b.series_played - a.series_played)
+        .slice(0, 10).map(toPlayerEntry);
+
+      const most_wins = [...players]
+        .sort((a, b) => b.series_won - a.series_won || b.win_rate - a.win_rate)
+        .slice(0, 10).map(toPlayerEntry);
+
+      const highest_win_rate = [...players]
+        .filter(p => p.series_played >= MIN_SERIES)
+        .sort((a, b) => b.win_rate - a.win_rate || b.series_won - a.series_won)
+        .slice(0, 10).map(toPlayerEntry);
+
+      return NextResponse.json({
+        success: true,
+        data: { fastest_series, longest_series, highest_accuracy, most_played, most_wins, highest_win_rate },
+      });
+    }
+
     // ── CSV export for external sites ──
     if (type === 'csv') {
       const { data: allSeries, error } = await supabaseAdmin
