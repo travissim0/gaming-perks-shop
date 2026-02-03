@@ -132,7 +132,7 @@ export default function BO9StatsPage() {
 
   // Data state
   const [recentSeries, setRecentSeries] = useState<BO9Series[]>([]);
-  const [aggregates, setAggregates] = useState<AggregateStats>({ total_series: 0, total_rounds: 0, avg_series_duration_seconds: 0, avg_accuracy_pct: 0 });
+  const [aggregates, setAggregates] = useState<AggregateStats>({ total_series: 0, total_rounds: 0, avg_series_duration_seconds: 0, avg_accuracy_pct: 0 }); // kept for potential future use
   const [expandedSeries, setExpandedSeries] = useState<string | null>(null);
   const [seriesRounds, setSeriesRounds] = useState<Record<string, BO9Round[]>>({});
 
@@ -242,39 +242,20 @@ export default function BO9StatsPage() {
       <NeutralNavbar />
 
       <div className="container mx-auto px-4 py-8">
-        {/* Aggregate Stat Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
-        >
-          <StatCard label="Total Series" value={aggregates.total_series} />
-          <StatCard label="Total Rounds" value={aggregates.total_rounds} />
-          <StatCard label="Avg Duration" value={formatDuration(aggregates.avg_series_duration_seconds)} />
-          <StatCard label="Avg Accuracy" value={`${aggregates.avg_accuracy_pct}%`} />
-        </motion.div>
-
-        {/* Leaderboards - All side by side */}
+        {/* Leaderboards - All 6 in one row */}
         {leaderboards && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
+            transition={{ delay: 0.1 }}
             className="mb-8"
           >
             <h2 className="text-xl font-bold text-cyan-400 mb-4">Top 10 Leaderboards</h2>
-
-            {/* Player-based leaderboards - 2x2 grid on desktop */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
               <LeaderboardList title="Most Wins" entries={leaderboards.most_wins} statKey="wins" />
               <LeaderboardList title="Win Rate" entries={leaderboards.highest_win_rate} statKey="win_rate" />
               <LeaderboardList title="Most Played" entries={leaderboards.most_played} statKey="played" />
               <LeaderboardList title="Accuracy" entries={leaderboards.highest_accuracy} statKey="accuracy" />
-            </div>
-
-            {/* Series-based leaderboards - side by side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SeriesLeaderboardList title="Fastest Series" entries={leaderboards.fastest_series} />
               <SeriesLeaderboardList title="Longest Series" entries={leaderboards.longest_series} />
             </div>
@@ -373,17 +354,6 @@ export default function BO9StatsPage() {
           )}
         </motion.div>
       </div>
-    </div>
-  );
-}
-
-// ─── Stat Card ──────────────────────────────────────────────────────────────────
-
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20 text-center">
-      <div className="text-3xl font-bold text-cyan-400">{value}</div>
-      <div className="text-sm text-blue-200 mt-1">{label}</div>
     </div>
   );
 }
