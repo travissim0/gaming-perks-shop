@@ -128,41 +128,24 @@ export default function TopSupportersWidget({
   };
 
   return (
-    <div className={`bg-gradient-to-b from-gray-900/90 to-black/90 backdrop-blur-sm border border-purple-500/30 rounded-xl shadow-2xl overflow-hidden relative ${className}`}>
-      {/* Starfield Background Effect */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none">
-        <div className="absolute top-6 left-10 w-1 h-1 bg-purple-300 rounded-full animate-pulse"></div>
-        <div className="absolute top-16 right-8 w-0.5 h-0.5 bg-yellow-400 rounded-full animate-pulse" style={{ animationDelay: '0.7s' }}></div>
-        <div className="absolute top-28 left-16 w-0.5 h-0.5 bg-cyan-300 rounded-full animate-pulse" style={{ animationDelay: '1.2s' }}></div>
-        <div className="absolute top-40 right-12 w-1 h-1 bg-indigo-300 rounded-full animate-pulse" style={{ animationDelay: '1.8s' }}></div>
-        <div className="absolute bottom-16 left-8 w-0.5 h-0.5 bg-pink-400 rounded-full animate-pulse" style={{ animationDelay: '2.3s' }}></div>
-        <div className="absolute bottom-32 right-20 w-0.5 h-0.5 bg-blue-300 rounded-full animate-pulse" style={{ animationDelay: '2.8s' }}></div>
-      </div>
-
-      <div className="bg-gradient-to-r from-purple-600/50 to-pink-600/50 px-6 py-4 border-b border-purple-500/50 relative">
-        {/* Cosmic background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="text-6xl flex items-center justify-center h-full">🌌</div>
-        </div>
-        
-        <div className="flex items-center justify-between relative z-10">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-              <span className="text-white font-bold text-lg">🏆</span>  
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-white tracking-wider">Top Supporters</h3>
-              <p className="text-sm text-purple-200"></p>
-            </div>
+    <div className={`bg-gray-900/60 backdrop-blur-sm border border-purple-500/15 rounded-xl overflow-hidden relative ${className}`}>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-800/80 relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-5 bg-gradient-to-b from-purple-400 via-pink-400 to-amber-400 rounded-full" />
+            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400 uppercase tracking-wider">
+              Top Supporters
+            </h3>
           </div>
-          
+
           {isAdmin && showAdminControls && (
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className={`px-3 py-1 rounded-lg text-sm font-medium transition-all duration-300 ${
-                isEditing 
-                  ? 'bg-red-600/30 text-red-300 border border-red-500/50 hover:bg-red-600/40' 
-                  : 'bg-blue-600/30 text-blue-300 border border-blue-500/50 hover:bg-blue-600/40'
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-300 ${
+                isEditing
+                  ? 'bg-red-600/20 text-red-300 border border-red-500/30 hover:bg-red-600/30'
+                  : 'bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600/30'
               }`}
             >
               {isEditing ? 'Done' : 'Edit'}
@@ -171,15 +154,15 @@ export default function TopSupportersWidget({
         </div>
       </div>
 
-      <div className="p-6 bg-gradient-to-b from-gray-900/50 to-black/50">
-        <div className="space-y-2">
+      <div className="p-3">
+        <div className="space-y-1.5">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-gray-400">Loading supporters...</div>
+            <div className="flex items-center justify-center py-6">
+              <div className="text-gray-500 text-sm">Loading supporters...</div>
             </div>
           ) : supporters.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-gray-400">No supporters found</div>
+            <div className="flex items-center justify-center py-6">
+              <div className="text-gray-500 text-sm">No supporters found</div>
             </div>
           ) : (
             supporters.map((supporter, index) => (
@@ -242,18 +225,18 @@ function SupporterRow({
   // Cascading styling arrays matching the space theme
   const trophyIcons = ['🥇', '🥈', '🥉'];
   const trophyColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
-  const nameTextSizes = ['text-2xl', 'text-xl', 'text-lg', 'text-base', 'text-sm', 'text-sm', 'text-xs', 'text-xs'];
-  const amountTextSizes = ['text-xl', 'text-lg', 'text-base', 'text-sm', 'text-sm', 'text-xs', 'text-xs', 'text-xs'];
-  const paddingSizes = ['p-4', 'p-3.5', 'p-3', 'p-3', 'p-2.5', 'p-2.5', 'p-2', 'p-2'];
+  const nameTextSizes = ['text-lg', 'text-base', 'text-base', 'text-sm', 'text-sm', 'text-xs', 'text-xs', 'text-xs'];
+  const amountTextSizes = ['text-base', 'text-sm', 'text-sm', 'text-xs', 'text-xs', 'text-xs', 'text-xs', 'text-xs'];
+  const paddingSizes = ['p-3', 'p-2.5', 'p-2.5', 'p-2', 'p-2', 'p-2', 'p-1.5', 'p-1.5'];
   const cardThemes = [
-    'bg-gradient-to-br from-yellow-900/30 to-yellow-800/20 border-yellow-500/50 shadow-yellow-500/20', // Gold - more cosmic
-    'bg-gradient-to-br from-gray-600/30 to-gray-500/20 border-gray-400/50 shadow-gray-400/20',       // Silver
-    'bg-gradient-to-br from-amber-900/30 to-amber-800/20 border-amber-600/50 shadow-amber-600/20',    // Bronze
-    'bg-gradient-to-br from-blue-900/25 to-blue-800/15 border-blue-500/40 shadow-blue-500/20',      // 4th place - more cosmic
-    'bg-gradient-to-br from-purple-900/25 to-purple-800/15 border-purple-500/40 shadow-purple-500/20', // 5th place
-    'bg-gradient-to-br from-cyan-900/25 to-cyan-800/15 border-cyan-500/40 shadow-cyan-500/20',       // 6th place - changed to cyan
-    'bg-gradient-to-br from-gray-700/20 to-gray-800/15 border-gray-500/30 shadow-gray-500/10',      // Lower ranks
-    'bg-gradient-to-br from-gray-800/15 to-gray-900/10 border-gray-600/20 shadow-gray-600/10'       // Lowest ranks
+    'bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-500/30 shadow-yellow-500/10', // Gold
+    'bg-gradient-to-br from-gray-600/20 to-gray-500/10 border-gray-400/30 shadow-gray-400/10',       // Silver
+    'bg-gradient-to-br from-amber-900/20 to-amber-800/10 border-amber-600/30 shadow-amber-600/10',    // Bronze
+    'bg-gradient-to-br from-blue-900/15 to-blue-800/10 border-blue-500/20 shadow-blue-500/10',        // 4th
+    'bg-gradient-to-br from-purple-900/15 to-purple-800/10 border-purple-500/20 shadow-purple-500/10', // 5th
+    'bg-gradient-to-br from-cyan-900/15 to-cyan-800/10 border-cyan-500/20 shadow-cyan-500/10',        // 6th
+    'bg-gradient-to-br from-gray-800/15 to-gray-800/10 border-gray-600/20',                           // Lower ranks
+    'bg-gradient-to-br from-gray-800/10 to-gray-900/10 border-gray-700/15'                            // Lowest ranks
   ];
 
   const rankIndex = Math.min(index, cardThemes.length - 1);
@@ -344,19 +327,19 @@ function SupporterRow({
     ];
 
     return (
-      <div className={`flex items-center gap-2 p-2 rounded-lg border bg-gray-800/40 hover:bg-gray-800/60 transition-colors ${compactBorders[Math.min(index, compactBorders.length - 1)]}`}>
-        <span className="text-lg flex-shrink-0">{supporter.medal}</span>
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="text-white font-semibold text-sm truncate">
+      <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border bg-gray-800/30 hover:bg-gray-800/50 transition-colors ${compactBorders[Math.min(index, compactBorders.length - 1)]}`}>
+        <span className="text-sm flex-shrink-0">{supporter.medal}</span>
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+          <span className="text-gray-200 font-semibold text-xs truncate">
             {supporter.name}
           </span>
           {supporter.message && (
-            <span className="text-gray-400 text-xs truncate italic">
+            <span className="text-gray-500 text-[10px] truncate italic">
               "{supporter.message}"
             </span>
           )}
         </div>
-        <span className={`font-bold text-sm flex-shrink-0 ${compactColors[Math.min(index, compactColors.length - 1)]}`}>
+        <span className={`font-semibold text-xs flex-shrink-0 ${compactColors[Math.min(index, compactColors.length - 1)]}`}>
           {formatAmount(supporter.amount, supporter.currency)}
         </span>
       </div>
@@ -364,38 +347,40 @@ function SupporterRow({
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-lg border transition-all duration-300 shadow-lg hover:shadow-2xl ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
-      {/* Massive background trophy icon with opacity */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-        <div className="text-9xl">{supporter.medal}</div>
-      </div>
+    <div className={`group relative overflow-hidden rounded-lg border transition-all duration-300 hover:brightness-110 ${paddingSizes[rankIndex]} ${cardThemes[rankIndex]}`}>
+      {/* Subtle background trophy */}
+      {rankIndex < 3 && (
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.06] pointer-events-none">
+          <div className="text-7xl">{supporter.medal}</div>
+        </div>
+      )}
 
-      {/* Money amount in top right corner */}
-      <div className="absolute top-2 right-2 z-20">
-        <div className={`font-bold ${rankIndex < 3 ? trophyColors[rankIndex] : 'text-cyan-300'} ${amountTextSizes[rankIndex]}`}>
+      {/* Amount in top right */}
+      <div className="absolute top-1.5 right-2 z-20">
+        <div className={`font-semibold ${rankIndex < 3 ? trophyColors[rankIndex] : 'text-cyan-400/70'} ${amountTextSizes[rankIndex]}`}>
           {formatAmount(supporter.amount, supporter.currency)}
         </div>
       </div>
 
       <div className="relative z-10">
-        <div className="pr-20 flex items-baseline gap-3"> {/* Add right padding to avoid overlap with amount */}
-          <div className={`text-white font-bold ${nameTextSizes[rankIndex]} text-left flex-shrink-0`}>
+        <div className="pr-16 flex items-baseline gap-2">
+          <div className={`text-gray-200 font-bold ${nameTextSizes[rankIndex]} text-left flex-shrink-0`}>
             {supporter.name}
           </div>
           {supporter.message && (
-            <p className="text-gray-300 text-sm truncate italic">
+            <p className="text-gray-500 text-xs truncate italic">
               "{supporter.message}"
             </p>
           )}
         </div>
       </div>
 
-      {/* Admin controls overlay */}
+      {/* Admin controls */}
       {isAdmin && (
-        <div className="absolute bottom-2 right-2 flex space-x-1 opacity-60 hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-1.5 right-1.5 flex space-x-0.5 opacity-0 group-hover:opacity-80 transition-opacity">
           <button
             onClick={onEdit}
-            className="px-2 py-1 bg-blue-600/90 text-white text-xs rounded hover:bg-blue-500 transition-colors shadow-lg"
+            className="px-1.5 py-0.5 bg-blue-600/80 text-white text-[10px] rounded hover:bg-blue-500 transition-colors"
             title="Edit"
           >
             ✏️
@@ -403,7 +388,7 @@ function SupporterRow({
           {canMoveUp && (
             <button
               onClick={onMoveUp}
-              className="px-2 py-1 bg-purple-600/90 text-white text-xs rounded hover:bg-purple-500 transition-colors shadow-lg"
+              className="px-1.5 py-0.5 bg-purple-600/80 text-white text-[10px] rounded hover:bg-purple-500 transition-colors"
               title="Move Up"
             >
               ⬆️
@@ -412,7 +397,7 @@ function SupporterRow({
           {canMoveDown && (
             <button
               onClick={onMoveDown}
-              className="px-2 py-1 bg-purple-600/90 text-white text-xs rounded hover:bg-purple-500 transition-colors shadow-lg"
+              className="px-1.5 py-0.5 bg-purple-600/80 text-white text-[10px] rounded hover:bg-purple-500 transition-colors"
               title="Move Down"
             >
               ⬇️

@@ -153,11 +153,17 @@ export default function HomeNew() {
       try {
         setIsLoadingFinancials(true);
 
-        // Fetch recent donations
+        // 30-day rolling window
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+
+        // Fetch recent donations (last 30 days)
         const { data: donationsData } = await supabase
           .from('donation_transactions')
           .select('id, amount_cents, customer_name, kofi_from_name, payment_method, created_at, donation_message')
           .eq('status', 'completed')
+          .gte('created_at', thirtyDaysAgoISO)
           .order('created_at', { ascending: false })
           .limit(5);
 
@@ -172,10 +178,11 @@ export default function HomeNew() {
           })));
         }
 
-        // Fetch recent orders with profile and product info
+        // Fetch recent orders with profile and product info (last 30 days)
         const { data: ordersData } = await supabase
           .from('user_products')
           .select('id, user_id, product_id, created_at')
+          .gte('created_at', thirtyDaysAgoISO)
           .order('created_at', { ascending: false })
           .limit(5);
 
@@ -436,72 +443,83 @@ export default function HomeNew() {
               {/* Compact Carousel */}
               <DynamicHeroCarousel compact />
 
-              {/* Donations & Orders - Side by Side */}
+              {/* Recent Activity - Side by Side */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Recent Donations */}
-                <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-yellow-500/20 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-700/50">
-                    <h3 className="text-sm font-bold text-yellow-400">Recent Donations</h3>
+                <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-amber-500/15 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-800/80">
+                    <div className="flex items-center gap-2">
+                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-amber-400 to-orange-500 rounded-full" />
+                      <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 uppercase tracking-wider">
+                        Donations
+                      </h3>
+                      <span className="text-[10px] text-gray-600 ml-auto">30d</span>
+                    </div>
                   </div>
                   {isLoadingFinancials ? (
                     <div className="p-2 space-y-1">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                        <div key={i} className="animate-pulse h-6 bg-gray-800/30 rounded"></div>
                       ))}
                     </div>
                   ) : recentDonations.length > 0 ? (
-                    <div className="p-2 space-y-1">
+                    <div className="p-1.5 space-y-0.5">
                       {recentDonations.slice(0, 5).map((donation) => (
-                        <div key={donation.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
-                          <span className="text-white text-sm truncate flex-1 min-w-0">
+                        <div key={donation.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
+                          <div className="w-0.5 h-3 bg-amber-500/30 rounded-full group-hover:bg-amber-400/50 transition-colors" />
+                          <span className="text-gray-300 text-xs truncate flex-1 min-w-0">
                             {donation.customerName}
                           </span>
-                          <span className="text-gray-500 text-xs whitespace-nowrap">
+                          <span className="text-gray-600 text-[10px] whitespace-nowrap">
                             {formatDate(donation.date)}
                           </span>
-                          <span className="text-yellow-400 font-bold text-sm whitespace-nowrap">
+                          <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
                             ${donation.amount.toFixed(0)}
                           </span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="p-3 text-center text-gray-500 text-xs">None</div>
+                    <div className="p-3 text-center text-gray-600 text-[10px]">No donations this month</div>
                   )}
                 </div>
 
                 {/* Recent Orders */}
-                <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-green-500/20 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-700/50">
-                    <h3 className="text-sm font-bold text-green-400">Recent Orders</h3>
+                <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-emerald-500/15 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-800/80">
+                    <div className="flex items-center gap-2">
+                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full" />
+                      <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 uppercase tracking-wider">
+                        Orders
+                      </h3>
+                      <span className="text-[10px] text-gray-600 ml-auto">30d</span>
+                    </div>
                   </div>
                   {isLoadingFinancials ? (
                     <div className="p-2 space-y-1">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                        <div key={i} className="animate-pulse h-6 bg-gray-800/30 rounded"></div>
                       ))}
                     </div>
                   ) : recentOrders.length > 0 ? (
-                    <div className="p-2 space-y-1">
+                    <div className="p-1.5 space-y-0.5">
                       {recentOrders.slice(0, 5).map((order) => (
-                        <div key={order.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
-                          <span className="text-white text-sm truncate min-w-0" style={{ flex: '1 1 0' }}>
+                        <div key={order.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
+                          <div className="w-0.5 h-3 bg-emerald-500/30 rounded-full group-hover:bg-emerald-400/50 transition-colors" />
+                          <span className="text-gray-300 text-xs truncate min-w-0 flex-1">
                             {order.customerName}
                           </span>
-                          <span className="text-gray-400 text-xs truncate min-w-0" style={{ flex: '1.5 1 0' }}>
-                            {order.productName}
-                          </span>
-                          <span className="text-gray-500 text-xs whitespace-nowrap">
+                          <span className="text-gray-600 text-[10px] whitespace-nowrap">
                             {formatDate(order.date)}
                           </span>
-                          <span className="text-green-400 font-bold text-sm whitespace-nowrap">
+                          <span className="text-emerald-400/80 font-semibold text-xs whitespace-nowrap">
                             ${order.amount.toFixed(0)}
                           </span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="p-3 text-center text-gray-500 text-xs">None</div>
+                    <div className="p-3 text-center text-gray-600 text-[10px]">No orders this month</div>
                   )}
                 </div>
               </div>
