@@ -2,10 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Orbitron } from 'next/font/google';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Plus, ExternalLink, Calendar, User, ChevronRight } from 'lucide-react';
 import NewPostModal from './NewPostModal';
+
+const orbitron = Orbitron({
+  subsets: ['latin'],
+  weight: ['400', '700', '900'],
+});
 
 interface NewsPost {
   id: string;
@@ -246,12 +252,10 @@ export default function HomeNewsSection() {
       {/* Section Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-300 to-purple-400">
-              News & Updates
-            </span>
+          <h2 className={`text-5xl font-black tracking-wide text-gray-200 ${orbitron.className}`}>
+            News & Updates
           </h2>
-          <div className="mt-1.5 h-0.5 w-24 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full" />
+          <div className="mt-2 h-0.5 w-32 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full" />
         </div>
         {isAdmin && (
           <button
