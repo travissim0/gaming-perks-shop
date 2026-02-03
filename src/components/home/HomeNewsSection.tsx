@@ -156,6 +156,15 @@ function renderFullContent(content: any): React.ReactNode {
     }
   }
 
+  // Safety: if content is an object we can't handle, render as JSON string
+  if (typeof content === 'object') {
+    return (
+      <div className="text-gray-300 text-base leading-relaxed">
+        {JSON.stringify(content)}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -174,6 +183,7 @@ export default function HomeNewsSection() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -245,7 +255,6 @@ export default function HomeNewsSection() {
 
   const latestPost = posts[0] || null;
   const olderPosts = posts.slice(1);
-  const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
 
   return (
     <div className="space-y-5">
@@ -531,9 +540,9 @@ function ExpandablePostRow({
         </Link>
       </div>
 
-      {/* Expanded: full content card */}
-      <div className={`transition-all duration-300 overflow-hidden ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-        <article className="bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm">
+      {/* Expanded: full content card — only mount when expanded to avoid rendering issues */}
+      {isExpanded && (
+        <article className="bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
 
           {/* YouTube Embed */}
@@ -608,7 +617,7 @@ function ExpandablePostRow({
             </div>
           </div>
         </article>
-      </div>
+      )}
     </div>
   );
 }
