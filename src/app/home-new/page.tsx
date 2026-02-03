@@ -427,14 +427,20 @@ export default function HomeNew() {
         {/* Navbar */}
         <NeutralNavbar />
 
-        {/* Server Status Bar */}
-        <ServerStatusBar
-          totalPlayers={serverData.stats.totalPlayers}
-          zones={serverData.zones}
-          serverStatus={serverData.stats.serverStatus}
-        />
+        {/* Slim Server Status Indicator */}
+        <div className="bg-gray-900/60 border-b border-gray-800/50">
+          <div className="max-w-[1600px] mx-auto px-4 py-1.5 flex items-center justify-center gap-3">
+            <div className={`w-2 h-2 rounded-full ${(serverData.stats.serverStatus === 'online' || serverData.stats.totalPlayers > 0) ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+            <span className="text-gray-400 text-xs">
+              Server {(serverData.stats.serverStatus === 'online' || serverData.stats.totalPlayers > 0) ? 'Online' : 'Offline'}
+            </span>
+            <span className="text-cyan-400 font-bold text-xs">
+              {serverData.stats.totalPlayers} Players
+            </span>
+          </div>
+        </div>
 
-        {/* Main Content Grid */}
+        {/* Main Content Grid: Left Sidebar | Center News | Right Sidebar */}
         <div className="max-w-[1600px] mx-auto px-4 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
@@ -538,9 +544,41 @@ export default function HomeNew() {
               <TopSupportersWidget maxSupporters={10} />
             </div>
 
-            {/* Center: News Section - Takes 3 columns */}
-            <div className="lg:col-span-3 order-1 lg:order-2">
+            {/* Center: News Section - Takes 2 columns (truly centered) */}
+            <div className="lg:col-span-2 order-1 lg:order-2">
               <HomeNewsSection />
+            </div>
+
+            {/* Right Sidebar: Zone Population */}
+            <div className="lg:col-span-1 space-y-4 order-3">
+              {/* Zone Population Panel */}
+              <div className="bg-gray-900/60 backdrop-blur-sm rounded-xl border border-cyan-500/15 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-800/80">
+                  <div className="flex items-center justify-center gap-2.5">
+                    <div className="w-1 h-6 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
+                    <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
+                      Zone Activity
+                    </h3>
+                  </div>
+                </div>
+                <div className="p-3 space-y-1.5">
+                  {serverData.zones.length > 0 ? (
+                    serverData.zones.map((zone, index) => (
+                      <div
+                        key={index}
+                        className="group flex items-center justify-between px-3 py-2 rounded-lg border border-gray-800/50 hover:bg-gray-800/40 transition-colors"
+                      >
+                        <span className="text-gray-300 text-sm truncate">{zone.title}</span>
+                        <span className={`font-bold text-sm ${zone.playerCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                          {zone.playerCount}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-gray-600 text-xs py-4">No active zones</div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
