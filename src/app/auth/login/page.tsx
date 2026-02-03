@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 
 export default function Login() {
@@ -170,9 +171,17 @@ export default function Login() {
 
             <div className="mt-6">
               <button
-                onClick={() => {
-                  // TODO: Implement Google SSO
-                  toast.error('🚫 Google sign-in coming soon!');
+                onClick={async () => {
+                  const { error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                      redirectTo: `${window.location.origin}/auth/callback`,
+                    },
+                  });
+                  if (error) {
+                    toast.error('Failed to start Google sign-in');
+                    console.error('Google OAuth error:', error);
+                  }
                 }}
                 className="w-full flex justify-center items-center py-3 px-4 border border-gray-600 rounded-lg shadow-lg bg-gray-700/50 hover:bg-gray-600/70 text-gray-300 hover:text-white font-medium tracking-wide transition-all duration-300 hover:border-cyan-500/50"
               >

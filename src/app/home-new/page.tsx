@@ -153,30 +153,46 @@ export default function HomeNew() {
       try {
         setIsLoadingFinancials(true);
 
-        // 30-day rolling window (filter client-side to avoid RLS issues with .gte())
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Fetch recent donations via API (bypasses RLS) — last 3 unique donors, totals aggregated
+        const donationsRes = await fetch('/api/recent-donations');
+        const donationsJson = await donationsRes.json();
 
-        // Fetch recent donations
-        const { data: donationsData } = await supabase
-          .from('donation_transactions')
-          .select('id, amount_cents, customer_name, kofi_from_name, payment_method, created_at, donation_message')
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(20);
+        if (donationsJson.donations && donationsJson.donations.length > 0) {
+          // Aggregate by donor name: sum amounts, keep most recent message/date
+          const donorMap = new Map<string, { total: number; latestDate: string; latestMessage: string; paymentMethod: string }>();
+          for (const d of donationsJson.donations) {
+            const name = d.customerName || 'Anonymous';
+            const existing = donorMap.get(name);
+            if (existing) {
+              existing.total += d.amount;
+              if (new Date(d.date) > new Date(existing.latestDate)) {
+                existing.latestDate = d.date;
+                existing.latestMessage = d.message || '';
+              }
+            } else {
+              donorMap.set(name, {
+                total: d.amount,
+                latestDate: d.date,
+                latestMessage: d.message || '',
+                paymentMethod: d.paymentMethod || 'kofi',
+              });
+            }
+          }
 
-        if (donationsData) {
-          const recentDonos = donationsData
-            .filter((d: any) => new Date(d.created_at) >= thirtyDaysAgo)
-            .slice(0, 5);
-          setRecentDonations(recentDonos.map((d: any) => ({
-            id: d.id,
-            customerName: d.kofi_from_name || d.customer_name || 'Anonymous',
-            amount: d.amount_cents / 100,
-            paymentMethod: d.payment_method || 'kofi',
-            date: d.created_at,
-            message: d.donation_message
-          })));
+          // Sort by most recent donation date, take top 3
+          const aggregated = Array.from(donorMap.entries())
+            .sort((a, b) => new Date(b[1].latestDate).getTime() - new Date(a[1].latestDate).getTime())
+            .slice(0, 3)
+            .map(([name, info], i) => ({
+              id: `donor-${i}`,
+              customerName: name,
+              amount: info.total,
+              paymentMethod: info.paymentMethod,
+              date: info.latestDate,
+              message: info.latestMessage || undefined,
+            }));
+
+          setRecentDonations(aggregated);
         }
 
         // Fetch recent orders with profile and product info
@@ -187,13 +203,9 @@ export default function HomeNew() {
           .limit(20);
 
         if (ordersData && ordersData.length > 0) {
-          // Filter to last 30 days client-side
-          const recentOrdersData = ordersData.filter((o: any) => new Date(o.created_at) >= thirtyDaysAgo);
-
-          if (recentOrdersData.length > 0) {
             // Get unique user IDs and product IDs
-            const userIds = [...new Set(recentOrdersData.map((o: any) => o.user_id))];
-            const productIds = [...new Set(recentOrdersData.map((o: any) => o.product_id))];
+            const userIds = [...new Set(ordersData.map((o: any) => o.user_id))];
+            const productIds = [...new Set(ordersData.map((o: any) => o.product_id))];
 
             // Fetch profiles
             const { data: profiles } = await supabase
@@ -210,7 +222,7 @@ export default function HomeNew() {
             const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
             const productsMap = new Map((products || []).map((p: any) => [p.id, p]));
 
-            setRecentOrders(recentOrdersData.slice(0, 5).map((o: any) => {
+            setRecentOrders(ordersData.slice(0, 5).map((o: any) => {
               const profile = profilesMap.get(o.user_id);
               const product = productsMap.get(o.product_id);
               return {
@@ -221,7 +233,6 @@ export default function HomeNew() {
                 date: o.created_at
               };
             }));
-          }
         }
 
       } catch (error) {
@@ -454,12 +465,11 @@ export default function HomeNew() {
                 {/* Recent Donations */}
                 <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-amber-500/15 overflow-hidden">
                   <div className="px-3 py-2 border-b border-gray-800/80">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center gap-2">
                       <div className="w-0.5 h-3.5 bg-gradient-to-b from-amber-400 to-orange-500 rounded-full" />
                       <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 uppercase tracking-wider">
-                        Donations
+                        Recent Donations
                       </h3>
-                      <span className="text-[10px] text-gray-600 ml-auto">30d</span>
                     </div>
                   </div>
                   {isLoadingFinancials ? (
@@ -470,15 +480,12 @@ export default function HomeNew() {
                     </div>
                   ) : recentDonations.length > 0 ? (
                     <div className="p-1.5 space-y-0.5">
-                      {recentDonations.slice(0, 5).map((donation) => (
+                      {recentDonations.map((donation) => (
                         <div key={donation.id} className="group px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
                           <div className="flex items-center gap-1.5">
                             <div className="w-0.5 h-3 bg-amber-500/30 rounded-full group-hover:bg-amber-400/50 transition-colors flex-shrink-0" />
                             <span className="text-gray-300 text-xs truncate flex-1 min-w-0">
                               {donation.customerName}
-                            </span>
-                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
-                              {formatDate(donation.date)}
                             </span>
                             <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
                               ${donation.amount.toFixed(0)}
@@ -496,7 +503,7 @@ export default function HomeNew() {
                       ))}
                     </div>
                   ) : (
-                    <div className="p-3 text-center text-gray-600 text-[10px]">No donations this month</div>
+                    <div className="p-3 text-center text-gray-600 text-[10px]">No donations yet</div>
                   )}
                 </div>
 
@@ -509,7 +516,6 @@ export default function HomeNew() {
                         <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 uppercase tracking-wider">
                           Orders
                         </h3>
-                        <span className="text-[10px] text-gray-600 ml-auto">30d</span>
                       </div>
                     </div>
                     {isLoadingFinancials ? (
