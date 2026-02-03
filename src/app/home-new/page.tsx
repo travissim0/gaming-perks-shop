@@ -443,8 +443,8 @@ export default function HomeNew() {
               {/* Compact Carousel */}
               <DynamicHeroCarousel compact />
 
-              {/* Recent Activity - Side by Side */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Recent Activity - Side by Side (hide orders if empty) */}
+              <div className={`grid gap-3 ${!isLoadingFinancials && recentOrders.length === 0 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                 {/* Recent Donations */}
                 <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-amber-500/15 overflow-hidden">
                   <div className="px-3 py-2 border-b border-gray-800/80">
@@ -465,17 +465,27 @@ export default function HomeNew() {
                   ) : recentDonations.length > 0 ? (
                     <div className="p-1.5 space-y-0.5">
                       {recentDonations.slice(0, 5).map((donation) => (
-                        <div key={donation.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
-                          <div className="w-0.5 h-3 bg-amber-500/30 rounded-full group-hover:bg-amber-400/50 transition-colors" />
-                          <span className="text-gray-300 text-xs truncate flex-1 min-w-0">
-                            {donation.customerName}
-                          </span>
-                          <span className="text-gray-600 text-[10px] whitespace-nowrap">
-                            {formatDate(donation.date)}
-                          </span>
-                          <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
-                            ${donation.amount.toFixed(0)}
-                          </span>
+                        <div key={donation.id} className="group px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-0.5 h-3 bg-amber-500/30 rounded-full group-hover:bg-amber-400/50 transition-colors flex-shrink-0" />
+                            <span className="text-gray-300 text-xs truncate flex-1 min-w-0">
+                              {donation.customerName}
+                            </span>
+                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
+                              {formatDate(donation.date)}
+                            </span>
+                            <span className="text-amber-400/80 font-semibold text-xs whitespace-nowrap">
+                              ${donation.amount.toFixed(0)}
+                            </span>
+                          </div>
+                          {donation.message && (
+                            <p
+                              className={`ml-2.5 mt-0.5 text-gray-500 text-[10px] italic ${donation.amount < 100 ? 'truncate cursor-help' : ''}`}
+                              title={donation.amount < 100 ? donation.message : undefined}
+                            >
+                              &ldquo;{donation.message}&rdquo;
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -484,44 +494,44 @@ export default function HomeNew() {
                   )}
                 </div>
 
-                {/* Recent Orders */}
-                <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-emerald-500/15 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-gray-800/80">
-                    <div className="flex items-center gap-2">
-                      <div className="w-0.5 h-3.5 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full" />
-                      <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 uppercase tracking-wider">
-                        Orders
-                      </h3>
-                      <span className="text-[10px] text-gray-600 ml-auto">30d</span>
+                {/* Recent Orders - only shown when there are orders */}
+                {!isLoadingFinancials && recentOrders.length === 0 ? null : (
+                  <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-emerald-500/15 overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-800/80">
+                      <div className="flex items-center gap-2">
+                        <div className="w-0.5 h-3.5 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full" />
+                        <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 uppercase tracking-wider">
+                          Orders
+                        </h3>
+                        <span className="text-[10px] text-gray-600 ml-auto">30d</span>
+                      </div>
                     </div>
+                    {isLoadingFinancials ? (
+                      <div className="p-2 space-y-1">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="animate-pulse h-6 bg-gray-800/30 rounded"></div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-1.5 space-y-0.5">
+                        {recentOrders.slice(0, 5).map((order) => (
+                          <div key={order.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
+                            <div className="w-0.5 h-3 bg-emerald-500/30 rounded-full group-hover:bg-emerald-400/50 transition-colors flex-shrink-0" />
+                            <span className="text-gray-300 text-xs truncate min-w-0 flex-1">
+                              {order.customerName}
+                            </span>
+                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
+                              {formatDate(order.date)}
+                            </span>
+                            <span className="text-emerald-400/80 font-semibold text-xs whitespace-nowrap">
+                              ${order.amount.toFixed(0)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {isLoadingFinancials ? (
-                    <div className="p-2 space-y-1">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="animate-pulse h-6 bg-gray-800/30 rounded"></div>
-                      ))}
-                    </div>
-                  ) : recentOrders.length > 0 ? (
-                    <div className="p-1.5 space-y-0.5">
-                      {recentOrders.slice(0, 5).map((order) => (
-                        <div key={order.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
-                          <div className="w-0.5 h-3 bg-emerald-500/30 rounded-full group-hover:bg-emerald-400/50 transition-colors" />
-                          <span className="text-gray-300 text-xs truncate min-w-0 flex-1">
-                            {order.customerName}
-                          </span>
-                          <span className="text-gray-600 text-[10px] whitespace-nowrap">
-                            {formatDate(order.date)}
-                          </span>
-                          <span className="text-emerald-400/80 font-semibold text-xs whitespace-nowrap">
-                            ${order.amount.toFixed(0)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-3 text-center text-gray-600 text-[10px]">No orders this month</div>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Top Supporters */}

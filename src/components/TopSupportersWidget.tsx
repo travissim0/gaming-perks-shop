@@ -131,27 +131,27 @@ export default function TopSupportersWidget({
     <div className={`bg-gray-900/60 backdrop-blur-sm border border-purple-500/15 rounded-xl overflow-hidden relative ${className}`}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-800/80 relative">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-5 bg-gradient-to-b from-purple-400 via-pink-400 to-amber-400 rounded-full" />
-            <h3 className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400 uppercase tracking-wider">
+        <div className="flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="w-1 h-6 bg-gradient-to-b from-purple-400 via-pink-400 to-amber-400 rounded-full" />
+            <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400 uppercase tracking-wider">
               Top Supporters
             </h3>
           </div>
-
-          {isAdmin && showAdminControls && (
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-300 ${
-                isEditing
-                  ? 'bg-red-600/20 text-red-300 border border-red-500/30 hover:bg-red-600/30'
-                  : 'bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600/30'
-              }`}
-            >
-              {isEditing ? 'Done' : 'Edit'}
-            </button>
-          )}
         </div>
+
+        {isAdmin && showAdminControls && (
+          <button
+            onClick={() => setIsEditing(!isEditing)}
+            className={`absolute right-4 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-300 ${
+              isEditing
+                ? 'bg-red-600/20 text-red-300 border border-red-500/30 hover:bg-red-600/30'
+                : 'bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600/30'
+            }`}
+          >
+            {isEditing ? 'Done' : 'Edit'}
+          </button>
+        )}
       </div>
 
       <div className="p-3">
@@ -334,8 +334,11 @@ function SupporterRow({
             {supporter.name}
           </span>
           {supporter.message && (
-            <span className="text-gray-500 text-[10px] truncate italic">
-              "{supporter.message}"
+            <span
+              className={`text-gray-500 text-[10px] italic ${supporter.amount < 100 ? 'truncate cursor-help' : ''}`}
+              title={supporter.amount < 100 ? supporter.message : undefined}
+            >
+              &ldquo;{supporter.message}&rdquo;
             </span>
           )}
         </div>
@@ -368,8 +371,11 @@ function SupporterRow({
             {supporter.name}
           </div>
           {supporter.message && (
-            <p className="text-gray-500 text-xs truncate italic">
-              "{supporter.message}"
+            <p
+              className={`text-gray-500 text-xs italic ${supporter.amount < 100 ? 'truncate cursor-help' : ''}`}
+              title={supporter.amount < 100 ? supporter.message : undefined}
+            >
+              &ldquo;{supporter.message}&rdquo;
             </p>
           )}
         </div>
