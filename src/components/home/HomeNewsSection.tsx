@@ -31,7 +31,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-3 text-gray-300 leading-relaxed">
+        <p key={key} className="mb-3 text-gray-200/90 leading-relaxed">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
@@ -70,7 +70,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'blockquote':
       return (
-        <blockquote key={key} className="border-l-4 border-cyan-500/50 pl-4 mb-3 italic text-gray-400">
+        <blockquote key={key} className="border-l-4 border-cyan-400/60 pl-4 mb-3 italic text-gray-300">
           {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
         </blockquote>
       );
@@ -246,10 +246,12 @@ export default function HomeNewsSection() {
       {/* Section Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">
-            News & Updates
+          <h2 className="text-2xl font-bold tracking-tight">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-300 to-purple-400">
+              News & Updates
+            </span>
           </h2>
-          <div className="mt-1 h-0.5 w-16 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full" />
+          <div className="mt-1.5 h-0.5 w-24 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full" />
         </div>
         {isAdmin && (
           <button
@@ -291,25 +293,26 @@ export default function HomeNewsSection() {
 
           {/* ─── Remaining Posts (minimal list) ─── */}
           {remainingPosts.length > 0 && (
-            <div className="bg-gray-800/20 rounded-xl border border-gray-700/20 overflow-hidden">
+            <div className="rounded-xl border border-gray-600/15 overflow-hidden">
               {remainingPosts.map((post, i) => (
                 <Link
                   key={post.id}
                   href={`/news/${post.id}`}
-                  className={`flex items-center justify-between px-4 py-3 hover:bg-gray-800/40 transition-colors ${
+                  className={`group flex items-center justify-between px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200 ${
                     i < remainingPosts.length - 1 ? 'border-b border-gray-700/20' : ''
                   }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-white font-medium truncate block">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-500/40 group-hover:bg-cyan-400 transition-colors shrink-0" />
+                    <span className="text-sm text-gray-200 font-medium truncate group-hover:text-cyan-300 transition-colors">
                       {post.title}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-3">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-cyan-500/50 font-medium">
                       {formatDate(post.published_at || post.created_at)}
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-cyan-400 transition-colors" />
                   </div>
                 </Link>
               ))}
@@ -317,10 +320,10 @@ export default function HomeNewsSection() {
           )}
 
           {/* View All */}
-          <div className="text-center">
+          <div className="text-center pt-2">
             <Link
               href="/news"
-              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-cyan-400 transition-colors group"
+              className="inline-flex items-center gap-1.5 text-sm text-cyan-400/70 hover:text-cyan-300 transition-colors group font-medium"
             >
               View all news
               <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -347,9 +350,9 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
 
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-gray-800/60 to-gray-900/80 backdrop-blur-sm shadow-lg shadow-black/20">
+    <article className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
       {/* Top gradient accent */}
-      <div className="h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500" />
+      <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
 
       {/* Featured Image */}
       {post.featured_image_url && !youtubeId && (
@@ -387,7 +390,7 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
             {post.tags.map((tag) => (
               <span
                 key={tag}
-                className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs text-cyan-400 font-medium"
+                className="px-2.5 py-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider"
               >
                 {tag}
               </span>
@@ -396,15 +399,15 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
         )}
 
         {/* Title */}
-        <h3 className="text-2xl font-bold text-white mb-1 leading-tight">
-          <Link href={`/news/${post.id}`} className="hover:text-cyan-400 transition-colors">
+        <h3 className="text-2xl md:text-3xl font-black mb-2 leading-tight">
+          <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
             {post.title}
           </Link>
         </h3>
 
         {/* Subtitle */}
         {post.subtitle && (
-          <p className="text-gray-400 text-base mb-4">{post.subtitle}</p>
+          <p className="text-cyan-100/60 text-base mb-4 font-medium">{post.subtitle}</p>
         )}
 
         {/* Full Content */}
@@ -418,7 +421,7 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
             href={post.metadata.external_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 mb-4 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/20 text-sm transition-all"
+            className="inline-flex items-center gap-1.5 mb-4 px-4 py-2 bg-gradient-to-r from-cyan-500/15 to-blue-500/15 border border-cyan-400/30 rounded-lg text-cyan-300 hover:text-cyan-200 hover:from-cyan-500/25 hover:to-blue-500/25 text-sm font-medium transition-all"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Read more
@@ -426,20 +429,20 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
         )}
 
         {/* Meta */}
-        <div className="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-700/30 pt-4">
-          <span className="flex items-center gap-1.5">
+        <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-4 mt-2">
+          <span className="flex items-center gap-1.5 text-cyan-400/70">
             <Calendar className="w-3.5 h-3.5" />
             {formatDate(post.published_at || post.created_at)}
           </span>
           {(post.author_alias || post.author_name) && (
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 text-purple-400/70">
               <User className="w-3.5 h-3.5" />
               {post.author_alias || post.author_name}
             </span>
           )}
           <Link
             href={`/news/${post.id}`}
-            className="ml-auto text-cyan-500/70 hover:text-cyan-400 transition-colors flex items-center gap-1"
+            className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
           >
             Permalink <ChevronRight className="w-3 h-3" />
           </Link>
@@ -460,11 +463,14 @@ function CompactPostCard({ post, formatDate }: { post: NewsPost; formatDate: (d:
 
   return (
     <Link href={`/news/${post.id}`}>
-      <article className="group h-full p-4 rounded-xl bg-gray-800/30 border border-gray-700/30 hover:border-cyan-500/20 hover:bg-gray-800/50 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/5">
-        <div className="flex gap-3">
+      <article className="group h-full flex overflow-hidden rounded-xl bg-gray-800/30 border border-gray-600/20 hover:border-cyan-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/5">
+        {/* Left accent bar */}
+        <div className="w-1 bg-gradient-to-b from-cyan-500/40 to-blue-500/20 group-hover:from-cyan-400 group-hover:to-blue-500 transition-all duration-300 shrink-0" />
+
+        <div className="flex gap-3 p-4 flex-1">
           {/* Thumbnail */}
           {thumbnailUrl && (
-            <div className="flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden bg-gray-900">
+            <div className="flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden bg-gray-900 ring-1 ring-white/5">
               <img
                 src={thumbnailUrl}
                 alt={post.title}
@@ -478,16 +484,16 @@ function CompactPostCard({ post, formatDate }: { post: NewsPost; formatDate: (d:
 
           {/* Text */}
           <div className="flex-1 min-w-0">
-            <h4 className="text-sm font-semibold text-white group-hover:text-cyan-400 transition-colors line-clamp-2 leading-snug">
+            <h4 className="text-sm font-bold text-gray-100 group-hover:text-cyan-300 transition-colors line-clamp-2 leading-snug">
               {post.title}
             </h4>
             {post.subtitle && (
               <p className="text-xs text-gray-500 mt-1 line-clamp-1">{post.subtitle}</p>
             )}
-            <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-600">
-              <span>{formatDate(post.published_at || post.created_at)}</span>
+            <div className="flex items-center gap-3 mt-1.5 text-xs">
+              <span className="text-cyan-500/60">{formatDate(post.published_at || post.created_at)}</span>
               {(post.author_alias || post.author_name) && (
-                <span>{post.author_alias || post.author_name}</span>
+                <span className="text-purple-400/50">{post.author_alias || post.author_name}</span>
               )}
             </div>
           </div>
