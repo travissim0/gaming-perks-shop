@@ -43,7 +43,7 @@ const heroSlides: HeroSlide[] = [
   },
   {
     id: 'usl-dueling',
-    title: 'USL DUELING',
+    title: 'USL STATS',
     subtitle: 'Best of 9 Competitive Match Analytics',
     buttonText: 'View Stats',
     buttonLink: '/dueling/bo9-stats',

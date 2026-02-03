@@ -141,6 +141,20 @@ export default function NeutralNavbar() {
                 </span>
                 <div className="absolute inset-0 rounded-lg bg-orange-400/0 group-hover:bg-orange-400/5 transition-colors" />
               </Link>
+
+              {/* USL Stats Button - Green/Emerald theme */}
+              <Link
+                href="/dueling/bo9-stats"
+                className="group relative px-4 py-2 bg-gradient-to-r from-green-600/20 to-emerald-600/20 hover:from-green-600/40 hover:to-emerald-600/40 border border-green-500/50 hover:border-emerald-400 rounded-lg transition-all duration-300"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-green-400 group-hover:text-emerald-300 transition-colors">📊</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400 group-hover:from-green-300 group-hover:to-emerald-300">
+                    USL Stats
+                  </span>
+                </span>
+                <div className="absolute inset-0 rounded-lg bg-green-400/0 group-hover:bg-green-400/5 transition-colors" />
+              </Link>
             </div>
 
             {/* Right Side - Utilities (matching original navbar) */}
@@ -354,6 +368,18 @@ export default function NeutralNavbar() {
               <span className="text-xl">⚡</span>
               <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400">
                 Triple Threat
+              </span>
+            </Link>
+
+            {/* USL Stats - Mobile */}
+            <Link
+              href="/dueling/bo9-stats"
+              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-lg transition-all"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="text-xl">📊</span>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
+                USL Stats
               </span>
             </Link>
             {!user && (
