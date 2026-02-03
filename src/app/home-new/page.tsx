@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
@@ -43,6 +43,19 @@ interface RecentOrder {
   date: string;
 }
 
+// Generate ambient starfield
+const generatePageStars = (count: number, layer: number) => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `page-star-${layer}-${i}`,
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    size: layer === 1 ? Math.random() * 2 + 1 : layer === 2 ? Math.random() * 1.5 + 0.5 : Math.random() + 0.3,
+    opacity: layer === 1 ? Math.random() * 0.4 + 0.3 : layer === 2 ? Math.random() * 0.3 + 0.2 : Math.random() * 0.2 + 0.1,
+    animationDuration: `${Math.random() * 4 + 3}s`,
+    animationDelay: `${Math.random() * 3}s`,
+  }));
+};
+
 export default function HomeNew() {
   const { user } = useAuth();
   const [serverData, setServerData] = useState<ServerData>({
@@ -53,6 +66,13 @@ export default function HomeNew() {
   const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [isLoadingFinancials, setIsLoadingFinancials] = useState(true);
+
+  // Page-wide starfield
+  const pageStars = useMemo(() => ({
+    bright: generatePageStars(30, 1),
+    medium: generatePageStars(60, 2),
+    dim: generatePageStars(80, 3),
+  }), []);
 
   // Fetch server status
   useEffect(() => {
@@ -161,120 +181,186 @@ export default function HomeNew() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
-      {/* Neutral Navbar */}
-      <NeutralNavbar />
+    <div className="min-h-screen relative">
+      {/* ─── Page-Wide Space Background ─── */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        {/* Base gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950" />
 
-      {/* Dynamic Space Hero Carousel */}
-      <DynamicHeroCarousel />
+        {/* Dim star layer */}
+        {pageStars.dim.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+            }}
+          />
+        ))}
 
-      {/* Server Status Bar */}
-      <ServerStatusBar
-        totalPlayers={serverData.stats.totalPlayers}
-        zones={serverData.zones}
-        serverStatus={serverData.stats.serverStatus}
-      />
+        {/* Medium star layer */}
+        {pageStars.medium.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white animate-pulse"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }}
+          />
+        ))}
 
-      {/* Main Content - News (left) + Donations (right) */}
-      <div className="max-w-[1600px] mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Bright star layer */}
+        {pageStars.bright.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full bg-white animate-pulse"
+            style={{
+              left: star.left,
+              top: star.top,
+              width: star.size,
+              height: star.size,
+              opacity: star.opacity,
+              boxShadow: `0 0 ${star.size * 2}px rgba(255, 255, 255, 0.3)`,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }}
+          />
+        ))}
 
-          {/* News Section - Takes 3 columns */}
-          <div className="lg:col-span-3">
-            <HomeNewsSection />
-          </div>
-
-          {/* Right Sidebar - Donations/Orders (compact) + Top Supporters (prominent) */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Donations & Orders - Side by Side */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Recent Donations */}
-              <div className="bg-gray-800/50 rounded-lg border border-yellow-500/20 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-700/50">
-                  <h3 className="text-sm font-bold text-yellow-400">Recent Donations</h3>
-                </div>
-                {isLoadingFinancials ? (
-                  <div className="p-2 space-y-1">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
-                    ))}
-                  </div>
-                ) : recentDonations.length > 0 ? (
-                  <div className="p-2 space-y-1">
-                    {recentDonations.slice(0, 5).map((donation) => (
-                      <div key={donation.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
-                        <span className="text-white text-sm truncate flex-1 min-w-0">
-                          {donation.customerName}
-                        </span>
-                        <span className="text-gray-500 text-xs whitespace-nowrap">
-                          {formatDate(donation.date)}
-                        </span>
-                        <span className="text-yellow-400 font-bold text-sm whitespace-nowrap">
-                          ${donation.amount.toFixed(0)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-3 text-center text-gray-500 text-xs">None</div>
-                )}
-              </div>
-
-              {/* Recent Orders */}
-              <div className="bg-gray-800/50 rounded-lg border border-green-500/20 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-700/50">
-                  <h3 className="text-sm font-bold text-green-400">Recent Orders</h3>
-                </div>
-                {isLoadingFinancials ? (
-                  <div className="p-2 space-y-1">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
-                    ))}
-                  </div>
-                ) : recentOrders.length > 0 ? (
-                  <div className="p-2 space-y-1">
-                    {recentOrders.slice(0, 5).map((order) => (
-                      <div key={order.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
-                        <span className="text-white text-sm truncate min-w-0" style={{ flex: '1 1 0' }}>
-                          {order.customerName}
-                        </span>
-                        <span className="text-gray-400 text-xs truncate min-w-0" style={{ flex: '1.5 1 0' }}>
-                          {order.productName}
-                        </span>
-                        <span className="text-gray-500 text-xs whitespace-nowrap">
-                          {formatDate(order.date)}
-                        </span>
-                        <span className="text-green-400 font-bold text-sm whitespace-nowrap">
-                          ${order.amount.toFixed(0)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-3 text-center text-gray-500 text-xs">None</div>
-                )}
-              </div>
-            </div>
-
-            {/* Top Supporters - Full Width with tiered styling */}
-            <TopSupportersWidget maxSupporters={10} />
-          </div>
-        </div>
+        {/* Subtle nebula wash */}
+        <div className="absolute inset-0 opacity-10"
+          style={{
+            background: 'radial-gradient(ellipse at 30% 20%, rgba(34, 211, 238, 0.3) 0%, transparent 50%), radial-gradient(ellipse at 70% 60%, rgba(139, 92, 246, 0.2) 0%, transparent 50%)',
+          }}
+        />
       </div>
 
-      {/* Footer */}
-      <footer className="mt-12 border-t border-gray-800/50 py-6 bg-gray-950/50">
-        <div className="max-w-[1600px] mx-auto px-4 text-center">
-          <div className="text-xl font-black tracking-wider mb-1">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
-              FREE INFANTRY
-            </span>
+      {/* ─── Page Content (above starfield) ─── */}
+      <div className="relative z-10">
+        {/* Navbar */}
+        <NeutralNavbar />
+
+        {/* Server Status Bar */}
+        <ServerStatusBar
+          totalPlayers={serverData.stats.totalPlayers}
+          zones={serverData.zones}
+          serverStatus={serverData.stats.serverStatus}
+        />
+
+        {/* Main Content Grid */}
+        <div className="max-w-[1600px] mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+            {/* Left: News Section - Takes 3 columns */}
+            <div className="lg:col-span-3">
+              <HomeNewsSection />
+            </div>
+
+            {/* Right Sidebar: Carousel + Donations + Supporters */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Compact Carousel */}
+              <DynamicHeroCarousel compact />
+
+              {/* Donations & Orders - Side by Side */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Recent Donations */}
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-yellow-500/20 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-700/50">
+                    <h3 className="text-sm font-bold text-yellow-400">Recent Donations</h3>
+                  </div>
+                  {isLoadingFinancials ? (
+                    <div className="p-2 space-y-1">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                      ))}
+                    </div>
+                  ) : recentDonations.length > 0 ? (
+                    <div className="p-2 space-y-1">
+                      {recentDonations.slice(0, 5).map((donation) => (
+                        <div key={donation.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
+                          <span className="text-white text-sm truncate flex-1 min-w-0">
+                            {donation.customerName}
+                          </span>
+                          <span className="text-gray-500 text-xs whitespace-nowrap">
+                            {formatDate(donation.date)}
+                          </span>
+                          <span className="text-yellow-400 font-bold text-sm whitespace-nowrap">
+                            ${donation.amount.toFixed(0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 text-center text-gray-500 text-xs">None</div>
+                  )}
+                </div>
+
+                {/* Recent Orders */}
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-green-500/20 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-700/50">
+                    <h3 className="text-sm font-bold text-green-400">Recent Orders</h3>
+                  </div>
+                  {isLoadingFinancials ? (
+                    <div className="p-2 space-y-1">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="animate-pulse h-8 bg-gray-700/30 rounded"></div>
+                      ))}
+                    </div>
+                  ) : recentOrders.length > 0 ? (
+                    <div className="p-2 space-y-1">
+                      {recentOrders.slice(0, 5).map((order) => (
+                        <div key={order.id} className="bg-gray-700/30 rounded px-2 py-1.5 flex items-center gap-2">
+                          <span className="text-white text-sm truncate min-w-0" style={{ flex: '1 1 0' }}>
+                            {order.customerName}
+                          </span>
+                          <span className="text-gray-400 text-xs truncate min-w-0" style={{ flex: '1.5 1 0' }}>
+                            {order.productName}
+                          </span>
+                          <span className="text-gray-500 text-xs whitespace-nowrap">
+                            {formatDate(order.date)}
+                          </span>
+                          <span className="text-green-400 font-bold text-sm whitespace-nowrap">
+                            ${order.amount.toFixed(0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 text-center text-gray-500 text-xs">None</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Top Supporters */}
+              <TopSupportersWidget maxSupporters={10} />
+            </div>
           </div>
-          <p className="text-gray-500 text-xs">
-            Community Gaming Hub
-          </p>
         </div>
-      </footer>
+
+        {/* Footer */}
+        <footer className="mt-12 border-t border-gray-800/50 py-6 bg-gray-950/30 backdrop-blur-sm">
+          <div className="max-w-[1600px] mx-auto px-4 text-center">
+            <div className="text-xl font-black tracking-wider mb-1">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
+                FREE INFANTRY
+              </span>
+            </div>
+            <p className="text-gray-500 text-xs">
+              Community Gaming Hub
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
