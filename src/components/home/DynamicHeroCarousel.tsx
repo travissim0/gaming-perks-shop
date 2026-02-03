@@ -117,35 +117,44 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
   if (compact) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm">
-        {/* Nebula glow */}
+        {/* Nebula glow - stronger */}
         <div
-          className="absolute inset-0 opacity-20"
+          className="absolute inset-0 opacity-30"
           style={{
             background: `radial-gradient(ellipse at 50% 50%, ${slide.glowColor} 0%, transparent 70%)`,
             transition: 'background 0.5s ease-out',
           }}
         />
 
-        {/* Content */}
-        <div className="relative flex flex-col items-center justify-center px-4 py-8 text-center">
-          <h2 className="text-2xl md:text-3xl font-black tracking-wider mb-1">
+        {/* Animated accent line at top */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[2px]"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${slide.glowColor}, transparent)`,
+            transition: 'background 0.5s ease-out',
+          }}
+        />
+
+        {/* Content - doubled height */}
+        <div className="relative flex flex-col items-center justify-center px-6 py-16 text-center">
+          <h2 className="text-3xl md:text-4xl font-black tracking-wider mb-2">
             <span
               className={`text-transparent bg-clip-text bg-gradient-to-r ${slide.accentColor}`}
-              style={{ filter: 'drop-shadow(0 0 8px currentColor)' }}
+              style={{ filter: 'drop-shadow(0 0 12px currentColor)' }}
             >
               {slide.title}
             </span>
           </h2>
 
-          <p className="text-gray-400 text-xs md:text-sm mb-4 max-w-xs">
+          <p className="text-gray-400 text-sm md:text-base mb-6 max-w-sm">
             {slide.subtitle}
           </p>
 
           <Link
             href={slide.buttonLink}
-            className={`group relative px-4 py-2 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105`}
+            className={`group relative px-5 py-2.5 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105`}
             style={{
-              boxShadow: `0 0 15px ${slide.glowColor}`,
+              boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
             }}
           >
             <span className="relative z-10 flex items-center gap-1.5">
@@ -158,7 +167,7 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
           </Link>
 
           {/* Navigation Dots */}
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-6">
             {heroSlides.map((s, index) => (
               <button
                 key={s.id}
