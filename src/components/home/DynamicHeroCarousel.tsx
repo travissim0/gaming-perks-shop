@@ -41,6 +41,15 @@ const heroSlides: HeroSlide[] = [
     accentColor: 'from-orange-400 to-red-500',
     glowColor: 'rgba(251, 146, 60, 0.5)',
   },
+  {
+    id: 'usl-dueling',
+    title: 'USL DUELING',
+    subtitle: 'Best of 9 Competitive Match Analytics',
+    buttonText: 'View Stats',
+    buttonLink: '/dueling/bo9-stats',
+    accentColor: 'from-green-400 to-emerald-500',
+    glowColor: 'rgba(34, 197, 94, 0.5)',
+  },
 ];
 
 // Generate stars once

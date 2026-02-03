@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, Image, Video, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
+import RichTextEditor from '@/components/RichTextEditor';
 
 interface NewPostModalProps {
   onClose: () => void;
@@ -146,15 +147,13 @@ export default function NewPostModal({ onClose, onPostCreated }: NewPostModalPro
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Content
             </label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Write your post content here... (supports HTML)"
-              rows={6}
-              className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
+            <RichTextEditor
+              content={content}
+              onChange={(newContent) => setContent(newContent)}
+              placeholder="Write your post content here..."
             />
             <p className="mt-1 text-xs text-gray-500">
-              You can use basic HTML tags like &lt;b&gt;, &lt;i&gt;, &lt;a href=""&gt;, &lt;br&gt;
+              Use the toolbar above to format your text with headings, lists, bold, italic, and more.
             </p>
           </div>
 

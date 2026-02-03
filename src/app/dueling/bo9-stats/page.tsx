@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Navbar from '@/components/Navbar';
+import NeutralNavbar from '@/components/home/NeutralNavbar';
+import DynamicHeroCarousel from '@/components/home/DynamicHeroCarousel';
 import { useAuth } from '@/lib/AuthContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -250,22 +251,11 @@ export default function BO9StatsPage() {
   // ── Render ──
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 text-white">
-      <Navbar user={user} />
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
+      <NeutralNavbar />
+      <DynamicHeroCarousel />
 
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
-            BO9 Dueling Stats
-          </h1>
-          <p className="text-xl text-blue-200">Best of 9 match analytics - round-by-round breakdowns</p>
-        </motion.div>
-
         {/* Aggregate Stat Cards */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
