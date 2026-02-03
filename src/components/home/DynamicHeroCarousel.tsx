@@ -19,7 +19,7 @@ const heroSlides: HeroSlide[] = [
     title: 'FREE INFANTRY',
     subtitle: 'The Ultimate Gaming Community Hub',
     buttonText: 'Join Now',
-    buttonLink: '/register',
+    buttonLink: '/auth/login',
     accentColor: 'from-cyan-400 to-blue-500',
     glowColor: 'rgba(34, 211, 238, 0.5)',
   },
@@ -192,7 +192,7 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
         </div>
 
         {/* Content */}
-        <div className="relative flex flex-col items-center justify-center px-6 py-20 text-center">
+        <div className="relative flex flex-col items-center justify-center px-6 py-10 min-h-[500px] text-center">
           <h2 className="text-3xl md:text-4xl font-black tracking-wider mb-3">
             <span
               className={`text-transparent bg-clip-text bg-gradient-to-r ${slide.accentColor}`}

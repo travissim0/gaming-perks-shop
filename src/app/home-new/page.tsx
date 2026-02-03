@@ -433,18 +433,13 @@ export default function HomeNew() {
         <div className="max-w-[1600px] mx-auto px-4 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
-            {/* Center: News Section - Takes 3 columns */}
-            <div className="lg:col-span-3">
-              <HomeNewsSection />
-            </div>
-
-            {/* Right Sidebar: Carousel + Donations + Supporters */}
-            <div className="lg:col-span-1 space-y-4">
+            {/* Left Sidebar: Carousel + Donations + Supporters */}
+            <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
               {/* Compact Carousel */}
               <DynamicHeroCarousel compact />
 
               {/* Recent Activity - Side by Side (hide orders if empty) */}
-              <div className={`grid gap-3 ${!isLoadingFinancials && recentOrders.length === 0 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              <div className="grid grid-cols-1 gap-3">
                 {/* Recent Donations */}
                 <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-amber-500/15 overflow-hidden">
                   <div className="px-3 py-2 border-b border-gray-800/80">
@@ -536,6 +531,11 @@ export default function HomeNew() {
 
               {/* Top Supporters */}
               <TopSupportersWidget maxSupporters={10} />
+            </div>
+
+            {/* Center: News Section - Takes 3 columns */}
+            <div className="lg:col-span-3 order-1 lg:order-2">
+              <HomeNewsSection />
             </div>
           </div>
         </div>
