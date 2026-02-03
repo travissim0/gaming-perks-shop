@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Plus, ExternalLink, Play, Calendar, User } from 'lucide-react';
+import { Plus, ExternalLink, Calendar, User, ChevronRight } from 'lucide-react';
 import NewPostModal from './NewPostModal';
 
 interface NewsPost {
@@ -25,6 +25,143 @@ interface NewsPost {
   metadata: any;
 }
 
+// ─── ProseMirror Rendering ───────────────────────────────────────────────────
+
+function renderProseMirrorNode(node: any, key: number): React.ReactNode {
+  switch (node.type) {
+    case 'paragraph':
+      return (
+        <p key={key} className="mb-3 text-gray-300 leading-relaxed">
+          {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
+        </p>
+      );
+    case 'heading': {
+      const level = node.attrs?.level || 2;
+      const classes: Record<number, string> = {
+        1: 'text-2xl font-bold text-white mb-3',
+        2: 'text-xl font-bold text-white mb-2',
+        3: 'text-lg font-semibold text-white mb-2',
+        4: 'text-base font-semibold text-white mb-2',
+      };
+      const cls = classes[level] || classes[2];
+      const content = node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i));
+      const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
+      return <Tag key={key} className={cls}>{content}</Tag>;
+    }
+    case 'bulletList':
+      return (
+        <ul key={key} className="mb-3 text-gray-300 ml-5 list-disc space-y-1">
+          {node.content?.map((item: any, i: number) => (
+            <li key={i}>
+              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            </li>
+          ))}
+        </ul>
+      );
+    case 'orderedList':
+      return (
+        <ol key={key} className="mb-3 text-gray-300 ml-5 list-decimal space-y-1">
+          {node.content?.map((item: any, i: number) => (
+            <li key={i}>
+              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            </li>
+          ))}
+        </ol>
+      );
+    case 'blockquote':
+      return (
+        <blockquote key={key} className="border-l-4 border-cyan-500/50 pl-4 mb-3 italic text-gray-400">
+          {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
+        </blockquote>
+      );
+    case 'codeBlock':
+      return (
+        <pre key={key} className="bg-gray-900/80 rounded-lg p-3 mb-3 overflow-x-auto text-sm text-green-400 font-mono">
+          <code>{node.content?.map((c: any) => c.text).join('')}</code>
+        </pre>
+      );
+    case 'horizontalRule':
+      return <hr key={key} className="border-gray-700/50 my-4" />;
+    case 'listItem':
+      return node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i));
+    default:
+      return null;
+  }
+}
+
+function renderProseMirrorInline(node: any, key: number): React.ReactNode {
+  if (node.type === 'text') {
+    let result: React.ReactNode = node.text;
+    if (node.marks && node.marks.length > 0) {
+      result = node.marks.reduce((acc: React.ReactNode, mark: any, i: number) => {
+        switch (mark.type) {
+          case 'bold':
+            return <strong key={`${key}-b-${i}`}>{acc}</strong>;
+          case 'italic':
+            return <em key={`${key}-i-${i}`}>{acc}</em>;
+          case 'underline':
+            return <u key={`${key}-u-${i}`}>{acc}</u>;
+          case 'strike':
+            return <del key={`${key}-s-${i}`}>{acc}</del>;
+          case 'code':
+            return <code key={`${key}-c-${i}`} className="bg-gray-700/60 px-1 rounded text-sm text-cyan-300">{acc}</code>;
+          default:
+            return acc;
+        }
+      }, node.text);
+    }
+    return result;
+  }
+  if (node.type === 'hardBreak') return <br key={key} />;
+  return null;
+}
+
+// ─── Content Renderer ────────────────────────────────────────────────────────
+
+function renderFullContent(content: any): React.ReactNode {
+  if (!content) return null;
+
+  // HTML string
+  if (typeof content === 'string') {
+    return (
+      <div
+        className="text-gray-300 text-sm leading-relaxed prose prose-invert max-w-none"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+
+  // TipTap ProseMirror JSON
+  if (content.type === 'doc' && content.content) {
+    return (
+      <div className="text-sm leading-relaxed">
+        {content.content.map((node: any, i: number) => renderProseMirrorNode(node, i))}
+      </div>
+    );
+  }
+
+  // Try parsing stringified JSON
+  if (typeof content === 'string') {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.type === 'doc') return renderFullContent(parsed);
+    } catch {
+      // not JSON, render as text
+    }
+  }
+
+  return null;
+}
+
+// ─── YouTube helper ──────────────────────────────────────────────────────────
+
+function getYouTubeId(url: string): string | null {
+  const match = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+  return match ? match[1] : null;
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export default function HomeNewsSection() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<NewsPost[]>([]);
@@ -32,152 +169,43 @@ export default function HomeNewsSection() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
 
-  // Check admin status
   useEffect(() => {
     const checkAdmin = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-
+      if (!user) { setIsAdmin(false); return; }
       const { data } = await supabase
         .from('profiles')
         .select('is_admin, site_admin')
         .eq('id', user.id)
         .single();
-
       setIsAdmin(data?.is_admin || data?.site_admin || false);
     };
-
     checkAdmin();
   }, [user]);
 
-  // Fetch news posts with author profiles
-  useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('news_posts')
-          .select('*')
-          .eq('status', 'published')
-          .order('published_at', { ascending: false })
-          .limit(10);
-
-        if (error) throw error;
-
-        // Fetch author aliases for all posts
-        if (data && data.length > 0) {
-          const authorIds = [...new Set(data.map((p: any) => p.author_id).filter(Boolean))];
-
-          if (authorIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('id, in_game_alias')
-              .in('id', authorIds);
-
-            const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.in_game_alias]));
-
-            // Add author_alias to each post
-            const postsWithAlias = data.map((post: any) => ({
-              ...post,
-              author_alias: profileMap.get(post.author_id) || post.author_name
-            }));
-
-            setPosts(postsWithAlias);
-          } else {
-            setPosts(data || []);
-          }
-        } else {
-          setPosts([]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch news:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchPosts();
-  }, []);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  // Extract YouTube video ID from URL
-  const getYouTubeId = (url: string) => {
-    const match = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
-    return match ? match[1] : null;
-  };
-
-  // Render content based on type
-  const renderContent = (content: any) => {
-    if (!content) return null;
-
-    // If content is a string (plain text or HTML)
-    if (typeof content === 'string') {
-      return (
-        <div
-          className="text-gray-300 text-sm leading-relaxed prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
-      );
-    }
-
-    // If content is TipTap JSON format
-    if (content.type === 'doc' && content.content) {
-      return (
-        <div className="text-gray-300 text-sm leading-relaxed space-y-2">
-          {content.content.map((block: any, index: number) => {
-            if (block.type === 'paragraph') {
-              const text = block.content?.map((c: any) => c.text).join('') || '';
-              return <p key={index}>{text}</p>;
-            }
-            if (block.type === 'heading') {
-              const text = block.content?.map((c: any) => c.text).join('') || '';
-              return <h3 key={index} className="text-lg font-bold text-white">{text}</h3>;
-            }
-            return null;
-          })}
-        </div>
-      );
-    }
-
-    return null;
-  };
-
-  const handlePostCreated = async () => {
-    // Refresh posts after creating a new one
-    setIsLoading(true);
+  const fetchPosts = async () => {
     try {
-      const { data } = await supabase
+      setIsLoading(true);
+      const { data, error } = await supabase
         .from('news_posts')
         .select('*')
         .eq('status', 'published')
         .order('published_at', { ascending: false })
         .limit(10);
 
+      if (error) throw error;
+
       if (data && data.length > 0) {
         const authorIds = [...new Set(data.map((p: any) => p.author_id).filter(Boolean))];
-
         if (authorIds.length > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
             .select('id, in_game_alias')
             .in('id', authorIds);
-
           const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.in_game_alias]));
-
-          const postsWithAlias = data.map((post: any) => ({
+          setPosts(data.map((post: any) => ({
             ...post,
             author_alias: profileMap.get(post.author_id) || post.author_name
-          }));
-
-          setPosts(postsWithAlias);
+          })));
         } else {
           setPosts(data || []);
         }
@@ -185,26 +213,48 @@ export default function HomeNewsSection() {
         setPosts([]);
       }
     } catch (error) {
-      console.error('Failed to refresh posts:', error);
+      console.error('Failed to fetch news:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <span className="text-2xl">📰</span>
-          News & Updates
-        </h2>
+  useEffect(() => { fetchPosts(); }, []);
 
-        {/* Admin: New Post Button */}
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    });
+  };
+
+  const handlePostCreated = () => { fetchPosts(); };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  const latestPost = posts[0] || null;
+  const olderPosts = posts.slice(1, 5);
+  const remainingPosts = posts.slice(5);
+
+  return (
+    <div className="space-y-5">
+      {/* Section Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white tracking-tight">
+            News & Updates
+          </h2>
+          <div className="mt-1 h-0.5 w-16 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full" />
+        </div>
         {isAdmin && (
           <button
             onClick={() => setShowNewPostModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 hover:bg-green-600/30 border border-green-500/50 text-green-400 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600/30 to-emerald-600/30 hover:from-green-600/40 hover:to-emerald-600/40 border border-green-500/40 text-green-400 rounded-lg text-sm font-medium transition-all hover:shadow-lg hover:shadow-green-500/10"
           >
             <Plus className="w-4 h-4" />
             New Post
@@ -212,139 +262,71 @@ export default function HomeNewsSection() {
         )}
       </div>
 
-      {/* Posts List */}
-      <div className="divide-y divide-gray-700/30">
-        {isLoading ? (
-          <div className="p-6 space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-5 bg-gray-700 rounded w-2/3 mb-2"></div>
-                <div className="h-4 bg-gray-700 rounded w-1/2 mb-2"></div>
-                <div className="h-3 bg-gray-700 rounded w-1/4"></div>
-              </div>
-            ))}
-          </div>
-        ) : posts.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <p>No news posts yet</p>
-            {isAdmin && (
-              <button
-                onClick={() => setShowNewPostModal(true)}
-                className="mt-4 text-green-400 hover:text-green-300 text-sm"
-              >
-                Create the first post →
-              </button>
-            )}
-          </div>
-        ) : (
-          posts.map((post) => {
-            const videoUrl = post.metadata?.video_url;
-            const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
-
-            return (
-              <article key={post.id} className="p-6 hover:bg-gray-800/30 transition-colors">
-                <div className="flex gap-4">
-                  {/* Thumbnail or Video */}
-                  {(post.featured_image_url || youtubeId) && (
-                    <div className="flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
-                      {youtubeId ? (
-                        <a
-                          href={videoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="relative block w-full h-full group"
-                        >
-                          <img
-                            src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`}
-                            alt={post.title}
-                            className="w-full h-full object-contain"
-                          />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/20 transition-colors">
-                            <Play className="w-8 h-8 text-white fill-white" />
-                          </div>
-                        </a>
-                      ) : post.featured_image_url ? (
-                        <img
-                          src={post.featured_image_url}
-                          alt={post.title}
-                          className="max-w-full max-h-full object-contain"
-                        />
-                      ) : null}
-                    </div>
-                  )}
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    {/* Title */}
-                    <h3 className="text-lg font-semibold text-white mb-1 hover:text-cyan-400 transition-colors">
-                      <Link href={`/news/${post.id}`}>
-                        {post.title}
-                      </Link>
-                    </h3>
-
-                    {/* Subtitle */}
-                    {post.subtitle && (
-                      <p className="text-gray-400 text-sm mb-2 line-clamp-2">
-                        {post.subtitle}
-                      </p>
-                    )}
-
-                    {/* Meta */}
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {formatDate(post.published_at || post.created_at)}
-                      </span>
-                      {(post.author_alias || post.author_name) && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {post.author_alias || post.author_name}
-                        </span>
-                      )}
-                      {post.tags && post.tags.length > 0 && (
-                        <div className="flex gap-1">
-                          {post.tags.slice(0, 2).map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-1.5 py-0.5 bg-gray-700/50 rounded text-gray-400"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* External Link */}
-                    {post.metadata?.external_url && (
-                      <a
-                        href={post.metadata.external_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-2 text-cyan-400 hover:text-cyan-300 text-sm"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Read more
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
-          })
-        )}
-      </div>
-
-      {/* View All Link */}
-      {posts.length > 0 && (
-        <div className="px-6 py-3 border-t border-gray-700/30 bg-gray-800/20">
-          <Link
-            href="/news"
-            className="text-sm text-gray-400 hover:text-cyan-400 transition-colors"
-          >
-            View all news →
-          </Link>
+      {posts.length === 0 ? (
+        <div className="p-12 text-center bg-gray-800/30 rounded-2xl border border-gray-700/30">
+          <div className="text-4xl mb-3 opacity-40">📰</div>
+          <p className="text-gray-500">No news posts yet</p>
+          {isAdmin && (
+            <button
+              onClick={() => setShowNewPostModal(true)}
+              className="mt-4 text-green-400 hover:text-green-300 text-sm"
+            >
+              Create the first post
+            </button>
+          )}
         </div>
+      ) : (
+        <>
+          {/* ─── Hero Post (Latest) ─── */}
+          {latestPost && <HeroPost post={latestPost} formatDate={formatDate} />}
+
+          {/* ─── Secondary Posts (2-column grid) ─── */}
+          {olderPosts.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {olderPosts.map((post) => (
+                <CompactPostCard key={post.id} post={post} formatDate={formatDate} />
+              ))}
+            </div>
+          )}
+
+          {/* ─── Remaining Posts (minimal list) ─── */}
+          {remainingPosts.length > 0 && (
+            <div className="bg-gray-800/20 rounded-xl border border-gray-700/20 overflow-hidden">
+              {remainingPosts.map((post, i) => (
+                <Link
+                  key={post.id}
+                  href={`/news/${post.id}`}
+                  className={`flex items-center justify-between px-4 py-3 hover:bg-gray-800/40 transition-colors ${
+                    i < remainingPosts.length - 1 ? 'border-b border-gray-700/20' : ''
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-white font-medium truncate block">
+                      {post.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0 ml-3">
+                    <span className="text-xs text-gray-500">
+                      {formatDate(post.published_at || post.created_at)}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* View All */}
+          <div className="text-center">
+            <Link
+              href="/news"
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-cyan-400 transition-colors group"
+            >
+              View all news
+              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
+        </>
       )}
 
       {/* New Post Modal */}
@@ -355,5 +337,208 @@ export default function HomeNewsSection() {
         />
       )}
     </div>
+  );
+}
+
+// ─── Hero Post Component ─────────────────────────────────────────────────────
+
+function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string) => string }) {
+  const videoUrl = post.metadata?.video_url;
+  const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
+
+  return (
+    <article className="relative overflow-hidden rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-gray-800/60 to-gray-900/80 backdrop-blur-sm shadow-lg shadow-black/20">
+      {/* Top gradient accent */}
+      <div className="h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500" />
+
+      {/* Featured Image */}
+      {post.featured_image_url && !youtubeId && (
+        <div className="relative w-full max-h-72 overflow-hidden bg-gray-900">
+          <img
+            src={post.featured_image_url}
+            alt={post.title}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
+        </div>
+      )}
+
+      {/* YouTube Embed */}
+      {youtubeId && (
+        <div className="relative w-full aspect-video bg-gray-900">
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}`}
+            title={post.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+          />
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="p-6">
+        {/* Tags */}
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex gap-2 mb-3">
+            {post.tags.map((tag) => (
+              <span
+                key={tag}
+                className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs text-cyan-400 font-medium"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Title */}
+        <h3 className="text-2xl font-bold text-white mb-1 leading-tight">
+          <Link href={`/news/${post.id}`} className="hover:text-cyan-400 transition-colors">
+            {post.title}
+          </Link>
+        </h3>
+
+        {/* Subtitle */}
+        {post.subtitle && (
+          <p className="text-gray-400 text-base mb-4">{post.subtitle}</p>
+        )}
+
+        {/* Full Content */}
+        <div className="prose prose-invert max-w-none mb-5">
+          {renderFullContent(post.content)}
+        </div>
+
+        {/* External Link */}
+        {post.metadata?.external_url && (
+          <a
+            href={post.metadata.external_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 mb-4 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/20 text-sm transition-all"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Read more
+          </a>
+        )}
+
+        {/* Meta */}
+        <div className="flex items-center gap-4 text-xs text-gray-500 border-t border-gray-700/30 pt-4">
+          <span className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" />
+            {formatDate(post.published_at || post.created_at)}
+          </span>
+          {(post.author_alias || post.author_name) && (
+            <span className="flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5" />
+              {post.author_alias || post.author_name}
+            </span>
+          )}
+          <Link
+            href={`/news/${post.id}`}
+            className="ml-auto text-cyan-500/70 hover:text-cyan-400 transition-colors flex items-center gap-1"
+          >
+            Permalink <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─── Compact Post Card ───────────────────────────────────────────────────────
+
+function CompactPostCard({ post, formatDate }: { post: NewsPost; formatDate: (d: string) => string }) {
+  const videoUrl = post.metadata?.video_url;
+  const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
+  const thumbnailUrl = youtubeId
+    ? `https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`
+    : post.featured_image_url || null;
+
+  return (
+    <Link href={`/news/${post.id}`}>
+      <article className="group h-full p-4 rounded-xl bg-gray-800/30 border border-gray-700/30 hover:border-cyan-500/20 hover:bg-gray-800/50 transition-all duration-200 hover:shadow-lg hover:shadow-cyan-500/5">
+        <div className="flex gap-3">
+          {/* Thumbnail */}
+          {thumbnailUrl && (
+            <div className="flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden bg-gray-900">
+              <img
+                src={thumbnailUrl}
+                alt={post.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+
+          {/* Text */}
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-white group-hover:text-cyan-400 transition-colors line-clamp-2 leading-snug">
+              {post.title}
+            </h4>
+            {post.subtitle && (
+              <p className="text-xs text-gray-500 mt-1 line-clamp-1">{post.subtitle}</p>
+            )}
+            <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-600">
+              <span>{formatDate(post.published_at || post.created_at)}</span>
+              {(post.author_alias || post.author_name) && (
+                <span>{post.author_alias || post.author_name}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+// ─── Loading Skeleton ────────────────────────────────────────────────────────
+
+function LoadingSkeleton() {
+  return (
+    <>
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-7 w-48 bg-gray-700/50 rounded animate-pulse" />
+          <div className="mt-2 h-0.5 w-16 bg-gray-700/50 rounded-full animate-pulse" />
+        </div>
+      </div>
+
+      {/* Hero skeleton */}
+      <div className="rounded-2xl border border-gray-700/30 bg-gray-800/30 overflow-hidden animate-pulse">
+        <div className="h-1 bg-gray-700/50" />
+        <div className="h-48 bg-gray-700/30" />
+        <div className="p-6 space-y-3">
+          <div className="h-6 bg-gray-700/50 rounded w-3/4" />
+          <div className="h-4 bg-gray-700/40 rounded w-1/2" />
+          <div className="space-y-2 pt-2">
+            <div className="h-3 bg-gray-700/30 rounded w-full" />
+            <div className="h-3 bg-gray-700/30 rounded w-5/6" />
+            <div className="h-3 bg-gray-700/30 rounded w-2/3" />
+          </div>
+        </div>
+      </div>
+
+      {/* Card skeletons */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {[1, 2].map((i) => (
+          <div key={i} className="rounded-xl border border-gray-700/20 bg-gray-800/20 p-4 animate-pulse">
+            <div className="flex gap-3">
+              <div className="w-20 h-14 bg-gray-700/30 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-700/40 rounded w-3/4" />
+                <div className="h-3 bg-gray-700/30 rounded w-1/2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
