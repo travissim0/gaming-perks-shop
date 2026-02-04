@@ -37,7 +37,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-4 text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide">
+        <p key={key} className="mb-4 text-cyan-100/85 text-sm sm:text-base leading-[1.85] font-mono tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
@@ -56,7 +56,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-3 text-cyan-100/70 ml-5 list-none space-y-1.5 font-mono text-[13px] sm:text-sm tracking-wide">
+        <ul key={key} className="mb-3 text-cyan-100/70 ml-5 list-none space-y-1.5 font-mono text-sm sm:text-base tracking-wide">
           {node.content?.map((item: any, i: number) => (
             <li key={i} className="before:content-['›_'] before:text-cyan-500/60">
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
@@ -66,7 +66,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-3 text-cyan-100/70 ml-5 list-decimal space-y-1.5 font-mono text-[13px] sm:text-sm tracking-wide marker:text-cyan-500/60">
+        <ol key={key} className="mb-3 text-cyan-100/70 ml-5 list-decimal space-y-1.5 font-mono text-sm sm:text-base tracking-wide marker:text-cyan-500/60">
           {node.content?.map((item: any, i: number) => (
             <li key={i}>
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
@@ -76,7 +76,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'blockquote':
       return (
-        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-cyan-200/60 font-mono text-[13px] sm:text-sm tracking-wide">
+        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-cyan-200/60 font-mono text-sm sm:text-base tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
         </blockquote>
       );
@@ -433,51 +433,36 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
           <p className="text-cyan-100/50 text-base mb-5 font-medium italic">{post.subtitle}</p>
         )}
 
-        {/* Flight Log Frame */}
-        <div className="relative mb-5 rounded border border-cyan-500/20 bg-gray-950/60 overflow-hidden">
-          {/* Subtle scan-line background */}
+        {/* Content Frame */}
+        <div className="relative mb-5 rounded border border-cyan-500/20 overflow-hidden"
+          style={{
+            background: `
+              linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
+              radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.03) 0%, transparent 50%)
+            `,
+          }}
+        >
+          {/* Scan-line overlay */}
           <div
-            className="absolute inset-0 pointer-events-none opacity-[0.04]"
+            className="absolute inset-0 pointer-events-none opacity-[0.035]"
             style={{
-              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(34,211,238,0.3) 3px, rgba(34,211,238,0.3) 4px)',
+              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
             }}
           />
+          {/* Noise/grain texture via CSS */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.12] mix-blend-overlay"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
+            }}
+          />
+          {/* Subtle inner glow at top */}
+          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-cyan-500/[0.03] to-transparent pointer-events-none" />
 
-          {/* Log header */}
-          <div className="relative px-4 py-2.5 border-b border-cyan-500/15 bg-cyan-500/5">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
-                  Flight Log
-                </span>
-                <span className="text-[10px] font-mono text-cyan-500/30">|</span>
-                <span className="text-[10px] font-mono text-cyan-500/50 tracking-wider">
-                  ENTRY #{post.id.slice(0, 6).toUpperCase()}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-cyan-500/40 tracking-wider">
-                  ORIGIN: {(post.author_alias || post.author_name || 'UNKNOWN').toUpperCase()}
-                </span>
-                <span className="text-[10px] font-mono text-cyan-500/30">|</span>
-                <span className="text-[10px] font-mono text-cyan-500/40 tracking-wider">
-                  SD {stardate}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Log body */}
           <div className="relative px-5 py-5 sm:px-6">
             <div className="max-w-none">
               {renderFullContent(post.content)}
-            </div>
-
-            {/* Sign-off line */}
-            <div className="mt-4 pt-3 border-t border-dashed border-cyan-500/15">
-              <span className="text-[10px] font-mono text-cyan-500/30 tracking-[0.15em] uppercase">
-                — End of transmission —
-              </span>
             </div>
           </div>
         </div>
@@ -686,31 +671,32 @@ function ExpandablePostRow({
                 <p className="text-cyan-100/60 text-sm mb-4 font-medium">{post.subtitle}</p>
               )}
 
-              {/* Flight Log Frame */}
-              <div className="relative mb-4 rounded border border-cyan-500/15 bg-gray-950/50 overflow-hidden">
+              {/* Content Frame */}
+              <div className="relative mb-4 rounded border border-cyan-500/15 overflow-hidden"
+                style={{
+                  background: `
+                    linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
+                    radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.03) 0%, transparent 50%)
+                  `,
+                }}
+              >
                 <div
                   className="absolute inset-0 pointer-events-none opacity-[0.03]"
                   style={{
-                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(34,211,238,0.3) 3px, rgba(34,211,238,0.3) 4px)',
+                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
                   }}
                 />
-                <div className="relative px-4 py-2 border-b border-cyan-500/10 bg-cyan-500/5">
-                  <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.2em]">
-                    Flight Log
-                  </span>
-                  <span className="text-[10px] font-mono text-cyan-500/30 ml-2">|</span>
-                  <span className="text-[10px] font-mono text-cyan-500/40 ml-2 tracking-wider">
-                    ORIGIN: {(post.author_alias || post.author_name || 'UNKNOWN').toUpperCase()}
-                  </span>
-                </div>
+                <div
+                  className="absolute inset-0 pointer-events-none opacity-[0.10] mix-blend-overlay"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
+                  }}
+                />
+                <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-cyan-500/[0.03] to-transparent pointer-events-none" />
                 <div className="relative px-4 py-4 sm:px-5">
                   <div className="max-w-none">
                     {renderFullContent(post.content)}
-                  </div>
-                  <div className="mt-3 pt-2 border-t border-dashed border-cyan-500/10">
-                    <span className="text-[10px] font-mono text-cyan-500/25 tracking-[0.15em] uppercase">
-                      — End of transmission —
-                    </span>
                   </div>
                 </div>
               </div>
