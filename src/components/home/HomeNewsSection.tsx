@@ -37,17 +37,17 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-4 text-gray-200/90 text-base leading-relaxed">
+        <p key={key} className="mb-4 text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
     case 'heading': {
       const level = node.attrs?.level || 2;
       const classes: Record<number, string> = {
-        1: 'text-2xl font-bold text-white mb-3',
-        2: 'text-xl font-bold text-white mb-2',
-        3: 'text-lg font-semibold text-white mb-2',
-        4: 'text-base font-semibold text-white mb-2',
+        1: 'text-lg font-bold text-cyan-300 mb-3 font-mono uppercase tracking-[0.15em]',
+        2: 'text-base font-bold text-cyan-300/90 mb-2 font-mono uppercase tracking-[0.12em]',
+        3: 'text-sm font-semibold text-cyan-300/80 mb-2 font-mono uppercase tracking-[0.1em]',
+        4: 'text-sm font-semibold text-cyan-300/70 mb-2 font-mono tracking-[0.08em]',
       };
       const cls = classes[level] || classes[2];
       const content = node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i));
@@ -56,9 +56,9 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-3 text-gray-300 ml-5 list-disc space-y-1">
+        <ul key={key} className="mb-3 text-cyan-100/70 ml-5 list-none space-y-1.5 font-mono text-[13px] sm:text-sm tracking-wide">
           {node.content?.map((item: any, i: number) => (
-            <li key={i}>
+            <li key={i} className="before:content-['›_'] before:text-cyan-500/60">
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
             </li>
           ))}
@@ -66,7 +66,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-3 text-gray-300 ml-5 list-decimal space-y-1">
+        <ol key={key} className="mb-3 text-cyan-100/70 ml-5 list-decimal space-y-1.5 font-mono text-[13px] sm:text-sm tracking-wide marker:text-cyan-500/60">
           {node.content?.map((item: any, i: number) => (
             <li key={i}>
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
@@ -76,7 +76,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'blockquote':
       return (
-        <blockquote key={key} className="border-l-4 border-cyan-400/60 pl-4 mb-3 italic text-gray-300">
+        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-cyan-200/60 font-mono text-[13px] sm:text-sm tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
         </blockquote>
       );
@@ -131,7 +131,7 @@ function renderFullContent(content: any): React.ReactNode {
   if (typeof content === 'string') {
     return (
       <div
-        className="text-gray-300 text-base leading-relaxed prose prose-invert max-w-none"
+        className="text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide prose prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: content }}
       />
     );
@@ -159,7 +159,7 @@ function renderFullContent(content: any): React.ReactNode {
   // Safety: if content is an object we can't handle, render as JSON string
   if (typeof content === 'object') {
     return (
-      <div className="text-gray-300 text-base leading-relaxed">
+      <div className="text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide">
         {JSON.stringify(content)}
       </div>
     );
@@ -341,10 +341,41 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
   const videoUrl = post.metadata?.video_url;
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
 
+  const publishDate = new Date(post.published_at || post.created_at);
+  const stardate = `${publishDate.getFullYear()}.${String(publishDate.getMonth() + 1).padStart(2, '0')}.${String(publishDate.getDate()).padStart(2, '0')}`;
+  const timestamp = publishDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
-      {/* Top gradient accent */}
-      <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
+    <article className="relative overflow-hidden rounded-lg border border-cyan-500/30 bg-gray-950/90 shadow-2xl shadow-cyan-500/10">
+      {/* Scan line overlay */}
+      <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.03]"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+        }}
+      />
+
+      {/* Top HUD bar */}
+      <div className="relative z-20 flex items-center justify-between px-4 py-2 bg-cyan-500/10 border-b border-cyan-500/30">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_6px_rgba(34,211,238,0.6)]" />
+            <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-[0.2em]">Live Transmission</span>
+          </div>
+          <div className="hidden sm:block w-px h-3 bg-cyan-500/30" />
+          <span className="hidden sm:block text-[10px] font-mono text-cyan-500/60 tracking-wider">FREQ 7.7.42</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-mono text-cyan-500/60 tracking-wider">SD {stardate}</span>
+          <div className="w-px h-3 bg-cyan-500/30" />
+          <span className="text-[10px] font-mono text-cyan-400/80 tracking-wider">{timestamp} UTC</span>
+        </div>
+      </div>
+
+      {/* Corner brackets */}
+      <div className="absolute top-10 left-0 w-4 h-8 border-l-2 border-t-2 border-cyan-400/40 z-20 rounded-tl-sm" />
+      <div className="absolute top-10 right-0 w-4 h-8 border-r-2 border-t-2 border-cyan-400/40 z-20 rounded-tr-sm" />
+      <div className="absolute bottom-0 left-0 w-4 h-8 border-l-2 border-b-2 border-cyan-400/40 z-20 rounded-bl-sm" />
+      <div className="absolute bottom-0 right-0 w-4 h-8 border-r-2 border-b-2 border-cyan-400/40 z-20 rounded-br-sm" />
 
       {/* Featured Image */}
       {post.featured_image_url && !youtubeId && (
@@ -357,7 +388,7 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 to-transparent" />
         </div>
       )}
 
@@ -375,14 +406,14 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
       )}
 
       {/* Content */}
-      <div className="p-8">
-        {/* Tags */}
+      <div className="relative z-20 p-6 sm:p-8">
+        {/* Tags as classification badges */}
         {post.tags && post.tags.length > 0 && (
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2 mb-4">
             {post.tags.map((tag) => (
               <span
                 key={tag}
-                className="px-2.5 py-1 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider"
+                className="px-2.5 py-0.5 bg-cyan-400/10 border border-cyan-400/40 text-[11px] text-cyan-300 font-mono font-bold uppercase tracking-[0.15em]"
               >
                 {tag}
               </span>
@@ -399,12 +430,56 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
 
         {/* Subtitle */}
         {post.subtitle && (
-          <p className="text-cyan-100/60 text-base mb-4 font-medium">{post.subtitle}</p>
+          <p className="text-cyan-100/50 text-base mb-5 font-medium italic">{post.subtitle}</p>
         )}
 
-        {/* Full Content */}
-        <div className="prose prose-invert max-w-none mb-5">
-          {renderFullContent(post.content)}
+        {/* Flight Log Frame */}
+        <div className="relative mb-5 rounded border border-cyan-500/20 bg-gray-950/60 overflow-hidden">
+          {/* Subtle scan-line background */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-[0.04]"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(34,211,238,0.3) 3px, rgba(34,211,238,0.3) 4px)',
+            }}
+          />
+
+          {/* Log header */}
+          <div className="relative px-4 py-2.5 border-b border-cyan-500/15 bg-cyan-500/5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
+                  Flight Log
+                </span>
+                <span className="text-[10px] font-mono text-cyan-500/30">|</span>
+                <span className="text-[10px] font-mono text-cyan-500/50 tracking-wider">
+                  ENTRY #{post.id.slice(0, 6).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-cyan-500/40 tracking-wider">
+                  ORIGIN: {(post.author_alias || post.author_name || 'UNKNOWN').toUpperCase()}
+                </span>
+                <span className="text-[10px] font-mono text-cyan-500/30">|</span>
+                <span className="text-[10px] font-mono text-cyan-500/40 tracking-wider">
+                  SD {stardate}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Log body */}
+          <div className="relative px-5 py-5 sm:px-6">
+            <div className="max-w-none">
+              {renderFullContent(post.content)}
+            </div>
+
+            {/* Sign-off line */}
+            <div className="mt-4 pt-3 border-t border-dashed border-cyan-500/15">
+              <span className="text-[10px] font-mono text-cyan-500/30 tracking-[0.15em] uppercase">
+                — End of transmission —
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* External Link */}
@@ -413,23 +488,23 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
             href={post.metadata.external_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 mb-4 px-4 py-2 bg-gradient-to-r from-cyan-500/15 to-blue-500/15 border border-cyan-400/30 rounded-lg text-cyan-300 hover:text-cyan-200 hover:from-cyan-500/25 hover:to-blue-500/25 text-sm font-medium transition-all"
+            className="inline-flex items-center gap-1.5 mb-4 px-4 py-2 bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 hover:text-cyan-200 hover:bg-cyan-500/20 text-sm font-mono font-medium transition-all"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            Read more
+            Access External Link
           </a>
         )}
 
-        {/* Meta */}
-        <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-4 mt-2">
+        {/* Footer meta bar */}
+        <div className="flex items-center gap-4 text-xs border-t border-cyan-500/20 pt-4 mt-2 font-mono">
           <span className="flex items-center gap-1.5 text-cyan-400/70">
             <Calendar className="w-3.5 h-3.5" />
             {formatDate(post.published_at || post.created_at)}
           </span>
           {(post.author_alias || post.author_name) && (
-            <span className="flex items-center gap-1.5 text-purple-400/70">
+            <span className="flex items-center gap-1.5 text-cyan-300/50">
               <User className="w-3.5 h-3.5" />
-              {post.author_alias || post.author_name}
+              <span className="text-cyan-400/70">{post.author_alias || post.author_name}</span>
             </span>
           )}
           <Link
@@ -440,6 +515,9 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
           </Link>
         </div>
       </div>
+
+      {/* Bottom glow line */}
+      <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
     </article>
   );
 }
@@ -608,8 +686,33 @@ function ExpandablePostRow({
                 <p className="text-cyan-100/60 text-sm mb-4 font-medium">{post.subtitle}</p>
               )}
 
-              <div className="prose prose-invert max-w-none mb-4">
-                {renderFullContent(post.content)}
+              {/* Flight Log Frame */}
+              <div className="relative mb-4 rounded border border-cyan-500/15 bg-gray-950/50 overflow-hidden">
+                <div
+                  className="absolute inset-0 pointer-events-none opacity-[0.03]"
+                  style={{
+                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(34,211,238,0.3) 3px, rgba(34,211,238,0.3) 4px)',
+                  }}
+                />
+                <div className="relative px-4 py-2 border-b border-cyan-500/10 bg-cyan-500/5">
+                  <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.2em]">
+                    Flight Log
+                  </span>
+                  <span className="text-[10px] font-mono text-cyan-500/30 ml-2">|</span>
+                  <span className="text-[10px] font-mono text-cyan-500/40 ml-2 tracking-wider">
+                    ORIGIN: {(post.author_alias || post.author_name || 'UNKNOWN').toUpperCase()}
+                  </span>
+                </div>
+                <div className="relative px-4 py-4 sm:px-5">
+                  <div className="max-w-none">
+                    {renderFullContent(post.content)}
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-dashed border-cyan-500/10">
+                    <span className="text-[10px] font-mono text-cyan-500/25 tracking-[0.15em] uppercase">
+                      — End of transmission —
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2">
