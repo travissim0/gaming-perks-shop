@@ -155,6 +155,20 @@ export default function NeutralNavbar() {
                 </span>
                 <div className="absolute inset-0 rounded-lg bg-green-400/0 group-hover:bg-green-400/5 transition-colors" />
               </Link>
+
+              {/* Dev Tools Button - Purple/Violet theme */}
+              <Link
+                href="/tools"
+                className="group relative px-4 py-2 bg-gradient-to-r from-purple-600/20 to-violet-600/20 hover:from-purple-600/40 hover:to-violet-600/40 border border-purple-500/50 hover:border-violet-400 rounded-lg transition-all duration-300"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-purple-400 group-hover:text-violet-300 transition-colors">🛠️</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400 group-hover:from-purple-300 group-hover:to-violet-300">
+                    Dev Tools
+                  </span>
+                </span>
+                <div className="absolute inset-0 rounded-lg bg-purple-400/0 group-hover:bg-purple-400/5 transition-colors" />
+              </Link>
             </div>
 
             {/* Right Side - Utilities (matching original navbar) */}
@@ -380,6 +394,18 @@ export default function NeutralNavbar() {
               <span className="text-xl">📊</span>
               <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
                 USL Stats
+              </span>
+            </Link>
+
+            {/* Dev Tools - Mobile */}
+            <Link
+              href="/tools"
+              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-600/20 to-violet-600/20 border border-purple-500/30 rounded-lg transition-all"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="text-xl">🛠️</span>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400">
+                Dev Tools
               </span>
             </Link>
             {!user && (

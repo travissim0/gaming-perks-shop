@@ -304,7 +304,7 @@ export default function HomeNewsSection() {
                   post={post}
                   formatDate={formatDate}
                   isExpanded={expandedPostId === post.id}
-                  onHover={(hovered) => setExpandedPostId(hovered ? post.id : null)}
+                  onToggle={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                   isLast={i === olderPosts.length - 1}
                 />
               ))}
@@ -564,13 +564,13 @@ function ExpandablePostRow({
   post,
   formatDate,
   isExpanded,
-  onHover,
+  onToggle,
   isLast,
 }: {
   post: NewsPost;
   formatDate: (d: string) => string;
   isExpanded: boolean;
-  onHover: (hovered: boolean) => void;
+  onToggle: () => void;
   isLast: boolean;
 }) {
   const videoUrl = post.metadata?.video_url;
@@ -593,14 +593,13 @@ function ExpandablePostRow({
           <span className="text-xs text-cyan-500/50 font-medium">
             {formatDate(post.published_at || post.created_at)}
           </span>
-          {/* Expand trigger — only this area activates expansion */}
-          <div
-            onMouseEnter={() => onHover(true)}
-            onMouseLeave={() => onHover(false)}
+          {/* Expand trigger — click to toggle */}
+          <button
+            onClick={onToggle}
             className={`p-2 rounded-lg transition-all duration-300 cursor-pointer ${isExpanded ? 'bg-cyan-500/15' : 'hover:bg-cyan-500/10'}`}
           >
             <ChevronRight className={`w-4 h-4 transition-all duration-300 ${isExpanded ? 'rotate-90 text-cyan-400' : 'text-gray-600 hover:text-cyan-400'}`} />
-          </div>
+          </button>
         </div>
       </div>
 
