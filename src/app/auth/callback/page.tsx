@@ -31,11 +31,11 @@ function CallbackContent() {
           }
           router.push('/auth/complete-profile');
         } else {
-          router.push('/home-new');
+          router.push('/');
         }
       } catch (err) {
         console.error('Profile check error:', err);
-        router.push('/home-new');
+        router.push('/');
       }
     };
 

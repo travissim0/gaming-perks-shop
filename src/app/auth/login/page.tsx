@@ -137,7 +137,7 @@ export default function Login() {
       <div className="relative z-10">
         {/* Header Section */}
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
-          <Link href="/home-new" className="inline-block">
+          <Link href="/" className="inline-block">
             <div className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 text-4xl font-bold tracking-wider mb-4 hover:from-cyan-300 hover:to-purple-300 transition-all duration-300">
               FREE INFANTRY
             </div>

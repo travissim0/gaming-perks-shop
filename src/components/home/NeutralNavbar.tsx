@@ -86,7 +86,7 @@ export default function NeutralNavbar() {
           <div className="flex items-center justify-between h-16">
 
             {/* Logo - Stylized FREE INFANTRY */}
-            <Link href="/home-new" className="flex items-center gap-3 group">
+            <Link href="/" className="flex items-center gap-3 group">
               <div className="relative">
                 {/* Glow effect */}
                 <div className="absolute inset-0 bg-cyan-500/20 blur-xl group-hover:bg-cyan-400/30 transition-all duration-300" />
@@ -116,7 +116,7 @@ export default function NeutralNavbar() {
             <div className="hidden md:flex items-center gap-4">
               {/* CTFPL Button - Blue/Cyan theme */}
               <Link
-                href="/league/ctfpl"
+                href="/league"
                 className="group relative px-4 py-2 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 hover:from-blue-600/40 hover:to-cyan-600/40 border border-blue-500/50 hover:border-cyan-400 rounded-lg transition-all duration-300"
               >
                 <span className="flex items-center gap-2">
@@ -349,7 +349,7 @@ export default function NeutralNavbar() {
           <div className="px-4 py-4 space-y-3">
             {/* CTFPL - Mobile */}
             <Link
-              href="/league/ctfpl"
+              href="/league"
               className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-lg transition-all"
               onClick={() => setIsMobileMenuOpen(false)}
             >

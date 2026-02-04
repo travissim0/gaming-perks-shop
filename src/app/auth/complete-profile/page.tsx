@@ -86,7 +86,7 @@ function CompleteProfileContent() {
       }
 
       toast.success('Profile complete! Welcome to Free Infantry.');
-      router.push('/home-new');
+      router.push('/');
     } catch (err: any) {
       console.error('Profile completion error:', err);
       setError(err.message || 'Failed to save profile. Please try again.');
