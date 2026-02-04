@@ -57,7 +57,7 @@ node_modules/
 .next/
 ngrok/
 stripe-cli/
-public/
+public/*
 !public/zones-config.json
 # Allow specific header video and sounds
 !public/CTFPL-Website-Header-1.webm
