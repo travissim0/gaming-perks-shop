@@ -461,35 +461,35 @@ function HeroPost({ post, formatDate, isAdmin, onEdit }: { post: NewsPost; forma
 
       {/* Content */}
       <div className="relative z-20 p-6 sm:p-8">
-        {/* Date */}
-        <span className="text-sm font-mono text-cyan-400/70">
-          {formatDate(post.published_at || post.created_at)}
-        </span>
-
-        {/* Tags */}
-        {post.tags && post.tags.length > 0 && (
-          <div className="flex gap-1.5 mt-1.5 mb-2">
-            {post.tags.map((tag) => (
-              <span
-                key={tag}
-                className="px-2.5 py-0.5 bg-cyan-400/10 border border-cyan-400/40 text-[11px] text-cyan-300 font-mono font-bold uppercase tracking-[0.15em]"
-              >
-                {tag}
-              </span>
-            ))}
+        {/* Title + Author + Date/Tags row */}
+        <div className="flex items-start gap-3 mb-2">
+          <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
+            <h3 className="text-2xl md:text-3xl font-black leading-tight">
+              <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                {post.title}
+              </Link>
+            </h3>
+            {(post.author_alias || post.author_name) && (
+              <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
+            )}
           </div>
-        )}
-
-        {/* Title + Author */}
-        <div className="flex items-baseline gap-3 flex-wrap mb-2">
-          <h3 className="text-2xl md:text-3xl font-black leading-tight">
-            <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-              {post.title}
-            </Link>
-          </h3>
-          {(post.author_alias || post.author_name) && (
-            <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
-          )}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0 pt-1.5">
+            <span className="text-sm font-mono text-cyan-400/70">
+              {formatDate(post.published_at || post.created_at)}
+            </span>
+            {post.tags && post.tags.length > 0 && (
+              <div className="flex gap-1.5">
+                {post.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-0.5 bg-cyan-400/10 border border-cyan-400/40 text-[11px] text-cyan-300 font-mono font-bold uppercase tracking-[0.15em]"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Subtitle */}
@@ -687,32 +687,32 @@ function ExpandablePostRow({
             )}
 
             <div className="p-6">
-              {/* Date */}
-              <span className="text-sm font-mono text-cyan-400/70">
-                {formatDate(post.published_at || post.created_at)}
-              </span>
-
-              {/* Tags */}
-              {post.tags && post.tags.length > 0 && (
-                <div className="flex gap-1.5 mt-1.5 mb-2">
-                  {post.tags.map((tag) => (
-                    <span key={tag} className="px-2.5 py-0.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-[11px] text-cyan-300 font-semibold uppercase tracking-wider">
-                      {tag}
-                    </span>
-                  ))}
+              {/* Title + Author + Date/Tags row */}
+              <div className="flex items-start gap-3 mb-2">
+                <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
+                  <h3 className="text-xl md:text-2xl font-black leading-tight">
+                    <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                      {post.title}
+                    </Link>
+                  </h3>
+                  {(post.author_alias || post.author_name) && (
+                    <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
+                  )}
                 </div>
-              )}
-
-              {/* Title + Author */}
-              <div className="flex items-baseline gap-3 flex-wrap mb-2">
-                <h3 className="text-xl md:text-2xl font-black leading-tight">
-                  <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-                    {post.title}
-                  </Link>
-                </h3>
-                {(post.author_alias || post.author_name) && (
-                  <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
-                )}
+                <div className="flex flex-col items-end gap-1 flex-shrink-0 pt-1.5">
+                  <span className="text-sm font-mono text-cyan-400/70">
+                    {formatDate(post.published_at || post.created_at)}
+                  </span>
+                  {post.tags && post.tags.length > 0 && (
+                    <div className="flex gap-1.5">
+                      {post.tags.map((tag) => (
+                        <span key={tag} className="px-2.5 py-0.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-[11px] text-cyan-300 font-semibold uppercase tracking-wider">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {post.subtitle && (
