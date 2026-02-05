@@ -461,13 +461,18 @@ function HeroPost({ post, formatDate, isAdmin, onEdit }: { post: NewsPost; forma
 
       {/* Content */}
       <div className="relative z-20 p-6 sm:p-8">
-        {/* Title + Tags row */}
+        {/* Title + Author + Tags row */}
         <div className="flex items-start gap-3 mb-2">
-          <h3 className="text-2xl md:text-3xl font-black leading-tight flex-1 min-w-0">
-            <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-              {post.title}
-            </Link>
-          </h3>
+          <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
+            <h3 className="text-2xl md:text-3xl font-black leading-tight">
+              <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                {post.title}
+              </Link>
+            </h3>
+            {(post.author_alias || post.author_name) && (
+              <span className="text-sm text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
+            )}
+          </div>
           {post.tags && post.tags.length > 0 && (
             <div className="flex gap-1.5 flex-shrink-0 pt-1.5">
               {post.tags.map((tag) => (
@@ -693,13 +698,18 @@ function ExpandablePostRow({
             )}
 
             <div className="p-6">
-              {/* Title + Tags row */}
+              {/* Title + Author + Tags row */}
               <div className="flex items-start gap-3 mb-2">
-                <h3 className="text-xl md:text-2xl font-black leading-tight flex-1 min-w-0">
-                  <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-                    {post.title}
-                  </Link>
-                </h3>
+                <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
+                  <h3 className="text-xl md:text-2xl font-black leading-tight">
+                    <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                      {post.title}
+                    </Link>
+                  </h3>
+                  {(post.author_alias || post.author_name) && (
+                    <span className="text-sm text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
+                  )}
+                </div>
                 {post.tags && post.tags.length > 0 && (
                   <div className="flex gap-1.5 flex-shrink-0 pt-1">
                     {post.tags.map((tag) => (
