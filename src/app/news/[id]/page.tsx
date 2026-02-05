@@ -43,10 +43,10 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     case 'heading': {
       const level = node.attrs?.level || 2;
       const classes: Record<number, string> = {
-        1: 'text-2xl sm:text-3xl font-bold text-cyan-300 mb-3 font-mono uppercase tracking-[0.15em]',
-        2: 'text-xl sm:text-2xl font-bold text-cyan-300/90 mb-2 font-mono uppercase tracking-[0.12em]',
-        3: 'text-lg sm:text-xl font-semibold text-cyan-300/80 mb-2 font-mono uppercase tracking-[0.1em]',
-        4: 'text-base sm:text-lg font-semibold text-cyan-300/70 mb-2 font-mono tracking-[0.08em]',
+        1: 'text-2xl sm:text-3xl font-bold text-cyan-300 mb-3',
+        2: 'text-xl sm:text-2xl font-bold text-cyan-300/90 mb-2',
+        3: 'text-lg sm:text-xl font-semibold text-cyan-300/80 mb-2',
+        4: 'text-base sm:text-lg font-semibold text-cyan-300/70 mb-2',
       };
       const cls = classes[level] || classes[2];
       const content = node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i));
@@ -118,6 +118,14 @@ function renderProseMirrorInline(node: any, key: number): React.ReactNode {
             return <del key={`${key}-s-${i}`}>{acc}</del>;
           case 'code':
             return <code key={`${key}-c-${i}`} className="bg-gray-700/60 px-1 rounded text-sm text-cyan-300">{acc}</code>;
+          case 'link':
+            return <a key={`${key}-l-${i}`} href={mark.attrs?.href} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline hover:text-cyan-300">{acc}</a>;
+          case 'textStyle': {
+            const style: any = {};
+            if (mark.attrs?.fontSize) style.fontSize = mark.attrs.fontSize;
+            if (mark.attrs?.fontFamily) style.fontFamily = mark.attrs.fontFamily;
+            return <span key={`${key}-ts-${i}`} style={style}>{acc}</span>;
+          }
           default:
             return acc;
         }
@@ -181,9 +189,9 @@ function renderFullContent(content: any): React.ReactNode {
         case 'header': {
           const level = block.data.level || 2;
           const classes: Record<number, string> = {
-            1: 'text-2xl sm:text-3xl font-bold text-cyan-300 mb-3 font-mono uppercase tracking-[0.15em]',
-            2: 'text-xl sm:text-2xl font-bold text-cyan-300/90 mb-2 font-mono uppercase tracking-[0.12em]',
-            3: 'text-lg sm:text-xl font-semibold text-cyan-300/80 mb-2 font-mono uppercase tracking-[0.1em]',
+            1: 'text-2xl sm:text-3xl font-bold text-cyan-300 mb-3',
+            2: 'text-xl sm:text-2xl font-bold text-cyan-300/90 mb-2',
+            3: 'text-lg sm:text-xl font-semibold text-cyan-300/80 mb-2',
           };
           const cls = classes[level] || classes[2];
           const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
