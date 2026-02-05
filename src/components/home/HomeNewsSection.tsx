@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { Orbitron } from 'next/font/google';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Plus, ExternalLink, Calendar, User, ChevronRight, Pencil } from 'lucide-react';
+import { Plus, ExternalLink, ChevronRight, Pencil } from 'lucide-react';
 import NewPostModal from './NewPostModal';
 
 const InlinePostEditor = dynamic(() => import('./InlinePostEditor'), { ssr: false });
@@ -461,29 +461,34 @@ function HeroPost({ post, formatDate, isAdmin, onEdit }: { post: NewsPost; forma
 
       {/* Content */}
       <div className="relative z-20 p-6 sm:p-8">
-        {/* Title + Author + Tags row */}
-        <div className="flex items-start gap-3 mb-2">
-          <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
-            <h3 className="text-2xl md:text-3xl font-black leading-tight">
-              <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-                {post.title}
-              </Link>
-            </h3>
-            {(post.author_alias || post.author_name) && (
-              <span className="text-sm text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
-            )}
+        {/* Date */}
+        <span className="text-sm font-mono text-cyan-400/70">
+          {formatDate(post.published_at || post.created_at)}
+        </span>
+
+        {/* Tags */}
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex gap-1.5 mt-1.5 mb-2">
+            {post.tags.map((tag) => (
+              <span
+                key={tag}
+                className="px-2.5 py-0.5 bg-cyan-400/10 border border-cyan-400/40 text-[11px] text-cyan-300 font-mono font-bold uppercase tracking-[0.15em]"
+              >
+                {tag}
+              </span>
+            ))}
           </div>
-          {post.tags && post.tags.length > 0 && (
-            <div className="flex gap-1.5 flex-shrink-0 pt-1.5">
-              {post.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2.5 py-0.5 bg-cyan-400/10 border border-cyan-400/40 text-[11px] text-cyan-300 font-mono font-bold uppercase tracking-[0.15em]"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
+        )}
+
+        {/* Title + Author */}
+        <div className="flex items-baseline gap-3 flex-wrap mb-2">
+          <h3 className="text-2xl md:text-3xl font-black leading-tight">
+            <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+              {post.title}
+            </Link>
+          </h3>
+          {(post.author_alias || post.author_name) && (
+            <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
           )}
         </div>
 
@@ -518,32 +523,16 @@ function HeroPost({ post, formatDate, isAdmin, onEdit }: { post: NewsPost; forma
         )}
 
         {/* Footer meta bar */}
-        <div className="flex items-center gap-4 text-xs border-t border-cyan-500/20 pt-4 mt-2 font-mono">
-          <span className="flex items-center gap-1.5 text-cyan-400/70">
-            <Calendar className="w-3.5 h-3.5" />
-            {formatDate(post.published_at || post.created_at)}
-          </span>
-          {(post.author_alias || post.author_name) && (
-            <span className="flex items-center gap-1.5 text-cyan-300/50">
-              <User className="w-3.5 h-3.5" />
-              <span className="text-cyan-400/70">{post.author_alias || post.author_name}</span>
-            </span>
-          )}
-          {isAdmin && (
+        {isAdmin && (
+          <div className="flex items-center gap-4 text-xs border-t border-cyan-500/20 pt-4 mt-2 font-mono">
             <button
               onClick={onEdit}
               className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium cursor-pointer"
             >
               <Pencil className="w-3 h-3" /> Edit
             </button>
-          )}
-          <Link
-            href={`/news/${post.id}`}
-            className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
-          >
-            Permalink <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom glow line */}
@@ -698,26 +687,31 @@ function ExpandablePostRow({
             )}
 
             <div className="p-6">
-              {/* Title + Author + Tags row */}
-              <div className="flex items-start gap-3 mb-2">
-                <div className="flex items-baseline gap-3 flex-1 min-w-0 flex-wrap">
-                  <h3 className="text-xl md:text-2xl font-black leading-tight">
-                    <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
-                      {post.title}
-                    </Link>
-                  </h3>
-                  {(post.author_alias || post.author_name) && (
-                    <span className="text-sm text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
-                  )}
+              {/* Date */}
+              <span className="text-sm font-mono text-cyan-400/70">
+                {formatDate(post.published_at || post.created_at)}
+              </span>
+
+              {/* Tags */}
+              {post.tags && post.tags.length > 0 && (
+                <div className="flex gap-1.5 mt-1.5 mb-2">
+                  {post.tags.map((tag) => (
+                    <span key={tag} className="px-2.5 py-0.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-[11px] text-cyan-300 font-semibold uppercase tracking-wider">
+                      {tag}
+                    </span>
+                  ))}
                 </div>
-                {post.tags && post.tags.length > 0 && (
-                  <div className="flex gap-1.5 flex-shrink-0 pt-1">
-                    {post.tags.map((tag) => (
-                      <span key={tag} className="px-2.5 py-0.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-full text-[11px] text-cyan-300 font-semibold uppercase tracking-wider">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
+              )}
+
+              {/* Title + Author */}
+              <div className="flex items-baseline gap-3 flex-wrap mb-2">
+                <h3 className="text-xl md:text-2xl font-black leading-tight">
+                  <Link href={`/news/${post.id}`} className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-cyan-200 hover:from-cyan-300 hover:to-blue-300 transition-all duration-300">
+                    {post.title}
+                  </Link>
+                </h3>
+                {(post.author_alias || post.author_name) && (
+                  <span className="text-base text-cyan-400/60 whitespace-nowrap">by {post.author_alias || post.author_name}</span>
                 )}
               </div>
 
@@ -735,32 +729,16 @@ function ExpandablePostRow({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2">
-                <span className="flex items-center gap-1.5 text-cyan-400/70">
-                  <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(post.published_at || post.created_at)}
-                </span>
-                {(post.author_alias || post.author_name) && (
-                  <span className="flex items-center gap-1.5 text-purple-400/70">
-                    <User className="w-3.5 h-3.5" />
-                    {post.author_alias || post.author_name}
-                  </span>
-                )}
-                {isAdmin && (
+              {isAdmin && (
+                <div className="flex items-center gap-4 text-xs border-t border-cyan-500/10 pt-3 mt-2 font-mono">
                   <button
                     onClick={onEdit}
                     className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium cursor-pointer"
                   >
                     <Pencil className="w-3 h-3" /> Edit
                   </button>
-                )}
-                <Link
-                  href={`/news/${post.id}`}
-                  className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
-                >
-                  Permalink <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
+                </div>
+              )}
             </div>
           </article>
         </div>
