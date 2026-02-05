@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Orbitron } from 'next/font/google';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Plus, ExternalLink, Calendar, User, ChevronRight } from 'lucide-react';
+import { Plus, ExternalLink, Calendar, User, ChevronRight, Pencil } from 'lucide-react';
 import NewPostModal from './NewPostModal';
 
 const orbitron = Orbitron({
@@ -37,7 +37,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-4 text-cyan-100/85 text-sm sm:text-base leading-[1.85] font-mono tracking-wide">
+        <p key={key} className="mb-4 text-cyan-100/85 text-xl sm:text-2xl leading-[1.85] font-mono tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
@@ -56,7 +56,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-3 text-cyan-100/70 ml-5 list-none space-y-1.5 font-mono text-sm sm:text-base tracking-wide">
+        <ul key={key} className="mb-3 text-cyan-100/70 ml-5 list-none space-y-1.5 font-mono text-xl sm:text-2xl tracking-wide">
           {node.content?.map((item: any, i: number) => (
             <li key={i} className="before:content-['›_'] before:text-cyan-500/60">
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
@@ -66,7 +66,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-3 text-cyan-100/70 ml-5 list-decimal space-y-1.5 font-mono text-sm sm:text-base tracking-wide marker:text-cyan-500/60">
+        <ol key={key} className="mb-3 text-cyan-100/70 ml-5 list-decimal space-y-1.5 font-mono text-xl sm:text-2xl tracking-wide marker:text-cyan-500/60">
           {node.content?.map((item: any, i: number) => (
             <li key={i}>
               {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
@@ -76,7 +76,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'blockquote':
       return (
-        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-cyan-200/60 font-mono text-sm sm:text-base tracking-wide">
+        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-cyan-200/60 font-mono text-xl sm:text-2xl tracking-wide">
           {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
         </blockquote>
       );
@@ -131,7 +131,7 @@ function renderFullContent(content: any): React.ReactNode {
   if (typeof content === 'string') {
     return (
       <div
-        className="text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide prose prose-invert max-w-none"
+        className="text-cyan-100/80 text-lg sm:text-xl leading-[1.8] font-mono tracking-wide prose prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: content }}
       />
     );
@@ -159,7 +159,7 @@ function renderFullContent(content: any): React.ReactNode {
   // Safety: if content is an object we can't handle, render as JSON string
   if (typeof content === 'object') {
     return (
-      <div className="text-cyan-100/80 text-[13px] sm:text-sm leading-[1.8] font-mono tracking-wide">
+      <div className="text-cyan-100/80 text-lg sm:text-xl leading-[1.8] font-mono tracking-wide">
         {JSON.stringify(content)}
       </div>
     );
@@ -293,7 +293,7 @@ export default function HomeNewsSection() {
       ) : (
         <>
           {/* ─── Hero Post (Latest) ─── */}
-          {latestPost && <HeroPost post={latestPost} formatDate={formatDate} />}
+          {latestPost && <HeroPost post={latestPost} formatDate={formatDate} isAdmin={isAdmin} />}
 
           {/* ─── Older Posts (list with hover-expand) ─── */}
           {olderPosts.length > 0 && (
@@ -306,6 +306,7 @@ export default function HomeNewsSection() {
                   isExpanded={expandedPostId === post.id}
                   onToggle={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                   isLast={i === olderPosts.length - 1}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
@@ -337,7 +338,7 @@ export default function HomeNewsSection() {
 
 // ─── Hero Post Component ─────────────────────────────────────────────────────
 
-function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string) => string }) {
+function HeroPost({ post, formatDate, isAdmin }: { post: NewsPost; formatDate: (d: string) => string; isAdmin: boolean }) {
   const videoUrl = post.metadata?.video_url;
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
 
@@ -492,6 +493,14 @@ function HeroPost({ post, formatDate }: { post: NewsPost; formatDate: (d: string
               <span className="text-cyan-400/70">{post.author_alias || post.author_name}</span>
             </span>
           )}
+          {isAdmin && (
+            <Link
+              href={`/admin/news?edit=${post.id}`}
+              className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium"
+            >
+              <Pencil className="w-3 h-3" /> Edit
+            </Link>
+          )}
           <Link
             href={`/news/${post.id}`}
             className="ml-auto text-cyan-400/60 hover:text-cyan-300 transition-colors flex items-center gap-1 font-medium"
@@ -566,12 +575,14 @@ function ExpandablePostRow({
   isExpanded,
   onToggle,
   isLast,
+  isAdmin,
 }: {
   post: NewsPost;
   formatDate: (d: string) => string;
   isExpanded: boolean;
   onToggle: () => void;
   isLast: boolean;
+  isAdmin: boolean;
 }) {
   const videoUrl = post.metadata?.video_url;
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
@@ -710,6 +721,14 @@ function ExpandablePostRow({
                     <User className="w-3.5 h-3.5" />
                     {post.author_alias || post.author_name}
                   </span>
+                )}
+                {isAdmin && (
+                  <Link
+                    href={`/admin/news?edit=${post.id}`}
+                    className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit
+                  </Link>
                 )}
                 <Link
                   href={`/news/${post.id}`}

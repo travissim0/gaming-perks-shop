@@ -595,13 +595,11 @@ export default function HomeNew() {
                 <div className="relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-green-500/5">
                   <div className="h-1.5 bg-gradient-to-r from-green-400 via-emerald-500 to-teal-400" />
                   <div className="px-4 py-3 border-b border-green-500/10">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-1 h-6 bg-gradient-to-b from-green-400 via-emerald-400 to-teal-400 rounded-full" />
-                        <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 uppercase tracking-wider">
-                          Online
-                        </h3>
-                      </div>
+                    <div className="flex items-center justify-center gap-2.5">
+                      <div className="w-1 h-6 bg-gradient-to-b from-green-400 via-emerald-400 to-teal-400 rounded-full" />
+                      <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 uppercase tracking-wider">
+                        Online Users
+                      </h3>
                       <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
                         {onlineUsers.length + unknownOnlineCount}
                       </span>
