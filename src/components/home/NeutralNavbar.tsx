@@ -14,6 +14,10 @@ export default function NeutralNavbar() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [showZonesDropdown, setShowZonesDropdown] = useState(false);
+  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const [mobileZonesOpen, setMobileZonesOpen] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCtfAdmin, setIsCtfAdmin] = useState(false);
@@ -26,6 +30,8 @@ export default function NeutralNavbar() {
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const adminDropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const zonesDropdownRef = useRef<HTMLDivElement>(null);
+  const toolsDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch user profile and permissions
   useEffect(() => {
@@ -64,6 +70,12 @@ export default function NeutralNavbar() {
       }
       if (notificationRef.current && !notificationRef.current.contains(target)) {
         setShowNotificationDropdown(false);
+      }
+      if (zonesDropdownRef.current && !zonesDropdownRef.current.contains(target)) {
+        setShowZonesDropdown(false);
+      }
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(target)) {
+        setShowToolsDropdown(false);
       }
     };
 
@@ -112,63 +124,91 @@ export default function NeutralNavbar() {
               </div>
             </Link>
 
-            {/* Desktop Navigation - Stylized League Buttons */}
+            {/* Desktop Navigation - Dropdown Menus */}
             <div className="hidden md:flex items-center gap-4">
-              {/* CTFPL Button - Blue/Cyan theme */}
-              <Link
-                href="/league"
-                className="group relative px-4 py-2 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 hover:from-blue-600/40 hover:to-cyan-600/40 border border-blue-500/50 hover:border-cyan-400 rounded-lg transition-all duration-300"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-blue-400 group-hover:text-cyan-300 transition-colors">🏆</span>
-                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 group-hover:from-blue-300 group-hover:to-cyan-300">
-                    CTFPL
+              {/* Zones Dropdown */}
+              <div className="relative" ref={zonesDropdownRef}>
+                <button
+                  onClick={() => { setShowZonesDropdown(!showZonesDropdown); setShowToolsDropdown(false); }}
+                  className="group relative px-4 py-2 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 hover:from-cyan-600/40 hover:to-blue-600/40 border border-cyan-500/50 hover:border-cyan-400 rounded-lg transition-all duration-300"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-cyan-400 group-hover:text-cyan-300 transition-colors">🌐</span>
+                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 group-hover:from-cyan-300 group-hover:to-blue-300">
+                      Zones
+                    </span>
+                    <svg className={`w-3 h-3 text-cyan-400 transition-transform duration-300 ${showZonesDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
                   </span>
-                </span>
-                <div className="absolute inset-0 rounded-lg bg-cyan-400/0 group-hover:bg-cyan-400/5 transition-colors" />
-              </Link>
+                  <div className="absolute inset-0 rounded-lg bg-cyan-400/0 group-hover:bg-cyan-400/5 transition-colors" />
+                </button>
 
-              {/* Triple Threat Button - Orange/Red theme */}
-              <Link
-                href="/triple-threat"
-                className="group relative px-4 py-2 bg-gradient-to-r from-orange-600/20 to-red-600/20 hover:from-orange-600/40 hover:to-red-600/40 border border-orange-500/50 hover:border-orange-400 rounded-lg transition-all duration-300"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-orange-400 group-hover:text-orange-300 transition-colors">⚡</span>
-                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400 group-hover:from-orange-300 group-hover:to-red-300">
-                    Triple Threat
-                  </span>
-                </span>
-                <div className="absolute inset-0 rounded-lg bg-orange-400/0 group-hover:bg-orange-400/5 transition-colors" />
-              </Link>
+                {showZonesDropdown && (
+                  <div className="absolute top-full left-0 mt-1 w-52 bg-gray-800/95 border border-cyan-500/30 rounded-xl shadow-2xl z-50 backdrop-blur-sm overflow-hidden">
+                    <div className="py-2">
+                      <Link
+                        href="/league"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span>🏆</span>
+                        <span className="font-semibold">CTFPL</span>
+                      </Link>
+                      <Link
+                        href="/dueling/bo9-stats"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span>📊</span>
+                        <span className="font-semibold">USL</span>
+                      </Link>
+                      <Link
+                        href="/triple-threat"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-orange-300 hover:bg-orange-600/10 transition-all"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span>⚡</span>
+                        <span className="font-semibold">Triple Threat</span>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-              {/* USL Stats Button - Green/Emerald theme */}
-              <Link
-                href="/dueling/bo9-stats"
-                className="group relative px-4 py-2 bg-gradient-to-r from-green-600/20 to-emerald-600/20 hover:from-green-600/40 hover:to-emerald-600/40 border border-green-500/50 hover:border-emerald-400 rounded-lg transition-all duration-300"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-green-400 group-hover:text-emerald-300 transition-colors">📊</span>
-                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400 group-hover:from-green-300 group-hover:to-emerald-300">
-                    USL Stats
+              {/* Tools Dropdown */}
+              <div className="relative" ref={toolsDropdownRef}>
+                <button
+                  onClick={() => { setShowToolsDropdown(!showToolsDropdown); setShowZonesDropdown(false); }}
+                  className="group relative px-4 py-2 bg-gradient-to-r from-purple-600/20 to-violet-600/20 hover:from-purple-600/40 hover:to-violet-600/40 border border-purple-500/50 hover:border-violet-400 rounded-lg transition-all duration-300"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-purple-400 group-hover:text-violet-300 transition-colors">🛠️</span>
+                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400 group-hover:from-purple-300 group-hover:to-violet-300">
+                      Tools
+                    </span>
+                    <svg className={`w-3 h-3 text-purple-400 transition-transform duration-300 ${showToolsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
                   </span>
-                </span>
-                <div className="absolute inset-0 rounded-lg bg-green-400/0 group-hover:bg-green-400/5 transition-colors" />
-              </Link>
+                  <div className="absolute inset-0 rounded-lg bg-purple-400/0 group-hover:bg-purple-400/5 transition-colors" />
+                </button>
 
-              {/* Dev Tools Button - Purple/Violet theme */}
-              <Link
-                href="/tools"
-                className="group relative px-4 py-2 bg-gradient-to-r from-purple-600/20 to-violet-600/20 hover:from-purple-600/40 hover:to-violet-600/40 border border-purple-500/50 hover:border-violet-400 rounded-lg transition-all duration-300"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-purple-400 group-hover:text-violet-300 transition-colors">🛠️</span>
-                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400 group-hover:from-purple-300 group-hover:to-violet-300">
-                    Dev Tools
-                  </span>
-                </span>
-                <div className="absolute inset-0 rounded-lg bg-purple-400/0 group-hover:bg-purple-400/5 transition-colors" />
-              </Link>
+                {showToolsDropdown && (
+                  <div className="absolute top-full left-0 mt-1 w-56 bg-gray-800/95 border border-purple-500/30 rounded-xl shadow-2xl z-50 backdrop-blur-sm overflow-hidden">
+                    <div className="py-2">
+                      <Link
+                        href="/tools"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-violet-300 hover:bg-violet-600/10 transition-all"
+                        onClick={() => setShowToolsDropdown(false)}
+                      >
+                        <span>🖥️</span>
+                        <span className="font-semibold">Infantry CFS Studio</span>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Right Side - Utilities (matching original navbar) */}
@@ -361,53 +401,82 @@ export default function NeutralNavbar() {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-gray-900/95 backdrop-blur-md border-b border-gray-800">
           <div className="px-4 py-4 space-y-3">
-            {/* CTFPL - Mobile */}
-            <Link
-              href="/league"
-              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-lg transition-all"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <span className="text-xl">🏆</span>
-              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                CTFPL League
-              </span>
-            </Link>
+            {/* Zones - Mobile Collapsible */}
+            <div>
+              <button
+                onClick={() => setMobileZonesOpen(!mobileZonesOpen)}
+                className="flex items-center justify-between w-full px-4 py-3 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 border border-cyan-500/30 rounded-lg transition-all"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="text-xl">🌐</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
+                    Zones
+                  </span>
+                </span>
+                <svg className={`w-4 h-4 text-cyan-400 transition-transform duration-300 ${mobileZonesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {mobileZonesOpen && (
+                <div className="mt-1 ml-4 space-y-1">
+                  <Link
+                    href="/league"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>🏆</span>
+                    <span className="font-semibold">CTFPL</span>
+                  </Link>
+                  <Link
+                    href="/dueling/bo9-stats"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>📊</span>
+                    <span className="font-semibold">USL</span>
+                  </Link>
+                  <Link
+                    href="/triple-threat"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-orange-300 hover:bg-orange-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>⚡</span>
+                    <span className="font-semibold">Triple Threat</span>
+                  </Link>
+                </div>
+              )}
+            </div>
 
-            {/* Triple Threat - Mobile */}
-            <Link
-              href="/triple-threat"
-              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-600/20 to-red-600/20 border border-orange-500/30 rounded-lg transition-all"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <span className="text-xl">⚡</span>
-              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-400">
-                Triple Threat
-              </span>
-            </Link>
+            {/* Tools - Mobile Collapsible */}
+            <div>
+              <button
+                onClick={() => setMobileToolsOpen(!mobileToolsOpen)}
+                className="flex items-center justify-between w-full px-4 py-3 bg-gradient-to-r from-purple-600/20 to-violet-600/20 border border-purple-500/30 rounded-lg transition-all"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="text-xl">🛠️</span>
+                  <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400">
+                    Tools
+                  </span>
+                </span>
+                <svg className={`w-4 h-4 text-purple-400 transition-transform duration-300 ${mobileToolsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {mobileToolsOpen && (
+                <div className="mt-1 ml-4 space-y-1">
+                  <Link
+                    href="/tools"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-violet-300 hover:bg-violet-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>🖥️</span>
+                    <span className="font-semibold">Infantry CFS Studio</span>
+                  </Link>
+                </div>
+              )}
+            </div>
 
-            {/* USL Stats - Mobile */}
-            <Link
-              href="/dueling/bo9-stats"
-              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-lg transition-all"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <span className="text-xl">📊</span>
-              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
-                USL Stats
-              </span>
-            </Link>
-
-            {/* Dev Tools - Mobile */}
-            <Link
-              href="/tools"
-              className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-600/20 to-violet-600/20 border border-purple-500/30 rounded-lg transition-all"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <span className="text-xl">🛠️</span>
-              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-violet-400">
-                Dev Tools
-              </span>
-            </Link>
             {!user && (
               <>
                 <Link
