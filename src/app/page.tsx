@@ -507,43 +507,6 @@ export default function HomeNew() {
                   )}
                 </div>
 
-                {/* Recent Orders - only shown when there are orders */}
-                {!isLoadingFinancials && recentOrders.length === 0 ? null : (
-                  <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-emerald-500/15 overflow-hidden">
-                    <div className="px-3 py-2 border-b border-gray-800/80">
-                      <div className="flex items-center gap-2">
-                        <div className="w-0.5 h-3.5 bg-gradient-to-b from-emerald-400 to-teal-500 rounded-full" />
-                        <h3 className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 uppercase tracking-wider">
-                          Orders
-                        </h3>
-                      </div>
-                    </div>
-                    {isLoadingFinancials ? (
-                      <div className="p-2 space-y-1">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="animate-pulse h-6 bg-gray-800/30 rounded"></div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-1.5 space-y-0.5">
-                        {recentOrders.slice(0, 5).map((order) => (
-                          <div key={order.id} className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-800/40 transition-colors">
-                            <div className="w-0.5 h-3 bg-emerald-500/30 rounded-full group-hover:bg-emerald-400/50 transition-colors flex-shrink-0" />
-                            <span className="text-gray-300 text-xs truncate min-w-0 flex-1">
-                              {order.customerName}
-                            </span>
-                            <span className="text-gray-600 text-[10px] whitespace-nowrap">
-                              {formatDate(order.date)}
-                            </span>
-                            <span className="text-emerald-400/80 font-semibold text-xs whitespace-nowrap">
-                              ${order.amount.toFixed(0)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Top Supporters */}
