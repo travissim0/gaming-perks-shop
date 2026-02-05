@@ -56,20 +56,22 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-3 text-gray-200 ml-5 list-none space-y-1.5 text-xl sm:text-2xl leading-loose">
+        <ul key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose">
           {node.content?.map((item: any, i: number) => (
-            <li key={i} className="before:content-['›_'] before:text-cyan-500/60">
-              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            <li key={i} className="flex items-baseline gap-2.5">
+              <span className="text-cyan-500/60 flex-shrink-0">›</span>
+              <span>{renderListItemContent(item)}</span>
             </li>
           ))}
         </ul>
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-3 text-gray-200 ml-5 list-decimal space-y-1.5 text-xl sm:text-2xl leading-loose marker:text-cyan-500/60">
+        <ol key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose counter-reset-list">
           {node.content?.map((item: any, i: number) => (
-            <li key={i}>
-              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            <li key={i} className="flex items-baseline gap-2.5">
+              <span className="text-cyan-500/60 flex-shrink-0 font-mono text-base">{i + 1}.</span>
+              <span>{renderListItemContent(item)}</span>
             </li>
           ))}
         </ol>
@@ -120,6 +122,19 @@ function renderProseMirrorInline(node: any, key: number): React.ReactNode {
   }
   if (node.type === 'hardBreak') return <br key={key} />;
   return null;
+}
+
+// Extract inline content from list items, avoiding nested <p> wrappers
+function renderListItemContent(item: any): React.ReactNode {
+  if (!item.content) return null;
+  return item.content.map((child: any, ci: number) => {
+    // If the child is a paragraph, render its inline content directly (no <p> wrapper)
+    if (child.type === 'paragraph') {
+      return <React.Fragment key={ci}>{child.content?.map((inline: any, ii: number) => renderProseMirrorInline(inline, ii))}</React.Fragment>;
+    }
+    // Otherwise render normally (e.g. nested lists)
+    return renderProseMirrorNode(child, ci);
+  });
 }
 
 // ─── Content Renderer ────────────────────────────────────────────────────────

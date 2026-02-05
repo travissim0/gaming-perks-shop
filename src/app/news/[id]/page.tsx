@@ -55,20 +55,22 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-3 text-gray-200 ml-5 list-none space-y-1.5 text-xl sm:text-2xl leading-loose">
+        <ul key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose">
           {node.content?.map((item: any, i: number) => (
-            <li key={i} className="before:content-['›_'] before:text-cyan-500/60">
-              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            <li key={i} className="flex items-baseline gap-2.5">
+              <span className="text-cyan-500/60 flex-shrink-0">›</span>
+              <span>{renderListItemContent(item)}</span>
             </li>
           ))}
         </ul>
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-3 text-gray-200 ml-5 list-decimal space-y-1.5 text-xl sm:text-2xl leading-loose marker:text-cyan-500/60">
+        <ol key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose">
           {node.content?.map((item: any, i: number) => (
-            <li key={i}>
-              {item.content?.map((child: any, ci: number) => renderProseMirrorNode(child, ci))}
+            <li key={i} className="flex items-baseline gap-2.5">
+              <span className="text-cyan-500/60 flex-shrink-0 font-mono text-base">{i + 1}.</span>
+              <span>{renderListItemContent(item)}</span>
             </li>
           ))}
         </ol>
@@ -119,6 +121,16 @@ function renderProseMirrorInline(node: any, key: number): React.ReactNode {
   }
   if (node.type === 'hardBreak') return <br key={key} />;
   return null;
+}
+
+function renderListItemContent(item: any): React.ReactNode {
+  if (!item.content) return null;
+  return item.content.map((child: any, ci: number) => {
+    if (child.type === 'paragraph') {
+      return <React.Fragment key={ci}>{child.content?.map((inline: any, ii: number) => renderProseMirrorInline(inline, ii))}</React.Fragment>;
+    }
+    return renderProseMirrorNode(child, ci);
+  });
 }
 
 function renderFullContent(content: any): React.ReactNode {
@@ -172,13 +184,15 @@ function renderFullContent(content: any): React.ReactNode {
           return <Tag key={index} className={cls}>{block.data.text}</Tag>;
         }
         case 'list': {
-          const ListTag = block.data.style === 'ordered' ? 'ol' : 'ul';
           return (
-            <ListTag key={index} className="mb-3 text-gray-200 ml-5 list-none space-y-1.5 text-xl sm:text-2xl leading-loose">
+            <ul key={index} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose">
               {block.data.items.map((item: string, itemIndex: number) => (
-                <li key={itemIndex} className="before:content-['›_'] before:text-cyan-500/60">{item}</li>
+                <li key={itemIndex} className="flex items-baseline gap-2.5">
+                  <span className="text-cyan-500/60 flex-shrink-0">{block.data.style === 'ordered' ? `${itemIndex + 1}.` : '›'}</span>
+                  <span>{item}</span>
+                </li>
               ))}
-            </ListTag>
+            </ul>
           );
         }
         default:
