@@ -29,7 +29,7 @@ interface InlinePostEditorProps {
     featured_image_url: string;
     metadata: any;
   };
-  onSave: () => void;
+  onSave: (updatedFields?: { title: string; subtitle: string; content: any; tags: string[] }) => void;
   onClose: () => void;
 }
 
@@ -356,13 +356,15 @@ export default function InlinePostEditor({ post, onSave, onClose }: InlinePostEd
     setSaving(true);
     try {
       const content = editor?.getJSON();
+      const updatedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
       const { error } = await supabase
         .from('news_posts')
-        .update({ title: title.trim(), subtitle: subtitle.trim(), content, tags: tags.split(',').map(t => t.trim()).filter(Boolean) })
+        .update({ title: title.trim(), subtitle: subtitle.trim(), content, tags: updatedTags })
         .eq('id', post.id);
       if (error) throw error;
       toast.success('Post updated!');
-      onSave();
+      // Pass updated fields for optimistic UI update
+      onSave({ title: title.trim(), subtitle: subtitle.trim(), content, tags: updatedTags });
     } catch (error) {
       console.error('Save error:', error);
       toast.error('Failed to save post');

@@ -231,9 +231,9 @@ export default function HomeNewsSection() {
     checkAdmin();
   }, [user]);
 
-  const fetchPosts = async () => {
+  const fetchPosts = async (showLoading = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const { data, error } = await supabase
         .from('news_posts')
         .select('*')
@@ -371,9 +371,16 @@ export default function HomeNewsSection() {
       {editingPost && (
         <InlinePostEditor
           post={editingPost}
-          onSave={() => {
+          onSave={(updatedFields) => {
+            // Optimistically update the post in local state immediately
+            if (updatedFields) {
+              setPosts(prev => prev.map(p =>
+                p.id === editingPost.id ? { ...p, ...updatedFields } : p
+              ));
+            }
             setEditingPost(null);
-            fetchPosts();
+            // Background refresh from database (no loading skeleton)
+            fetchPosts(false);
           }}
           onClose={() => setEditingPost(null)}
         />
