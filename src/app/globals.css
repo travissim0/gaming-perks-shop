@@ -348,6 +348,38 @@ input, textarea, select {
   text-decoration: underline;
 }
 
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+  margin: 0.75rem 0;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #6b7280;
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror a {
+  color: #22d3ee;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tiptap-editor-inline .ProseMirror {
+  min-height: 400px;
+  padding: 1.5rem;
+}
+
 /* News section specific styles */
 .news-hero-layout {
   display: flex;

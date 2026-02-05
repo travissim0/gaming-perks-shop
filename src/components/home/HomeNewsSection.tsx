@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Orbitron } from 'next/font/google';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Plus, ExternalLink, Calendar, User, ChevronRight, Pencil } from 'lucide-react';
 import NewPostModal from './NewPostModal';
+
+const InlinePostEditor = dynamic(() => import('./InlinePostEditor'), { ssr: false });
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -37,17 +40,17 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
   switch (node.type) {
     case 'paragraph':
       return (
-        <p key={key} className="mb-4 text-gray-200 text-xl sm:text-2xl leading-loose">
+        <p key={key} className="mb-4 text-gray-200 text-base sm:text-lg leading-relaxed">
           {node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i))}
         </p>
       );
     case 'heading': {
       const level = node.attrs?.level || 2;
       const classes: Record<number, string> = {
-        1: 'text-lg font-bold text-cyan-300 mb-3 font-mono uppercase tracking-[0.15em]',
-        2: 'text-base font-bold text-cyan-300/90 mb-2 font-mono uppercase tracking-[0.12em]',
-        3: 'text-sm font-semibold text-cyan-300/80 mb-2 font-mono uppercase tracking-[0.1em]',
-        4: 'text-sm font-semibold text-cyan-300/70 mb-2 font-mono tracking-[0.08em]',
+        1: 'text-xl sm:text-2xl font-bold text-cyan-300 mb-3 font-mono uppercase tracking-[0.15em]',
+        2: 'text-lg sm:text-xl font-bold text-cyan-300/90 mb-2 font-mono uppercase tracking-[0.12em]',
+        3: 'text-base sm:text-lg font-semibold text-cyan-300/80 mb-2 font-mono uppercase tracking-[0.1em]',
+        4: 'text-sm sm:text-base font-semibold text-cyan-300/70 mb-2 font-mono tracking-[0.08em]',
       };
       const cls = classes[level] || classes[2];
       const content = node.content?.map((child: any, i: number) => renderProseMirrorInline(child, i));
@@ -56,7 +59,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
     }
     case 'bulletList':
       return (
-        <ul key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose">
+        <ul key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-1.5 text-base sm:text-lg leading-relaxed">
           {node.content?.map((item: any, i: number) => (
             <li key={i} className="flex items-baseline gap-2.5">
               <span className="text-cyan-500/60 flex-shrink-0">›</span>
@@ -67,10 +70,10 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'orderedList':
       return (
-        <ol key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-2 text-xl sm:text-2xl leading-loose counter-reset-list">
+        <ol key={key} className="mb-4 text-gray-200 ml-2 list-none space-y-1.5 text-base sm:text-lg leading-relaxed">
           {node.content?.map((item: any, i: number) => (
             <li key={i} className="flex items-baseline gap-2.5">
-              <span className="text-cyan-500/60 flex-shrink-0 font-mono text-base">{i + 1}.</span>
+              <span className="text-cyan-500/60 flex-shrink-0 font-mono text-sm">{i + 1}.</span>
               <span>{renderListItemContent(item)}</span>
             </li>
           ))}
@@ -78,7 +81,7 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'blockquote':
       return (
-        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-gray-300 text-xl sm:text-2xl leading-loose">
+        <blockquote key={key} className="border-l-2 border-cyan-400/40 pl-4 mb-3 italic text-gray-300 text-base sm:text-lg leading-relaxed">
           {node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i))}
         </blockquote>
       );
@@ -90,6 +93,12 @@ function renderProseMirrorNode(node: any, key: number): React.ReactNode {
       );
     case 'horizontalRule':
       return <hr key={key} className="border-gray-700/50 my-4" />;
+    case 'image':
+      return (
+        <div key={key} className="my-4">
+          <img src={node.attrs?.src} alt={node.attrs?.alt || ''} className="max-w-full rounded-lg border border-cyan-500/20" />
+        </div>
+      );
     case 'listItem':
       return node.content?.map((child: any, i: number) => renderProseMirrorNode(child, i));
     default:
@@ -146,7 +155,7 @@ function renderFullContent(content: any): React.ReactNode {
   if (typeof content === 'string') {
     return (
       <div
-        className="text-gray-200 text-lg sm:text-xl leading-loose prose prose-invert max-w-none"
+        className="text-gray-200 text-base sm:text-lg leading-relaxed prose prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: content }}
       />
     );
@@ -174,7 +183,7 @@ function renderFullContent(content: any): React.ReactNode {
   // Safety: if content is an object we can't handle, render as JSON string
   if (typeof content === 'object') {
     return (
-      <div className="text-gray-200 text-lg sm:text-xl leading-loose">
+      <div className="text-gray-200 text-base sm:text-lg leading-relaxed">
         {JSON.stringify(content)}
       </div>
     );
@@ -199,6 +208,7 @@ export default function HomeNewsSection() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [editingPost, setEditingPost] = useState<NewsPost | null>(null);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -308,7 +318,7 @@ export default function HomeNewsSection() {
       ) : (
         <>
           {/* ─── Hero Post (Latest) ─── */}
-          {latestPost && <HeroPost post={latestPost} formatDate={formatDate} isAdmin={isAdmin} />}
+          {latestPost && <HeroPost post={latestPost} formatDate={formatDate} isAdmin={isAdmin} onEdit={() => setEditingPost(latestPost)} />}
 
           {/* ─── Older Posts (list with hover-expand) ─── */}
           {olderPosts.length > 0 && (
@@ -322,6 +332,7 @@ export default function HomeNewsSection() {
                   onToggle={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                   isLast={i === olderPosts.length - 1}
                   isAdmin={isAdmin}
+                  onEdit={() => setEditingPost(post)}
                 />
               ))}
             </div>
@@ -347,13 +358,25 @@ export default function HomeNewsSection() {
           onPostCreated={handlePostCreated}
         />
       )}
+
+      {/* Inline Post Editor */}
+      {editingPost && (
+        <InlinePostEditor
+          post={editingPost}
+          onSave={() => {
+            setEditingPost(null);
+            fetchPosts();
+          }}
+          onClose={() => setEditingPost(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Hero Post Component ─────────────────────────────────────────────────────
 
-function HeroPost({ post, formatDate, isAdmin }: { post: NewsPost; formatDate: (d: string) => string; isAdmin: boolean }) {
+function HeroPost({ post, formatDate, isAdmin, onEdit }: { post: NewsPost; formatDate: (d: string) => string; isAdmin: boolean; onEdit: () => void }) {
   const videoUrl = post.metadata?.video_url;
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
 
@@ -487,12 +510,12 @@ function HeroPost({ post, formatDate, isAdmin }: { post: NewsPost; formatDate: (
             </span>
           )}
           {isAdmin && (
-            <Link
-              href={`/admin/news?edit=${post.id}`}
-              className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium"
+            <button
+              onClick={onEdit}
+              className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium cursor-pointer"
             >
               <Pencil className="w-3 h-3" /> Edit
-            </Link>
+            </button>
           )}
           <Link
             href={`/news/${post.id}`}
@@ -569,6 +592,7 @@ function ExpandablePostRow({
   onToggle,
   isLast,
   isAdmin,
+  onEdit,
 }: {
   post: NewsPost;
   formatDate: (d: string) => string;
@@ -576,6 +600,7 @@ function ExpandablePostRow({
   onToggle: () => void;
   isLast: boolean;
   isAdmin: boolean;
+  onEdit: () => void;
 }) {
   const videoUrl = post.metadata?.video_url;
   const youtubeId = videoUrl ? getYouTubeId(videoUrl) : null;
@@ -696,12 +721,12 @@ function ExpandablePostRow({
                   </span>
                 )}
                 {isAdmin && (
-                  <Link
-                    href={`/admin/news?edit=${post.id}`}
-                    className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium"
+                  <button
+                    onClick={onEdit}
+                    className="text-amber-400/60 hover:text-amber-300 transition-colors flex items-center gap-1 font-medium cursor-pointer"
                   >
                     <Pencil className="w-3 h-3" /> Edit
-                  </Link>
+                  </button>
                 )}
                 <Link
                   href={`/news/${post.id}`}
