@@ -8,6 +8,7 @@ import DynamicHeroCarousel from '@/components/home/DynamicHeroCarousel';
 import ServerStatusBar from '@/components/home/ServerStatusBar';
 import HomeNewsSection from '@/components/home/HomeNewsSection';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
+import UserAvatar from '@/components/UserAvatar';
 
 interface ServerStats {
   totalPlayers: number;
@@ -41,6 +42,13 @@ interface RecentOrder {
   productName: string;
   amount: number;
   date: string;
+}
+
+interface OnlineUser {
+  id: string;
+  in_game_alias: string;
+  last_seen: string;
+  avatar_url?: string | null;
 }
 
 // Star color palette - weighted towards white with some colored variety
@@ -114,6 +122,8 @@ export default function HomeNew() {
   const [recentDonations, setRecentDonations] = useState<RecentDonation[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [isLoadingFinancials, setIsLoadingFinancials] = useState(true);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [unknownOnlineCount, setUnknownOnlineCount] = useState(0);
 
   // Enhanced page-wide starfield + warp stars
   const pageStars = useMemo(() => ({
@@ -241,6 +251,66 @@ export default function HomeNew() {
 
     fetchFinancialData();
   }, []);
+
+  // Fetch online users
+  useEffect(() => {
+    const fetchOnlineUsers = async () => {
+      try {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+        const { data: onlineData, error } = await supabase
+          .from('profiles')
+          .select('id, in_game_alias, last_seen, avatar_url')
+          .gte('last_seen', fiveMinutesAgo)
+          .order('last_seen', { ascending: false })
+          .limit(20);
+
+        if (error || !onlineData) return;
+
+        const known = onlineData.filter(u => u.in_game_alias);
+        const unknownCount = onlineData.length - known.length;
+
+        setOnlineUsers(known.map((u: any) => ({
+          id: u.id,
+          in_game_alias: u.in_game_alias,
+          last_seen: u.last_seen,
+          avatar_url: u.avatar_url,
+        })));
+        setUnknownOnlineCount(unknownCount);
+      } catch (error) {
+        console.error('Failed to fetch online users:', error);
+      }
+    };
+
+    fetchOnlineUsers();
+    const interval = setInterval(fetchOnlineUsers, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update current user's activity timestamp
+  useEffect(() => {
+    if (!user) return;
+
+    const updateActivity = async () => {
+      const lastUpdate = localStorage.getItem('lastActivityUpdate');
+      const now = Date.now();
+      if (lastUpdate && (now - parseInt(lastUpdate)) < 60000) return;
+
+      try {
+        await supabase
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', user.id);
+        localStorage.setItem('lastActivityUpdate', now.toString());
+      } catch (error) {
+        console.error('Error updating activity:', error);
+      }
+    };
+
+    updateActivity();
+    const interval = setInterval(updateActivity, 600000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -518,8 +588,58 @@ export default function HomeNew() {
               <HomeNewsSection />
             </div>
 
-            {/* Right Sidebar: Zone Population — top padding aligns with first news card */}
+            {/* Right Sidebar: Online Users + Zone Population */}
             <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[4.875rem]">
+              {/* Online Users Panel */}
+              {(onlineUsers.length > 0 || unknownOnlineCount > 0) && (
+                <div className="relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-green-500/5">
+                  <div className="h-1.5 bg-gradient-to-r from-green-400 via-emerald-500 to-teal-400" />
+                  <div className="px-4 py-3 border-b border-green-500/10">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-1 h-6 bg-gradient-to-b from-green-400 via-emerald-400 to-teal-400 rounded-full" />
+                        <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 uppercase tracking-wider">
+                          Online
+                        </h3>
+                      </div>
+                      <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
+                        {onlineUsers.length + unknownOnlineCount}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-1.5 max-h-72 overflow-y-auto">
+                    {onlineUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="group flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-700/30 hover:bg-green-500/5 hover:border-green-500/20 transition-all duration-200"
+                      >
+                        <div className="relative flex-shrink-0">
+                          <UserAvatar
+                            user={{ avatar_url: u.avatar_url, in_game_alias: u.in_game_alias, email: null }}
+                            size="xs"
+                          />
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-gray-900" />
+                        </div>
+                        <span className="text-gray-300 text-sm truncate group-hover:text-gray-200">
+                          {u.in_game_alias}
+                        </span>
+                      </div>
+                    ))}
+                    {unknownOnlineCount > 0 && (
+                      <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-700/30">
+                        <div className="relative flex-shrink-0">
+                          <div className="w-6 h-6 rounded-lg bg-gray-700 flex items-center justify-center text-gray-500 text-xs font-bold">?</div>
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-gray-900" />
+                        </div>
+                        <span className="text-gray-500 text-sm italic">
+                          {unknownOnlineCount} unknown {unknownOnlineCount === 1 ? 'user' : 'users'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Zone Population Panel */}
               <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
                 {/* Top gradient accent */}
