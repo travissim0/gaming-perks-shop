@@ -368,8 +368,8 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
           </div>
         </section>
 
-        {/* ─── All Releases / Changelogs ──────────────────────────────────── */}
-        <section className="mb-12">
+        {/* ─── All Releases / Changelogs (temporarily hidden) ─────────────── */}
+        {false && <section className="mb-12">
           <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
             Releases & Changelogs
           </h2>
@@ -500,7 +500,7 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
               })}
             </div>
           )}
-        </section>
+        </section>}
 
         {/* ─── Other Tools ────────────────────────────────────────────────── */}
         <section className="mb-12">
