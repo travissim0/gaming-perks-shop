@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Orbitron } from 'next/font/google';
-import { Download, ChevronRight, ExternalLink, Monitor, FileText, Tag } from 'lucide-react';
+import { Download, ChevronRight, ExternalLink, Monitor, FileText, Tag, Upload, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
+import { toast } from 'react-hot-toast';
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -24,6 +27,17 @@ interface Release {
   body: string;
   assets: ReleaseAsset[];
   html_url: string;
+}
+
+interface LatestBuild {
+  id: string;
+  version: string;
+  changelog: string | null;
+  filename: string;
+  file_size: number;
+  file_path: string;
+  download_url: string;
+  uploaded_at: string;
 }
 
 const GITHUB_REPO = 'travissim0/infantry-cfs-studio';
@@ -57,10 +71,102 @@ function renderMarkdown(text: string): string {
     .replace(/\n/g, '<br/>');
 }
 
-export default function ToolsPageClient({ releases }: { releases: Release[] }) {
+export default function ToolsPageClient({ releases, latestBuild }: { releases: Release[]; latestBuild: LatestBuild | null }) {
+  const { user } = useAuth();
   const [expandedRelease, setExpandedRelease] = useState<string | null>(
     releases.length > 0 ? releases[0].tag_name : null
   );
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentBuild, setCurrentBuild] = useState<LatestBuild | null>(latestBuild);
+
+  // Upload state
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [uploadVersion, setUploadVersion] = useState('');
+  const [uploadChangelog, setUploadChangelog] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!user) { setIsAdmin(false); return; }
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_admin, site_admin')
+        .eq('id', user.id)
+        .single();
+      setIsAdmin(data?.is_admin || data?.site_admin || false);
+    };
+    checkAdmin();
+  }, [user]);
+
+  const handleBuildUpload = async () => {
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) { toast.error('Please select a file'); return; }
+    if (!uploadVersion.trim()) { toast.error('Please enter a version'); return; }
+
+    const validExts = ['.exe', '.msi', '.zip'];
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validExts.includes(ext)) {
+      toast.error('File must be .exe, .msi, or .zip');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadProgress('Uploading file to storage...');
+
+      // 1. Upload file directly to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('builds')
+        .upload(`latest/${file.name}`, file, { upsert: true });
+
+      if (uploadError) {
+        if (uploadError.message?.includes('policy')) {
+          toast.error('Upload permission denied. Admin access required.');
+        } else {
+          toast.error(`Upload failed: ${uploadError.message}`);
+        }
+        return;
+      }
+
+      // 2. Save metadata via API
+      setUploadProgress('Saving build metadata...');
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      const res = await fetch('/api/builds/metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          version: uploadVersion.trim(),
+          changelog: uploadChangelog.trim() || null,
+          filename: file.name,
+          file_size: file.size,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save metadata');
+      }
+
+      const newBuild = await res.json();
+      setCurrentBuild(newBuild);
+      setUploadVersion('');
+      setUploadChangelog('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      toast.success(`Build ${uploadVersion.trim()} uploaded successfully!`);
+    } catch (error: any) {
+      console.error('Build upload error:', error);
+      toast.error(error.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      setUploadProgress('');
+    }
+  };
 
   const latestStable = releases.find(r => !r.prerelease);
   const latestRelease = releases[0];
@@ -131,49 +237,60 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                   ))}
                 </div>
 
-                {/* Download buttons */}
-                {latestStable && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    {latestStable.assets
-                      .filter(a => a.name.endsWith('.exe'))
-                      .map(asset => (
-                        <a
-                          key={asset.name}
-                          href={asset.browser_download_url}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download {latestStable.tag_name}
-                          <span className="text-white/60 text-xs font-normal">({formatBytes(asset.size)})</span>
-                        </a>
-                      ))}
-                    {latestStable.assets
-                      .filter(a => a.name.endsWith('.msi'))
-                      .map(asset => (
-                        <a
-                          key={asset.name}
-                          href={asset.browser_download_url}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800/80 hover:bg-gray-700/80 border border-gray-600/40 hover:border-cyan-500/40 rounded-lg text-gray-300 hover:text-white text-sm transition-all"
-                        >
-                          <Download className="w-4 h-4" />
-                          MSI Installer
-                          <span className="text-gray-500 text-xs">({formatBytes(asset.size)})</span>
-                        </a>
-                      ))}
+                {/* Download buttons — Supabase build preferred, GitHub fallback */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {currentBuild ? (
                     <a
-                      href={`https://github.com/${GITHUB_REPO}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 text-cyan-400/70 hover:text-cyan-300 text-sm transition-colors"
+                      href={currentBuild.download_url}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      GitHub
+                      <Download className="w-4 h-4" />
+                      Download {currentBuild.version}
+                      <span className="text-white/60 text-xs font-normal">({formatBytes(currentBuild.file_size)})</span>
                     </a>
-                  </div>
-                )}
+                  ) : latestStable ? (
+                    <>
+                      {latestStable.assets
+                        .filter(a => a.name.endsWith('.exe'))
+                        .map(asset => (
+                          <a
+                            key={asset.name}
+                            href={asset.browser_download_url}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
+                          >
+                            <Download className="w-4 h-4" />
+                            Download {latestStable.tag_name}
+                            <span className="text-white/60 text-xs font-normal">({formatBytes(asset.size)})</span>
+                          </a>
+                        ))}
+                      {latestStable.assets
+                        .filter(a => a.name.endsWith('.msi'))
+                        .map(asset => (
+                          <a
+                            key={asset.name}
+                            href={asset.browser_download_url}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800/80 hover:bg-gray-700/80 border border-gray-600/40 hover:border-cyan-500/40 rounded-lg text-gray-300 hover:text-white text-sm transition-all"
+                          >
+                            <Download className="w-4 h-4" />
+                            MSI Installer
+                            <span className="text-gray-500 text-xs">({formatBytes(asset.size)})</span>
+                          </a>
+                        ))}
+                    </>
+                  ) : null}
+                  <a
+                    href={`https://github.com/${GITHUB_REPO}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 text-cyan-400/70 hover:text-cyan-300 text-sm transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    GitHub
+                  </a>
+                </div>
 
                 {/* Pre-release notice */}
-                {latestRelease && latestRelease.prerelease && latestRelease.tag_name !== latestStable?.tag_name && (
+                {!currentBuild && latestRelease && latestRelease.prerelease && latestRelease.tag_name !== latestStable?.tag_name && (
                   <div className="mt-3 flex items-center gap-2 text-xs text-yellow-400/70 font-mono">
                     <Tag className="w-3 h-3" />
                     Pre-release {latestRelease.tag_name} available below
@@ -182,6 +299,72 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </div>
             </div>
             <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+
+            {/* ─── Admin Build Upload ──────────────────────────────── */}
+            {isAdmin && (
+              <div className="relative z-20 px-6 py-5 sm:px-8 bg-gray-900/60 border-t border-cyan-500/20">
+                <h3 className="text-sm font-mono font-bold text-cyan-400/80 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload New Build
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-xs text-gray-400 font-mono mb-1">Version *</label>
+                    <input
+                      type="text"
+                      value={uploadVersion}
+                      onChange={e => setUploadVersion(e.target.value)}
+                      placeholder="e.g. v1.5.0"
+                      disabled={uploading}
+                      className="w-full px-3 py-2 bg-gray-800/80 border border-gray-600/40 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 font-mono mb-1">File (.exe, .msi, .zip) *</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".exe,.msi,.zip"
+                      disabled={uploading}
+                      className="w-full px-3 py-1.5 bg-gray-800/80 border border-gray-600/40 rounded-lg text-sm text-gray-400 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-mono file:bg-cyan-600/20 file:text-cyan-300 hover:file:bg-cyan-600/30 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-400 font-mono mb-1">Changelog (optional)</label>
+                  <textarea
+                    value={uploadChangelog}
+                    onChange={e => setUploadChangelog(e.target.value)}
+                    placeholder="What's new in this version..."
+                    rows={3}
+                    disabled={uploading}
+                    className="w-full px-3 py-2 bg-gray-800/80 border border-gray-600/40 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:border-cyan-500/50 focus:outline-none resize-none disabled:opacity-50"
+                  />
+                </div>
+                <button
+                  onClick={handleBuildUpload}
+                  disabled={uploading}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 hover:border-cyan-500/50 rounded-lg text-cyan-300 hover:text-cyan-200 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {uploadProgress}
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Upload Build
+                    </>
+                  )}
+                </button>
+                {currentBuild && (
+                  <p className="mt-3 text-xs text-gray-500 font-mono">
+                    Current: {currentBuild.version} &mdash; {currentBuild.filename} ({formatBytes(currentBuild.file_size)})
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
