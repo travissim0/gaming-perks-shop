@@ -320,6 +320,39 @@ export default function HomeNew() {
     });
   };
 
+  const renderZoneActivity = () => (
+    <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
+      {/* Top gradient accent */}
+      <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
+
+      <div className="px-4 py-3 border-b border-cyan-500/10">
+        <div className="flex items-center justify-center gap-2.5">
+          <div className="w-1 h-6 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
+          <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
+            Zone Activity
+          </h3>
+        </div>
+      </div>
+      <div className="p-3 space-y-1.5">
+        {serverData.zones.length > 0 ? (
+          serverData.zones.map((zone, index) => (
+            <div
+              key={index}
+              className="group flex items-center justify-between px-3 py-2 rounded-lg border border-gray-700/30 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all duration-200"
+            >
+              <span className="text-gray-300 text-sm truncate group-hover:text-gray-200">{zone.title}</span>
+              <span className={`font-bold text-sm ${zone.playerCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                {zone.playerCount}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-600 text-xs py-4">No active zones</div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen relative">
       {/* ─── Page-Wide Space Background ─── */}
@@ -518,6 +551,11 @@ export default function HomeNew() {
           </div>
         </div>
 
+        {/* Zone Activity - Mobile Only (appears first, outside the grid) */}
+        <div className="lg:hidden max-w-[1600px] mx-auto px-4 pt-8">
+          {renderZoneActivity()}
+        </div>
+
         {/* Main Content Grid: Left Sidebar | Center News | Right Sidebar */}
         <div className="max-w-[1600px] mx-auto px-4 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:items-start">
@@ -638,36 +676,9 @@ export default function HomeNew() {
                 </div>
               )}
 
-              {/* Zone Population Panel */}
-              <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
-                {/* Top gradient accent */}
-                <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
-
-                <div className="px-4 py-3 border-b border-cyan-500/10">
-                  <div className="flex items-center justify-center gap-2.5">
-                    <div className="w-1 h-6 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
-                    <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
-                      Zone Activity
-                    </h3>
-                  </div>
-                </div>
-                <div className="p-3 space-y-1.5">
-                  {serverData.zones.length > 0 ? (
-                    serverData.zones.map((zone, index) => (
-                      <div
-                        key={index}
-                        className="group flex items-center justify-between px-3 py-2 rounded-lg border border-gray-700/30 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all duration-200"
-                      >
-                        <span className="text-gray-300 text-sm truncate group-hover:text-gray-200">{zone.title}</span>
-                        <span className={`font-bold text-sm ${zone.playerCount > 0 ? 'text-green-400' : 'text-gray-600'}`}>
-                          {zone.playerCount}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-600 text-xs py-4">No active zones</div>
-                  )}
-                </div>
+              {/* Zone Population Panel - Desktop only (mobile version shown above) */}
+              <div className="hidden lg:block">
+                {renderZoneActivity()}
               </div>
             </div>
           </div>
