@@ -62,6 +62,7 @@ export default function ImprovedNavbar({ user }: { user: any }) {
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
+    { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
   ];
 
   if (!user) {

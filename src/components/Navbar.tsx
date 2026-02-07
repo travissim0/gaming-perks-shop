@@ -496,6 +496,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
     { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
+    { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
   ];
 
   const miscNavItems = [
@@ -524,6 +525,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
     { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
+    { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
   ];
 
   const publicMiscNavItems = [
