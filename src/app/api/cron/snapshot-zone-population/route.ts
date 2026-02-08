@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 
-interface ZoneConfig {
-  key: string;
-  name: string;
-  directory: string;
-}
-
 interface ApiZone {
   Title: string;
   PlayerCount: number;
+}
+
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 export async function GET(request: NextRequest) {
@@ -57,27 +58,6 @@ export async function GET(request: NextRequest) {
       throw new Error('Zone API returned non-array data');
     }
 
-    // Load zones config
-    let zonesConfig: { zones: ZoneConfig[] };
-    try {
-      const configResponse = await fetch(new URL('/zones-config.json', request.url));
-      zonesConfig = await configResponse.json();
-    } catch {
-      // Fallback: hardcode the zones we know about
-      zonesConfig = {
-        zones: [
-          { key: 'ctf', name: 'CTF - Twin Peaks 2.0', directory: 'CTF - Twin Peaks 2.0' },
-          { key: 'tp', name: 'CTF - Twin Peaks Classic', directory: 'CTF - Twin Peaks Classic' },
-          { key: 'usl', name: 'League - USL Matches', directory: 'League - USL Matches' },
-          { key: 'usl2', name: 'League - USL Secondary', directory: 'League - USL Secondary' },
-          { key: 'skMini', name: 'Skirmish - Minimaps', directory: 'Skirmish - Minimaps' },
-          { key: 'grav', name: 'Sports - GravBall', directory: 'Sports - GravBall' },
-          { key: 'arena', name: 'Arcade - The Arena', directory: 'Arcade - The Arena' },
-          { key: 'zz', name: 'Bots - Zombie Zone', directory: 'Bots - Zombie Zone' },
-        ],
-      };
-    }
-
     const snapshotId = crypto.randomUUID();
 
     // Calculate total players across all API zones
@@ -86,21 +66,20 @@ export async function GET(request: NextRequest) {
       0
     );
 
-    // Map each configured zone to its population
-    const rows = zonesConfig.zones.map((config) => {
-      // Match by comparing directory field to API Title (case-insensitive)
-      const match = apiZones.find(
-        (az) => az.Title && az.Title.toLowerCase() === config.directory.toLowerCase()
-      );
-
-      return {
-        zone_key: config.key,
-        zone_title: config.name,
-        player_count: match ? match.PlayerCount : 0,
+    // Record every zone from the API directly
+    const rows = apiZones
+      .filter((z) => z.Title && typeof z.Title === 'string')
+      .map((z) => ({
+        zone_key: slugify(z.Title),
+        zone_title: z.Title,
+        player_count: typeof z.PlayerCount === 'number' ? z.PlayerCount : 0,
         total_server_players: totalServerPlayers,
         snapshot_id: snapshotId,
-      };
-    });
+      }));
+
+    if (rows.length === 0) {
+      throw new Error('No valid zones found in API response');
+    }
 
     // Insert via service client
     const supabase = getServiceSupabase();
@@ -115,6 +94,7 @@ export async function GET(request: NextRequest) {
       snapshot_id: snapshotId,
       zones_recorded: rows.length,
       total_server_players: totalServerPlayers,
+      zones: rows.map((r) => ({ key: r.zone_key, title: r.zone_title, players: r.player_count })),
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

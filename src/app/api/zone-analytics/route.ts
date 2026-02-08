@@ -116,6 +116,30 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      case 'zones': {
+        // Return distinct zones from recorded data
+        const { data, error } = await supabase
+          .from('zone_population_history')
+          .select('zone_key, zone_title')
+          .gte('recorded_at', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
+
+        if (error) throw error;
+
+        // Deduplicate by zone_key, keeping the most recent title
+        const zoneMap = new Map<string, string>();
+        (data || []).forEach((row: any) => {
+          zoneMap.set(row.zone_key, row.zone_title);
+        });
+
+        const zones = Array.from(zoneMap.entries())
+          .map(([key, name]) => ({ key, name }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        return NextResponse.json(zones, {
+          headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600' },
+        });
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid type parameter' }, { status: 400 });
     }

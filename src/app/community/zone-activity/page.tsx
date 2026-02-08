@@ -8,18 +8,8 @@ import PopulationHeatmap from '@/components/zone-activity/PopulationHeatmap';
 import PeakHoursCard from '@/components/zone-activity/PeakHoursCard';
 import PopulationTrendChart from '@/components/zone-activity/PopulationTrendChart';
 
-const ZONES = [
-  { key: 'ctf', name: 'CTF - Twin Peaks 2.0' },
-  { key: 'tp', name: 'CTF - Twin Peaks Classic' },
-  { key: 'usl', name: 'League - USL Matches' },
-  { key: 'usl2', name: 'League - USL Secondary' },
-  { key: 'skMini', name: 'Skirmish - Minimaps' },
-  { key: 'grav', name: 'Sports - GravBall' },
-  { key: 'arena', name: 'Arcade - The Arena' },
-  { key: 'zz', name: 'Bots - Zombie Zone' },
-];
-
 export default function ZoneActivityPage() {
+  const [zones, setZones] = useState<{ key: string; name: string }[]>([]);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState(30);
   const [loading, setLoading] = useState(true);
@@ -28,6 +18,16 @@ export default function ZoneActivityPage() {
   const [peakHoursData, setPeakHoursData] = useState<any>(null);
   const [trendData, setTrendData] = useState<any>(null);
   const [hasData, setHasData] = useState(true);
+
+  // Fetch available zones from recorded data
+  useEffect(() => {
+    fetch(`/api/zone-analytics?type=zones&days=90`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setZones(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -86,7 +86,7 @@ export default function ZoneActivityPage() {
         {/* Filters */}
         <div className="mb-6">
           <ZoneSelector
-            zones={ZONES}
+            zones={zones}
             selectedZone={selectedZone}
             onZoneChange={setSelectedZone}
             selectedDays={selectedDays}
