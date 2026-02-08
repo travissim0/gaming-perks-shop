@@ -16,7 +16,6 @@ export default function ZoneActivityPage() {
   const [summaryData, setSummaryData] = useState<any>(null);
   const [heatmapData, setHeatmapData] = useState<any>(null);
   const [peakHoursData, setPeakHoursData] = useState<any>(null);
-  const [trendData, setTrendData] = useState<any>(null);
   const [hasData, setHasData] = useState(true);
 
   // Fetch available zones from recorded data
@@ -35,24 +34,21 @@ export default function ZoneActivityPage() {
     const daysParam = `&days=${selectedDays}`;
 
     try {
-      const [summaryRes, heatmapRes, peakRes, trendRes] = await Promise.all([
+      const [summaryRes, heatmapRes, peakRes] = await Promise.all([
         fetch(`/api/zone-analytics?type=summary${daysParam}`),
         fetch(`/api/zone-analytics?type=heatmap${zoneParam}${daysParam}`),
         fetch(`/api/zone-analytics?type=peak-hours${zoneParam}${daysParam}`),
-        fetch(`/api/zone-analytics?type=daily-trend${zoneParam}${daysParam}`),
       ]);
 
-      const [summary, heatmap, peak, trend] = await Promise.all([
+      const [summary, heatmap, peak] = await Promise.all([
         summaryRes.json(),
         heatmapRes.json(),
         peakRes.json(),
-        trendRes.json(),
       ]);
 
       setSummaryData(summary);
       setHeatmapData(heatmap);
       setPeakHoursData(peak);
-      setTrendData(trend);
 
       // Check if we have any data at all
       const totalSnapshots = summary.total_snapshots || 0;
@@ -119,7 +115,7 @@ export default function ZoneActivityPage() {
 
             {/* Bottom row: Trend + Peak Hours */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PopulationTrendChart data={trendData} loading={loading} />
+              <PopulationTrendChart data={heatmapData} loading={loading} />
               <PeakHoursCard data={peakHoursData} loading={loading} />
             </div>
           </div>
