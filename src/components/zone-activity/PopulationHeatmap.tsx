@@ -1,144 +1,218 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
-interface HeatmapEntry {
-  day_of_week: number;
-  hour_of_day: number;
-  avg_players: number;
-  max_players: number;
-  min_players: number;
-  sample_count: number;
+interface ZoneHourlyEntry {
+  zone_key: string;
+  zone_title: string;
+  hours: { hour: number; avg_players: number }[];
 }
 
-const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const hourLabels = Array.from({ length: 24 }, (_, i) => {
-  if (i === 0) return '12a';
-  if (i === 12) return '12p';
-  return i > 12 ? `${i - 12}p` : `${i}a`;
-});
+const zoneColors = [
+  '#22d3ee', // cyan
+  '#f87171', // red
+  '#4ade80', // green
+  '#fb923c', // orange
+  '#818cf8', // indigo
+  '#facc15', // yellow
+  '#c084fc', // purple
+  '#f472b6', // pink
+  '#2dd4bf', // teal
+  '#a3e635', // lime
+  '#fbbf24', // amber
+  '#60a5fa', // blue
+];
 
-function HeatmapSkeleton() {
+function formatHour(hour: number): string {
+  if (hour === 0) return '12a';
+  if (hour === 12) return '12p';
+  return hour > 12 ? `${hour - 12}p` : `${hour}a`;
+}
+
+function shortZoneName(title: string): string {
+  // Strip common prefixes for cleaner display
+  const parts = title.split(' - ');
+  return parts.length > 1 ? parts.slice(1).join(' - ') : title;
+}
+
+function ChartSkeleton() {
   return (
     <div className="bg-gray-800/50 rounded-xl border border-cyan-500/30 p-4">
       <div className="animate-pulse">
         <div className="h-5 bg-gray-700 rounded w-48 mb-4"></div>
-        <div className="h-48 bg-gray-700/30 rounded"></div>
+        <div className="h-72 bg-gray-700/30 rounded"></div>
       </div>
     </div>
   );
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload || payload.length === 0) return null;
+  const visibleEntries = payload.filter((p: any) => p.value != null && p.value > 0);
+  return (
+    <div className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 shadow-xl max-h-64 overflow-y-auto">
+      <p className="text-gray-300 text-sm font-medium mb-1">{label} ET</p>
+      {visibleEntries.length > 0 ? (
+        visibleEntries
+          .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
+          .map((p: any) => (
+            <p key={p.dataKey} className="text-sm" style={{ color: p.color }}>
+              {p.name}: {p.value} players
+            </p>
+          ))
+      ) : (
+        <p className="text-gray-500 text-sm">No players</p>
+      )}
+    </div>
+  );
+};
+
 export default function PopulationHeatmap({
   data,
   loading,
 }: {
-  data: HeatmapEntry[] | null;
+  data: ZoneHourlyEntry[] | null;
   loading: boolean;
 }) {
-  if (loading) return <HeatmapSkeleton />;
-  if (!data || data.length === 0) return null;
+  const [enabledZones, setEnabledZones] = useState<Set<string> | null>(null);
 
-  const { grid, maxAvg } = useMemo(() => {
-    // Build a 7x24 grid
-    const g: (HeatmapEntry | null)[][] = Array.from({ length: 7 }, () =>
-      Array(24).fill(null)
-    );
-    let max = 0;
-    data.forEach((entry) => {
-      g[entry.day_of_week][entry.hour_of_day] = entry;
-      if (entry.avg_players > max) max = entry.avg_players;
-    });
-    return { grid: g, maxAvg: max };
+  // Initialize enabled zones on first data load
+  const zoneList = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((z, i) => ({
+      key: z.zone_key,
+      title: z.zone_title,
+      short: shortZoneName(z.zone_title),
+      color: zoneColors[i % zoneColors.length],
+    }));
   }, [data]);
 
-  function getCellColor(avg: number | undefined): string {
-    if (!avg || maxAvg === 0) return 'bg-gray-900/50';
-    const intensity = avg / maxAvg;
-    if (intensity > 0.8) return 'bg-cyan-400/80';
-    if (intensity > 0.6) return 'bg-cyan-500/60';
-    if (intensity > 0.4) return 'bg-cyan-600/50';
-    if (intensity > 0.2) return 'bg-cyan-700/40';
-    if (intensity > 0.05) return 'bg-cyan-800/30';
-    return 'bg-gray-900/50';
-  }
+  // Auto-enable all zones on first load
+  const activeZones = useMemo(() => {
+    if (enabledZones !== null) return enabledZones;
+    return new Set(zoneList.map((z) => z.key));
+  }, [enabledZones, zoneList]);
+
+  const toggleZone = (key: string) => {
+    setEnabledZones((prev) => {
+      const current = prev ?? new Set(zoneList.map((z) => z.key));
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    return Array.from({ length: 24 }, (_, h) => {
+      const row: any = { hour: formatHour(h) };
+      data.forEach((zone) => {
+        const hourData = zone.hours.find((hr) => hr.hour === h);
+        row[zone.zone_key] = hourData ? hourData.avg_players : 0;
+      });
+      return row;
+    });
+  }, [data]);
+
+  if (loading) return <ChartSkeleton />;
+  if (!data || data.length === 0) return null;
 
   return (
     <div className="bg-gray-800/50 rounded-xl border border-cyan-500/30 p-4">
-      <h3 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
-        <span className="text-2xl">🗓️</span>
-        Population Heatmap
+      <h3 className="text-lg font-bold text-cyan-400 mb-3 flex items-center gap-2">
+        <span className="text-2xl">📊</span>
+        Zone Population by Hour
         <span className="text-xs text-gray-500 font-normal ml-2">(ET timezone)</span>
       </h3>
 
-      {/* Scrollable container for mobile */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[640px]">
-          {/* Hour labels row */}
-          <div className="flex mb-1">
-            <div className="w-10 shrink-0"></div>
-            {hourLabels.map((label, i) => (
-              <div
-                key={i}
-                className="flex-1 text-center text-[10px] text-gray-500 font-mono"
-              >
-                {i % 3 === 0 ? label : ''}
-              </div>
-            ))}
-          </div>
+      {/* Zone toggles */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {zoneList.map((zone) => (
+          <button
+            key={zone.key}
+            onClick={() => toggleZone(zone.key)}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all border ${
+              activeZones.has(zone.key)
+                ? 'opacity-100'
+                : 'border-gray-700/50 opacity-30 hover:opacity-50'
+            }`}
+            style={{
+              color: zone.color,
+              borderColor: activeZones.has(zone.key) ? zone.color : undefined,
+              backgroundColor: activeZones.has(zone.key)
+                ? `${zone.color}15`
+                : 'transparent',
+            }}
+          >
+            {zone.short}
+          </button>
+        ))}
+      </div>
 
-          {/* Grid rows */}
-          {dayLabels.map((day, dayIdx) => (
-            <div key={dayIdx} className="flex mb-0.5">
-              <div className="w-10 shrink-0 text-xs text-gray-400 font-medium flex items-center">
-                {day}
-              </div>
-              {Array.from({ length: 24 }, (_, hourIdx) => {
-                const cell = grid[dayIdx][hourIdx];
-                const avg = cell ? Number(cell.avg_players) : 0;
-                return (
-                  <div
-                    key={hourIdx}
-                    className={`flex-1 aspect-square rounded-sm mx-px ${getCellColor(avg)} transition-colors cursor-default group relative`}
-                    title={
-                      cell
-                        ? `${day} ${hourLabels[hourIdx]}: avg ${cell.avg_players}, max ${cell.max_players}, ${cell.sample_count} samples`
-                        : `${day} ${hourLabels[hourIdx]}: no data`
-                    }
-                  >
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
-                      <div className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs whitespace-nowrap shadow-xl">
-                        <p className="text-gray-300 font-medium">{day} {hourLabels[hourIdx]}</p>
-                        {cell ? (
-                          <>
-                            <p className="text-cyan-400">Avg: {cell.avg_players} players</p>
-                            <p className="text-gray-400">Max: {cell.max_players} | Min: {cell.min_players}</p>
-                            <p className="text-gray-500">{cell.sample_count} samples</p>
-                          </>
-                        ) : (
-                          <p className="text-gray-500">No data</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Legend */}
-          <div className="flex items-center gap-2 mt-3 justify-end">
-            <span className="text-xs text-gray-500">Less</span>
-            <div className="w-4 h-4 rounded-sm bg-gray-900/50"></div>
-            <div className="w-4 h-4 rounded-sm bg-cyan-800/30"></div>
-            <div className="w-4 h-4 rounded-sm bg-cyan-700/40"></div>
-            <div className="w-4 h-4 rounded-sm bg-cyan-600/50"></div>
-            <div className="w-4 h-4 rounded-sm bg-cyan-500/60"></div>
-            <div className="w-4 h-4 rounded-sm bg-cyan-400/80"></div>
-            <span className="text-xs text-gray-500">More</span>
-          </div>
-        </div>
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={chartData}
+            margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis
+              dataKey="hour"
+              tick={{ fill: '#9ca3af', fontSize: 11 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={{ stroke: '#374151' }}
+              interval={1}
+            />
+            <YAxis
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={{ stroke: '#374151' }}
+              allowDecimals={false}
+              label={{
+                value: 'Players',
+                angle: -90,
+                position: 'insideLeft',
+                offset: 20,
+                style: { fill: '#6b7280', fontSize: 12 },
+              }}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            {zoneList.map((zone) =>
+              activeZones.has(zone.key) ? (
+                <Line
+                  key={zone.key}
+                  type="monotone"
+                  dataKey={zone.key}
+                  name={zone.short}
+                  stroke={zone.color}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    fill: zone.color,
+                    stroke: '#111827',
+                    strokeWidth: 2,
+                  }}
+                  connectNulls
+                />
+              ) : null
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

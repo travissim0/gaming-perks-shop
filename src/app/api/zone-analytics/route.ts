@@ -116,6 +116,56 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      case 'zone-hourly': {
+        // Per-zone hourly breakdown for line chart
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        const { data: rawData, error } = await supabase
+          .from('zone_population_history')
+          .select('zone_key, zone_title, player_count, recorded_at')
+          .gte('recorded_at', cutoff)
+          .order('recorded_at', { ascending: true });
+
+        if (error) throw error;
+
+        // Group by zone_key -> hour -> avg player count
+        // Use ET timezone offset for hour extraction
+        const zoneHourMap: Record<string, { title: string; hours: Record<number, { total: number; count: number }> }> = {};
+
+        (rawData || []).forEach((row: any) => {
+          if (!zoneHourMap[row.zone_key]) {
+            zoneHourMap[row.zone_key] = { title: row.zone_title, hours: {} };
+          }
+          // Convert to ET hour
+          const utcDate = new Date(row.recorded_at);
+          const etHour = parseInt(
+            utcDate.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false })
+          );
+          const h = isNaN(etHour) ? utcDate.getUTCHours() : etHour;
+
+          if (!zoneHourMap[row.zone_key].hours[h]) {
+            zoneHourMap[row.zone_key].hours[h] = { total: 0, count: 0 };
+          }
+          zoneHourMap[row.zone_key].hours[h].total += row.player_count;
+          zoneHourMap[row.zone_key].hours[h].count += 1;
+        });
+
+        // Build response: array of zones with their hourly data
+        const zoneHourly = Object.entries(zoneHourMap).map(([key, val]) => ({
+          zone_key: key,
+          zone_title: val.title,
+          hours: Array.from({ length: 24 }, (_, h) => ({
+            hour: h,
+            avg_players: val.hours[h]
+              ? Math.round((val.hours[h].total / val.hours[h].count) * 10) / 10
+              : 0,
+          })),
+        }));
+
+        return NextResponse.json(zoneHourly, {
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+        });
+      }
+
       case 'zones': {
         // Return distinct zones from recorded data
         const { data, error } = await supabase
