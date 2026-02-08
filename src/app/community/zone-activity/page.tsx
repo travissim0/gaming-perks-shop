@@ -11,7 +11,7 @@ import PopulationTrendChart from '@/components/zone-activity/PopulationTrendChar
 export default function ZoneActivityPage() {
   const [zones, setZones] = useState<{ key: string; name: string }[]>([]);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [selectedDays, setSelectedDays] = useState(30);
+  const [selectedDays, setSelectedDays] = useState(1);
   const [loading, setLoading] = useState(true);
   const [summaryData, setSummaryData] = useState<any>(null);
   const [heatmapData, setHeatmapData] = useState<any>(null);

@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
           .sort((a, b) => a.name.localeCompare(b.name));
 
         return NextResponse.json(zones, {
-          headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600' },
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
         });
       }
 

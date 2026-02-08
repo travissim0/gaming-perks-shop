@@ -10,7 +10,12 @@ interface ZoneSelectorProps {
   onDaysChange: (days: number) => void;
 }
 
-const dayOptions = [7, 30, 90];
+const dayOptions = [
+  { value: 1, label: 'Today' },
+  { value: 7, label: '7 days' },
+  { value: 30, label: '30 days' },
+  { value: 90, label: '90 days' },
+];
 
 export default function ZoneSelector({
   zones,
@@ -57,15 +62,15 @@ export default function ZoneSelector({
         <div className="flex gap-2">
           {dayOptions.map((d) => (
             <button
-              key={d}
-              onClick={() => onDaysChange(d)}
+              key={d.value}
+              onClick={() => onDaysChange(d.value)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                selectedDays === d
+                selectedDays === d.value
                   ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50'
                   : 'bg-gray-900/50 text-gray-400 border border-gray-700/50 hover:text-gray-300 hover:border-gray-600'
               }`}
             >
-              {d} days
+              {d.label}
             </button>
           ))}
         </div>
