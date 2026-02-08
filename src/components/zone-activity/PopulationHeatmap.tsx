@@ -85,21 +85,25 @@ export default function PopulationHeatmap({
 }) {
   const [enabledZones, setEnabledZones] = useState<Set<string> | null>(null);
 
-  // Initialize enabled zones on first data load
+  // Initialize zone list, marking which ones have any activity
   const zoneList = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.map((z, i) => ({
-      key: z.zone_key,
-      title: z.zone_title,
-      short: shortZoneName(z.zone_title),
-      color: zoneColors[i % zoneColors.length],
-    }));
+    return data.map((z, i) => {
+      const hasActivity = z.hours.some((hr) => hr.avg_players > 0);
+      return {
+        key: z.zone_key,
+        title: z.zone_title,
+        short: shortZoneName(z.zone_title),
+        color: zoneColors[i % zoneColors.length],
+        hasActivity,
+      };
+    });
   }, [data]);
 
-  // Auto-enable all zones on first load
+  // Auto-enable only zones with activity on first load
   const activeZones = useMemo(() => {
     if (enabledZones !== null) return enabledZones;
-    return new Set(zoneList.map((z) => z.key));
+    return new Set(zoneList.filter((z) => z.hasActivity).map((z) => z.key));
   }, [enabledZones, zoneList]);
 
   const toggleZone = (key: string) => {
@@ -122,11 +126,27 @@ export default function PopulationHeatmap({
       const row: any = { hour: formatHour(h) };
       data.forEach((zone) => {
         const hourData = zone.hours.find((hr) => hr.hour === h);
-        row[zone.zone_key] = hourData ? hourData.avg_players : 0;
+        // Use null for 0 so the line doesn't render at zero
+        row[zone.zone_key] = hourData && hourData.avg_players > 0 ? hourData.avg_players : null;
       });
       return row;
     });
   }, [data]);
+
+  // Calculate a nice Y-axis max that gives breathing room for low counts
+  const yMax = useMemo(() => {
+    if (!data || data.length === 0) return 10;
+    let max = 0;
+    data.forEach((zone) => {
+      if (!activeZones.has(zone.zone_key)) return;
+      zone.hours.forEach((hr) => {
+        if (hr.avg_players > max) max = hr.avg_players;
+      });
+    });
+    if (max <= 5) return Math.max(max + 2, 5);
+    if (max <= 15) return Math.ceil(max * 1.2);
+    return Math.ceil(max * 1.1);
+  }, [data, activeZones]);
 
   if (loading) return <ChartSkeleton />;
   if (!data || data.length === 0) return null;
@@ -139,16 +159,20 @@ export default function PopulationHeatmap({
         <span className="text-xs text-gray-500 font-normal ml-2">(ET timezone)</span>
       </h3>
 
-      {/* Zone toggles */}
+      {/* Zone toggles - active zones first, then inactive */}
       <div className="flex flex-wrap gap-1.5 mb-4">
-        {zoneList.map((zone) => (
+        {zoneList
+          .sort((a, b) => (b.hasActivity ? 1 : 0) - (a.hasActivity ? 1 : 0))
+          .map((zone) => (
           <button
             key={zone.key}
             onClick={() => toggleZone(zone.key)}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all border ${
               activeZones.has(zone.key)
                 ? 'opacity-100'
-                : 'border-gray-700/50 opacity-30 hover:opacity-50'
+                : zone.hasActivity
+                ? 'border-gray-700/50 opacity-40 hover:opacity-60'
+                : 'border-gray-700/50 opacity-20 hover:opacity-35'
             }`}
             style={{
               color: zone.color,
@@ -182,6 +206,8 @@ export default function PopulationHeatmap({
               axisLine={{ stroke: '#374151' }}
               tickLine={{ stroke: '#374151' }}
               allowDecimals={false}
+              domain={[0, yMax]}
+              tickCount={Math.min(yMax + 1, 8)}
               label={{
                 value: 'Players',
                 angle: -90,
