@@ -108,81 +108,85 @@ export default function AveragePopulationWidget() {
   }
 
   return (
-    <Link href="/community/zone-activity" className="block">
-      <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5 hover:border-cyan-500/30 transition-colors">
-        {/* Top gradient accent */}
-        <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
+    <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-cyan-500/5">
+      {/* Top gradient accent */}
+      <div className="h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
 
-        <div className="px-4 py-3 border-b border-cyan-500/10">
-          <div className="flex items-center justify-center gap-2.5">
+      <div className="px-4 py-3 border-b border-cyan-500/10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
             <div className="w-1 h-6 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
             <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
-              Avg Population
+              Average Population
             </h3>
           </div>
-        </div>
-
-        {/* Stats row */}
-        {peakTotal !== null && (
-          <div className="px-4 pt-3 flex items-center justify-end text-xs">
-            <div>
-              <span className="text-gray-500">7d Peak</span>
-              <span className="text-green-400 font-bold ml-1.5">{peakTotal}</span>
-              <span className="text-gray-600 ml-1">players</span>
-            </div>
-          </div>
-        )}
-
-        {/* Chart */}
-        <div className="px-2 pb-3 pt-1">
-          <div className="h-36">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={chartData}
-                margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="avgPopGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="hour"
-                  tick={{ fill: '#6b7280', fontSize: 9 }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={3}
-                />
-                <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 9 }}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                  domain={[0, yMax]}
-                  width={30}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#22d3ee"
-                  strokeWidth={1.5}
-                  fill="url(#avgPopGrad)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{
-                    r: 3,
-                    fill: '#22d3ee',
-                    stroke: '#111827',
-                    strokeWidth: 2,
-                  }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <Link href="/community/zone-activity" className="text-gray-500 hover:text-cyan-400 transition-colors text-xs">
+            Analytics &rarr;
+          </Link>
         </div>
       </div>
-    </Link>
+
+      {/* Stats row */}
+      {peakTotal !== null && (
+        <div className="px-4 pt-3 flex items-center justify-end text-xs">
+          <div>
+            <span className="text-gray-500">7d Peak</span>
+            <span className="text-green-400 font-bold ml-1.5">{peakTotal}</span>
+            <span className="text-gray-600 ml-1">players</span>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      <div className="px-2 pb-3 pt-1 relative">
+        <div className="h-36">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={chartData}
+              margin={{ top: 5, right: 5, left: -5, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="avgPopGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.5} />
+                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="hour"
+                tick={{ fill: '#6b7280', fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                interval={3}
+              />
+              <YAxis
+                tick={{ fill: '#6b7280', fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+                domain={[0, yMax]}
+                width={30}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#22d3ee"
+                strokeWidth={1.5}
+                fill="url(#avgPopGrad)"
+                fillOpacity={1}
+                dot={false}
+                activeDot={{
+                  r: 3,
+                  fill: '#22d3ee',
+                  stroke: '#111827',
+                  strokeWidth: 2,
+                }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <span className="absolute bottom-4 right-4 text-[9px] text-gray-600">ET</span>
+      </div>
+    </div>
   );
 }
