@@ -9,6 +9,7 @@ import ServerStatusBar from '@/components/home/ServerStatusBar';
 import HomeNewsSection from '@/components/home/HomeNewsSection';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
 import UserAvatar from '@/components/UserAvatar';
+import AveragePopulationWidget from '@/components/zone-activity/AveragePopulationWidget';
 
 interface ServerStats {
   totalPlayers: number;
@@ -552,8 +553,9 @@ export default function HomeNew() {
         </div>
 
         {/* Zone Activity - Mobile Only (appears first, outside the grid) */}
-        <div className="lg:hidden max-w-[1600px] mx-auto px-4 pt-8">
+        <div className="lg:hidden max-w-[1600px] mx-auto px-4 pt-8 space-y-4">
           {renderZoneActivity()}
+          <AveragePopulationWidget />
         </div>
 
         {/* Main Content Grid: Left Sidebar | Center News | Right Sidebar */}
@@ -677,8 +679,9 @@ export default function HomeNew() {
               )}
 
               {/* Zone Population Panel - Desktop only (mobile version shown above) */}
-              <div className="hidden lg:block">
+              <div className="hidden lg:block space-y-4">
                 {renderZoneActivity()}
+                <AveragePopulationWidget />
               </div>
             </div>
           </div>
