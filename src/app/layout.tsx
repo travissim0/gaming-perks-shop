@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CTFPL",
-  description: "Capture The Flag Player's League - Free Infantry competitive gaming platform",
+  title: "FREEINF",
+  description: "FREEINF - Community site for development tools, community features, and hub for linux hosted zones. Authored by Axidus.",
   icons: {
     icon: [
       { url: '/images/freeinfantry.png', sizes: '32x32', type: 'image/png' },
