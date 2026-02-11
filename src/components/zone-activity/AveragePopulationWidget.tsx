@@ -31,14 +31,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function AveragePopulationWidget() {
   const [chartData, setChartData] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [overallAvg, setOverallAvg] = useState(0);
-  const [peakHour, setPeakHour] = useState<{ hour: string; value: number } | null>(null);
+  const [peakTotal, setPeakTotal] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/zone-analytics?type=zone-hourly&days=7');
-        const zoneHourly = await res.json();
+        const [hourlyRes, summaryRes] = await Promise.all([
+          fetch('/api/zone-analytics?type=zone-hourly&days=7'),
+          fetch('/api/zone-analytics?type=summary&days=7'),
+        ]);
+        const [zoneHourly, summary] = await Promise.all([
+          hourlyRes.json(),
+          summaryRes.json(),
+        ]);
 
         if (!Array.isArray(zoneHourly) || zoneHourly.length === 0) {
           setChartData([]);
@@ -63,20 +68,9 @@ export default function AveragePopulationWidget() {
 
         setChartData(hourlyTotals);
 
-        // Calculate overall average (non-zero hours only for meaningful avg)
-        const nonZero = hourlyTotals.filter((h) => h._raw > 0);
-        const avg = nonZero.length > 0
-          ? Math.round((nonZero.reduce((sum, h) => sum + h._raw, 0) / nonZero.length) * 10) / 10
-          : 0;
-        setOverallAvg(avg);
-
-        // Find peak hour
-        let peak = hourlyTotals[0];
-        hourlyTotals.forEach((h) => {
-          if (h._raw > peak._raw) peak = h;
-        });
-        if (peak._raw > 0) {
-          setPeakHour({ hour: peak.hour, value: peak._raw });
+        // Actual peak total population from summary
+        if (summary.max_server_pop) {
+          setPeakTotal(summary.max_server_pop);
         }
       } catch (error) {
         console.error('Failed to fetch average population:', error);
@@ -129,19 +123,15 @@ export default function AveragePopulationWidget() {
         </div>
 
         {/* Stats row */}
-        <div className="px-4 pt-3 flex items-center justify-between text-xs">
-          <div>
-            <span className="text-gray-500">7-day avg</span>
-            <span className="text-cyan-400 font-bold ml-1.5">{overallAvg}</span>
-          </div>
-          {peakHour && (
+        {peakTotal !== null && (
+          <div className="px-4 pt-3 flex items-center justify-end text-xs">
             <div>
-              <span className="text-gray-500">Peak</span>
-              <span className="text-green-400 font-bold ml-1.5">{peakHour.value}</span>
-              <span className="text-gray-600 ml-1">@ {peakHour.hour}</span>
+              <span className="text-gray-500">7d Peak</span>
+              <span className="text-green-400 font-bold ml-1.5">{peakTotal}</span>
+              <span className="text-gray-600 ml-1">players</span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Chart */}
         <div className="px-2 pb-3 pt-1">

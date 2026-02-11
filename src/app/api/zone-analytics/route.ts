@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
           snapshotTotals.length > 0
             ? Math.round((snapshotTotals.reduce((a, b) => a + b, 0) / snapshotTotals.length) * 10) / 10
             : 0;
+        const maxServerPop = snapshotTotals.length > 0 ? Math.max(...snapshotTotals) : 0;
 
         // Get most popular zone
         const { data: popData } = await supabase
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
           {
             total_snapshots: snapshotMap.size,
             avg_server_pop: avgServerPop,
+            max_server_pop: maxServerPop,
             most_popular_zone: mostPopularZone,
             peak_hour: peakHour,
           },
