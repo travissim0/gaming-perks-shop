@@ -57,18 +57,22 @@ function ChartSkeleton() {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload || payload.length === 0) return null;
-  const visibleEntries = payload.filter((p: any) => p.value != null && p.value > 0);
+  const rawData = payload[0]?.payload?._raw || {};
+  const visibleEntries = payload.filter((p: any) => p.value != null && p.value > 0 && p.dataKey !== '_raw');
   return (
     <div className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 shadow-xl max-h-64 overflow-y-auto">
       <p className="text-gray-300 text-sm font-medium mb-1">{label} ET</p>
       {visibleEntries.length > 0 ? (
         visibleEntries
-          .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
-          .map((p: any) => (
-            <p key={p.dataKey} className="text-sm" style={{ color: p.color }}>
-              {p.name}: {p.value} players
-            </p>
-          ))
+          .sort((a: any, b: any) => ((rawData[b.dataKey] ?? b.value) || 0) - ((rawData[a.dataKey] ?? a.value) || 0))
+          .map((p: any) => {
+            const realValue = rawData[p.dataKey] ?? p.value;
+            return (
+              <p key={p.dataKey} className="text-sm" style={{ color: p.color }}>
+                {p.name}: {realValue} players
+              </p>
+            );
+          })
       ) : (
         <p className="text-gray-500 text-sm">No players</p>
       )}
@@ -123,10 +127,13 @@ export default function PopulationHeatmap({
     if (!data || data.length === 0) return [];
 
     return Array.from({ length: 24 }, (_, h) => {
-      const row: any = { hour: formatHour(h) };
+      const row: any = { hour: formatHour(h), _raw: {} as any };
       data.forEach((zone) => {
         const hourData = zone.hours.find((hr) => hr.hour === h);
-        row[zone.zone_key] = hourData ? hourData.avg_players : 0;
+        const raw = hourData ? hourData.avg_players : 0;
+        // Visual floor: give non-zero values a minimum height so they don't vanish at the baseline
+        row[zone.zone_key] = raw > 0 ? Math.max(raw, 1.5) : 0;
+        row._raw[zone.zone_key] = raw;
       });
       return row;
     });
@@ -195,8 +202,8 @@ export default function PopulationHeatmap({
             <defs>
               {zoneList.map((zone) => (
                 <linearGradient key={zone.key} id={`grad-${zone.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={zone.color} stopOpacity={0.55} />
-                  <stop offset="100%" stopColor={zone.color} stopOpacity={0.08} />
+                  <stop offset="0%" stopColor={zone.color} stopOpacity={0.6} />
+                  <stop offset="100%" stopColor={zone.color} stopOpacity={0.2} />
                 </linearGradient>
               ))}
             </defs>

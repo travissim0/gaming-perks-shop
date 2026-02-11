@@ -50,17 +50,21 @@ function TrendSkeleton() {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload || payload.length === 0) return null;
+  const rawData = payload[0]?.payload?._raw || {};
   return (
     <div className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 shadow-xl">
       <p className="text-gray-300 text-sm font-medium mb-1">{label}</p>
       {payload
-        .filter((p: any) => p.value != null)
-        .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
-        .map((p: any) => (
-          <p key={p.dataKey} className="text-sm" style={{ color: p.color }}>
-            {p.name}: {p.value} avg
-          </p>
-        ))}
+        .filter((p: any) => p.value != null && p.dataKey !== '_raw')
+        .sort((a: any, b: any) => ((rawData[b.dataKey] ?? b.value) || 0) - ((rawData[a.dataKey] ?? a.value) || 0))
+        .map((p: any) => {
+          const realValue = rawData[p.dataKey] ?? p.value;
+          return (
+            <p key={p.dataKey} className="text-sm" style={{ color: p.color }}>
+              {p.name}: {realValue} avg
+            </p>
+          );
+        })}
     </div>
   );
 };
@@ -93,12 +97,15 @@ export default function PopulationTrendChart({
 
     // Build a row per hour with a column per day
     const hours = Array.from({ length: 24 }, (_, h) => {
-      const row: any = { hour: formatHour(h) };
+      const row: any = { hour: formatHour(h), _raw: {} as any };
       for (let d = 0; d < 7; d++) {
         const entry = data.find(
           (e) => e.day_of_week === d && e.hour_of_day === h
         );
-        row[dayNames[d]] = entry ? Number(entry.avg_players) : 0;
+        const raw = entry ? Number(entry.avg_players) : 0;
+        // Visual floor: give non-zero values a minimum height so they don't vanish at the baseline
+        row[dayNames[d]] = raw > 0 ? Math.max(raw, 1.5) : 0;
+        row._raw[dayNames[d]] = raw;
       }
       return row;
     });
@@ -149,8 +156,8 @@ export default function PopulationTrendChart({
             <defs>
               {dayNames.map((name, idx) => (
                 <linearGradient key={name} id={`grad-day-${idx}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={dayColors[idx]} stopOpacity={0.5} />
-                  <stop offset="100%" stopColor={dayColors[idx]} stopOpacity={0.05} />
+                  <stop offset="0%" stopColor={dayColors[idx]} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={dayColors[idx]} stopOpacity={0.15} />
                 </linearGradient>
               ))}
             </defs>
