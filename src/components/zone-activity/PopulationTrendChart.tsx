@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -98,7 +98,7 @@ export default function PopulationTrendChart({
         const entry = data.find(
           (e) => e.day_of_week === d && e.hour_of_day === h
         );
-        row[dayNames[d]] = entry ? Number(entry.avg_players) : null;
+        row[dayNames[d]] = entry ? Number(entry.avg_players) : 0;
       }
       return row;
     });
@@ -142,10 +142,18 @@ export default function PopulationTrendChart({
 
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
+          <AreaChart
             data={chartData}
             margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
           >
+            <defs>
+              {dayNames.map((name, idx) => (
+                <linearGradient key={name} id={`grad-day-${idx}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={dayColors[idx]} stopOpacity={0.5} />
+                  <stop offset="100%" stopColor={dayColors[idx]} stopOpacity={0.05} />
+                </linearGradient>
+              ))}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis
               dataKey="hour"
@@ -163,13 +171,15 @@ export default function PopulationTrendChart({
             <Tooltip content={<CustomTooltip />} />
             {dayNames.map((name, idx) =>
               enabledDays.has(idx) ? (
-                <Line
+                <Area
                   key={name}
                   type="monotone"
                   dataKey={name}
                   name={name}
                   stroke={dayColors[idx]}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
+                  fill={`url(#grad-day-${idx})`}
+                  fillOpacity={1}
                   dot={false}
                   activeDot={{
                     r: 4,
@@ -177,11 +187,10 @@ export default function PopulationTrendChart({
                     stroke: '#111827',
                     strokeWidth: 2,
                   }}
-                  connectNulls
                 />
               ) : null
             )}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

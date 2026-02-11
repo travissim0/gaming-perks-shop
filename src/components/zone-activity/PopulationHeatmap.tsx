@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -126,8 +126,7 @@ export default function PopulationHeatmap({
       const row: any = { hour: formatHour(h) };
       data.forEach((zone) => {
         const hourData = zone.hours.find((hr) => hr.hour === h);
-        // Use null for 0 so the line doesn't render at zero
-        row[zone.zone_key] = hourData && hourData.avg_players > 0 ? hourData.avg_players : null;
+        row[zone.zone_key] = hourData ? hourData.avg_players : 0;
       });
       return row;
     });
@@ -189,10 +188,18 @@ export default function PopulationHeatmap({
 
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
+          <AreaChart
             data={chartData}
             margin={{ top: 5, right: 10, left: -10, bottom: 5 }}
           >
+            <defs>
+              {zoneList.map((zone) => (
+                <linearGradient key={zone.key} id={`grad-${zone.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={zone.color} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={zone.color} stopOpacity={0.08} />
+                </linearGradient>
+              ))}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis
               dataKey="hour"
@@ -219,13 +226,15 @@ export default function PopulationHeatmap({
             <Tooltip content={<CustomTooltip />} />
             {zoneList.map((zone) =>
               activeZones.has(zone.key) ? (
-                <Line
+                <Area
                   key={zone.key}
                   type="monotone"
                   dataKey={zone.key}
                   name={zone.short}
                   stroke={zone.color}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
+                  fill={`url(#grad-${zone.key})`}
+                  fillOpacity={1}
                   dot={false}
                   activeDot={{
                     r: 4,
@@ -233,11 +242,10 @@ export default function PopulationHeatmap({
                     stroke: '#111827',
                     strokeWidth: 2,
                   }}
-                  connectNulls
                 />
               ) : null
             )}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

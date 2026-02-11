@@ -2,68 +2,54 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Activity } from 'lucide-react';
-import ZoneSelector from '@/components/zone-activity/ZoneSelector';
-import ZoneSummaryCards from '@/components/zone-activity/ZoneSummaryCards';
 import PopulationHeatmap from '@/components/zone-activity/PopulationHeatmap';
 import PeakHoursCard from '@/components/zone-activity/PeakHoursCard';
 import PopulationTrendChart from '@/components/zone-activity/PopulationTrendChart';
 
+const dayOptions = [
+  { value: 1, label: 'Today' },
+  { value: 7, label: '7d' },
+  { value: 30, label: '30d' },
+  { value: 90, label: '90d' },
+];
+
 export default function ZoneActivityPage() {
-  const [zones, setZones] = useState<{ key: string; name: string }[]>([]);
-  const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [selectedDays, setSelectedDays] = useState(1);
+  const [selectedDays, setSelectedDays] = useState(7);
   const [loading, setLoading] = useState(true);
-  const [summaryData, setSummaryData] = useState<any>(null);
   const [zoneHourlyData, setZoneHourlyData] = useState<any>(null);
   const [heatmapData, setHeatmapData] = useState<any>(null);
   const [peakHoursData, setPeakHoursData] = useState<any>(null);
   const [hasData, setHasData] = useState(true);
 
-  // Fetch available zones from recorded data
-  useEffect(() => {
-    fetch(`/api/zone-analytics?type=zones&days=90`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setZones(data);
-      })
-      .catch(() => {});
-  }, []);
-
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const zoneParam = selectedZone ? `&zone=${selectedZone}` : '';
     const daysParam = `&days=${selectedDays}`;
 
     try {
-      const [summaryRes, zoneHourlyRes, heatmapRes, peakRes] = await Promise.all([
-        fetch(`/api/zone-analytics?type=summary${daysParam}`),
+      const [zoneHourlyRes, heatmapRes, peakRes] = await Promise.all([
         fetch(`/api/zone-analytics?type=zone-hourly${daysParam}`),
-        fetch(`/api/zone-analytics?type=heatmap${zoneParam}${daysParam}`),
-        fetch(`/api/zone-analytics?type=peak-hours${zoneParam}${daysParam}`),
+        fetch(`/api/zone-analytics?type=heatmap${daysParam}`),
+        fetch(`/api/zone-analytics?type=peak-hours${daysParam}`),
       ]);
 
-      const [summary, zoneHourly, heatmap, peak] = await Promise.all([
-        summaryRes.json(),
+      const [zoneHourly, heatmap, peak] = await Promise.all([
         zoneHourlyRes.json(),
         heatmapRes.json(),
         peakRes.json(),
       ]);
 
-      setSummaryData(summary);
       setZoneHourlyData(zoneHourly);
       setHeatmapData(heatmap);
       setPeakHoursData(peak);
 
-      // Check if we have any data at all
-      const totalSnapshots = summary.total_snapshots || 0;
-      setHasData(totalSnapshots > 0);
+      setHasData(Array.isArray(zoneHourly) && zoneHourly.length > 0);
     } catch (error) {
       console.error('Failed to fetch zone analytics:', error);
       setHasData(false);
     } finally {
       setLoading(false);
     }
-  }, [selectedZone, selectedDays]);
+  }, [selectedDays]);
 
   useEffect(() => {
     fetchData();
@@ -71,27 +57,28 @@ export default function ZoneActivityPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <Activity className="w-8 h-8 text-cyan-400" />
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        {/* Header with inline time range */}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Activity className="w-7 h-7 text-cyan-400" />
             Zone Activity
           </h1>
-          <p className="text-gray-400 mt-1">
-            Population analytics and best times to play
-          </p>
-        </div>
-
-        {/* Filters */}
-        <div className="mb-6">
-          <ZoneSelector
-            zones={zones}
-            selectedZone={selectedZone}
-            onZoneChange={setSelectedZone}
-            selectedDays={selectedDays}
-            onDaysChange={setSelectedDays}
-          />
+          <div className="flex gap-1.5">
+            {dayOptions.map((d) => (
+              <button
+                key={d.value}
+                onClick={() => setSelectedDays(d.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors border ${
+                  selectedDays === d.value
+                    ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50'
+                    : 'text-gray-400 border-gray-700/50 hover:text-gray-300 hover:border-gray-600'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Empty State */}
@@ -108,17 +95,11 @@ export default function ZoneActivityPage() {
           </div>
         )}
 
-        {/* Data Content */}
+        {/* Charts */}
         {(loading || hasData) && (
-          <div className="space-y-6">
-            {/* Summary Cards */}
-            <ZoneSummaryCards data={summaryData} loading={loading} />
-
-            {/* Zone Population by Hour - full width */}
+          <div className="space-y-4">
             <PopulationHeatmap data={zoneHourlyData} loading={loading} />
-
-            {/* Bottom row: Trend + Peak Hours */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <PopulationTrendChart data={heatmapData} loading={loading} />
               <PeakHoursCard data={peakHoursData} loading={loading} />
             </div>
