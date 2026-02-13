@@ -589,13 +589,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
         <div className="hidden xl:block bg-gray-800/50 border-t border-gray-700/30">
           <div className="container mx-auto px-4">
             <div className="flex items-center justify-center space-x-8 py-3">
-              {/* News */}
+              {/* Home (league hub) */}
               <Link
-                href="/news"
+                href="/league"
                 className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700/50 transition-all duration-300 rounded"
               >
-                <span className="text-sm">📰</span>
-                <span className="font-medium">News</span>
+                <span className="text-sm">🏠</span>
+                <span className="font-medium">Home</span>
               </Link>
 
               {/* League Dropdown */}
@@ -632,6 +632,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       >
                         <span className="mr-3">🏆</span>
                         Schedule
+                      </Link>
+                      <Link
+                        href="/news"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">📰</span>
+                        News
                       </Link>
                       <div className="border-t border-gray-600 my-1"></div>
                       <Link
@@ -827,12 +834,12 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             <div className="container mx-auto px-4 py-4">
               <div className="space-y-3">
                 <Link
-                  href="/news"
+                  href="/league"
                   className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <span className="mr-3">📰</span>
-                  News
+                  <span className="mr-3">🏠</span>
+                  Home
                 </Link>
                 {/* League Section */}
                 <div className="border-l-2 border-cyan-500/50 pl-2">
@@ -871,6 +878,17 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       >
                         <span className="mr-3">🏆</span>
                         Schedule
+                      </Link>
+                      <Link
+                        href="/news"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">📰</span>
+                        News
                       </Link>
                       <div className="border-t border-gray-600 my-2 mx-3"></div>
                       <Link
@@ -1529,14 +1547,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
       <div className="hidden border-t border-gray-700/50">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between py-2 overflow-x-auto">
-                        {/* News */}
+                        {/* Home (league hub) */}
             <Link
-              href="/news"
+              href="/league"
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <span className="text-sm">📰</span>
-              <span className="font-medium">News</span>
+              <span className="text-sm">🏠</span>
+              <span className="font-medium">Home</span>
             </Link>
 
             {/* League - Note: Mobile doesn't support hover dropdowns, so link to CTFPL */}
@@ -1629,14 +1647,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
       <div className="hidden lg:block">
         <div className="container mx-auto px-4">
           <div className="flex items-center space-x-8 py-3">
-            {/* News Section */}
+            {/* Home (league hub) */}
             <div className="relative">
               <Link 
-                href="/news"
+                href="/league"
                 className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-yellow-500/30 hover:shadow-lg hover:shadow-yellow-500/20"
               >
-                <span className="text-lg">📰</span>
-                <span className="font-semibold">News</span>
+                <span className="text-lg">🏠</span>
+                <span className="font-semibold">Home</span>
               </Link>
             </div>
 
@@ -1665,6 +1683,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   >
                     <span className="mr-3 text-lg">🏆</span>
                     <span className="font-medium">Schedule</span>
+                  </Link>
+                  <Link
+                    href="/news"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">📰</span>
+                    <span className="font-medium">News</span>
                   </Link>
                   <div className="border-t border-gray-600/50 my-2 mx-4"></div>
                   <Link
@@ -1834,12 +1859,12 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Main</h4>
                   <div className="space-y-1">
                     <Link
-                      href="/news"
+                      href="/league"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <span className="mr-3">📰</span>
-                      News
+                      <span className="mr-3">🏠</span>
+                      Home
                     </Link>
                   </div>
                 </div>
@@ -1862,6 +1887,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     >
                       <span className="mr-3">🏆</span>
                       Schedule
+                    </Link>
+                    <Link
+                      href="/news"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">📰</span>
+                      News
                     </Link>
                     <Link
                       href="/league/ctfpl"
