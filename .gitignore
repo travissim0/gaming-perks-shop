@@ -66,6 +66,8 @@ public/*
 !public/images/sites/
 # Allow tools directory for Infantry Blob Viewer and other tools
 !public/tools/
+# Rules PDF for /rules page
+!public/CTFDL-S3-Rules.pdf
 archive/
 
 # Large executables and binaries
