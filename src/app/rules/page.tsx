@@ -24,10 +24,10 @@ export default function RulesPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-4">
-            CTFPL Season 22 Rules
+            CTFDL S3 Rules
           </h1>
           <p className="text-gray-400 text-lg">
-            Official tournament rules and regulations for CTFPL Season 22
+            Official tournament rules and regulations for CTFDL Season 3
           </p>
         </div>
 
@@ -36,10 +36,10 @@ export default function RulesPage() {
           <div className="p-4 bg-gray-800 border-b border-gray-700">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-white">
-                CTFPL S22 Rules - August 11th, 2025
+                CTFDL S3 Rules
               </h2>
               <a 
-                href="/CTFPL S22 Rules August 11th, 2025.pdf" 
+                href="/CTFDL-S3-Rules.pdf" 
                 download
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
               >
@@ -54,9 +54,9 @@ export default function RulesPage() {
           {/* PDF Embed */}
           <div className="relative" style={{ height: '80vh' }}>
             <iframe
-              src="/CTFPL-S22-Rules-August-11th-2025.pdf"
+              src="/CTFDL-S3-Rules.pdf"
               className="w-full h-full"
-              title="CTFPL Season 22 Rules"
+              title="CTFDL S3 Rules"
               style={{ border: 'none' }}
             >
               <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -70,11 +70,11 @@ export default function RulesPage() {
                   Your browser doesn't support embedded PDF viewing. Please download the file to view the rules.
                 </p>
                 <a 
-                  href="/CTFPL-S22-Rules-August-11th-2025.pdf" 
+                  href="/CTFDL-S3-Rules.pdf" 
                   download
                   className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors font-semibold"
                 >
-                  Download CTFPL S22 Rules PDF
+                  Download CTFDL S3 Rules PDF
                 </a>
               </div>
             </iframe>
