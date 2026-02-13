@@ -1861,39 +1861,6 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Tools Highlight */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
-                  <h3 className="text-cyan-400 font-bold text-sm tracking-wider">🔧 TOOLS</h3>
-                </div>
-                <div className="p-3 bg-gray-900">
-                  <div className="space-y-2">
-                    <Link 
-                      href="/tools/blob-viewer/index.html"
-                      className="block bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-lg p-3 hover:scale-105 transition-all duration-300 group"
-                    >
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="text-xl">🖼️</span>
-                        <span className="text-green-400 font-bold text-sm">Sprite Animator</span>
-                      </div>
-                      <p className="text-gray-400 text-xs leading-relaxed">
-                        View and animate Infantry BLO files with full control over timing, zoom, and effects.
-                      </p>
-                    </Link>
-                    
-                    <Link 
-                      href="/tools"
-                      className="inline-flex items-center text-cyan-400 hover:text-cyan-300 text-xs transition-colors"
-                    >
-                      View All Tools
-                      <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  </div>
-                </div>
-              </section>
-
               {/* Top Supporters */}
               <TopSupportersWidget 
                 showAdminControls={false}
