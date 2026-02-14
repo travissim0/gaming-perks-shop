@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
 import { canAddPlayerToSquad, hasAdminOverride, getSquadMemberCountDisplay } from '@/utils/squadValidation';
+import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpers';
 
 interface SquadMember {
   id: string;
@@ -108,6 +109,15 @@ export default function SquadDetailPage() {
   // Derived roster lock status for easier usage
   const isRosterLocked = rosterLockStatus?.isLocked || false;
 
+  // Free agent pool: current user is in pool (null = loading)
+  const [isInFreeAgentPool, setIsInFreeAgentPool] = useState<boolean | null>(null);
+
+  // Invite from free agents: modal and list
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [freeAgentsForInvite, setFreeAgentsForInvite] = useState<{ player_id: string; in_game_alias: string | null }[]>([]);
+  const [loadingFreeAgents, setLoadingFreeAgents] = useState(false);
+  const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
+
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
     isLoading: pageLoading,
@@ -132,6 +142,19 @@ export default function SquadDetailPage() {
       loadUserProfile();
     }
   }, [user, loading]);
+
+  // Load free-agent pool status for current user (for Apply to squad)
+  useEffect(() => {
+    if (!user || !squad) {
+      setIsInFreeAgentPool(null);
+      return;
+    }
+    let cancelled = false;
+    checkIfUserInFreeAgentPool(user.id).then((inPool) => {
+      if (!cancelled) setIsInFreeAgentPool(inPool);
+    });
+    return () => { cancelled = true; };
+  }, [user?.id, squad?.id]);
 
   // Load pending requests when squad data becomes available and user is captain/co-captain or admin
   useEffect(() => {
@@ -403,6 +426,12 @@ export default function SquadDetailPage() {
         return;
       }
 
+      if (isInFreeAgentPool !== true) {
+        toast.error('You must register as a free agent before applying to squads.');
+        setIsRequesting(false);
+        return;
+      }
+
       // First check if there's already a pending request
       const { data: existingRequest, error: checkError } = await supabase
         .from('squad_invites')
@@ -492,6 +521,10 @@ export default function SquadDetailPage() {
   };
 
   const handleRequestAction = async (requestId: string, action: 'approve' | 'deny') => {
+    if (action === 'approve' && isRosterLocked) {
+      toast.error('Cannot approve join requests while rosters are locked.');
+      return;
+    }
     setProcessingRequest(requestId);
 
     const { success } = await robustFetch(
@@ -584,6 +617,54 @@ export default function SquadDetailPage() {
     }
 
     setProcessingRequest(null);
+  };
+
+  const openInviteModal = async () => {
+    if (!squad?.id || !user || isRosterLocked) return;
+    setShowInviteModal(true);
+    setLoadingFreeAgents(true);
+    setFreeAgentsForInvite([]);
+    try {
+      const data = await getFreeAgents();
+      const memberIds = new Set(squad.members?.map((m) => m.player_id) ?? []);
+      const pendingIds = new Set(sentInvites.filter((i) => i.status === 'pending').map((i) => i.invited_player_id));
+      const list = (data || [])
+        .filter((fa: any) => fa.is_active !== false && !memberIds.has(fa.player_id) && !pendingIds.has(fa.player_id))
+        .map((fa: any) => ({
+          player_id: fa.player_id,
+          in_game_alias: fa.profiles?.in_game_alias ?? null
+        }));
+      setFreeAgentsForInvite(list);
+    } catch (e) {
+      console.error('Failed to load free agents:', e);
+      toast.error('Failed to load free agents');
+    } finally {
+      setLoadingFreeAgents(false);
+    }
+  };
+
+  const sendInviteToPlayer = async (playerId: string) => {
+    if (!squad?.id || !user || isRosterLocked) return;
+    setInvitingPlayerId(playerId);
+    try {
+      const { error } = await supabase.from('squad_invites').insert({
+        squad_id: squad.id,
+        invited_player_id: playerId,
+        invited_by: user.id,
+        status: 'pending',
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        invite_source: 'free_agent_list',
+        invite_type: 'recruitment'
+      });
+      if (error) throw error;
+      toast.success('Invite sent.');
+      setFreeAgentsForInvite((prev) => prev.filter((p) => p.player_id !== playerId));
+      await loadSentInvites();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to send invite');
+    } finally {
+      setInvitingPlayerId(null);
+    }
   };
 
   const isAdminOrCtfAdmin = () => !!userProfile?.is_admin || userProfile?.ctf_role === 'ctf_admin';
@@ -694,8 +775,14 @@ export default function SquadDetailPage() {
       console.log('❌ User is the captain');
       return false;
     }
+
+    // Must be in free agent pool to apply (when we have loaded status)
+    if (isInFreeAgentPool === false) {
+      console.log('❌ User is not in free agent pool');
+      return false;
+    }
     
-    // Allow requests to active squads only (not legacy)
+    // Allow requests to active squads only (not legacy), and in free agent pool
     console.log('✅ Can request to join active squad');
     return true;
   };
@@ -1271,45 +1358,69 @@ export default function SquadDetailPage() {
                       </div>
                     )}
                     
-                    {/* Join Request Button - Show different states based on request status */}
-                    {(canRequestToJoin() || hasExistingRequest) && !isCurrentMember() && (
+                    {/* Join Request / Apply - Show when not a member: pending, can apply, or must register as free agent */}
+                    {(canRequestToJoin() || hasExistingRequest || (user && !isCurrentMember() && isInFreeAgentPool === false)) && !isCurrentMember() && (
                       <div className="flex flex-col gap-2">
-                        <button
-                          onClick={hasExistingRequest || isRosterLocked ? undefined : requestToJoin}
-                          disabled={isRequesting || hasExistingRequest || isRosterLocked}
-                          className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed ${
-                            hasExistingRequest 
-                              ? 'bg-gradient-to-r from-yellow-600 to-amber-600 text-white cursor-default'
-                              : isRosterLocked
-                              ? 'bg-gradient-to-r from-red-600 to-red-700 text-white cursor-not-allowed opacity-50'
-                              : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white'
-                          }`}
-                        >
-                          {hasExistingRequest ? (
-                            <span className="flex items-center gap-2">
-                              ⏳ Request Pending
-                            </span>
-                          ) : isRosterLocked ? (
-                            <span className="flex items-center gap-2">
-                              🔒 Applications Disabled
-                            </span>
-                          ) : isRequesting ? (
-                            <span className="flex items-center gap-2">
-                              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
-                              Sending...
-                            </span>
-                          ) : (
-                            '📤 Request to Join'
-                          )}
-                        </button>
-                        
-                        {/* Roster Lock Warning */}
-                        {isRosterLocked && (
-                          <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
-                            <span className="text-red-400 text-sm">
-                              🔒 Squad applications are currently disabled due to roster lock.
-                            </span>
+                        {/* Not in free agent pool: show register message */}
+                        {!hasExistingRequest && isInFreeAgentPool === false && (
+                          <div className="p-4 bg-amber-900/20 border border-amber-600/30 rounded-lg">
+                            <p className="text-amber-200 text-sm mb-2">
+                              You must register as a free agent before you can apply to squads.
+                            </p>
+                            <Link
+                              href="/league/register"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium text-sm transition-colors"
+                            >
+                              Register as Free Agent
+                            </Link>
                           </div>
+                        )}
+                        {/* Request to Join button (only when in free agent pool or already have request) */}
+                        {(canRequestToJoin() || hasExistingRequest) && (
+                          <>
+                            <button
+                              onClick={hasExistingRequest || isRosterLocked ? undefined : requestToJoin}
+                              disabled={isRequesting || hasExistingRequest || isRosterLocked || isInFreeAgentPool === null}
+                              className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed ${
+                                hasExistingRequest 
+                                  ? 'bg-gradient-to-r from-yellow-600 to-amber-600 text-white cursor-default'
+                                  : isRosterLocked
+                                  ? 'bg-gradient-to-r from-red-600 to-red-700 text-white cursor-not-allowed opacity-50'
+                                  : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-gray-600 disabled:to-gray-700 text-white'
+                              }`}
+                            >
+                              {hasExistingRequest ? (
+                                <span className="flex items-center gap-2">
+                                  ⏳ Request Pending
+                                </span>
+                              ) : isRosterLocked ? (
+                                <span className="flex items-center gap-2">
+                                  🔒 Applications Disabled
+                                </span>
+                              ) : isInFreeAgentPool === null ? (
+                                <span className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                                  Checking...
+                                </span>
+                              ) : isRequesting ? (
+                                <span className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                                  Sending...
+                                </span>
+                              ) : (
+                                '📤 Request to Join'
+                              )}
+                            </button>
+                            
+                            {/* Roster Lock Warning */}
+                            {isRosterLocked && (
+                              <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
+                                <span className="text-red-400 text-sm">
+                                  🔒 {rosterLockStatus?.lockedLabel ? `Rosters are locked (${rosterLockStatus.lockedLabel}). ` : ''}Squad applications are currently disabled.
+                                </span>
+                              </div>
+                            )}
+                          </>
                         )}
                         
                         {/* Squad Capacity Info */}
@@ -1538,6 +1649,29 @@ export default function SquadDetailPage() {
           </div>
         </div>
 
+        {/* Invite from free agents (Captain/Co-Captain/Admin, only when rosters unlocked) */}
+        {isUserCaptainOrCoCaptain() && !isRosterLocked && (
+          <div className="flex justify-center mt-8">
+            <div className="w-full max-w-4xl">
+              <div className="bg-gradient-to-b from-slate-800/50 to-slate-700/50 rounded-xl p-6 border border-cyan-500/20">
+                <h3 className="text-xl font-bold text-cyan-400 mb-2 flex items-center gap-2">
+                  📤 Invite from free agent pool
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Send an invite to a player who is registered as a free agent. They will see it in their invites.
+                </p>
+                <button
+                  type="button"
+                  onClick={openInviteModal}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  Invite player from free agent pool
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pending Requests Section (Captain/Co-Captain Only) - Centered */}
         {isUserCaptainOrCoCaptain() && (
           <div className="flex justify-center mt-8">
@@ -1565,11 +1699,14 @@ export default function SquadDetailPage() {
                           </div>
                         </div>
                         
+                        {isRosterLocked && (
+                          <p className="text-amber-400 text-xs mb-2">Approval is disabled while rosters are locked.</p>
+                        )}
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleRequestAction(request.id, 'approve')}
-                            disabled={processingRequest === request.id}
-                            className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white px-3 py-2 rounded text-sm transition-colors disabled:cursor-not-allowed"
+                            disabled={processingRequest === request.id || isRosterLocked}
+                            className="flex-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:opacity-60 text-white px-3 py-2 rounded text-sm transition-colors disabled:cursor-not-allowed"
                           >
                             {processingRequest === request.id ? '⏳' : '✅'} Approve
                           </button>
@@ -1714,6 +1851,41 @@ export default function SquadDetailPage() {
           </Link>
         </div>
       </main>
+
+      {/* Invite from free agent pool modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowInviteModal(false)}>
+          <div className="bg-gray-800 rounded-xl border border-cyan-500/20 w-full max-w-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-600 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-cyan-400">Invite from free agent pool</h3>
+              <button type="button" onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {loadingFreeAgents ? (
+                <p className="text-gray-400 text-center py-4">Loading...</p>
+              ) : freeAgentsForInvite.length === 0 ? (
+                <p className="text-gray-400 text-center py-4">No eligible free agents (everyone is already in this squad or has a pending invite).</p>
+              ) : (
+                <ul className="space-y-2">
+                  {freeAgentsForInvite.map((fa) => (
+                    <li key={fa.player_id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-700 last:border-0">
+                      <span className="text-white font-medium truncate">{fa.in_game_alias || 'Unknown'}</span>
+                      <button
+                        type="button"
+                        onClick={() => sendInviteToPlayer(fa.player_id)}
+                        disabled={invitingPlayerId === fa.player_id}
+                        className="flex-shrink-0 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-600 text-white rounded text-sm transition-colors disabled:cursor-not-allowed"
+                      >
+                        {invitingPlayerId === fa.player_id ? 'Sending...' : 'Invite'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Squad Banner Management Modal */}
       {showBannerForm && (

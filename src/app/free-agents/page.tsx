@@ -788,9 +788,7 @@ export default function FreeAgentsPage() {
   const getDataSource = (): FreeAgent[] => {
     if (playerTypeFilter === 'players') {
       // Convert all players to FreeAgent format for consistent display
-      // Filter out hidden players at the frontend level as a backup
       const visiblePlayers = allPlayers
-        .filter(player => !player.hide_from_free_agents)
         .filter(player => includeInSquadPlayers || !activeSquadMemberIds.has(player.id));
 
       return visiblePlayers.map(player => ({
@@ -811,12 +809,8 @@ export default function FreeAgentsPage() {
         timezone: 'Unknown'
       }));
     } else if (playerTypeFilter === 'free_agents') {
-      // Filter out free agents whose profiles are hidden
-      const visibleFreeAgents = freeAgents.filter(agent => {
-        const playerProfile = allPlayers.find(p => p.id === agent.player_id);
-        const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
-        return !isHidden;
-      });
+      // Everyone in the free agent pool is visible (no hide_from_free_agents filter)
+      const visibleFreeAgents = freeAgents;
 
       if (!includeInSquadPlayers) {
         // Default: exclude players already in squads
@@ -827,7 +821,6 @@ export default function FreeAgentsPage() {
       const freeAgentIds = new Set(visibleFreeAgents.map(fa => fa.player_id));
       const additionalInSquadPlayers = allPlayers
         .filter(player => activeSquadMemberIds.has(player.id))
-        .filter(player => !player.hide_from_free_agents)
         .filter(player => !freeAgentIds.has(player.id))
         .map(player => ({
           id: player.id,
@@ -849,16 +842,12 @@ export default function FreeAgentsPage() {
 
       return [...visibleFreeAgents, ...additionalInSquadPlayers];
     } else {
-      // Combined: merge both lists, prioritizing free agents
-      // Filter out hidden players from both lists
+      // Combined: merge both lists, prioritizing free agents (everyone in pool is visible)
       const visiblePlayers = allPlayers
-        .filter(player => !player.hide_from_free_agents)
         .filter(player => includeInSquadPlayers || !activeSquadMemberIds.has(player.id));
       const visibleFreeAgents = freeAgents.filter(agent => {
-        const playerProfile = allPlayers.find(p => p.id === agent.player_id);
-        const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
         const isInSquad = activeSquadMemberIds.has(agent.player_id);
-        return !isHidden && (includeInSquadPlayers || !isInSquad);
+        return includeInSquadPlayers || !isInSquad;
       });
       
       const freeAgentPlayerIds = new Set(visibleFreeAgents.map(fa => fa.player_id));
@@ -888,15 +877,7 @@ export default function FreeAgentsPage() {
 
   // Stable dataset for class distribution charts: always reflect the entire free-agents pool
   // Ignores search/class filters and view toggles so charts don't shift when filtering the table
-  const baseAgentsForCharts: FreeAgent[] = useMemo(() => {
-    // Filter out hidden free-agent profiles only
-    const visibleFreeAgents = freeAgents.filter(agent => {
-      const playerProfile = allPlayers.find(p => p.id === agent.player_id);
-      const isHidden = !!(playerProfile && playerProfile.hide_from_free_agents);
-      return !isHidden;
-    });
-    return visibleFreeAgents;
-  }, [freeAgents, allPlayers]);
+  const baseAgentsForCharts: FreeAgent[] = useMemo(() => freeAgents, [freeAgents]);
 
   const filteredAndSortedAgents = getDataSource()
     .filter(agent => {

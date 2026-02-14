@@ -91,7 +91,7 @@ export default function Dashboard() {
           // Fetch user profile
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('*, hide_from_free_agents')
+            .select('*')
             .eq('id', user.id)
             .maybeSingle();
 
@@ -296,30 +296,6 @@ export default function Dashboard() {
     }
   };
 
-
-  const toggleFreeAgentVisibility = async () => {
-    if (!user || !profile) return;
-
-    try {
-      const newValue = !profile.hide_from_free_agents;
-      const { error } = await supabase
-        .from('profiles')
-        .update({ hide_from_free_agents: newValue })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      setProfile((prev: any) => ({ ...prev, hide_from_free_agents: newValue }));
-      
-      if (newValue) {
-        toast.success('You are now hidden from the free agents page');
-      } else {
-        toast.success('You are now visible on the free agents page');
-      }
-    } catch (error: any) {
-      toast.error('Error updating free agent visibility: ' + error.message);
-    }
-  };
 
   const formatCurrency = (amount: number, currency: string = 'usd') => {
     return new Intl.NumberFormat('en-US', {
@@ -542,32 +518,6 @@ export default function Dashboard() {
                             </div>
                           </div>
                         </div>
-                      </div>
-
-                      {/* Free Agent Visibility - Full width below */}
-                      <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-cyan-400 text-sm mb-1">🔍 Free Agent Visibility</h3>
-                            <span className="text-sm text-gray-300">
-                              {profile.hide_from_free_agents ? 'Hidden from free agents page' : 'Visible on free agents page'}
-                            </span>
-                          </div>
-                          <button
-                            onClick={toggleFreeAgentVisibility}
-                            className={`relative w-10 h-5 rounded-full transition-all duration-300 ${
-                              !profile.hide_from_free_agents ? 'bg-green-500 shadow-green-500/50' : 'bg-gray-600'
-                            } shadow-sm flex-shrink-0`}
-                            title={profile.hide_from_free_agents ? 'Click to show on free agents page' : 'Click to hide from free agents page'}
-                          >
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${
-                              !profile.hide_from_free_agents ? 'translate-x-5' : 'translate-x-0.5'
-                            }`}></div>
-                          </button>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-2">
-                          Control whether you appear on the free agents page for squad recruitment
-                        </p>
                       </div>
                     </div>
                   ) : (
