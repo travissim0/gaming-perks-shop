@@ -666,11 +666,11 @@ export default function SquadsPage() {
   const loadRosterLockStatus = async () => {
     if (!isMountedRef.current) return;
     try {
-      const { checkRosterLockStatus } = await import('@/utils/rosterLock');
-      const status = await checkRosterLockStatus();
+      const res = await fetch('/api/roster-lock-status');
+      const status = await res.json();
       if (!isMountedRef.current) return;
       setRosterLockStatus({
-        isLocked: status.isLocked,
+        isLocked: !!status.isLocked,
         reason: status.reason,
         seasonNumber: status.seasonNumber,
         seasonName: status.seasonName ?? undefined,
@@ -2064,8 +2064,9 @@ export default function SquadsPage() {
                 }`}>
                   {rosterLockStatus.isLocked ? '🔒' : '🔓'}
                   <span>
-                    {rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}`} Roster: {rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}
-                    {!rosterLockStatus.lockedLabel && rosterLockStatus.seasonName && ` - ${rosterLockStatus.seasonName}`}
+                    {rosterLockStatus.lockedLabel === 'No active season'
+                      ? `No active season – Roster: ${rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}`
+                      : `${rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}`} Roster: ${rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}${!rosterLockStatus.lockedLabel && rosterLockStatus.seasonName ? ` - ${rosterLockStatus.seasonName}` : ''}`}
                   </span>
                 </div>
               )}

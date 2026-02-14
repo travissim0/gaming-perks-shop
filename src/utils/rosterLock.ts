@@ -20,53 +20,72 @@ export async function checkRosterLockStatus(seasonId?: string): Promise<RosterLo
   const supabase = createClientComponentClient();
 
   try {
-    // 1) CTFPL: check active season (or specific season if seasonId provided)
-    let ctfplQuery = supabase
-      .from('season_roster_locks')
-      .select(`
-        is_locked,
-        reason,
-        season_id,
-        season:ctfpl_seasons!season_id(
-          id,
-          status,
-          season_number,
-          season_name
-        )
-      `)
-      .eq('is_current', true);
+    // 1) CTFPL: resolve the season to check, then read that season's lock (so admin and public agree)
+    let ctfplSeasonId: string | null = seasonId ?? null;
+    let ctfplSeasonInfo: { season_number?: number; season_name?: string | null } | null = null;
 
-    if (seasonId) {
-      ctfplQuery = ctfplQuery.eq('season_id', seasonId);
-    } else {
-      ctfplQuery = ctfplQuery.eq('season.status', 'active');
-    }
-
-    const { data: ctfplData, error: ctfplError } = await ctfplQuery.limit(1);
-
-    if (!ctfplError && ctfplData && ctfplData.length > 0) {
-      const row = ctfplData[0] as any;
-      if (row?.is_locked) {
-        const season = row.season;
-        const num = season?.season_number;
-        const name = season?.season_name;
-        return {
-          isLocked: true,
-          reason: row.reason ?? undefined,
-          seasonId: row.season_id,
-          lockedLabel: num != null ? `CTFPL Season ${num}${name ? ` (${name})` : ''}` : 'CTFPL',
-          seasonNumber: num,
-          seasonName: name ?? null,
-        };
+    if (!ctfplSeasonId) {
+      // Get the single active CTFPL season (same source of truth as admin "active" season)
+      const { data: activeSeasons, error: activeErr } = await supabase
+        .from('ctfpl_seasons')
+        .select('id, season_number, season_name')
+        .eq('status', 'active')
+        .order('season_number', { ascending: false })
+        .limit(1);
+      if (!activeErr && activeSeasons?.length) {
+        const s = activeSeasons[0];
+        ctfplSeasonId = s.id;
+        ctfplSeasonInfo = { season_number: s.season_number, season_name: s.season_name ?? null };
       }
     }
 
-    // If checking a specific season (CTFPL), we're done
+    if (ctfplSeasonId) {
+      const { data: lockRow, error: ctfplError } = await supabase
+        .from('season_roster_locks')
+        .select(`
+          is_locked,
+          reason,
+          season_id,
+          season:ctfpl_seasons!season_id(
+            id,
+            season_number,
+            season_name
+          )
+        `)
+        .eq('season_id', ctfplSeasonId)
+        .eq('is_current', true)
+        .maybeSingle();
+
+      if (!ctfplError && lockRow) {
+        const row = lockRow as any;
+        const season = row.season;
+        const num = season?.season_number ?? ctfplSeasonInfo?.season_number;
+        const name = season?.season_name ?? ctfplSeasonInfo?.season_name;
+        if (row.is_locked) {
+          return {
+            isLocked: true,
+            reason: row.reason ?? undefined,
+            seasonId: row.season_id,
+            lockedLabel: num != null ? `CTFPL Season ${num}${name ? ` (${name})` : ''}` : 'CTFPL',
+            seasonNumber: num,
+            seasonName: name ?? null,
+          };
+        }
+      }
+
+      // CTFPL active season is unlocked (we have the season and it's not locked, or no lock row = unlocked)
+      const num = ctfplSeasonInfo?.season_number ?? (lockRow as any)?.season?.season_number;
+      const name = ctfplSeasonInfo?.season_name ?? (lockRow as any)?.season?.season_name;
+      const lockedLabel = num != null ? `CTFPL Season ${num}${name ? ` (${name})` : ''}` : 'CTFPL';
+      return { isLocked: false, lockedLabel, seasonNumber: num, seasonName: name ?? null };
+    }
+
+    // If checking a specific season (CTFPL) and we didn't find it above
     if (seasonId) {
       return { isLocked: false };
     }
 
-    // 2) Other leagues: any active season with roster lock?
+    // 2) Other leagues: any active season with roster lock? (only when no CTFPL active season)
     const { data: activeLeagueSeasons, error: activeErr } = await supabase
       .from('league_seasons')
       .select('id')
