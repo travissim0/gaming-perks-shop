@@ -96,12 +96,13 @@ export default function SquadDetailPage() {
   // Mobile-friendly confirmation modal state
   const [showLeaveConfirmation, setShowLeaveConfirmation] = useState(false);
 
-  // Roster lock status
+  // Roster lock status (CTFPL or any league's active season)
   const [rosterLockStatus, setRosterLockStatus] = useState<{
     isLocked: boolean;
     reason?: string;
     seasonNumber?: number;
     seasonName?: string;
+    lockedLabel?: string;
   } | null>(null);
 
   // Derived roster lock status for easier usage
@@ -631,46 +632,15 @@ export default function SquadDetailPage() {
 
   const loadRosterLockStatus = async () => {
     try {
-      // First find the active season, then get its roster lock status
-      const { data: activeSeason, error: seasonError } = await supabase
-        .from('ctfpl_seasons')
-        .select('id, season_number, season_name')
-        .eq('status', 'active')
-        .single();
-
-      if (seasonError || !activeSeason) {
-        setRosterLockStatus({ isLocked: false });
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('season_roster_locks')
-        .select('is_locked, reason')
-        .eq('season_id', activeSeason.id)
-        .eq('is_current', true)
-        .limit(1);
-
-      if (error) {
-        console.error('Error loading roster lock status:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const lock = data[0] as any;
-        setRosterLockStatus({
-          isLocked: lock.is_locked || false,
-          reason: lock.reason || undefined,
-          seasonNumber: activeSeason.season_number,
-          seasonName: activeSeason.season_name || undefined
-        });
-      } else {
-        // No roster lock record found for active season, default to unlocked
-        setRosterLockStatus({
-          isLocked: false,
-          seasonNumber: activeSeason.season_number,
-          seasonName: activeSeason.season_name || undefined
-        });
-      }
+      const { checkRosterLockStatus } = await import('@/utils/rosterLock');
+      const status = await checkRosterLockStatus();
+      setRosterLockStatus({
+        isLocked: status.isLocked,
+        reason: status.reason,
+        seasonNumber: status.seasonNumber,
+        seasonName: status.seasonName ?? undefined,
+        lockedLabel: status.lockedLabel
+      });
     } catch (error: any) {
       console.error('Exception loading roster lock status:', error);
       setRosterLockStatus({ isLocked: false });

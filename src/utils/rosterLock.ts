@@ -1,49 +1,116 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { SeasonRosterLock } from '@/types/database';
 
-export async function checkRosterLockStatus(seasonId?: string): Promise<{ isLocked: boolean; reason?: string; seasonId?: string }> {
+export type RosterLockStatus = {
+  isLocked: boolean;
+  reason?: string;
+  seasonId?: string;
+  /** e.g. "CTFPL Season 5" or "CTFDL Season 1" for display */
+  lockedLabel?: string;
+  seasonNumber?: number;
+  seasonName?: string | null;
+};
+
+/**
+ * Checks if roster is locked for invites. Returns locked if EITHER:
+ * - CTFPL active season is locked (season_roster_locks), OR
+ * - Any other league's active season is locked (league_season_roster_locks).
+ * Used to block new squad invites across all leagues.
+ */
+export async function checkRosterLockStatus(seasonId?: string): Promise<RosterLockStatus> {
   const supabase = createClientComponentClient();
-  
+
   try {
-    let query = supabase
+    // 1) CTFPL: check active season (or specific season if seasonId provided)
+    let ctfplQuery = supabase
       .from('season_roster_locks')
       .select(`
-        is_locked, 
-        reason, 
+        is_locked,
+        reason,
         season_id,
         season:ctfpl_seasons!season_id(
           id,
-          status
+          status,
+          season_number,
+          season_name
         )
-      `);
+      `)
+      .eq('is_current', true);
 
     if (seasonId) {
-      // Check specific season
-      query = query.eq('season_id', seasonId);
+      ctfplQuery = ctfplQuery.eq('season_id', seasonId);
     } else {
-      // Check active season
-      query = query.eq('season.status', 'active');
+      ctfplQuery = ctfplQuery.eq('season.status', 'active');
     }
 
-    const { data, error } = await query.limit(1);
+    const { data: ctfplData, error: ctfplError } = await ctfplQuery.limit(1);
 
-    if (error) {
-      console.error('Error checking roster lock status:', error);
-      // Default to unlocked if we can't check
+    if (!ctfplError && ctfplData && ctfplData.length > 0) {
+      const row = ctfplData[0] as any;
+      if (row?.is_locked) {
+        const season = row.season;
+        const num = season?.season_number;
+        const name = season?.season_name;
+        return {
+          isLocked: true,
+          reason: row.reason ?? undefined,
+          seasonId: row.season_id,
+          lockedLabel: num != null ? `CTFPL Season ${num}${name ? ` (${name})` : ''}` : 'CTFPL',
+          seasonNumber: num,
+          seasonName: name ?? null,
+        };
+      }
+    }
+
+    // If checking a specific season (CTFPL), we're done
+    if (seasonId) {
       return { isLocked: false };
     }
 
-    if (!data || data.length === 0) {
-      // No record exists, default to unlocked
+    // 2) Other leagues: any active season with roster lock?
+    const { data: activeLeagueSeasons, error: activeErr } = await supabase
+      .from('league_seasons')
+      .select('id')
+      .eq('status', 'active');
+
+    if (activeErr || !activeLeagueSeasons?.length) {
       return { isLocked: false };
     }
 
-    const lock = data[0] as any;
-    return { 
-      isLocked: lock?.is_locked || false,
-      reason: lock?.reason || undefined,
-      seasonId: lock?.season_id
-    };
+    const activeIds = activeLeagueSeasons.map((s: { id: string }) => s.id);
+    const { data: leagueLocks, error: lockErr } = await supabase
+      .from('league_season_roster_locks')
+      .select(`
+        reason,
+        season:league_seasons(
+          season_number,
+          season_name,
+          league:leagues(name)
+        )
+      `)
+      .in('league_season_id', activeIds)
+      .eq('is_locked', true)
+      .eq('is_current', true)
+      .limit(1);
+
+    if (!lockErr && leagueLocks && leagueLocks.length > 0) {
+      const row = leagueLocks[0] as any;
+      const season = row.season;
+      const leagueName = season?.league?.name ?? 'League';
+      const num = season?.season_number;
+      const name = season?.season_name;
+      const label = num != null
+        ? `${leagueName} Season ${num}${name ? ` (${name})` : ''}`
+        : leagueName;
+      return {
+        isLocked: true,
+        reason: row.reason ?? undefined,
+        lockedLabel: label,
+        seasonNumber: num,
+        seasonName: name ?? null,
+      };
+    }
+
+    return { isLocked: false };
   } catch (error) {
     console.error('Error checking roster lock status:', error);
     return { isLocked: false };

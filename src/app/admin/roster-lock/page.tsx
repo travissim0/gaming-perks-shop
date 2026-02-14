@@ -31,6 +31,13 @@ interface Season {
   status: 'upcoming' | 'active' | 'completed';
 }
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+}
+
 interface PendingInvite {
   id: string;
   squad_name: string;
@@ -41,6 +48,8 @@ interface PendingInvite {
 }
 
 export default function RosterLockAdminPage() {
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
   const [lockStatus, setLockStatus] = useState<SeasonRosterLockStatus | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<string>('');
@@ -53,41 +62,79 @@ export default function RosterLockAdminPage() {
   const supabase = createClientComponentClient();
   const router = useRouter();
   const { user } = useAuth();
+  const isCTFPL = selectedLeague?.slug === 'ctfpl';
 
   useEffect(() => {
-    fetchSeasons();
+    fetchLeagues();
     fetchPendingInvites();
   }, []);
 
   useEffect(() => {
-    if (selectedSeason) {
-      fetchSeasonRosterLockStatus(selectedSeason);
+    if (selectedLeague) {
+      setSelectedSeason('');
+      setLockStatus(null);
+      fetchSeasons();
     }
-  }, [selectedSeason]);
+  }, [selectedLeague?.id]);
 
-  const fetchSeasons = async () => {
+  useEffect(() => {
+    if (!selectedSeason) {
+      setLockStatus(null);
+      return;
+    }
+    if (isCTFPL) {
+      fetchSeasonRosterLockStatus(selectedSeason);
+    } else {
+      fetchLeagueSeasonRosterLockStatus(selectedSeason);
+    }
+  }, [selectedSeason, isCTFPL]);
+
+  const fetchLeagues = async () => {
     try {
       const { data, error } = await supabase
-        .from('ctfpl_seasons')
-        .select('id, season_number, season_name, status')
-        .order('season_number', { ascending: false });
-
+        .from('leagues')
+        .select('id, slug, name, description')
+        .order('name');
       if (error) throw error;
-      
-      setSeasons(data || []);
-      
-      // Auto-select the active season
-      const activeSeason = data?.find(s => s.status === 'active');
-      if (activeSeason) {
-        setSelectedSeason(activeSeason.id);
-      } else if (data && data.length > 0) {
-        // If no active season, select the most recent
-        setSelectedSeason(data[0].id);
+      const list = (data || []) as League[];
+      setLeagues(list);
+      const ctfpl = list.find(l => l.slug === 'ctfpl');
+      setSelectedLeague(ctfpl || list[0] || null);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Error fetching leagues: ${error.message}` });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSeasons = async () => {
+    if (!selectedLeague) return;
+    try {
+      setSeasons([]);
+      setSelectedSeason('');
+      if (selectedLeague.slug === 'ctfpl') {
+        const { data, error } = await supabase
+          .from('ctfpl_seasons')
+          .select('id, season_number, season_name, status')
+          .order('season_number', { ascending: false });
+        if (error) throw error;
+        const list = (data || []) as Season[];
+        setSeasons(list);
+        const active = list.find(s => s.status === 'active');
+        setSelectedSeason(active ? active.id : (list[0]?.id || ''));
+      } else {
+        const { data, error } = await supabase
+          .from('league_seasons')
+          .select('id, season_number, season_name, status')
+          .eq('league_id', selectedLeague.id)
+          .order('season_number', { ascending: false });
+        if (error) throw error;
+        const list = (data || []) as Season[];
+        setSeasons(list);
+        setSelectedSeason(list[0]?.id || '');
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: `Error fetching seasons: ${error.message}` });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -113,7 +160,6 @@ export default function RosterLockAdminPage() {
       }
 
       if (!data) {
-        // No lock record exists for this season, create default unlocked state
         setLockStatus({
           id: 0,
           season_id: seasonId,
@@ -131,6 +177,70 @@ export default function RosterLockAdminPage() {
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: `Error fetching season roster lock: ${error.message}` });
+    }
+  };
+
+  const fetchLeagueSeasonRosterLockStatus = async (leagueSeasonId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('league_season_roster_locks')
+        .select(`
+          id,
+          league_season_id,
+          is_locked,
+          locked_at,
+          unlocked_at,
+          locked_by,
+          reason,
+          created_at,
+          updated_at,
+          is_current,
+          season:league_seasons(
+            id,
+            season_number,
+            season_name,
+            status
+          )
+        `)
+        .eq('league_season_id', leagueSeasonId)
+        .eq('is_current', true)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      const seasonInfo = seasons.find(s => s.id === leagueSeasonId);
+      if (!data) {
+        setLockStatus({
+          id: 0,
+          season_id: leagueSeasonId,
+          is_locked: false,
+          locked_at: null,
+          unlocked_at: null,
+          locked_by: null,
+          reason: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          season: seasonInfo ?? undefined
+        });
+      } else {
+        const row = data as any;
+        setLockStatus({
+          id: row.id,
+          season_id: row.league_season_id,
+          is_locked: row.is_locked,
+          locked_at: row.locked_at,
+          unlocked_at: row.unlocked_at,
+          locked_by: row.locked_by,
+          reason: row.reason,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          season: row.season ?? seasonInfo
+        });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: `Error fetching roster lock: ${error.message}` });
     }
   };
 
@@ -206,8 +316,6 @@ export default function RosterLockAdminPage() {
   };
 
   const toggleRosterLock = async () => {
-    console.log('🔒 toggleRosterLock: Starting with:', { lockStatus, selectedSeason, reason });
-    
     if (!lockStatus || !selectedSeason || !reason.trim()) {
       setMessage({ type: 'error', text: 'Please provide a reason for the roster lock change' });
       return;
@@ -216,47 +324,37 @@ export default function RosterLockAdminPage() {
     setUpdating(true);
     try {
       const newLockState = !lockStatus.is_locked;
-      console.log('🔒 toggleRosterLock: Changing lock state from', lockStatus.is_locked, 'to', newLockState);
-      
-      const lockData = {
-        season_id: selectedSeason,
-        is_locked: newLockState,
-        locked_at: newLockState ? new Date().toISOString() : lockStatus.locked_at,
-        unlocked_at: !newLockState ? new Date().toISOString() : lockStatus.unlocked_at,
-        reason: reason.trim(),
-        updated_at: new Date().toISOString()
-      };
-      
-      console.log('🔒 toggleRosterLock: Lock data to save:', lockData);
-      console.log('🔒 toggleRosterLock: Current lockStatus.id:', lockStatus.id);
-      
-      let data, error;
-      
-      console.log('🔒 toggleRosterLock: Using history-tracking approach - calling set_season_roster_lock function');
-      ({ data, error } = await supabase.rpc('set_season_roster_lock', {
-        p_season_id: selectedSeason,
-        p_is_locked: newLockState,
-        p_reason: reason.trim(),
-        p_user_id: user?.id || null
-      }));
 
-      console.log('🔒 toggleRosterLock: Query result:', { data, error });
+      if (isCTFPL) {
+        const { error } = await supabase.rpc('set_season_roster_lock', {
+          p_season_id: selectedSeason,
+          p_is_locked: newLockState,
+          p_reason: reason.trim(),
+          p_user_id: user?.id || null
+        });
+        if (error) throw error;
+        await fetchSeasonRosterLockStatus(selectedSeason);
+      } else {
+        const { error } = await supabase.rpc('set_league_season_roster_lock', {
+          p_league_season_id: selectedSeason,
+          p_is_locked: newLockState,
+          p_reason: reason.trim(),
+          p_user_id: user?.id || null
+        });
+        if (error) throw error;
+        await fetchLeagueSeasonRosterLockStatus(selectedSeason);
+      }
 
-      if (error) throw error;
-
-      // Fetch the updated record with season info
-      await fetchSeasonRosterLockStatus(selectedSeason);
-      
       setReason('');
-      setMessage({ 
-        type: 'success', 
-        text: `Season ${lockStatus.season?.season_number} roster ${newLockState ? 'locked' : 'unlocked'} successfully. ${newLockState ? 'All pending invites have been cancelled.' : 'Squad invitations are now allowed.'}` 
+      const seasonNum = lockStatus.season?.season_number ?? '';
+      setMessage({
+        type: 'success',
+        text: `${selectedLeague?.name ?? 'League'} Season ${seasonNum} roster ${newLockState ? 'locked' : 'unlocked'} successfully. ${newLockState ? 'All pending invites have been cancelled.' : 'Squad invitations are now allowed.'}`
       });
-      
-      // Refresh pending invites as they may have been auto-cancelled
+
       setTimeout(() => fetchPendingInvites(), 1000);
     } catch (error: any) {
-      setMessage({ type: 'error', text: `Error updating season roster lock: ${error.message}` });
+      setMessage({ type: 'error', text: `Error updating roster lock: ${error.message}` });
     } finally {
       setUpdating(false);
     }
@@ -295,11 +393,28 @@ export default function RosterLockAdminPage() {
           <p className="text-gray-400">Control squad invitation system during tournament periods</p>
         </div>
 
+        {/* League Selection */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-bold mb-3">League</h3>
+          <select
+            value={selectedLeague?.id ?? ''}
+            onChange={(e) => {
+              const league = leagues.find(l => l.id === e.target.value);
+              if (league) setSelectedLeague(league);
+            }}
+            className="w-full max-w-xs bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            {leagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.name} ({l.slug})</option>
+            ))}
+          </select>
+        </div>
+
         {/* Season Selection */}
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <div className="flex items-center mb-4">
             <Trophy className="h-6 w-6 text-blue-500 mr-2" />
-            <h3 className="text-lg font-bold">Season Selection</h3>
+            <h3 className="text-lg font-bold">Season Selection{selectedLeague ? ` – ${selectedLeague.name}` : ''}</h3>
           </div>
           
           <div className="space-y-4">
@@ -336,7 +451,7 @@ export default function RosterLockAdminPage() {
         </div>
 
         {/* Current Status Card */}
-        {selectedSeason && (
+        {selectedSeason && lockStatus && (
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <div className="flex items-center mb-4">
             {lockStatus?.is_locked ? (
@@ -413,7 +528,7 @@ export default function RosterLockAdminPage() {
         )}
 
         {/* Toggle Control */}
-        {selectedSeason && (
+        {selectedSeason && lockStatus && (
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-lg font-bold mb-4">
             {lockStatus?.is_locked ? 'Unlock Roster' : 'Lock Roster'}

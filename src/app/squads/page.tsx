@@ -94,6 +94,7 @@ export default function SquadsPage() {
     reason?: string;
     seasonNumber?: number;
     seasonName?: string;
+    lockedLabel?: string;
   } | null>(null);
   
   // Squad filtering states
@@ -664,66 +665,21 @@ export default function SquadsPage() {
 
   const loadRosterLockStatus = async () => {
     if (!isMountedRef.current) return;
-    
     try {
-      console.log('🔒 loadRosterLockStatus: Loading roster lock status...');
-      
-      // Get active season roster lock status (current records only)
-      // First find the active season, then get its roster lock status
-      const { data: activeSeason, error: seasonError } = await supabase
-        .from('ctfpl_seasons')
-        .select('id, season_number, season_name')
-        .eq('status', 'active')
-        .single();
-
-      if (seasonError || !activeSeason) {
-        console.log('🔒 No active season found, defaulting to unlocked');
-        setRosterLockStatus({ isLocked: false });
-        return;
-      }
-
-      console.log('🔒 Found active season:', activeSeason);
-
-      const { data, error } = await supabase
-        .from('season_roster_locks')
-        .select('is_locked, reason')
-        .eq('season_id', activeSeason.id)
-        .eq('is_current', true)
-        .limit(1);
-
-      console.log('🔒 loadRosterLockStatus: Query result:', { data, error });
-
-      if (error) {
-        console.error('❌ Error loading roster lock status:', error);
-        return;
-      }
-
+      const { checkRosterLockStatus } = await import('@/utils/rosterLock');
+      const status = await checkRosterLockStatus();
       if (!isMountedRef.current) return;
-
-      if (data && data.length > 0) {
-        const lock = data[0] as any;
-        setRosterLockStatus({
-          isLocked: lock.is_locked || false,
-          reason: lock.reason || undefined,
-          seasonNumber: activeSeason.season_number,
-          seasonName: activeSeason.season_name || undefined
-        });
-        console.log('🔒 Roster lock status loaded:', lock.is_locked ? 'LOCKED' : 'UNLOCKED');
-      } else {
-        // No roster lock record found for active season, default to unlocked
-        setRosterLockStatus({
-          isLocked: false,
-          seasonNumber: activeSeason.season_number,
-          seasonName: activeSeason.season_name || undefined
-        });
-        console.log('🔒 No roster lock record found for active season - defaulting to unlocked');
-      }
+      setRosterLockStatus({
+        isLocked: status.isLocked,
+        reason: status.reason,
+        seasonNumber: status.seasonNumber,
+        seasonName: status.seasonName ?? undefined,
+        lockedLabel: status.lockedLabel
+      });
     } catch (error: any) {
-      console.error('❌ Exception loading roster lock status:', error);
+      console.error('Error loading roster lock status:', error);
       if (isMountedRef.current) {
-        setRosterLockStatus({
-          isLocked: false
-        });
+        setRosterLockStatus({ isLocked: false });
       }
     }
   };
@@ -1301,7 +1257,7 @@ export default function SquadsPage() {
     // Check if roster is locked for the current active season
     if (rosterLockStatus?.isLocked) {
       toast.error(
-        `🔒 Roster is currently locked for Season ${rosterLockStatus.seasonNumber}${rosterLockStatus.seasonName ? ` (${rosterLockStatus.seasonName})` : ''}. Squad invitations are not allowed during this period.`,
+        `🔒 Roster is currently locked for ${rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}${rosterLockStatus.seasonName ? ` (${rosterLockStatus.seasonName})` : ''}`}. Squad invitations are not allowed during this period.`,
         { duration: 6000 }
       );
       return;
@@ -2108,8 +2064,8 @@ export default function SquadsPage() {
                 }`}>
                   {rosterLockStatus.isLocked ? '🔒' : '🔓'}
                   <span>
-                    Season {rosterLockStatus.seasonNumber} Roster: {rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}
-                    {rosterLockStatus.seasonName && ` - ${rosterLockStatus.seasonName}`}
+                    {rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}`} Roster: {rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}
+                    {!rosterLockStatus.lockedLabel && rosterLockStatus.seasonName && ` - ${rosterLockStatus.seasonName}`}
                   </span>
                 </div>
               )}
@@ -2473,8 +2429,7 @@ export default function SquadsPage() {
                     <span className="text-red-300 font-medium text-sm">Roster Locked</span>
                   </div>
                   <p className="text-red-200 text-xs">
-                    Squad invitations are currently disabled for Season {rosterLockStatus.seasonNumber}
-                    {rosterLockStatus.seasonName && ` (${rosterLockStatus.seasonName})`}. 
+                    Squad invitations are currently disabled for {rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}${rosterLockStatus.seasonName ? ` (${rosterLockStatus.seasonName})` : ''}`}. 
                     Please try again when the roster lock is lifted.
                   </p>
                 </div>

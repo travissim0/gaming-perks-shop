@@ -343,14 +343,10 @@ export default function FreeAgentsPage() {
     if (!isCaptain || !captainSquad) return;
     setIsInviting(playerId);
     try {
-      // Check roster lock status first
-      const { data: rosterLock } = await supabase
-        .from('roster_lock')
-        .select('is_locked, reason')
-        .order('id', { ascending: false })
-        .limit(1);
-
-      if (rosterLock && rosterLock.length > 0 && rosterLock[0].is_locked) {
+      // Check roster lock (CTFPL or any league's active season)
+      const { checkRosterLockStatus } = await import('@/utils/rosterLock');
+      const rosterStatus = await checkRosterLockStatus();
+      if (rosterStatus.isLocked) {
         toast.error('Squad invitations are currently disabled during roster lock period');
         setIsInviting(null);
         return;
