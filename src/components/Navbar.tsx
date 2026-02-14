@@ -481,7 +481,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   
   const squadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/free-agents', label: 'Players', icon: '🎯' },
+    { href: '/squads/players', label: 'Players', icon: '👥' },
     { href: '/matches', label: 'Match Log', icon: '⚔️' },
     { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
   ];
@@ -511,7 +511,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   // Navigation arrays for non-authenticated users (same as authenticated)
   const publicSquadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/free-agents', label: 'Players', icon: '🎯' },
+    { href: '/squads/players', label: 'Players', icon: '👥' },
     { href: '/matches', label: 'Match Log', icon: '⚔️' },
     { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
   ];
@@ -619,6 +619,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     onMouseLeave={() => setShowLeagueDropdown(false)}
                   >
                     <div className="py-2">
+                      <Link
+                        href="/league/register"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">🎯</span>
+                        Register
+                      </Link>
                       <Link
                         href="/rules"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
@@ -857,6 +864,17 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   </button>
                   {activeMobileDropdown === 'league' && (
                     <div className="ml-4 mt-2 space-y-1">
+                      <Link
+                        href="/league/register"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">🎯</span>
+                        Register
+                      </Link>
                       <Link
                         href="/rules"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
@@ -1671,6 +1689,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
                 <div className="py-3">
                   <Link
+                    href="/league/register"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">🎯</span>
+                    <span className="font-medium">Register</span>
+                  </Link>
+                  <Link
                     href="/rules"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
@@ -1872,6 +1897,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">League</h4>
                   <div className="space-y-1">
+                    <Link
+                      href="/league/register"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🎯</span>
+                      Register
+                    </Link>
                     <Link
                       href="/rules"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
