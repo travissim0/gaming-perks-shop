@@ -229,14 +229,18 @@ export default function SquadsPlayersPage() {
     else setSortBy(key);
   };
 
+  const profileUrl = (alias: string) => `/stats/player/${encodeURIComponent(alias)}`;
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Players</h1>
-        <p className="text-gray-400 text-sm mb-6">
-          All players with squad status and stats (Combined). Data from Squads, Player Stats, and ELO leaderboard.
-        </p>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white tracking-tight">Players</h1>
+          <p className="text-gray-400 mt-1">
+            Squad status and stats (Combined). Click a name for full profile and stats.
+          </p>
+        </div>
 
         <div className="flex flex-wrap gap-4 mb-6">
           <input
@@ -244,12 +248,12 @@ export default function SquadsPlayersPage() {
             placeholder="Search by name or squad..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 w-64"
+            className="px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-500 w-72 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500"
           />
           <select
             value={squadFilter}
             onChange={e => setSquadFilter(e.target.value as any)}
-            className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white"
+            className="px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
           >
             <option value="all">All</option>
             <option value="squad">In a squad</option>
@@ -257,59 +261,91 @@ export default function SquadsPlayersPage() {
           </select>
         </div>
 
-        {loading && <div className="text-gray-400 py-8">Loading...</div>}
-        {error && <div className="text-red-400 py-4">{error}</div>}
+        {loading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-cyan-500 border-t-transparent" />
+            <span className="ml-3 text-gray-400">Loading players…</span>
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-red-900/20 border border-red-500/30 px-4 py-3 text-red-400">{error}</div>
+        )}
 
         {!loading && !error && (
-          <div className="overflow-x-auto rounded-lg border border-gray-700">
-            <table className="w-full text-left">
-              <thead className="bg-gray-800 text-gray-300 text-sm">
-                <tr>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('alias')}>Player {sortBy === 'alias' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium">AKAs</th>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('squad')}>Squad {sortBy === 'squad' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('games')}>Games {sortBy === 'games' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium">W–L</th>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('winRate')}>Win % {sortBy === 'winRate' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('kd')}>K/D {sortBy === 'kd' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium cursor-pointer" onClick={() => toggleSort('elo')}>ELO {sortBy === 'elo' && (sortOrder === 'desc' ? '▼' : '▲')}</th>
-                  <th className="px-4 py-3 font-medium">Links</th>
-                  {isAdmin && <th className="px-4 py-3 font-medium text-gray-400">Admin</th>}
+          <div className="overflow-x-auto rounded-xl border border-gray-600/80 bg-gray-800/40 shadow-xl">
+            <table className={`w-full text-left ${isAdmin ? 'min-w-[1000px]' : ''}`}>
+              <thead>
+                <tr className="border-b border-gray-600 bg-gray-800/80">
+                  <th className="px-5 py-4 text-sm font-semibold text-cyan-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('alias')}>
+                    Player {sortBy === 'alias' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">AKAs</th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('squad')}>
+                    Squad {sortBy === 'squad' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Role</th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('games')}>
+                    Games {sortBy === 'games' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">W–L</th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('winRate')}>
+                    Win % {sortBy === 'winRate' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('kd')}>
+                    K/D {sortBy === 'kd' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('elo')}>
+                    ELO {sortBy === 'elo' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Profile</th>
+                  {isAdmin && <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap min-w-[7rem]">Admin</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-gray-700/80">
                 {rows.map(r => (
-                  <tr key={r.id} className="bg-gray-800/50 hover:bg-gray-700/50">
-                    <td className="px-4 py-2 text-white font-medium">{r.alias}</td>
-                    <td className="px-4 py-2 text-gray-400 text-sm">{r.akas.length ? r.akas.join(', ') : '—'}</td>
-                    <td className="px-4 py-2 text-gray-300">
+                  <tr key={r.id} className="bg-gray-800/30 hover:bg-gray-700/50 transition-colors">
+                    <td className="px-5 py-3">
+                      <Link
+                        href={profileUrl(r.alias)}
+                        className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline"
+                      >
+                        {r.alias}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-gray-400 text-sm">{r.akas.length ? r.akas.join(', ') : '—'}</td>
+                    <td className="px-5 py-3 text-gray-300">
                       {r.squadId ? (
-                        <Link href={`/squads/${r.squadId}`} className="text-cyan-400 hover:underline">
+                        <Link href={`/squads/${r.squadId}`} className="text-cyan-400 hover:text-cyan-300 hover:underline">
                           [{r.squadTag}] {r.squadName}
                         </Link>
                       ) : (
                         <span className="text-gray-500">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-gray-400">{r.role ? r.role.replace('_', ' ') : '—'}</td>
-                    <td className="px-4 py-2 text-gray-300">{r.games}</td>
-                    <td className="px-4 py-2 text-gray-300">{r.games ? `${r.wins}–${r.losses}` : '—'}</td>
-                    <td className="px-4 py-2 text-gray-300">{r.winRate != null ? `${(r.winRate * 100).toFixed(1)}%` : '—'}</td>
-                    <td className="px-4 py-2 text-gray-300">{r.kd != null ? r.kd.toFixed(2) : '—'}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-5 py-3 text-gray-400">{r.role ? r.role.replace('_', ' ') : '—'}</td>
+                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.games}</td>
+                    <td className="px-5 py-3 text-gray-300 tabular-nums whitespace-nowrap">{r.games ? `${r.wins}–${r.losses}` : '—'}</td>
+                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.winRate != null ? `${(r.winRate * 100).toFixed(1)}%` : '—'}</td>
+                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.kd != null ? r.kd.toFixed(2) : '—'}</td>
+                    <td className="px-5 py-3">
                       {r.elo != null ? (
-                        <span title={r.eloTier || ''} className="font-medium text-cyan-400">{Math.round(r.elo)}</span>
+                        <span title={r.eloTier || ''} className="inline-flex items-center px-2 py-0.5 rounded font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/30">
+                          {Math.round(r.elo)}
+                        </span>
                       ) : (
                         <span className="text-gray-500">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2">
-                      <Link href={`/stats/player/${encodeURIComponent(r.alias)}`} className="text-sm text-cyan-400 hover:underline mr-2">Stats</Link>
-                      <a href="/stats/elo" className="text-sm text-cyan-400 hover:underline">ELO</a>
+                    <td className="px-5 py-3">
+                      <Link
+                        href={profileUrl(r.alias)}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/30 hover:border-cyan-500/50 transition-colors"
+                      >
+                        View profile
+                      </Link>
                     </td>
                     {isAdmin && (
-                      <td className="px-4 py-2">
+                      <td className="px-5 py-3 whitespace-nowrap min-w-[7rem]">
                         <button
                           type="button"
                           onClick={() => hideFromList(r.id)}
@@ -328,7 +364,11 @@ export default function SquadsPlayersPage() {
           </div>
         )}
 
-        {!loading && !error && <p className="text-gray-500 text-sm mt-4">{rows.length} players</p>}
+        {!loading && !error && (
+          <p className="text-gray-500 text-sm mt-4">
+            {rows.length} player{rows.length !== 1 ? 's' : ''}
+          </p>
+        )}
       </main>
     </div>
   );
