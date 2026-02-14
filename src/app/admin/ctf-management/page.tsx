@@ -74,6 +74,8 @@ export default function CTFManagementPage() {
   const [freeAgentsLoading, setFreeAgentsLoading] = useState(true);
   const [showAddFreeAgent, setShowAddFreeAgent] = useState(false);
   const [editingFreeAgent, setEditingFreeAgent] = useState<FreeAgent | null>(null);
+  const [showClearFreeAgentsConfirm, setShowClearFreeAgentsConfirm] = useState(false);
+  const [clearingPool, setClearingPool] = useState(false);
   
   // League ban state
   const [bannedPlayers, setBannedPlayers] = useState<BannedPlayer[]>([]);
@@ -428,9 +430,11 @@ export default function CTFManagementPage() {
 
   const removeFromFreeAgentPool = async (agentId: string) => {
     try {
+      // Delete the row so we don't hit (player_id, is_active) unique constraint
+      // if the player already has an inactive row. Same behavior for the UI.
       const { error } = await supabase
         .from('free_agents')
-        .update({ is_active: false })
+        .delete()
         .eq('id', agentId);
 
       if (error) throw error;
@@ -440,6 +444,33 @@ export default function CTFManagementPage() {
     } catch (error) {
       console.error('Error removing free agent:', error);
       toast.error('Failed to remove from pool');
+    }
+  };
+
+  const clearEntireFreeAgentPool = async () => {
+    try {
+      setClearingPool(true);
+      // Delete active rows instead of updating to is_active=false to avoid violating
+      // unique constraint (player_id, is_active) when a player already has an inactive row.
+      const { error } = await supabase
+        .from('free_agents')
+        .delete()
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('Error clearing free agent pool:', error.message, error.code, error.details);
+        throw error;
+      }
+
+      toast.success('Free agent pool cleared. Players can re-join when the next season opens.');
+      setShowClearFreeAgentsConfirm(false);
+      loadFreeAgents();
+    } catch (error: unknown) {
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as { message: unknown }).message) : 'Failed to clear pool';
+      console.error('Error clearing free agent pool:', msg, error);
+      toast.error(msg || 'Failed to clear pool.');
+    } finally {
+      setClearingPool(false);
     }
   };
 
@@ -674,15 +705,53 @@ export default function CTFManagementPage() {
         {/* Free Agents Tab */}
         {activeTab === 'free-agents' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
               <h2 className="text-xl font-bold text-purple-400">Free Agent Pool</h2>
-              <button
-                onClick={() => setShowAddFreeAgent(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-              >
-                Add Free Agent
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowClearFreeAgentsConfirm(true)}
+                  disabled={freeAgents.length === 0 || clearingPool}
+                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium"
+                  title="Remove everyone from the pool (e.g. after season end). Players can re-join for the next season."
+                >
+                  {clearingPool ? 'Clearing…' : 'Clear entire pool'}
+                </button>
+                <button
+                  onClick={() => setShowAddFreeAgent(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  Add Free Agent
+                </button>
+              </div>
             </div>
+
+            {/* Clear pool confirmation modal */}
+            {showClearFreeAgentsConfirm && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-md w-full">
+                  <h3 className="text-lg font-bold text-white mb-2">Clear entire free agent pool?</h3>
+                  <p className="text-gray-300 text-sm mb-4">
+                    This will remove all {freeAgents.length} player{freeAgents.length === 1 ? '' : 's'} from the pool. Use this when a season ends so the pool is fresh for the next season. Players can join again from the Free Agents page.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setShowClearFreeAgentsConfirm(false)}
+                      disabled={clearingPool}
+                      className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={clearEntireFreeAgentPool}
+                      disabled={clearingPool}
+                      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
+                    >
+                      {clearingPool ? 'Clearing…' : 'Clear pool'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Free Agents List */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">
