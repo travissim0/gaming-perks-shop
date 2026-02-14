@@ -133,16 +133,18 @@ export default function SquadDetailPage() {
     }
   }, [user, loading]);
 
-  // Load pending requests when squad data becomes available and user is captain/co-captain
+  // Load pending requests when squad data becomes available and user is captain/co-captain or admin
   useEffect(() => {
     if (squad && user && !pageLoading) {
       const userMember = squad.members?.find(m => m.player_id === user.id);
-      if (userMember && ['captain', 'co_captain'].includes(userMember.role)) {
+      const isCapOrCo = userMember && ['captain', 'co_captain'].includes(userMember.role);
+      const isAdmin = userProfile?.is_admin || userProfile?.ctf_role === 'ctf_admin';
+      if (isCapOrCo || isAdmin) {
         loadPendingRequests();
         loadSentInvites();
       }
     }
-  }, [squad, user, pageLoading]);
+  }, [squad, user, pageLoading, userProfile]);
 
   const loadAllData = async () => {
     try {
@@ -584,14 +586,18 @@ export default function SquadDetailPage() {
     setProcessingRequest(null);
   };
 
+  const isAdminOrCtfAdmin = () => !!userProfile?.is_admin || userProfile?.ctf_role === 'ctf_admin';
+
   const isUserCaptainOrCoCaptain = () => {
     if (!user || !squad?.members) return false;
+    if (isAdminOrCtfAdmin()) return true;
     const userMember = squad.members.find(m => m.player_id === user.id);
     return userMember && ['captain', 'co_captain'].includes(userMember.role);
   };
 
   const isCaptain = () => {
     if (!user || !squad?.members) return false;
+    if (isAdminOrCtfAdmin()) return true;
     const userMember = squad.members.find(m => m.player_id === user.id);
     return userMember && userMember.role === 'captain';
   };
@@ -1059,9 +1065,10 @@ export default function SquadDetailPage() {
     }
   };
 
-  // Helper functions for squad management
+  // Helper functions for squad management (admin/ctf_admin can manage any squad)
   const canManageSquad = () => {
     if (!squad || !user) return false;
+    if (isAdminOrCtfAdmin()) return true;
     const userMember = squad.members.find(m => m.player_id === user.id);
     return userMember && ['captain', 'co_captain'].includes(userMember.role);
   };

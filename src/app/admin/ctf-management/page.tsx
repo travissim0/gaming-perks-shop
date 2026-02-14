@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface Squad {
   id: string;
@@ -68,6 +69,12 @@ export default function CTFManagementPage() {
   const [squads, setSquads] = useState<Squad[]>([]);
   const [squadsLoading, setSquadsLoading] = useState(true);
   const [squadFilter, setSquadFilter] = useState<'all' | 'active' | 'inactive' | 'tournament-eligible' | 'tournament-ineligible'>('all');
+  const [showDeleteSquadConfirm, setShowDeleteSquadConfirm] = useState<string | null>(null);
+  const [deletingSquad, setDeletingSquad] = useState(false);
+  const [showChangeCaptain, setShowChangeCaptain] = useState<Squad | null>(null);
+  const [squadMembersForCaptain, setSquadMembersForCaptain] = useState<{ id: string; player_id: string; in_game_alias: string; role: string }[]>([]);
+  const [loadingMembersForCaptain, setLoadingMembersForCaptain] = useState(false);
+  const [transferringCaptain, setTransferringCaptain] = useState(false);
   
   // Free agent state
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
@@ -379,6 +386,89 @@ export default function CTFManagementPage() {
     }
   };
 
+  const deleteSquad = async (squadId: string) => {
+    try {
+      setDeletingSquad(true);
+      const { error: membersError } = await supabase
+        .from('squad_members')
+        .delete()
+        .eq('squad_id', squadId);
+      if (membersError) throw membersError;
+      const { error: squadError } = await supabase
+        .from('squads')
+        .delete()
+        .eq('id', squadId);
+      if (squadError) throw squadError;
+      toast.success('Squad deleted');
+      setShowDeleteSquadConfirm(null);
+      loadSquads();
+    } catch (error) {
+      console.error('Error deleting squad:', error);
+      toast.error('Failed to delete squad. You may need admin RLS or an API route.');
+    } finally {
+      setDeletingSquad(false);
+    }
+  };
+
+  const openChangeCaptain = async (squad: Squad) => {
+    setShowChangeCaptain(squad);
+    setSquadMembersForCaptain([]);
+    setLoadingMembersForCaptain(true);
+    try {
+      const { data, error } = await supabase
+        .from('squad_members')
+        .select('id, player_id, role, profiles!squad_members_player_id_fkey(in_game_alias)')
+        .eq('squad_id', squad.id);
+      if (error) throw error;
+      const members = (data || []).map((m: any) => ({
+        id: m.id,
+        player_id: m.player_id,
+        in_game_alias: (m.profiles as any)?.in_game_alias || 'Unknown',
+        role: (m as any).role || 'player'
+      }));
+      setSquadMembersForCaptain(members);
+    } catch (e) {
+      console.error('Error loading squad members:', e);
+      toast.error('Failed to load members');
+      setShowChangeCaptain(null);
+    } finally {
+      setLoadingMembersForCaptain(false);
+    }
+  };
+
+  const transferCaptain = async (newCaptainId: string) => {
+    if (!showChangeCaptain) return;
+    try {
+      setTransferringCaptain(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch('/api/squads/transfer-captain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          squadId: showChangeCaptain.id,
+          newCaptainId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error || res.statusText || 'Transfer failed');
+      }
+      toast.success('Captain updated');
+      setShowChangeCaptain(null);
+      loadSquads();
+    } catch (error) {
+      const msg = (error as Error)?.message;
+      console.error('Error transferring captain:', msg, error);
+      toast.error(msg || 'Failed to change captain.');
+    } finally {
+      setTransferringCaptain(false);
+    }
+  };
+
   const addToFreeAgentPool = async (formData: Partial<FreeAgent>) => {
     try {
       const { error } = await supabase
@@ -680,9 +770,28 @@ export default function CTFManagementPage() {
                             </button>
                           </td>
                           <td className="py-3 px-4">
-                            <div className="flex space-x-2">
-                              <button className="text-blue-400 hover:text-blue-300 text-sm">
-                                View Details
+                            <div className="flex flex-wrap gap-2">
+                              <Link
+                                href={`/squads/${squad.id}`}
+                                className="text-blue-400 hover:text-blue-300 text-sm"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                View
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => openChangeCaptain(squad)}
+                                className="text-amber-400 hover:text-amber-300 text-sm"
+                              >
+                                Change captain
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowDeleteSquadConfirm(squad.id)}
+                                className="text-red-400 hover:text-red-300 text-sm"
+                              >
+                                Delete
                               </button>
                             </div>
                           </td>
@@ -699,6 +808,82 @@ export default function CTFManagementPage() {
                 </div>
               )}
             </div>
+
+            {/* Delete squad confirmation */}
+            {showDeleteSquadConfirm && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
+                  <h3 className="text-lg font-semibold text-white mb-2">Delete squad?</h3>
+                  <p className="text-gray-300 text-sm mb-4">
+                    This will remove all members and delete the squad. This cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteSquadConfirm(null)}
+                      className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteSquad(showDeleteSquadConfirm)}
+                      disabled={deletingSquad}
+                      className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {deletingSquad ? 'Deleting…' : 'Delete squad'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Change captain modal */}
+            {showChangeCaptain && (
+              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    Change captain – [{showChangeCaptain.tag}] {showChangeCaptain.name}
+                  </h3>
+                  <p className="text-gray-400 text-sm mb-4">
+                    Choose a member to become the new captain. Invite players and manage roster on the squad page.
+                  </p>
+                  {loadingMembersForCaptain ? (
+                    <p className="text-gray-400">Loading members…</p>
+                  ) : squadMembersForCaptain.length === 0 ? (
+                    <p className="text-gray-400">No members found.</p>
+                  ) : (
+                    <ul className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                      {squadMembersForCaptain.map((m) => (
+                        <li key={m.player_id} className="flex items-center justify-between gap-2 py-1">
+                          <span className="text-white">
+                            {m.in_game_alias}
+                            {m.role === 'captain' && <span className="ml-2 text-amber-400 text-sm">(current captain)</span>}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={m.role === 'captain' || transferringCaptain}
+                            onClick={() => transferCaptain(m.player_id)}
+                            className="text-sm px-3 py-1 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Make captain
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowChangeCaptain(null)}
+                      className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
