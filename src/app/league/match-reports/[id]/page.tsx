@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails, MatchPlayerRating } from '@/types/database';
 
 // Expandable Video Player Component
@@ -462,7 +462,7 @@ export default function MatchReportDetailPage() {
                       </div>
                       <div className="flex items-center space-x-2 text-gray-400">
                         <span>🕒</span>
-                        <span>{formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}</span>
+                        <span>{formatRelativeTime(report.created_at, { addSuffix: true })}</span>
                       </div>
                     </div>
                   </div>

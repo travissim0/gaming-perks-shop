@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails } from '@/types/database';
 
 export default function MatchReportsPage() {
@@ -299,7 +299,7 @@ export default function MatchReportsPage() {
                       <span>🏆 {report.season_name}</span>
                     </div>
                     <div>
-                      {formatDistanceToNow(new Date(report.created_at), { addSuffix: true })}
+                      {formatRelativeTime(report.created_at, { addSuffix: true })}
                     </div>
                   </div>
                 </div>

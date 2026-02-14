@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -35,7 +35,7 @@ interface SquadMap {
   [id: string]: string;
 }
 
-export default function LeagueStandingsHubPage() {
+function LeagueStandingsHubContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
   const leagueSlugParam = searchParams.get('league') || 'ctfpl';
@@ -203,5 +203,18 @@ export default function LeagueStandingsHubPage() {
         </main>
       )}
     </div>
+  );
+}
+
+export default function LeagueStandingsHubPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-950 text-gray-100">
+        <Navbar />
+        <div className="border-b border-gray-800 px-4 py-8 text-center text-gray-400">Loading standings…</div>
+      </div>
+    }>
+      <LeagueStandingsHubContent />
+    </Suspense>
   );
 }
