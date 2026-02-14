@@ -296,7 +296,7 @@ export default function TournamentMatchesPage() {
               📜 Tournament Rules
             </span>
           </Link>
-          <Link href="/league/ctfpl" className="group relative px-4 py-2 rounded-lg transition-all duration-300 hover:scale-105">
+          <Link href="/league/standings" className="group relative px-4 py-2 rounded-lg transition-all duration-300 hover:scale-105">
             <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity blur-sm"></div>
             <span className="relative text-purple-400 hover:text-purple-300 font-sans text-base font-extrabold tracking-tight">
               🏆 View Standings
@@ -309,9 +309,12 @@ export default function TournamentMatchesPage() {
           <Link href="/matches" className="text-cyan-400 hover:text-cyan-300 flex items-center gap-2">
             ← Back to All Matches
           </Link>
+          <div>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
             Upcoming Tournament Matches
           </h1>
+          <p className="text-gray-400 text-sm mt-1">Scheduled matches for all leagues</p>
+        </div>
           <div className="w-48"></div> {/* Spacer for centering */}
         </div>
 

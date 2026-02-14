@@ -28,6 +28,13 @@ interface Squad {
   is_active?: boolean;
 }
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+}
+
 const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c'; // System user for historical squads
 
 // Helper functions to handle date timezone issues
@@ -58,11 +65,16 @@ const formatDateForDisplay = (dateString: string | null): string => {
 
 const SeasonManagementModal = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [squads, setSquads] = useState<Squad[]>([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'view' | 'add' | 'edit'>('view');
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
+  const [showAddLeague, setShowAddLeague] = useState(false);
+  const [newLeagueSlug, setNewLeagueSlug] = useState('');
+  const [newLeagueName, setNewLeagueName] = useState('');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -76,15 +88,44 @@ const SeasonManagementModal = () => {
     third_place_squad_names: '' as string
   });
 
-  const fetchSeasons = async () => {
+  const fetchLeagues = async () => {
     try {
       const { data, error } = await supabase
-        .from('ctfpl_seasons')
-        .select('*')
-        .order('season_number', { ascending: false });
+        .from('leagues')
+        .select('id, slug, name, description')
+        .order('name');
 
       if (error) throw error;
-      setSeasons(data || []);
+      const list = (data || []) as League[];
+      setLeagues(list);
+      if (list.length > 0 && !selectedLeague) {
+        setSelectedLeague(list[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching leagues:', error);
+      toast.error('Failed to fetch leagues');
+    }
+  };
+
+  const fetchSeasons = async () => {
+    if (!selectedLeague) return;
+    try {
+      if (selectedLeague.slug === 'ctfpl') {
+        const { data, error } = await supabase
+          .from('ctfpl_seasons')
+          .select('*')
+          .order('season_number', { ascending: false });
+        if (error) throw error;
+        setSeasons(data || []);
+      } else {
+        const { data, error } = await supabase
+          .from('league_seasons')
+          .select('*')
+          .eq('league_id', selectedLeague.id)
+          .order('season_number', { ascending: false });
+        if (error) throw error;
+        setSeasons(data || []);
+      }
     } catch (error) {
       console.error('Error fetching seasons:', error);
       toast.error('Failed to fetch seasons');
@@ -108,10 +149,16 @@ const SeasonManagementModal = () => {
 
   useEffect(() => {
     if (isOpen) {
-      fetchSeasons();
+      fetchLeagues();
       fetchSquads();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && selectedLeague) {
+      fetchSeasons();
+    }
+  }, [isOpen, selectedLeague?.id]);
 
   const resetForm = () => {
     setFormData({
@@ -248,7 +295,7 @@ const SeasonManagementModal = () => {
       const runnerUpIds = await findOrCreateSquadIdsByNames(formData.runner_up_squad_names);
       const thirdPlaceIds = await findOrCreateSquadIdsByNames(formData.third_place_squad_names);
 
-      const seasonData = {
+      const seasonData: Record<string, unknown> = {
         season_number: parseInt(formData.season_number),
         season_name: formData.season_name || null,
         start_date: formatDateForDatabase(formData.start_date),
@@ -259,21 +306,27 @@ const SeasonManagementModal = () => {
         third_place_squad_ids: thirdPlaceIds
       };
 
-      if (mode === 'add') {
-        const { error } = await supabase
-          .from('ctfpl_seasons')
-          .insert([seasonData]);
-        
-        if (error) throw error;
-        toast.success('Season created successfully');
-      } else {
-        const { error } = await supabase
-          .from('ctfpl_seasons')
-          .update(seasonData)
-          .eq('id', selectedSeason?.id);
-        
-        if (error) throw error;
-        toast.success('Season updated successfully');
+      if (selectedLeague?.slug === 'ctfpl') {
+        if (mode === 'add') {
+          const { error } = await supabase.from('ctfpl_seasons').insert([seasonData]);
+          if (error) throw error;
+          toast.success('Season created successfully');
+        } else {
+          const { error } = await supabase.from('ctfpl_seasons').update(seasonData).eq('id', selectedSeason?.id);
+          if (error) throw error;
+          toast.success('Season updated successfully');
+        }
+      } else if (selectedLeague) {
+        const payload = { ...seasonData, league_id: selectedLeague.id };
+        if (mode === 'add') {
+          const { error } = await supabase.from('league_seasons').insert([payload]);
+          if (error) throw error;
+          toast.success('Season created successfully');
+        } else {
+          const { error } = await supabase.from('league_seasons').update(seasonData).eq('id', selectedSeason?.id);
+          if (error) throw error;
+          toast.success('Season updated successfully');
+        }
       }
 
       fetchSeasons();
@@ -288,28 +341,52 @@ const SeasonManagementModal = () => {
   };
 
   const setActiveStatus = async (seasonId: string, makeActive: boolean) => {
+    if (!selectedLeague) return;
     setLoading(true);
     try {
-      if (makeActive) {
-        // Set all other seasons to completed/upcoming
-        await supabase
-          .from('ctfpl_seasons')
-          .update({ status: 'completed' })
-          .eq('status', 'active');
+      if (selectedLeague.slug === 'ctfpl') {
+        if (makeActive) {
+          await supabase.from('ctfpl_seasons').update({ status: 'completed' }).eq('status', 'active');
+        }
+        const { error } = await supabase.from('ctfpl_seasons').update({ status: makeActive ? 'active' : 'completed' }).eq('id', seasonId);
+        if (error) throw error;
+      } else {
+        if (makeActive) {
+          await supabase.from('league_seasons').update({ status: 'completed' }).eq('league_id', selectedLeague.id).eq('status', 'active');
+        }
+        const { error } = await supabase.from('league_seasons').update({ status: makeActive ? 'active' : 'completed' }).eq('id', seasonId);
+        if (error) throw error;
       }
-
-      const { error } = await supabase
-        .from('ctfpl_seasons')
-        .update({ status: makeActive ? 'active' : 'completed' })
-        .eq('id', seasonId);
-
-      if (error) throw error;
-      
       toast.success(makeActive ? 'Season set as active' : 'Season marked as completed');
       fetchSeasons();
     } catch (error) {
       console.error('Error updating season status:', error);
       toast.error('Failed to update season status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addLeague = async () => {
+    const slug = newLeagueSlug.trim().toLowerCase().replace(/\s+/g, '-');
+    const name = newLeagueName.trim();
+    if (!slug || !name) {
+      toast.error('Slug and name are required');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('leagues').insert([{ slug, name }]).select('id, slug, name').single();
+      if (error) throw error;
+      toast.success(`League "${name}" added`);
+      setNewLeagueSlug('');
+      setNewLeagueName('');
+      setShowAddLeague(false);
+      await fetchLeagues();
+      if (data) setSelectedLeague(data as League);
+    } catch (error) {
+      console.error('Error adding league:', error);
+      toast.error('Failed to add league');
     } finally {
       setLoading(false);
     }
@@ -347,7 +424,9 @@ const SeasonManagementModal = () => {
             >
               {/* Header */}
               <div className="bg-gray-800/50 px-6 py-4 border-b border-yellow-500/30 flex justify-between items-center">
-                <h2 className="text-yellow-400 text-xl font-bold">🏆 Season Management</h2>
+                <h2 className="text-yellow-400 text-xl font-bold">
+                  🏆 Season Management{selectedLeague ? ` – ${selectedLeague.name}` : ''}
+                </h2>
                 <button
                   onClick={() => setIsOpen(false)}
                   className="text-gray-400 hover:text-white text-2xl font-bold"
@@ -359,6 +438,66 @@ const SeasonManagementModal = () => {
               {/* Content */}
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
                 <div className="space-y-6">
+                  {/* League selector */}
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="text-white font-medium">League:</label>
+                    <select
+                      value={selectedLeague?.id ?? ''}
+                      onChange={(e) => {
+                        const league = leagues.find(l => l.id === e.target.value);
+                        if (league) setSelectedLeague(league);
+                      }}
+                      className="bg-gray-800 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-yellow-500 min-w-[180px]"
+                    >
+                      {leagues.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.slug})</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddLeague(!showAddLeague)}
+                      className="text-sm text-cyan-400 hover:text-cyan-300"
+                    >
+                      + Add league
+                    </button>
+                  </div>
+
+                  {showAddLeague && (
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 space-y-3">
+                      <h4 className="text-white font-medium">New league</h4>
+                      <div className="flex flex-wrap gap-3 items-end">
+                        <div>
+                          <label className="block text-gray-400 text-xs mb-1">Slug (e.g. ctfdl)</label>
+                          <input
+                            type="text"
+                            value={newLeagueSlug}
+                            onChange={(e) => setNewLeagueSlug(e.target.value)}
+                            placeholder="ctfdl"
+                            className="bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded w-40"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-gray-400 text-xs mb-1">Name</label>
+                          <input
+                            type="text"
+                            value={newLeagueName}
+                            onChange={(e) => setNewLeagueName(e.target.value)}
+                            placeholder="CTFDL"
+                            className="bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded w-40"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={addLeague}
+                          disabled={loading}
+                          className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Mode Controls */}
                   <div className="flex gap-2">
                     <button
