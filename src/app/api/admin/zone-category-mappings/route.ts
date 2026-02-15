@@ -23,14 +23,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: categoriesRes.error.message }, { status: 500 });
   }
 
-  // Discover all distinct zone titles from population history (last 30 days)
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // Discover ALL distinct zone titles ever seen in population history (no time cutoff for admin)
   const { data: popData } = await supabase
     .from('zone_population_history')
     .select('zone_title')
-    .gte('recorded_at', cutoff)
     .order('zone_title')
-    .limit(5000);
+    .limit(10000);
 
   const seenTitles = new Set<string>();
   const discoveredTitles: string[] = [];

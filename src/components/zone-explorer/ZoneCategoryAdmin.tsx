@@ -101,27 +101,20 @@ export default function ZoneCategoryAdmin({
     }
   };
 
-  // Split into three groups: unmapped active, mapped active, stale
-  const activeMappings = mappings.filter((m) => discoveredTitles.includes(m.zone_title));
-  const staleMappings = mappings.filter((m) => !discoveredTitles.includes(m.zone_title));
-  const unmappedActive = activeMappings.filter((m) => !m.category_id);
-  const mappedActive = activeMappings.filter((m) => m.category_id);
-  const unmappedCount = unmappedActive.length;
+  // Sort: unmapped first, then mapped — all fully editable
+  const unmapped = mappings.filter((m) => !m.category_id);
+  const mapped = mappings.filter((m) => m.category_id);
+  const unmappedCount = unmapped.length;
 
-  const renderRow = (row: MappingRow, isStale: boolean) => (
+  const renderRow = (row: MappingRow) => (
     <div
       key={row.zone_title}
       className={`grid grid-cols-[1fr_180px] gap-2 items-center py-1.5 ${
-        !row.category_id && !isStale ? 'bg-red-500/5 -mx-2 px-2 rounded' : ''
-      } ${isStale ? 'opacity-50' : ''}`}
+        !row.category_id ? 'bg-red-500/5 -mx-2 px-2 rounded' : ''
+      }`}
     >
-      <span className={`text-sm truncate ${
-        isStale ? 'text-gray-600' : row.category_id ? 'text-gray-300' : 'text-red-300'
-      }`}>
+      <span className={`text-sm truncate ${row.category_id ? 'text-gray-300' : 'text-red-300'}`}>
         {row.zone_title}
-        {isStale && (
-          <span className="text-[10px] text-gray-600 ml-2">(stale - not in API)</span>
-        )}
       </span>
       <div className="relative">
         <select
@@ -197,33 +190,23 @@ export default function ZoneCategoryAdmin({
                 <span>Category</span>
               </div>
 
-              {/* Unmapped active zones - TOP priority */}
-              {unmappedActive.length > 0 && (
+              {/* Unmapped zones first */}
+              {unmapped.length > 0 && (
                 <>
                   <div className="text-[10px] uppercase tracking-wider text-red-400/80 pt-1 font-semibold">
-                    Needs Assignment ({unmappedActive.length})
+                    Needs Assignment ({unmapped.length})
                   </div>
-                  {unmappedActive.map((row) => renderRow(row, false))}
+                  {unmapped.map((row) => renderRow(row))}
                 </>
               )}
 
-              {/* Mapped active zones */}
-              {mappedActive.length > 0 && (
+              {/* Assigned zones */}
+              {mapped.length > 0 && (
                 <>
                   <div className="text-[10px] uppercase tracking-wider text-green-400/60 pt-2 font-semibold">
-                    Assigned ({mappedActive.length})
+                    Assigned ({mapped.length})
                   </div>
-                  {mappedActive.map((row) => renderRow(row, false))}
-                </>
-              )}
-
-              {/* Stale mappings at the bottom */}
-              {staleMappings.length > 0 && (
-                <>
-                  <div className="text-[10px] uppercase tracking-wider text-gray-600 pt-2 border-t border-gray-700/30 mt-2 font-semibold">
-                    Stale — not seen in API ({staleMappings.length})
-                  </div>
-                  {staleMappings.map((row) => renderRow(row, true))}
+                  {mapped.map((row) => renderRow(row))}
                 </>
               )}
 
