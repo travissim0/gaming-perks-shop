@@ -10,6 +10,7 @@ import ZoneExplorerCard from '@/components/zone-explorer/ZoneExplorerCard';
 import ZoneExplorerFilters from '@/components/zone-explorer/ZoneExplorerFilters';
 import ZoneExplorerSkeleton from '@/components/zone-explorer/ZoneExplorerSkeleton';
 import ZoneCategoryAdmin from '@/components/zone-explorer/ZoneCategoryAdmin';
+import SpaceBackground from '@/components/SpaceBackground';
 import { supabase } from '@/lib/supabase';
 
 export default function ZoneExplorerPage() {
@@ -203,10 +204,9 @@ export default function ZoneExplorerPage() {
   }, [data]);
 
   return (
-    <div className="min-h-screen" style={{
-      background: 'linear-gradient(180deg, #060610 0%, #0a0e1a 40%, #0d1020 60%, #060610 100%)',
-    }}>
-      <div className="max-w-7xl mx-auto px-4 py-5">
+    <div className="min-h-screen relative">
+      <SpaceBackground />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-5">
         {/* Compact header */}
         <div className="flex items-center gap-3 mb-4">
           <span className="text-2xl" style={{ filter: 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.3))' }}>
