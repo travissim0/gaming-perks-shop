@@ -37,7 +37,6 @@ export default function ZoneExplorerPage() {
 
       if (session?.user) {
         fetchSubscriptions(session.access_token);
-        // Check admin
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_admin')
@@ -76,11 +75,10 @@ export default function ZoneExplorerPage() {
         setSubscriptions(map);
       }
     } catch {
-      // Silently fail - subscriptions are non-critical
+      // Silently fail
     }
   };
 
-  // Fetch zone explorer data
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -100,7 +98,6 @@ export default function ZoneExplorerPage() {
     fetchData();
   }, [fetchData]);
 
-  // Subscribe handler (uses zone_title now)
   const handleSubscribe = useCallback(async (zoneTitle: string, threshold: number) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -123,7 +120,6 @@ export default function ZoneExplorerPage() {
     }
   }, []);
 
-  // Unsubscribe handler
   const handleUnsubscribe = useCallback(async (zoneTitle: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -142,7 +138,6 @@ export default function ZoneExplorerPage() {
     }
   }, []);
 
-  // Sort zones within a category
   const sortZones = useCallback(
     (zones: ZoneExplorerCardType[]) => {
       const sorted = [...zones];
@@ -162,10 +157,8 @@ export default function ZoneExplorerPage() {
     [sortBy]
   );
 
-  // Filter + sort data
   const filteredData = useMemo(() => {
     if (!data) return null;
-
     const lowerQuery = searchQuery.toLowerCase();
 
     const filterZones = (zones: ZoneExplorerCardType[]) => {
@@ -187,61 +180,111 @@ export default function ZoneExplorerPage() {
 
     return {
       categories: categories
-        .map((cat) => ({
-          ...cat,
-          zones: filterZones(cat.zones),
-        }))
+        .map((cat) => ({ ...cat, zones: filterZones(cat.zones) }))
         .filter((cat) => cat.zones.length > 0),
       uncategorized: filterZones(data.uncategorized),
     };
   }, [data, activeCategory, searchQuery, sortZones]);
 
-  // All categories for filter pills
   const allCategories = useMemo(() => {
     if (!data) return [];
     return data.categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      icon: c.icon,
-      accent_color: c.accent_color,
-      description: c.description,
-      sort_order: c.sort_order,
+      id: c.id, name: c.name, icon: c.icon,
+      accent_color: c.accent_color, description: c.description, sort_order: c.sort_order,
     }));
   }, [data]);
 
-  // Total online across all zones
   const totalOnline = useMemo(() => {
     if (!data) return 0;
     let total = 0;
-    data.categories.forEach((cat) =>
-      cat.zones.forEach((z) => (total += z.current_players))
-    );
+    data.categories.forEach((cat) => cat.zones.forEach((z) => (total += z.current_players)));
     data.uncategorized.forEach((z) => (total += z.current_players));
     return total;
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">🧭</span>
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
-              Zone Explorer
-            </h1>
+    <div className="min-h-screen relative overflow-hidden" style={{
+      background: 'linear-gradient(180deg, #060610 0%, #0a0e1a 30%, #0d1020 50%, #0a0e1a 70%, #060610 100%)',
+    }}>
+      {/* Nebula background effects */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute w-[800px] h-[800px] rounded-full opacity-60"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(34, 211, 238, 0.06) 0%, transparent 60%)',
+            top: '-10%', left: '-10%',
+            animation: 'nebulaDrift1 30s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute w-[600px] h-[600px] rounded-full opacity-50"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.05) 0%, transparent 55%)',
+            top: '30%', right: '-5%',
+            animation: 'nebulaDrift2 25s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute w-[500px] h-[500px] rounded-full opacity-40"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(236, 72, 153, 0.04) 0%, transparent 50%)',
+            bottom: '5%', left: '20%',
+            animation: 'nebulaDrift3 35s ease-in-out infinite',
+          }}
+        />
+      </div>
+
+      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
+        {/* Hero Header */}
+        <div className="mb-10 animate-fadeIn">
+          <div className="relative">
+            {/* Decorative accent line */}
+            <div className="absolute -left-4 top-0 w-1 h-full bg-gradient-to-b from-cyan-400 via-blue-500 to-purple-500 rounded-full opacity-60" />
+
+            <div className="pl-4">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="relative">
+                  <span className="text-4xl" style={{ filter: 'drop-shadow(0 0 12px rgba(34, 211, 238, 0.4))' }}>
+                    🧭
+                  </span>
+                </div>
+                <div>
+                  <h1
+                    className="text-4xl md:text-5xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400"
+                    style={{ textShadow: '0 0 40px rgba(34, 211, 238, 0.15)' }}
+                  >
+                    Zone Explorer
+                  </h1>
+                  <div className="mt-2 h-0.5 w-32 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full" />
+                </div>
+              </div>
+
+              <p className="text-gray-400 text-sm md:text-base leading-relaxed max-w-xl">
+                Discover game zones, check live populations, and find your next match.
+              </p>
+
+              {/* Live stats bar */}
+              {totalOnline > 0 && (
+                <div className="mt-4 inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-gray-900/60 backdrop-blur-sm border border-green-500/20">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400" />
+                    </span>
+                    <span className="text-green-400 font-bold text-sm">
+                      {totalOnline}
+                    </span>
+                    <span className="text-gray-500 text-sm">
+                      player{totalOnline !== 1 ? 's' : ''} online now
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <p className="text-gray-400 text-sm pl-12">
-            Discover game zones, check live populations, and find your next match.
-            {totalOnline > 0 && (
-              <span className="ml-2 text-green-400 font-medium">
-                {totalOnline} player{totalOnline !== 1 ? 's' : ''} online now
-              </span>
-            )}
-          </p>
         </div>
 
-        {/* Admin Panel — only visible to admins */}
+        {/* Admin Panel */}
         {isAdmin && accessToken && (
           <ZoneCategoryAdmin
             accessToken={accessToken}
@@ -254,19 +297,21 @@ export default function ZoneExplorerPage() {
           <ZoneExplorerSkeleton />
         ) : error ? (
           <div className="text-center py-20">
-            <p className="text-red-400 text-lg mb-2">Failed to load zones</p>
-            <p className="text-gray-500 text-sm">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors text-sm"
-            >
-              Retry
-            </button>
+            <div className="inline-block p-8 rounded-2xl bg-gray-900/60 backdrop-blur-sm border border-red-500/20">
+              <p className="text-red-400 text-lg font-semibold mb-2">Failed to load zones</p>
+              <p className="text-gray-500 text-sm mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-5 py-2.5 bg-gradient-to-r from-red-600/30 to-red-500/20 border border-red-500/40 text-red-400 rounded-lg hover:border-red-400 transition-all text-sm font-medium"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filteredData ? (
           <>
             {/* Filters */}
-            <div className="mb-6">
+            <div className="mb-8 animate-slideUp" style={{ animationDelay: '0.1s' }}>
               <ZoneExplorerFilters
                 categories={allCategories}
                 activeCategory={activeCategory}
@@ -279,29 +324,29 @@ export default function ZoneExplorerPage() {
             </div>
 
             {/* Category sections */}
-            {filteredData.categories.map((cat) => (
-              <ZoneCategorySection
-                key={cat.id}
-                category={cat}
-                defaultExpanded={true}
-                isLoggedIn={isLoggedIn}
-                subscriptions={subscriptions}
-                onSubscribe={handleSubscribe}
-                onUnsubscribe={handleUnsubscribe}
-              />
+            {filteredData.categories.map((cat, i) => (
+              <div key={cat.id} className="animate-slideUp" style={{ animationDelay: `${0.15 + i * 0.05}s` }}>
+                <ZoneCategorySection
+                  category={cat}
+                  defaultExpanded={true}
+                  isLoggedIn={isLoggedIn}
+                  subscriptions={subscriptions}
+                  onSubscribe={handleSubscribe}
+                  onUnsubscribe={handleUnsubscribe}
+                />
+              </div>
             ))}
 
             {/* Uncategorized */}
             {filteredData.uncategorized.length > 0 && (
-              <div className="mb-6">
-                <div className="flex items-center gap-3 py-3 px-1">
-                  <span className="text-2xl">📦</span>
-                  <h2 className="text-lg font-bold text-gray-100">
+              <div className="mb-8">
+                <div className="flex items-center gap-3 py-3 px-1 mb-2">
+                  <span className="text-2xl" style={{ filter: 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.3))' }}>📦</span>
+                  <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-300 to-gray-400 uppercase tracking-wider">
                     Uncategorized Zones
                   </h2>
-                  <span className="text-xs text-gray-500 bg-gray-800/70 px-2 py-0.5 rounded-full">
-                    {filteredData.uncategorized.length} zone
-                    {filteredData.uncategorized.length !== 1 ? 's' : ''}
+                  <span className="text-[11px] font-mono text-gray-500 bg-gray-800/60 px-2.5 py-0.5 rounded-full border border-gray-700/40">
+                    {filteredData.uncategorized.length}
                   </span>
                   {isAdmin && (
                     <span className="text-[10px] text-amber-400/80 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
@@ -309,7 +354,7 @@ export default function ZoneExplorerPage() {
                     </span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {filteredData.uncategorized.map((zone) => (
                     <ZoneExplorerCard
                       key={zone.zone_key}
@@ -330,10 +375,12 @@ export default function ZoneExplorerPage() {
             {filteredData.categories.length === 0 &&
               filteredData.uncategorized.length === 0 && (
                 <div className="text-center py-20">
-                  <p className="text-gray-500 text-lg mb-1">No zones match your filter</p>
-                  <p className="text-gray-600 text-sm">
-                    Try adjusting your search or category filter.
-                  </p>
+                  <div className="inline-block p-8 rounded-2xl bg-gray-900/40 backdrop-blur-sm border border-gray-700/30">
+                    <p className="text-gray-400 text-lg mb-1">No zones match your filter</p>
+                    <p className="text-gray-600 text-sm">
+                      Try adjusting your search or category filter.
+                    </p>
+                  </div>
                 </div>
               )}
           </>
