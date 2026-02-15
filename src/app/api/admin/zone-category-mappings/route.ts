@@ -14,24 +14,27 @@ export async function GET(request: NextRequest) {
 
   const supabase = getServiceSupabase();
 
-  const [categoriesRes, mappingsRes, zonesRes] = await Promise.all([
+  const [categoriesRes, mappingsRes] = await Promise.all([
     supabase.from('zone_categories').select('*').order('sort_order'),
     supabase.from('zone_name_mappings').select('*'),
-    // Discover all zone titles ever seen in population history
-    supabase
-      .from('zone_population_history')
-      .select('zone_title')
-      .order('zone_title'),
   ]);
 
   if (categoriesRes.error) {
     return NextResponse.json({ error: categoriesRes.error.message }, { status: 500 });
   }
 
-  // Deduplicate zone titles
+  // Discover all distinct zone titles from population history (last 30 days)
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: popData } = await supabase
+    .from('zone_population_history')
+    .select('zone_title')
+    .gte('recorded_at', cutoff)
+    .order('zone_title')
+    .limit(5000);
+
   const seenTitles = new Set<string>();
   const discoveredTitles: string[] = [];
-  (zonesRes.data || []).forEach((row: any) => {
+  (popData || []).forEach((row: any) => {
     if (row.zone_title && !seenTitles.has(row.zone_title)) {
       seenTitles.add(row.zone_title);
       discoveredTitles.push(row.zone_title);

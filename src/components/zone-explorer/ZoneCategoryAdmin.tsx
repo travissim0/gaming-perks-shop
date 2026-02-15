@@ -101,7 +101,57 @@ export default function ZoneCategoryAdmin({
     }
   };
 
-  const unmappedCount = mappings.filter((m) => !m.category_id).length;
+  // Split into three groups: unmapped active, mapped active, stale
+  const activeMappings = mappings.filter((m) => discoveredTitles.includes(m.zone_title));
+  const staleMappings = mappings.filter((m) => !discoveredTitles.includes(m.zone_title));
+  const unmappedActive = activeMappings.filter((m) => !m.category_id);
+  const mappedActive = activeMappings.filter((m) => m.category_id);
+  const unmappedCount = unmappedActive.length;
+
+  const renderRow = (row: MappingRow, isStale: boolean) => (
+    <div
+      key={row.zone_title}
+      className={`grid grid-cols-[1fr_180px] gap-2 items-center py-1.5 ${
+        !row.category_id && !isStale ? 'bg-red-500/5 -mx-2 px-2 rounded' : ''
+      } ${isStale ? 'opacity-50' : ''}`}
+    >
+      <span className={`text-sm truncate ${
+        isStale ? 'text-gray-600' : row.category_id ? 'text-gray-300' : 'text-red-300'
+      }`}>
+        {row.zone_title}
+        {isStale && (
+          <span className="text-[10px] text-gray-600 ml-2">(stale - not in API)</span>
+        )}
+      </span>
+      <div className="relative">
+        <select
+          value={row.category_id || ''}
+          onChange={(e) => handleCategoryChange(row.zone_title, e.target.value)}
+          disabled={saving === row.zone_title}
+          className={`w-full text-xs py-1.5 px-2 rounded-lg border transition-colors cursor-pointer appearance-none
+            ${
+              row.category_id
+                ? 'bg-gray-800/80 border-gray-600/50 text-gray-300'
+                : 'bg-red-900/20 border-red-500/30 text-red-300'
+            }
+            focus:outline-none focus:border-amber-500/50
+            ${saving === row.zone_title ? 'opacity-50' : ''}`}
+        >
+          <option value="">-- Uncategorized --</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.icon} {cat.name}
+            </option>
+          ))}
+        </select>
+        {saving === row.zone_title && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-400 text-[10px]">
+            saving...
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
@@ -142,52 +192,41 @@ export default function ZoneCategoryAdmin({
             <div className="text-gray-500 text-sm animate-pulse">Loading mappings...</div>
           ) : (
             <div className="space-y-1.5 max-h-96 overflow-y-auto">
-              <div className="grid grid-cols-[1fr_180px] gap-2 text-[11px] text-gray-500 uppercase tracking-wider pb-1 border-b border-gray-700/50 sticky top-0 bg-gray-950/90 backdrop-blur-sm">
+              <div className="grid grid-cols-[1fr_180px] gap-2 text-[11px] text-gray-500 uppercase tracking-wider pb-1 border-b border-gray-700/50 sticky top-0 bg-gray-950/90 backdrop-blur-sm z-10">
                 <span>Zone Title (from API)</span>
                 <span>Category</span>
               </div>
-              {mappings.map((row) => (
-                <div
-                  key={row.zone_title}
-                  className={`grid grid-cols-[1fr_180px] gap-2 items-center py-1.5 ${
-                    !row.category_id ? 'bg-red-500/5 -mx-2 px-2 rounded' : ''
-                  }`}
-                >
-                  <span className={`text-sm truncate ${row.category_id ? 'text-gray-300' : 'text-red-300'}`}>
-                    {row.zone_title}
-                    {!discoveredTitles.includes(row.zone_title) && (
-                      <span className="text-[10px] text-gray-600 ml-2">(stale)</span>
-                    )}
-                  </span>
-                  <div className="relative">
-                    <select
-                      value={row.category_id || ''}
-                      onChange={(e) => handleCategoryChange(row.zone_title, e.target.value)}
-                      disabled={saving === row.zone_title}
-                      className={`w-full text-xs py-1.5 px-2 rounded-lg border transition-colors cursor-pointer appearance-none
-                        ${
-                          row.category_id
-                            ? 'bg-gray-800/80 border-gray-600/50 text-gray-300'
-                            : 'bg-red-900/20 border-red-500/30 text-red-300'
-                        }
-                        focus:outline-none focus:border-amber-500/50
-                        ${saving === row.zone_title ? 'opacity-50' : ''}`}
-                    >
-                      <option value="">-- Uncategorized --</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                    {saving === row.zone_title && (
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-400 text-[10px]">
-                        saving...
-                      </span>
-                    )}
+
+              {/* Unmapped active zones - TOP priority */}
+              {unmappedActive.length > 0 && (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider text-red-400/80 pt-1 font-semibold">
+                    Needs Assignment ({unmappedActive.length})
                   </div>
-                </div>
-              ))}
+                  {unmappedActive.map((row) => renderRow(row, false))}
+                </>
+              )}
+
+              {/* Mapped active zones */}
+              {mappedActive.length > 0 && (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider text-green-400/60 pt-2 font-semibold">
+                    Assigned ({mappedActive.length})
+                  </div>
+                  {mappedActive.map((row) => renderRow(row, false))}
+                </>
+              )}
+
+              {/* Stale mappings at the bottom */}
+              {staleMappings.length > 0 && (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-600 pt-2 border-t border-gray-700/30 mt-2 font-semibold">
+                    Stale — not seen in API ({staleMappings.length})
+                  </div>
+                  {staleMappings.map((row) => renderRow(row, true))}
+                </>
+              )}
+
               {mappings.length === 0 && (
                 <p className="text-gray-500 text-sm py-4 text-center">
                   No zone titles discovered yet. Zone titles appear here once the population cron has run.
