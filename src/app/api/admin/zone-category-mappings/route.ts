@@ -23,12 +23,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: categoriesRes.error.message }, { status: 500 });
   }
 
-  // Discover ALL distinct zone titles ever seen in population history (no time cutoff for admin)
+  // Discover ALL distinct zone titles ever seen in population history
+  // Order by recorded_at DESC so recent records (containing all active zones) come first
+  // Supabase caps at ~1000 rows regardless of limit, so DESC order ensures we see all titles
   const { data: popData } = await supabase
     .from('zone_population_history')
-    .select('zone_title')
-    .order('zone_title')
-    .limit(10000);
+    .select('zone_title, recorded_at')
+    .order('recorded_at', { ascending: false })
+    .limit(5000);
 
   const seenTitles = new Set<string>();
   const discoveredTitles: string[] = [];
