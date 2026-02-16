@@ -80,10 +80,14 @@ export default function ZoneExplorerPage() {
     }
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (bustCache = false) => {
     try {
       setLoading(true);
-      const res = await fetch('/api/zone-explorer');
+      // Add cache-buster when admin changes mappings to bypass CDN s-maxage
+      const url = bustCache
+        ? `/api/zone-explorer?t=${Date.now()}`
+        : '/api/zone-explorer';
+      const res = await fetch(url, bustCache ? { cache: 'no-store' } : undefined);
       if (!res.ok) throw new Error('Failed to load zones');
       const json: ZoneExplorerData = await res.json();
       setData(json);
@@ -232,7 +236,7 @@ export default function ZoneExplorerPage() {
         {isAdmin && accessToken && (
           <ZoneCategoryAdmin
             accessToken={accessToken}
-            onMappingsChanged={fetchData}
+            onMappingsChanged={() => fetchData(true)}
           />
         )}
 
