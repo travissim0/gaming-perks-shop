@@ -8,6 +8,19 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import type { Squad } from '@/types/database';
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+interface SeasonOption {
+  id: string;
+  season_number: number;
+  season_name: string | null;
+  status: string;
+}
+
 export default function CreateMatchReportPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -15,7 +28,10 @@ export default function CreateMatchReportPage() {
   const [squads, setSquads] = useState<Squad[]>([]);
   const [hasPermission, setHasPermission] = useState(false);
   const [permissionLoading, setPermissionLoading] = useState(true);
-  
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState('ctfpl');
+  const [seasonOptions, setSeasonOptions] = useState<SeasonOption[]>([]);
+
   // Form state
   const [formData, setFormData] = useState({
     title: '',
@@ -26,13 +42,66 @@ export default function CreateMatchReportPage() {
     match_summary: '',
     match_highlights_video_url: '',
     match_date: new Date().toISOString().split('T')[0],
-    season_name: 'Season 5' // Default to current season
+    season_name: '',
+    league_slug: 'ctfpl'
   });
 
   useEffect(() => {
     checkPermissions();
     fetchSquads();
+    fetchLeagues();
   }, [user]);
+
+  // Fetch seasons when league changes
+  useEffect(() => {
+    fetchSeasons(selectedLeague);
+  }, [selectedLeague, leagues]);
+
+  const fetchLeagues = async () => {
+    const { data } = await supabase
+      .from('leagues')
+      .select('id, slug, name')
+      .order('slug');
+    if (data) setLeagues(data);
+  };
+
+  const fetchSeasons = async (leagueSlug: string) => {
+    if (leagueSlug === 'ctfpl') {
+      const { data } = await supabase
+        .from('ctfpl_seasons')
+        .select('id, season_number, season_name, status')
+        .order('season_number', { ascending: false });
+      if (data) {
+        setSeasonOptions(data);
+        const active = data.find((s: any) => s.status === 'active');
+        if (active) {
+          const name = active.season_name || `Season ${active.season_number}`;
+          setFormData(prev => ({ ...prev, season_name: name }));
+        }
+      }
+    } else {
+      const league = leagues.find(l => l.slug === leagueSlug);
+      if (!league) return;
+      const { data } = await supabase
+        .from('league_seasons')
+        .select('id, season_number, season_name, status')
+        .eq('league_id', league.id)
+        .order('season_number', { ascending: false });
+      if (data) {
+        setSeasonOptions(data);
+        const active = data.find((s: any) => s.status === 'active');
+        if (active) {
+          const name = active.season_name || `Season ${active.season_number}`;
+          setFormData(prev => ({ ...prev, season_name: name }));
+        }
+      }
+    }
+  };
+
+  const handleLeagueChange = (slug: string) => {
+    setSelectedLeague(slug);
+    setFormData(prev => ({ ...prev, league_slug: slug, season_name: '' }));
+  };
 
   const checkPermissions = async () => {
     if (!user) {
@@ -189,10 +258,31 @@ export default function CreateMatchReportPage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
           <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8">
+            {/* League Selection */}
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-white mb-6">League</h3>
+              <div className="flex flex-wrap gap-2">
+                {leagues.map(league => (
+                  <button
+                    key={league.slug}
+                    type="button"
+                    onClick={() => handleLeagueChange(league.slug)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      selectedLeague === league.slug
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {league.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Basic Information */}
             <div className="mb-8">
               <h3 className="text-2xl font-bold text-white mb-6">Basic Information</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -203,7 +293,7 @@ export default function CreateMatchReportPage() {
                     name="title"
                     value={formData.title}
                     onChange={handleInputChange}
-                    placeholder="e.g., CTFPL Week 3: Darkslayers vs Smurfs"
+                    placeholder={`e.g., ${selectedLeague.toUpperCase()} Week 3: Team A vs Team B`}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     required
                   />
@@ -227,15 +317,21 @@ export default function CreateMatchReportPage() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Season *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     name="season_name"
                     value={formData.season_name}
                     onChange={handleInputChange}
-                    placeholder="e.g., Season 5"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     required
-                  />
+                  >
+                    <option value="">Select a season...</option>
+                    {seasonOptions.map(season => (
+                      <option key={season.id} value={season.season_name || `Season ${season.season_number}`}>
+                        {season.season_name || `Season ${season.season_number}`}
+                        {season.status === 'active' ? ' (Active)' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

@@ -144,6 +144,7 @@ export interface SquadRating {
   squad_id: string;
   analyst_id: string;
   season_name: string;
+  league_slug: string;
   analysis_date: string;
   analyst_commentary?: string | null;
   analyst_quote?: string | null;
@@ -161,6 +162,62 @@ export interface PlayerRating {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// =============================================================================
+// MULTI-LEAGUE INTERFACES
+// =============================================================================
+
+export interface League {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+}
+
+export interface LeagueSeason {
+  id: string;
+  league_id: string;
+  season_number: number;
+  season_name: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: 'upcoming' | 'active' | 'completed';
+  champion_squad_ids: string[];
+  runner_up_squad_ids: string[];
+  third_place_squad_ids: string[];
+  total_matches: number;
+  total_squads: number;
+}
+
+export interface LeagueStanding {
+  id: string;
+  league_season_id: string;
+  squad_id: string;
+  matches_played: number;
+  wins: number;
+  losses: number;
+  no_shows: number;
+  overtime_wins: number;
+  overtime_losses: number;
+  regulation_wins: number;
+  points: number;
+  kills_for: number;
+  deaths_against: number;
+  kill_death_difference: number;
+  win_percentage: number;
+}
+
+export interface LeagueStandingWithRanking extends LeagueStanding {
+  squad_name: string;
+  squad_tag: string;
+  banner_url: string | null;
+  captain_alias: string;
+  rank: number;
+  points_behind: number;
+  season_number: number;
+  league_slug: string;
+  league_name: string;
 }
 
 // Extended interfaces for joined data
@@ -218,6 +275,7 @@ export interface MatchReport {
   match_highlights_video_url?: string | null;
   match_date: string;
   season_name: string;
+  league_slug: string;
   created_by: string;
   created_at: string;
   updated_at: string;

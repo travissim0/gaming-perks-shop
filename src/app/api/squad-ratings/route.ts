@@ -76,15 +76,16 @@ export async function POST(request: NextRequest) {
     }
     // For unofficial ratings, anyone can create them (no additional permission check needed)
 
-    const { 
-      squad_id, 
-      season_name, 
-      analysis_date, 
-      analyst_commentary, 
-      analyst_quote, 
+    const {
+      squad_id,
+      season_name,
+      league_slug = 'ctfpl',
+      analysis_date,
+      analyst_commentary,
+      analyst_quote,
       breakdown_summary,
       is_official = false,
-      player_ratings 
+      player_ratings
     } = body;
 
     // Validate required fields
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
         squad_id,
         analyst_id: user.id,
         season_name,
+        league_slug,
         analysis_date: analysis_date || new Date().toISOString().split('T')[0],
         analyst_commentary,
         analyst_quote,

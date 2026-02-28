@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url);
     const season = url.searchParams.get('season');
+    const league = url.searchParams.get('league');
     const limit = url.searchParams.get('limit');
 
     // Use the RPC function to get match reports with details
@@ -30,8 +31,14 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (season) {
-      filteredData = filteredData.filter(report => 
+      filteredData = filteredData.filter(report =>
         report.season_name.toLowerCase() === season.toLowerCase()
+      );
+    }
+
+    if (league) {
+      filteredData = filteredData.filter(report =>
+        (report as any).league_slug === league
       );
     }
 
@@ -118,7 +125,8 @@ export async function POST(request: NextRequest) {
       match_summary,
       match_highlights_video_url,
       match_date,
-      season_name
+      season_name,
+      league_slug = 'ctfpl'
     } = body;
 
     // Validate required fields
@@ -155,6 +163,7 @@ export async function POST(request: NextRequest) {
         match_highlights_video_url: match_highlights_video_url || null,
         match_date: match_date || new Date().toISOString().split('T')[0],
         season_name,
+        league_slug,
         created_by: user.id
       })
       .select()

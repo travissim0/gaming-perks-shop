@@ -41,7 +41,14 @@ interface Season {
   third_place_squad_ids?: string[];
 }
 
-export function CTFPLStandingsContent() {
+interface LeagueStandingsProps {
+  leagueSlug?: string;
+  leagueName?: string;
+}
+
+export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFPL' }: LeagueStandingsProps) {
+  const isCTFPL = leagueSlug === 'ctfpl';
+  const [leagueId, setLeagueId] = useState<string | null>(null);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
@@ -64,23 +71,61 @@ export function CTFPLStandingsContent() {
   const loadAllSeasons = useCallback(async () => {
     try {
       setSeasonsLoading(true);
-      const { data: seasonsData, error: seasonsError } = await supabase
-        .from('ctfpl_seasons')
-        .select('*')
-        .order('season_number', { ascending: false });
 
-      if (seasonsError) {
-        console.error('Error loading seasons:', seasonsError);
-        return;
-      }
+      if (isCTFPL) {
+        const { data: seasonsData, error: seasonsError } = await supabase
+          .from('ctfpl_seasons')
+          .select('*')
+          .order('season_number', { ascending: false });
 
-      if (seasonsData) {
-        setAllSeasons(seasonsData);
-        const activeSeason = seasonsData.find((season) => season.status === 'active');
-        if (activeSeason) {
-          setCurrentSeason(activeSeason.season_number);
-          if (selectedSeason === null) {
-            setSelectedSeason(activeSeason.season_number);
+        if (seasonsError) {
+          console.error('Error loading seasons:', seasonsError);
+          return;
+        }
+
+        if (seasonsData) {
+          setAllSeasons(seasonsData);
+          const activeSeason = seasonsData.find((season) => season.status === 'active');
+          if (activeSeason) {
+            setCurrentSeason(activeSeason.season_number);
+            if (selectedSeason === null) {
+              setSelectedSeason(activeSeason.season_number);
+            }
+          }
+        }
+      } else {
+        // Look up league ID first
+        const { data: leagueData } = await supabase
+          .from('leagues')
+          .select('id')
+          .eq('slug', leagueSlug)
+          .single();
+
+        if (!leagueData) {
+          console.error('League not found:', leagueSlug);
+          return;
+        }
+        setLeagueId(leagueData.id);
+
+        const { data: seasonsData, error: seasonsError } = await supabase
+          .from('league_seasons')
+          .select('*')
+          .eq('league_id', leagueData.id)
+          .order('season_number', { ascending: false });
+
+        if (seasonsError) {
+          console.error('Error loading seasons:', seasonsError);
+          return;
+        }
+
+        if (seasonsData) {
+          setAllSeasons(seasonsData);
+          const activeSeason = seasonsData.find((season: any) => season.status === 'active');
+          if (activeSeason) {
+            setCurrentSeason(activeSeason.season_number);
+            if (selectedSeason === null) {
+              setSelectedSeason(activeSeason.season_number);
+            }
           }
         }
       }
@@ -89,7 +134,7 @@ export function CTFPLStandingsContent() {
     } finally {
       setSeasonsLoading(false);
     }
-  }, [selectedSeason]);
+  }, [selectedSeason, isCTFPL, leagueSlug]);
 
   const loadAllSquads = useCallback(async () => {
     try {
@@ -115,16 +160,35 @@ export function CTFPLStandingsContent() {
     async (seasonNumber: number) => {
       try {
         setDataLoading(true);
-        const seasonData = allSeasons.find((s) => s.season_number === seasonNumber);
+        const seasonData = allSeasons.find((s: any) => s.season_number === seasonNumber);
         if (seasonData) {
           setSeasonInfo(seasonData);
         }
 
-        const { data: standingsData, error: standingsError } = await supabase
-          .from('ctfpl_standings_with_rankings')
-          .select('*')
-          .eq('season_number', seasonNumber)
-          .order('rank', { ascending: true });
+        let standingsData: any[] | null = null;
+        let standingsError: any = null;
+
+        if (isCTFPL) {
+          const result = await supabase
+            .from('ctfpl_standings_with_rankings')
+            .select('*')
+            .eq('season_number', seasonNumber)
+            .order('rank', { ascending: true });
+          standingsData = result.data;
+          standingsError = result.error;
+        } else {
+          // For generic leagues, find the league_season_id for this season_number
+          const matchingSeason = allSeasons.find((s: any) => s.season_number === seasonNumber);
+          if (matchingSeason) {
+            const result = await supabase
+              .from('league_standings_with_rankings')
+              .select('*')
+              .eq('league_season_id', (matchingSeason as any).id)
+              .order('rank', { ascending: true });
+            standingsData = result.data;
+            standingsError = result.error;
+          }
+        }
 
         if (standingsError) {
           console.error('Error loading standings:', standingsError);
@@ -160,7 +224,7 @@ export function CTFPLStandingsContent() {
         setDataLoading(false);
       }
     },
-    [allSeasons]
+    [allSeasons, isCTFPL]
   );
 
   useEffect(() => {
@@ -224,7 +288,7 @@ export function CTFPLStandingsContent() {
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-              <p className="text-gray-400">Loading CTFPL Standings...</p>
+              <p className="text-gray-400">Loading {leagueName} Standings...</p>
             </div>
           </div>
         </div>
@@ -396,10 +460,10 @@ export function CTFPLStandingsContent() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <Trophy className="w-8 h-8 text-cyan-400 mr-3" />
-            <h1 className="text-4xl font-bold text-white">CTFPL Standings</h1>
+            <h1 className="text-4xl font-bold text-white">{leagueName} Standings</h1>
           </div>
           <p className="text-gray-400 text-lg">
-            Capture The Flag Player League - Season {selectedSeason || 'Loading...'}
+            {leagueName} - Season {selectedSeason || 'Loading...'}
             {seasonInfo && <span className="text-cyan-400 ml-2">({seasonInfo.season_name})</span>}
             {currentSeason === selectedSeason && (
               <span className="text-green-400 ml-2 text-sm">(Current)</span>
@@ -565,7 +629,7 @@ export function CTFPLStandingsContent() {
           <div className="p-6 border-b border-gray-700/50">
             <h2 className="text-2xl font-bold text-white flex items-center">
               <Trophy className="w-6 h-6 text-cyan-400 mr-3" />
-              CTFPL Season Standings
+              {leagueName} Season Standings
             </h2>
           </div>
           <div className="overflow-x-auto">

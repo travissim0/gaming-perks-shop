@@ -6,6 +6,12 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { SquadRatingWithDetails } from '@/types/database';
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export default function SquadRatingsPage() {
   const { user } = useAuth();
   const [ratings, setRatings] = useState<SquadRatingWithDetails[]>([]);
@@ -13,12 +19,23 @@ export default function SquadRatingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<string>('all');
+  const [leagueFilter, setLeagueFilter] = useState<string>('all');
+  const [leagues, setLeagues] = useState<League[]>([]);
   const [showUnofficialRatings, setShowUnofficialRatings] = useState(false);
   const [canManageRatings, setCanManageRatings] = useState(false);
 
   useEffect(() => {
     fetchRatings();
+    fetchLeagues();
   }, []);
+
+  const fetchLeagues = async () => {
+    const { data } = await supabase
+      .from('leagues')
+      .select('id, slug, name')
+      .order('slug');
+    if (data) setLeagues(data);
+  };
 
   useEffect(() => {
     checkRatingsPermissions();
@@ -56,24 +73,25 @@ export default function SquadRatingsPage() {
   // Get unique seasons for filter
   const seasons = Array.from(new Set(ratings.map(r => r.season_name))).sort();
 
-  // Filter ratings based on search, season, and official status
+  // Filter ratings based on search, season, league, and official status
   const filteredRatings = ratings.filter(rating => {
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       rating.squad_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rating.squad_tag.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rating.analyst_alias?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesSeason = selectedSeason === 'all' || rating.season_name === selectedSeason;
-    
+
+    const matchesLeague = leagueFilter === 'all' || (rating as any).league_slug === leagueFilter;
+
     // Handle missing is_official field (default to false for backwards compatibility)
     const isOfficial = rating.is_official === true;
     const isUnofficial = rating.is_official === false || rating.is_official === undefined || rating.is_official === null;
-    
+
     // Show official ratings always, unofficial only if requested
-    // If is_official field is missing, treat as unofficial for backwards compatibility
     const matchesOfficialFilter = isOfficial || (isUnofficial && showUnofficialRatings);
-    
-    return matchesSearch && matchesSeason && matchesOfficialFilter;
+
+    return matchesSearch && matchesSeason && matchesLeague && matchesOfficialFilter;
   });
 
   // Separate official and unofficial ratings for display
@@ -161,6 +179,35 @@ export default function SquadRatingsPage() {
                 </Link>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* League Filter */}
+        <div className="mb-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setLeagueFilter('all')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                leagueFilter === 'all'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              All Leagues
+            </button>
+            {leagues.map(league => (
+              <button
+                key={league.slug}
+                onClick={() => setLeagueFilter(league.slug)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  leagueFilter === league.slug
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {league.name}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -287,7 +334,14 @@ export default function SquadRatingsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-400 mb-1">{rating.season_name}</div>
+                      <div className="flex items-center justify-end gap-2 mb-1">
+                        {(rating as any).league_slug && (
+                          <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-xs font-medium uppercase">
+                            {(rating as any).league_slug}
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-400">{rating.season_name}</span>
+                      </div>
                       <div className="text-sm text-gray-500">{formatDate(rating.analysis_date)}</div>
                     </div>
                   </div>

@@ -7,12 +7,20 @@ import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails } from '@/types/database';
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export default function MatchReportsPage() {
   const { user } = useAuth();
   const [reports, setReports] = useState<MatchReportWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seasonFilter, setSeasonFilter] = useState<string>('all');
+  const [leagueFilter, setLeagueFilter] = useState<string>('all');
+  const [leagues, setLeagues] = useState<League[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasPermission, setHasPermission] = useState(false);
   const [permissionLoading, setPermissionLoading] = useState(true);
@@ -20,7 +28,16 @@ export default function MatchReportsPage() {
   useEffect(() => {
     fetchReports();
     checkPermissions();
+    fetchLeagues();
   }, [user]);
+
+  const fetchLeagues = async () => {
+    const { data } = await supabase
+      .from('leagues')
+      .select('id, slug, name')
+      .order('slug');
+    if (data) setLeagues(data);
+  };
 
   const checkPermissions = async () => {
     if (!user) {
@@ -75,15 +92,17 @@ export default function MatchReportsPage() {
   };
 
   const filteredReports = reports.filter(report => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.squad_a_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.squad_b_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       report.creator_alias.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesSeason = seasonFilter === 'all' || report.season_name === seasonFilter;
-    
-    return matchesSearch && matchesSeason;
+
+    const matchesLeague = leagueFilter === 'all' || (report as any).league_slug === leagueFilter;
+
+    return matchesSearch && matchesSeason && matchesLeague;
   });
 
   const formatDate = (dateString: string) => {
@@ -166,6 +185,35 @@ export default function MatchReportsPage() {
               </div>
               <div className="text-gray-400">Contributing Analysts</div>
             </div>
+          </div>
+        </div>
+
+        {/* League Filter */}
+        <div className="mb-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setLeagueFilter('all')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                leagueFilter === 'all'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              All Leagues
+            </button>
+            {leagues.map(league => (
+              <button
+                key={league.slug}
+                onClick={() => setLeagueFilter(league.slug)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  leagueFilter === league.slug
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                {league.name}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -297,6 +345,11 @@ export default function MatchReportsPage() {
                     <div className="flex items-center space-x-4">
                       <span>📊 By {report.creator_alias}</span>
                       <span>🏆 {report.season_name}</span>
+                      {(report as any).league_slug && (
+                        <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-xs font-medium uppercase">
+                          {(report as any).league_slug}
+                        </span>
+                      )}
                     </div>
                     <div>
                       {formatRelativeTime(report.created_at, { addSuffix: true })}
