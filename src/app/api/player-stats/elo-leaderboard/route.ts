@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getEloTier } from '@/utils/eloTiers';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -148,24 +149,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Get ELO tier based on rating
- */
-function getEloTier(elo: number): { name: string; color: string; min: number; max: number } {
-  const tiers = [
-    { name: 'Unranked', color: '#6B7280', min: 0, max: 999 },
-    { name: 'Bronze', color: '#CD7F32', min: 1000, max: 1199 },
-    { name: 'Silver', color: '#C0C0C0', min: 1200, max: 1399 },
-    { name: 'Gold', color: '#FFD700', min: 1400, max: 1599 },
-    { name: 'Platinum', color: '#E5E4E2', min: 1600, max: 1799 },
-    { name: 'Diamond', color: '#B9F2FF', min: 1800, max: 1999 },
-    { name: 'Master', color: '#FF6B6B', min: 2000, max: 2199 },
-    { name: 'Grandmaster', color: '#9B59B6', min: 2200, max: 2399 },
-    { name: 'Legend', color: '#F39C12', min: 2400, max: 2800 }
-  ];
-
-  return tiers.find(tier => elo >= tier.min && elo <= tier.max) || tiers[0];
-}
+// getEloTier imported from @/utils/eloTiers
 
 // Also handle POST for ELO recalculation (admin only)
 export async function POST(request: NextRequest) {

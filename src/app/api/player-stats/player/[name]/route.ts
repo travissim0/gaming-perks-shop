@@ -19,8 +19,6 @@ export async function GET(
     const dateFilter = searchParams.get('dateFilter') || 'all';
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
 
-    console.log('Player stats query:', { playerName, gameMode, dateFilter, limit });
-
     // Get aggregate stats for the player - using case-insensitive comparison
     let aggregateQuery = supabase
       .from('player_stats_normalized_by_mode')

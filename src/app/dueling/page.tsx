@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
+import { getEloTier } from '@/utils/eloTiers';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1166,17 +1167,7 @@ export default function DuelingPage() {
     return 0;
   });
 
-  const getEloTier = (elo: number) => {
-    if (elo >= 2400) return { name: 'Legend', color: 'text-yellow-400' };
-    if (elo >= 2200) return { name: 'Grandmaster', color: 'text-purple-400' };
-    if (elo >= 2000) return { name: 'Master', color: 'text-red-400' };
-    if (elo >= 1800) return { name: 'Diamond', color: 'text-cyan-400' };
-    if (elo >= 1600) return { name: 'Platinum', color: 'text-gray-300' };
-    if (elo >= 1400) return { name: 'Gold', color: 'text-yellow-600' };
-    if (elo >= 1200) return { name: 'Silver', color: 'text-gray-400' };
-    if (elo >= 1000) return { name: 'Bronze', color: 'text-orange-600' };
-    return { name: 'Unranked', color: 'text-gray-500' };
-  };
+  // getEloTier imported from @/utils/eloTiers
 
   const formatPercentage = (num: number) => {
     return `${(num * 100).toFixed(1)}%`;
@@ -1384,9 +1375,9 @@ export default function DuelingPage() {
                           <td className="px-6 py-4">
                             {player.match_type.startsWith('ranked') || player.match_type === 'overall' ? (
                               <div>
-                                <div className={`font-bold ${tier.color}`}>{player.current_elo}</div>
+                                <div className={`font-bold ${tier.tailwind}`}>{player.current_elo}</div>
                                 <div className="text-xs text-blue-300">Peak: {player.peak_elo}</div>
-                                <div className={`text-xs ${tier.color}`}>{tier.name}</div>
+                                <div className={`text-xs ${tier.tailwind}`}>{tier.name}</div>
                               </div>
                             ) : (
                               <span className="text-gray-500">N/A</span>
