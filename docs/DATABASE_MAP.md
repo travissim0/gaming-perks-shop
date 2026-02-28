@@ -1,11 +1,12 @@
-# Database Table Map
+# Database & API Map
 
-Reference for which tables belong to which system. Use this when building new features to avoid cross-wiring data between game modes.
+Reference for which tables and API routes belong to which system. Use this when building new features to avoid cross-wiring data between game modes.
 
 ---
 
-## Naming Convention for New Tables
+## Naming Conventions (for new features)
 
+### Tables
 | System | Prefix | Examples |
 |--------|--------|----------|
 | CTF (any league: CTFPL, CTFDL, OVDL, etc.) | `ctf_` | `ctf_squads`, `ctf_free_agents` |
@@ -14,6 +15,40 @@ Reference for which tables belong to which system. Use this when building new fe
 | Shared / Platform | no prefix | `profiles`, `private_messages` |
 | Community | `forum_` / `news_` | `forum_threads`, `news_posts` |
 | Zones | `zone_` | `zone_status`, `zone_population_history` |
+
+### API Routes
+| System | Route Prefix | Examples |
+|--------|-------------|----------|
+| CTF (new endpoints) | `/api/ctf/` | `/api/ctf/free-agents`, `/api/ctf/roster-lock` |
+| Dueling | `/api/dueling/` | `/api/dueling/matches`, `/api/dueling/stats` |
+| Triple Threat | `/api/triple-threat/` | `/api/triple-threat/stats`, `/api/triple-threat/series-analysis` |
+| Shared / Platform | `/api/` | `/api/avatars`, `/api/player-stats` |
+
+### Page Routes
+| System | Route Prefix | Examples |
+|--------|-------------|----------|
+| CTF | `/league/` | `/league/standings`, `/league/match-reports` |
+| Dueling | `/dueling/` | `/dueling`, `/dueling/bo9-stats` |
+| Triple Threat | `/triple-threat/` | `/triple-threat/teams`, `/triple-threat/matches` |
+| Shared | `/` | `/profile`, `/dashboard`, `/donate` |
+
+---
+
+## Legacy CTF Endpoints (not yet migrated)
+
+These existing CTF routes use generic paths. They still work and should NOT be moved unless you're already rebuilding that feature. New CTF endpoints should use `/api/ctf/`.
+
+| Current Route | Would Be | Notes |
+|--------------|----------|-------|
+| `/api/free-agents/update` | `/api/ctf/free-agents/update` | Free agent update API |
+| `/api/match-reports/` | `/api/ctf/match-reports/` | Match report CRUD |
+| `/api/match-reports/[id]/comments/` | `/api/ctf/match-reports/[id]/comments/` | Match report comments |
+| `/api/match-reports/[id]/player-ratings/` | `/api/ctf/match-reports/[id]/player-ratings/` | Player rating submissions |
+| `/api/squad-ratings/` | `/api/ctf/squad-ratings/` | Squad rating system |
+| `/api/roster-lock-status/` | `/api/ctf/roster-lock-status/` | Roster lock checks |
+| `/free-agents` | `/league/free-agents` | Free agents page |
+| `/squads/` | `/league/squads/` | Squad management pages |
+| `/champions` | `/league/champions` | Hall of Champions |
 
 ---
 
@@ -40,22 +75,37 @@ Tables used by the CTF league system (CTFPL, CTFDL, OVDL, etc.). Includes squad 
 ### CTF-only but NO prefix (legacy names)
 These are CTF-specific but use generic names. Do NOT reuse these names for other game modes. New CTF tables should use the `ctf_` prefix.
 
-| Table | Purpose | Notes |
-|-------|---------|-------|
-| `squads` | CTF squad/team records | Would be `ctf_squads` if created today |
-| `squad_members` | Squad roster membership | Would be `ctf_squad_members` |
-| `squad_invites` | Squad invitation system | Would be `ctf_squad_invites` |
-| `squad_ratings` | Squad performance ratings by analysts | Would be `ctf_squad_ratings` |
-| `free_agents` | Players looking for squads | Would be `ctf_free_agents` |
-| `match_reports` | Detailed post-match reports | Would be `ctf_match_reports` |
-| `match_participants` | Players in a match report | Would be `ctf_match_participants` |
-| `match_player_ratings` | Per-player performance ratings | Would be `ctf_match_player_ratings` |
-| `match_report_comments` | Comments on match reports | Would be `ctf_match_report_comments` |
-| `player_ratings` | Player skill ratings | Would be `ctf_player_ratings` |
-| `season_roster_locks` | Roster lock periods | Would be `ctf_roster_locks` |
-| `referee_applications` | Referee role applications | Would be `ctf_referee_applications` |
-| `user_ctf_roles` | CTF role assignments (admin, ref) | Already has "ctf" in name |
-| `ctf_roles` | Available CTF role types | Already has "ctf" in name |
+**Migration approach:** Use `ALTER TABLE x RENAME TO ctf_x` + create a backward-compat view on the old name. Update code at your own pace, then drop the view.
+
+#### Island tables (safe to rename independently)
+| Table | New Name | Depends On | Code Refs |
+|-------|----------|------------|-----------|
+| `free_agents` | `ctf_free_agents` | `profiles` only | ~16 files |
+| `season_roster_locks` | `ctf_roster_locks` | `ctfpl_seasons` only | ~3 files |
+| `referee_applications` | `ctf_referee_applications` | `profiles` only | ~4 files |
+
+#### Squad cluster (must migrate together)
+| Table | New Name | Why Coupled |
+|-------|----------|-------------|
+| `squads` | `ctf_squads` | Referenced by squad_members, squad_invites, squad_ratings, match_reports (~68 refs) |
+| `squad_members` | `ctf_squad_members` | FK to squads (~54 refs) |
+| `squad_invites` | `ctf_squad_invites` | FK to squads (~31 refs) |
+| `squad_ratings` | `ctf_squad_ratings` | FK to squads, cascades to player_ratings (~6 refs) |
+| `player_ratings` | `ctf_player_ratings` | FK to squad_ratings (~3 refs) |
+
+#### Match report cluster (own tree, weak link to squads)
+| Table | New Name | Why Coupled |
+|-------|----------|-------------|
+| `match_reports` | `ctf_match_reports` | squad refs are ON DELETE SET NULL (~5 refs) |
+| `match_participants` | `ctf_match_participants` | FK to match_reports (~11 refs) |
+| `match_player_ratings` | `ctf_match_player_ratings` | FK to match_reports, CASCADE (~3 refs) |
+| `match_report_comments` | `ctf_match_report_comments` | FK to match_reports, CASCADE (~3 refs) |
+
+#### Already has "ctf" in name
+| Table | Purpose |
+|-------|---------|
+| `user_ctf_roles` | CTF role assignments (admin, ref) |
+| `ctf_roles` | Available CTF role types |
 
 ---
 
@@ -187,10 +237,10 @@ Zone explorer and activity tracking. All prefixed with `zone_` or `scheduled_zon
 ## Quick Reference: "Which prefix do I use?"
 
 Building something for...
-- **CTF leagues (squads, matches, seasons, free agents)** -> `ctf_`
-- **1v1 dueling** -> `dueling_`
-- **3v3 Triple Threat** -> `tt_`
-- **User accounts, messaging, donations** -> no prefix
-- **Forum / news** -> `forum_` / `news_`
-- **Zone system** -> `zone_`
+- **CTF leagues (squads, matches, seasons, free agents)** -> table: `ctf_`, API: `/api/ctf/`, page: `/league/`
+- **1v1 dueling** -> table: `dueling_`, API: `/api/dueling/`, page: `/dueling/`
+- **3v3 Triple Threat** -> table: `tt_`, API: `/api/triple-threat/`, page: `/triple-threat/`
+- **User accounts, messaging, donations** -> no prefix, API: `/api/`, page: `/`
+- **Forum / news** -> table: `forum_` / `news_`, page: `/forum/` / `/news/`
+- **Zone system** -> table: `zone_`, API: `/api/zone-*/`, page: `/zones/`
 - **A new game mode** -> pick a short prefix and be consistent (e.g., `koth_` for King of the Hill)
