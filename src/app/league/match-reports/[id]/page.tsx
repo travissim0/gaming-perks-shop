@@ -196,9 +196,18 @@ export default function MatchReportDetailPage() {
 
     try {
       setSubmittingComment(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('No session found');
+        return;
+      }
+
       const response = await fetch(`/api/match-reports/${params.id}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ content: newComment.trim() }),
       });
       const data = await response.json();
@@ -217,8 +226,14 @@ export default function MatchReportDetailPage() {
 
   const deleteComment = async (commentId: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const response = await fetch(`/api/match-reports/${params.id}/comments?commentId=${commentId}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
       });
       if (response.ok) {
         setComments(prev => prev.filter(c => c.id !== commentId));

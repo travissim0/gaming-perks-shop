@@ -1,6 +1,12 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+
+// Service role client for queries that need to bypass RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET(
   request: NextRequest,
@@ -8,9 +14,8 @@ export async function GET(
 ) {
   try {
     const { id: match_report_id } = await params;
-    const supabase = createRouteHandlerClient({ cookies });
 
-    const { data: comments, error } = await supabase
+    const { data: comments, error } = await supabaseAdmin
       .from('match_report_comments')
       .select(`
         id,
@@ -58,15 +63,19 @@ export async function POST(
 ) {
   try {
     const { id: match_report_id } = await params;
-    const supabase = createRouteHandlerClient({ cookies });
 
-    // Check authentication
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // Verify authorization via Bearer token
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const user = session.user;
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const body = await request.json();
     const { content } = body;
@@ -81,7 +90,7 @@ export async function POST(
     }
 
     // Insert the comment
-    const { data: newComment, error: insertError } = await supabase
+    const { data: newComment, error: insertError } = await supabaseAdmin
       .from('match_report_comments')
       .insert({
         match_report_id,
@@ -97,7 +106,7 @@ export async function POST(
     }
 
     // Fetch the user's profile for the response
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseAdmin
       .from('profiles')
       .select('in_game_alias, avatar_url')
       .eq('id', user.id)
@@ -128,15 +137,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-
-    // Check authentication
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
-    if (authError || !session) {
+    // Verify authorization via Bearer token
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const user = session.user;
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const url = new URL(request.url);
     const commentId = url.searchParams.get('commentId');
@@ -145,8 +157,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });
     }
 
-    // Delete the comment (RLS ensures only owner can delete)
-    const { error: deleteError } = await supabase
+    // Delete the comment — only allow owner to delete
+    const { error: deleteError } = await supabaseAdmin
       .from('match_report_comments')
       .delete()
       .eq('id', commentId)
