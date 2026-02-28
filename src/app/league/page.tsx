@@ -8,9 +8,10 @@ import UserAvatar from '@/components/UserAvatar';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
 import NewsSection from '@/components/NewsSection';
 import { useDonationMode } from '@/hooks/useDonationMode';
-import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
+import { getClassColor } from '@/utils/classColors';
+import { getEloTier } from '@/utils/eloTiers';
 
 interface ServerStats {
   totalPlayers: number;
@@ -31,8 +32,8 @@ interface ServerData {
 
 interface GamePlayer {
   alias: string;
-  team: string; // Actual team name like "WC C" or "PT T"
-  teamType?: 'Titan' | 'Collective'; // For logic purposes
+  team: string;
+  teamType?: 'Titan' | 'Collective';
   class: string;
   isOffense: boolean;
   weapon?: string;
@@ -165,11 +166,72 @@ interface SupabaseMatchRow {
   squad_b: { name: string } | null;
 }
 
+interface EloLeaderEntry {
+  player_name: string;
+  elo_rating: string;
+  weighted_elo: string;
+  total_games: number;
+  win_rate: string;
+  elo_tier: { name: string; color: string; min: number; max: number };
+}
+
+interface SeasonStanding {
+  squad_name: string;
+  squad_tag: string;
+  squad_id: string;
+  rank: number;
+  wins: number;
+  losses: number;
+  points: number;
+  win_percentage: number;
+}
+
+interface ActiveSeason {
+  id: string;
+  season_number: number;
+  season_name: string | null;
+  status: string;
+  league_name?: string;
+}
+
+// ── Banner slide color helpers ──────────────────────────────────────────
+const SLIDE_COLORS: Record<string, {
+  overlay: string;
+  text: string;
+  button: string;
+  dot: string;
+}> = {
+  cyan:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90',   text: 'text-cyan-400',   button: 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 hover:shadow-cyan-500/25',     dot: 'bg-cyan-400' },
+  purple: { overlay: 'bg-gradient-to-r from-gray-900/90 via-purple-900/60 to-gray-900/90', text: 'text-purple-400', button: 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 hover:shadow-purple-500/25', dot: 'bg-purple-400' },
+  pink:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-pink-900/60 to-gray-900/90',   text: 'text-pink-400',   button: 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 hover:shadow-pink-500/25',     dot: 'bg-pink-400' },
+  green:  { overlay: 'bg-gradient-to-r from-gray-900/90 via-green-900/60 to-gray-900/90',  text: 'text-green-400',  button: 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 hover:shadow-green-500/25',   dot: 'bg-green-400' },
+  blue:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-blue-900/60 to-gray-900/90',   text: 'text-blue-400',   button: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 hover:shadow-blue-500/25',     dot: 'bg-blue-400' },
+  orange: { overlay: 'bg-gradient-to-r from-gray-900/90 via-orange-900/60 to-gray-900/90', text: 'text-orange-400', button: 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 hover:shadow-orange-500/25',   dot: 'bg-orange-400' },
+  indigo: { overlay: 'bg-gradient-to-r from-gray-900/90 via-indigo-900/60 to-gray-900/90', text: 'text-indigo-400', button: 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 hover:shadow-indigo-500/25', dot: 'bg-indigo-400' },
+  teal:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-teal-900/60 to-gray-900/90',   text: 'text-teal-400',   button: 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 hover:shadow-teal-500/25',     dot: 'bg-teal-400' },
+  red:    { overlay: 'bg-gradient-to-r from-red-900/90 via-red-900/60 to-gray-900/90',     text: 'text-red-400',    button: 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 hover:shadow-red-500/25',       dot: 'bg-red-400' },
+  yellow: { overlay: 'bg-gradient-to-r from-yellow-900/60 to-gray-900/90',                 text: 'text-yellow-400', button: 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 hover:shadow-yellow-500/25', dot: 'bg-yellow-400' },
+};
+
+const getSlideColor = (color: string) => SLIDE_COLORS[color] || SLIDE_COLORS.cyan;
+
+// ── Banner slides data ──────────────────────────────────────────────────
+const ALL_BANNER_SLIDES = [
+  { title: "FREE INFANTRY", subtitle: "Capture the Flag: Player's League", description: "🎮 Competitive Gaming Platform", highlight: "Join the Battle", color: "cyan", href: "/dashboard", showWhen: "guest" as const },
+  { title: "ACTIVE SQUADS", subtitle: "Form Elite Teams", description: "🛡️ Create or Join Competitive Squads", highlight: "Build Your Team", color: "purple", href: "/squads", showWhen: "always" as const },
+  { title: "FREE AGENTS", subtitle: "Find Your Perfect Squad", description: "🎯 Connect Players with Teams", highlight: "Join the Pool", color: "pink", href: "/free-agents", showWhen: "always" as const },
+  { title: "LIVE MATCHES", subtitle: "Compete in Real-Time", description: "⚔️ Schedule and Play Competitive Matches", highlight: "Enter the Arena", color: "green", href: "/matches", showWhen: "always" as const },
+  { title: "PLAYER STATS", subtitle: "Track Your Performance", description: "📊 Advanced Statistics & ELO Rankings", highlight: "View Stats", color: "blue", href: "/stats", showWhen: "always" as const },
+  { title: "DUELING SYSTEM", subtitle: "1v1 Competitive Matches", description: "⚡ Face Off in Skill-Based Duels", highlight: "Challenge Players", color: "orange", href: "/dueling", showWhen: "always" as const },
+  { title: "COMMUNITY FORUM", subtitle: "Connect with Players", description: "💬 Discuss Strategies & Share Content", highlight: "Join Discussion", color: "indigo", href: "/forum", showWhen: "always" as const },
+  { title: "NEWS & UPDATES", subtitle: "Stay Informed", description: "📰 Latest Patch Notes & Announcements", highlight: "Read Latest", color: "teal", href: "/news", showWhen: "always" as const },
+  { title: "GAMING PERKS", subtitle: "Enhance Your Experience", description: "🛍️ Exclusive In-Game Perks & Items", highlight: "Browse Shop", color: "red", href: "/perks", showWhen: "always" as const },
+  { title: "SUPPORT THE GAME", subtitle: "Keep Free Infantry Running", description: "💰 Donate to Support Development", highlight: "Make a Difference", color: "yellow", href: "/donate", showWhen: "always" as const },
+];
+
 export default function Home() {
   const { user, loading } = useAuth();
   const [userProfile, setUserProfile] = useState<Record<string, unknown> | null>(null);
-  const [recentPatchNotes, setRecentPatchNotes] = useState<string>('');
-  const [latestUpdateDate, setLatestUpdateDate] = useState<string>('');
   const [serverData, setServerData] = useState<ServerData>({
     zones: [],
     stats: { totalPlayers: 0, activeGames: 0, serverStatus: 'offline' },
@@ -189,119 +251,32 @@ export default function Home() {
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
-  
+
   // Recorded games state
   const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
   const [showRecordedGamesTheater, setShowRecordedGamesTheater] = useState(false);
   const [showVideoEmbed, setShowVideoEmbed] = useState(false);
-  
-  // Collapsible states for player lists
-  const [isSpectatorsCollapsed, setIsSpectatorsCollapsed] = useState(false);
-  const [isNotPlayingCollapsed, setIsNotPlayingCollapsed] = useState(false);
-  
+
   // Carousel and animation states
   const [currentSlide, setCurrentSlide] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const bannerRef = useRef<HTMLDivElement>(null);
-  
+
   // YouTube embed modal state
   const [embedModal, setEmbedModal] = useState<{
     isOpen: boolean;
     videoId: string | null;
     title: string;
-  }>({
-    isOpen: false,
-    videoId: null,
-    title: ''
-  });
-  
-  // Banner slides data - filtered based on user status
-  const getAllBannerSlides = () => [
-    {
-      title: "FREE INFANTRY",
-      subtitle: "Capture the Flag: Player's League",
-      description: "🎮 Competitive Gaming Platform",
-      highlight: "Join the Battle",
-      color: "cyan",
-      showWhen: "guest" // Only show to non-authenticated users
-    },
-    {
-      title: "ACTIVE SQUADS",
-      subtitle: "Form Elite Teams",
-      description: "🛡️ Create or Join Competitive Squads",
-      highlight: "Build Your Team",
-      color: "purple",
-      showWhen: "always"
-    },
-    {
-      title: "FREE AGENTS",
-      subtitle: "Find Your Perfect Squad",
-      description: "🎯 Connect Players with Teams",
-      highlight: "Join the Pool",
-      color: "pink",
-      showWhen: "always"
-    },
-    {
-      title: "LIVE MATCHES",
-      subtitle: "Compete in Real-Time",
-      description: "⚔️ Schedule and Play Competitive Matches",
-      highlight: "Enter the Arena",
-      color: "green",
-      showWhen: "always"
-    },
-    {
-      title: "PLAYER STATS",
-      subtitle: "Track Your Performance",
-      description: "📊 Advanced Statistics & ELO Rankings",
-      highlight: "View Stats",
-      color: "blue",
-      showWhen: "always"
-    },
-    {
-      title: "DUELING SYSTEM",
-      subtitle: "1v1 Competitive Matches",
-      description: "⚡ Face Off in Skill-Based Duels",
-      highlight: "Challenge Players",
-      color: "orange",
-      showWhen: "always"
-    },
-    {
-      title: "COMMUNITY FORUM",
-      subtitle: "Connect with Players",
-      description: "💬 Discuss Strategies & Share Content",
-      highlight: "Join Discussion",
-      color: "indigo",
-      showWhen: "always"
-    },
-    {
-      title: "NEWS & UPDATES",
-      subtitle: "Stay Informed",
-      description: "📰 Latest Patch Notes & Announcements",
-      highlight: "Read Latest",
-      color: "teal",
-      showWhen: "always"
-    },
-    {
-      title: "GAMING PERKS",
-      subtitle: "Enhance Your Experience",
-      description: "🛍️ Exclusive In-Game Perks & Items",
-      highlight: "Browse Shop",
-      color: "red",
-      showWhen: "always"
-    },
-    {
-      title: "SUPPORT THE GAME",
-      subtitle: "Keep Free Infantry Running",
-      description: "💰 Donate to Support Development",
-      highlight: "Make a Difference",
-      color: "yellow",
-      showWhen: "always"
-    }
-  ];
+  }>({ isOpen: false, videoId: null, title: '' });
+
+  // New widgets state
+  const [eloLeaders, setEloLeaders] = useState<EloLeaderEntry[]>([]);
+  const [seasonStandings, setSeasonStandings] = useState<SeasonStanding[]>([]);
+  const [activeSeason, setActiveSeason] = useState<ActiveSeason | null>(null);
 
   // Filter slides based on user authentication
-  const bannerSlides = getAllBannerSlides().filter(slide => 
-    slide.showWhen === "always" || 
+  const bannerSlides = ALL_BANNER_SLIDES.filter(slide =>
+    slide.showWhen === "always" ||
     (slide.showWhen === "guest" && !user) ||
     (slide.showWhen === "user" && user)
   );
@@ -310,117 +285,105 @@ export default function Home() {
     const fetchUserProfile = async () => {
       if (user) {
         try {
-          // Simple profile fetch with timeout
           const result = await Promise.race([
             supabase
               .from('profiles')
               .select('is_admin, ctf_role')
               .eq('id', user.id)
               .single(),
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
             )
           ]);
-        
+
           const { data } = result as any;
           if (data) {
             setUserProfile(data);
           }
         } catch (error) {
           console.error('Error fetching user profile:', error);
-          // Don't throw - just log and continue
         }
       }
     };
 
-    // Simple profile check without complex diagnostics
     const quickProfileCheck = async () => {
       if (!user) return;
-      
+
       try {
-        // Quick check with timeout
         const result = await Promise.race([
           supabase
             .from('profiles')
             .select('id')
             .eq('id', user.id)
             .single(),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Profile check timeout')), 3000)
           )
         ]);
-        
+
         const { data: profile, error } = result as any;
-          
+
         if (error && error.code === 'PGRST116') {
-          // Profile doesn't exist, create it quickly
-          // NEVER use email prefix as alias for privacy reasons
           await supabase
             .from('profiles')
             .insert([{
               id: user.id,
               email: user.email,
-              in_game_alias: null, // Leave null to be set by user later
+              in_game_alias: null,
               last_seen: new Date().toISOString()
             }]);
         }
       } catch (error) {
         console.error('Quick profile check error:', error);
-        // Don't throw - just log and continue
       }
     };
 
-    // Simple user activity update with timeout and throttling
     const updateUserActivity = async () => {
       if (!user) return;
-      
-      // Throttle activity updates to once per minute
+
       const lastUpdate = localStorage.getItem('lastActivityUpdate');
       const now = Date.now();
       if (lastUpdate && (now - parseInt(lastUpdate)) < 60000) {
-        return; // Skip if updated less than 1 minute ago
+        return;
       }
-      
+
       try {
         const timestamp = new Date().toISOString();
-        
+
         await Promise.race([
           supabase
             .from('profiles')
             .update({ last_seen: timestamp })
             .eq('id', user.id),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Activity update timeout')), 3000)
           )
         ]);
-        
+
         localStorage.setItem('lastActivityUpdate', now.toString());
       } catch (error) {
         console.error('Error updating user activity:', error);
-        // Don't throw - just log and continue
       }
     };
 
-    // Run the simplified checks only when user changes
     if (user) {
       fetchUserProfile();
       updateUserActivity();
       quickProfileCheck();
     }
 
-    // Scroll effect handler
     const handleScroll = () => {
       setScrollY(window.scrollY);
     };
-    
-    // Carousel auto-advance with dynamic slide count
+
     const carouselInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % bannerSlides.length);
-    }, 5000); // Change slide every 5 seconds
-    
+    }, 5000);
+
     window.addEventListener('scroll', handleScroll);
-    
-    // Fetch server data for all users
+
+    // ── Data fetch functions ──────────────────────────────────────────
+
     const fetchServerData = async () => {
       try {
         const response = await fetch('/api/server-status');
@@ -432,8 +395,7 @@ export default function Home() {
         console.error('Error fetching server data:', error);
       }
     };
-    
-    // Fetch game data
+
     const fetchGameData = async () => {
       try {
         const response = await fetch('/api/game-data');
@@ -446,73 +408,44 @@ export default function Home() {
       }
     };
 
-    // Fetch featured videos for homepage center
     const fetchFeaturedVideos = async () => {
       try {
-        console.log('🎬 Fetching featured videos...');
-        
-        // Use API endpoint instead of direct RPC
         const response = await fetch('/api/featured-videos?limit=6');
-        
-        if (!response.ok) {
-          console.error('Featured videos API error:', response.status, response.statusText);
-          const errorText = await response.text();
-          console.error('Error response:', errorText);
-          return;
-        }
-        
+
+        if (!response.ok) return;
+
         const data = await response.json();
-        console.log('📊 Featured videos API response:', data);
-        
+
         if (data.videos && Array.isArray(data.videos)) {
-          // Auto-generate YouTube thumbnails if missing
           const videosWithThumbnails = data.videos.map((video: FeaturedVideo) => {
             const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
-            const finalThumbnail = video.thumbnail_url || autoThumbnail;
-
-            console.log(`🎬 Video: "${video.title}"`);
-            console.log(`  📺 YouTube URL: ${video.youtube_url || 'None'}`);
-            console.log(`  🏷️ Stored Thumbnail: ${video.thumbnail_url || 'None'}`);
-            console.log(`  🔧 Auto-Generated: ${autoThumbnail || 'None'}`);
-            console.log(`  ✅ Final Thumbnail: ${finalThumbnail || 'None'}`);
-
             return {
               ...video,
-              thumbnail_url: finalThumbnail
+              thumbnail_url: video.thumbnail_url || autoThumbnail
             };
           });
-          
+
           setFeaturedVideos(videosWithThumbnails);
-          console.log('✅ Featured videos loaded:', videosWithThumbnails.length);
-        } else {
-          console.error('Invalid API response format:', data);
         }
       } catch (error) {
-        console.error('Error fetching featured videos (catch):', error);
-        
+        console.error('Error fetching featured videos:', error);
+
         // Fallback: try direct RPC call
         try {
-          console.log('🔄 Trying direct RPC fallback...');
           const { data, error: rpcError } = await supabase.rpc('get_featured_videos', { limit_count: 6 });
-          
-          if (rpcError) {
-            console.error('RPC error:', rpcError);
-            return;
-          }
-          
+
+          if (rpcError) return;
+
           if (data) {
             const videosWithThumbnails = data.map((video: FeaturedVideo) => {
               const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
-              const finalThumbnail = video.thumbnail_url || autoThumbnail;
-              
               return {
                 ...video,
-                thumbnail_url: finalThumbnail
+                thumbnail_url: video.thumbnail_url || autoThumbnail
               };
             });
-            
+
             setFeaturedVideos(videosWithThumbnails);
-            console.log('✅ Featured videos loaded via RPC:', videosWithThumbnails.length);
           }
         } catch (rpcError) {
           console.error('RPC fallback also failed:', rpcError);
@@ -520,14 +453,10 @@ export default function Home() {
       }
     };
 
-    // Fetch online users - improved to show truly active users
     const fetchOnlineUsers = async () => {
       try {
-        // Consider users online if they've been active in the last 5 minutes
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        console.log('Fetching online users since:', fiveMinutesAgo);
-        
-        // Simple query for online users based on profiles table only
+
         const { data: onlineData, error } = await supabase
           .from('profiles')
           .select('id, in_game_alias, email, last_seen, avatar_url')
@@ -535,48 +464,28 @@ export default function Home() {
           .order('last_seen', { ascending: false })
           .limit(20);
 
-        if (error) {
-          console.error('Error fetching online users:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-            full_error: error
-          });
-          return;
-        }
-
-        console.log('Raw online users data:', onlineData);
+        if (error) return;
 
         if (onlineData) {
-          // Filter and format users, prioritizing those with in_game_alias but including others
           const formattedUsers = onlineData
-            .filter(user => user.in_game_alias) // Only include users with proper aliases
+            .filter(user => user.in_game_alias)
             .map((user: SupabaseProfileRow) => ({
               id: user.id,
               in_game_alias: user.in_game_alias,
               last_seen: user.last_seen,
-              squad_name: undefined, // We'll add squad info back later as an enhancement
+              squad_name: undefined,
               squad_tag: undefined,
               role: undefined,
               avatar_url: user.avatar_url,
             }));
-          
+
           setOnlineUsers(formattedUsers);
-          
-          // Debug log for troubleshooting
-          console.log(`Found ${formattedUsers.length} online users:`, formattedUsers.map(u => u.in_game_alias));
         }
       } catch (error) {
-        console.error('Error fetching online users (catch):', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
+        console.error('Error fetching online users:', error);
       }
     };
 
-    // Fetch recent games
     const fetchRecentGames = async () => {
       try {
         const response = await fetch('/api/player-stats/recent-games');
@@ -589,46 +498,34 @@ export default function Home() {
       }
     };
 
-    // Fetch recorded games
     const fetchRecordedGames = async () => {
       try {
-        console.log('🎬 Fetching recorded games...');
         const response = await fetch('/api/player-stats/recent-games?with_recordings=true&limit=10');
-        console.log('🎬 Response status:', response.status);
-        
+
         if (response.ok) {
           const data = await response.json();
-          console.log('🎬 Raw API data:', data);
-          
-          // Enhanced null/undefined checks
+
           if (!data || typeof data !== 'object') {
-            console.warn('🎬 Invalid API response data:', data);
             setRecordedGames([]);
             setShowRecordedGamesTheater(false);
             return;
           }
-          
+
           const games = Array.isArray(data.games) ? data.games : [];
-          console.log('🎬 Games in response:', games.length);
-          
+
           const gamesWithRecordings = games.filter((game: RecordedGame) => {
             try {
-              return game && 
+              return game &&
                      typeof game === 'object' &&
-                     game.videoInfo && 
+                     game.videoInfo &&
                      typeof game.videoInfo === 'object' &&
-                     game.videoInfo.has_video === true && 
+                     game.videoInfo.has_video === true &&
                      (game.videoInfo.youtube_url || game.videoInfo.vod_url);
-            } catch (filterError) {
-              console.warn('🎬 Error filtering game:', filterError, game);
+            } catch {
               return false;
             }
           }) || [];
-          
-          console.log('🎬 Games with recordings found:', gamesWithRecordings.length);
-          console.log('🎬 Sample game data:', gamesWithRecordings[0]);
-          
-          // Validate the games data structure before setting state
+
           const validatedGames = gamesWithRecordings.map((game: RecordedGame) => {
             try {
               return {
@@ -637,52 +534,38 @@ export default function Home() {
                 videoInfo: game.videoInfo || { has_video: false },
                 winningInfo: game.winningInfo || null
               };
-            } catch (validationError) {
-              console.warn('🎬 Error validating game data:', validationError, game);
+            } catch {
               return null;
             }
-          }).filter(Boolean); // Remove null entries
-          
+          }).filter(Boolean);
+
           setRecordedGames(validatedGames);
-          
-          // Always show theater mode if we have recorded games - this showcases recent activity prominently
           setShowRecordedGamesTheater(validatedGames.length > 0);
-          console.log('🎬 Theater mode enabled:', validatedGames.length > 0);
-          
-          // Temporary debugging: If no recorded games, try to fetch regular recent games to show something
+
           if (validatedGames.length === 0) {
-            console.log('🎬 No recorded games found, checking for any recent games...');
             fetch('/api/player-stats/recent-games?limit=3')
               .then(res => res.json())
               .then(data => {
-                console.log('🎬 Recent games without recording filter:', data);
                 if (data.games && data.games.length > 0) {
-                  console.log('🎬 Found', data.games.length, 'recent games without recordings');
-                  // Temporarily enable theater mode to show recent games section
-                  // You can remove this when you have actual recorded content
-                  setRecordedGames(data.games.slice(0, 1)); // Show just the most recent game
+                  setRecordedGames(data.games.slice(0, 1));
                   setShowRecordedGamesTheater(true);
                 }
               })
-              .catch(err => console.error('🎬 Error fetching recent games:', err));
+              .catch(() => {});
           }
         } else {
-          console.error('🎬 API response not ok:', response.status, response.statusText);
           setRecordedGames([]);
           setShowRecordedGamesTheater(false);
         }
       } catch (error) {
-        console.error('🎬 Error fetching recorded games:', error);
-        // Ensure we always set safe defaults on error
+        console.error('Error fetching recorded games:', error);
         setRecordedGames([]);
         setShowRecordedGamesTheater(false);
       }
     };
 
-    // Fetch top squads - Only active squads (removed inner join to get all active squads)
     const fetchTopSquads = async () => {
       try {
-        // Use direct query to ensure we filter by is_active
         const { data, error } = await supabase
           .from('squads')
           .select(`
@@ -697,14 +580,13 @@ export default function Home() {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          // Get member counts separately to avoid inner join limitations
           const squadIds = data.map(squad => squad.id);
           const { data: memberCounts } = await supabase
             .from('squad_members')
             .select('squad_id')
             .in('squad_id', squadIds)
             .eq('status', 'active');
-          
+
           const squads: Squad[] = (data as unknown as SupabaseSquadRow[]).map((squad) => ({
             id: squad.id,
             name: squad.name,
@@ -713,7 +595,7 @@ export default function Home() {
             captain_alias: squad.profiles?.in_game_alias || 'Unknown',
             banner_url: squad.banner_url
           }));
-          
+
           setTopSquads(squads);
         }
       } catch (error) {
@@ -722,7 +604,6 @@ export default function Home() {
       }
     };
 
-    // Fetch upcoming matches
     const fetchUpcomingMatches = async () => {
       try {
         const { data, error } = await supabase
@@ -758,10 +639,9 @@ export default function Home() {
       }
     };
 
-    // Fetch user's squad status
     const fetchUserSquad = async () => {
       if (!user) return;
-      
+
       try {
         const { data, error } = await supabase
           .from('squad_members')
@@ -787,7 +667,89 @@ export default function Home() {
         console.error('Error fetching user squad:', error);
       }
     };
-    
+
+    // ── New widget fetchers ─────────────────────────────────────────
+
+    const fetchEloLeaders = async () => {
+      try {
+        const response = await fetch('/api/player-stats/elo-leaderboard?limit=10&minGames=3&sortBy=weighted_elo');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data && Array.isArray(data.data)) {
+            setEloLeaders(data.data.slice(0, 10));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching ELO leaders:', error);
+      }
+    };
+
+    const fetchActiveSeasonStandings = async () => {
+      try {
+        // Check for active CTFPL season first
+        const { data: ctfplSeason, error: ctfplError } = await supabase
+          .from('ctfpl_seasons')
+          .select('*')
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (!ctfplError && ctfplSeason) {
+          setActiveSeason({
+            id: ctfplSeason.id,
+            season_number: ctfplSeason.season_number,
+            season_name: ctfplSeason.season_name,
+            status: ctfplSeason.status,
+            league_name: 'CTFPL'
+          });
+
+          const { data: standings, error: standingsError } = await supabase
+            .from('ctfpl_standings_with_rankings')
+            .select('squad_name, squad_tag, squad_id, rank, wins, losses, points, win_percentage')
+            .eq('season_number', ctfplSeason.season_number)
+            .order('rank', { ascending: true })
+            .limit(8);
+
+          if (!standingsError && standings) {
+            setSeasonStandings(standings);
+          }
+          return;
+        }
+
+        // Fallback: check for any active league season
+        const { data: leagueSeason, error: leagueError } = await supabase
+          .from('league_seasons')
+          .select('*, leagues(name, slug)')
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle();
+
+        if (!leagueError && leagueSeason) {
+          setActiveSeason({
+            id: leagueSeason.id,
+            season_number: leagueSeason.season_number,
+            season_name: leagueSeason.season_name,
+            status: leagueSeason.status,
+            league_name: (leagueSeason.leagues as any)?.name || 'League'
+          });
+
+          const { data: standings, error: standingsError } = await supabase
+            .from('league_standings_with_rankings')
+            .select('squad_name, squad_tag, squad_id, rank, wins, losses, points, win_percentage')
+            .eq('league_season_id', leagueSeason.id)
+            .order('rank', { ascending: true })
+            .limit(8);
+
+          if (!standingsError && standings) {
+            setSeasonStandings(standings);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching season standings:', error);
+      }
+    };
+
+    // ── Execute all fetches ─────────────────────────────────────────
+
     fetchServerData();
     fetchGameData();
     fetchFeaturedVideos();
@@ -797,26 +759,27 @@ export default function Home() {
     fetchTopSquads();
     fetchUpcomingMatches();
     fetchUserSquad();
-    
-    // Set up intervals to refresh data
-    const serverInterval = setInterval(fetchServerData, 300000); // Poll every 5 minutes instead of 1 minute
+    fetchEloLeaders();
+    fetchActiveSeasonStandings();
+
+    // Set up polling intervals
+    const serverInterval = setInterval(fetchServerData, 300000);
     const gameInterval = setInterval(fetchGameData, 5000);
-    const videosInterval = setInterval(fetchFeaturedVideos, 300000); // Refresh every 5 minutes
-    const usersInterval = setInterval(fetchOnlineUsers, 10000); // Refresh every 10 seconds
-    const recentGamesInterval = setInterval(fetchRecentGames, 30000); // Refresh every 30 seconds
+    const videosInterval = setInterval(fetchFeaturedVideos, 300000);
+    const usersInterval = setInterval(fetchOnlineUsers, 10000);
+    const recentGamesInterval = setInterval(fetchRecentGames, 30000);
     const squadsInterval = setInterval(fetchTopSquads, 60000);
     const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
-    const activityInterval = setInterval(updateUserActivity, 600000); // Update activity every 10 minutes
-    
-    // Keyboard event listener for modal
+    const activityInterval = setInterval(updateUserActivity, 600000);
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && embedModal.isOpen) {
         closeEmbedModal();
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
-    
+
     return () => {
       clearInterval(serverInterval);
       clearInterval(gameInterval);
@@ -833,37 +796,13 @@ export default function Home() {
   }, [user, embedModal.isOpen]);
 
   useEffect(() => {
-    // Reset current slide if it's out of bounds after filtering
     if (currentSlide >= bannerSlides.length) {
       setCurrentSlide(0);
     }
   }, [user, bannerSlides.length, currentSlide]);
 
-  // Helper function to get class color
-  const getClassColor = (className: string) => {
-    switch (className?.toLowerCase()) {
-      // Updated class names to match actual game data
-      case 'engineer': return '#f59e0b'; // Amber
-      case 'medic': return '#10b981'; // Green  
-      case 'rifleman': return '#ef4444'; // Red
-      case 'grenadier': return '#f97316'; // Orange
-      case 'rocket': return '#3b82f6'; // Blue
-      case 'mortar': return '#8b5cf6'; // Purple
-      case 'sniper': return '#06b6d4'; // Cyan
-      case 'pilot': return '#84cc16'; // Lime
-      // Legacy class names (fallback)
-      case 'infantry': return '#ef4444'; // Red
-      case 'heavy weapons': return '#3b82f6'; // Blue
-      case 'jump trooper': return '#6b7280'; // Gray
-      case 'infiltrator': return '#8b5cf6'; // Purple
-      case 'squad leader': return '#10b981'; // Green
-      case 'field medic': return '#eab308'; // Yellow
-      case 'combat engineer': return '#f59e0b'; // Amber
-      default: return '#d1d5db'; // Light gray for unknown
-    }
-  };
+  // ── Helper functions ────────────────────────────────────────────────
 
-  // Helper function to get class priority order
   const getClassPriority = (className: string): number => {
     switch (className.toLowerCase()) {
       case 'field medic': return 1;
@@ -877,7 +816,6 @@ export default function Home() {
     }
   };
 
-  // Helper function to get weapon emoji
   const getWeaponEmoji = (weapon: string) => {
     switch (weapon?.toLowerCase()) {
       case 'caw': return ' 🪚';
@@ -886,86 +824,39 @@ export default function Home() {
     }
   };
 
-  // Helper function to get role color
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'captain': return 'text-yellow-400';
-      case 'co_captain': return 'text-orange-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  // Helper function to get role icon
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'captain': return '👑';
-      case 'co_captain': return '⭐';
-      default: return '';
-    }
-  };
-
-  // Helper function to get YouTube video ID from URL
   const getYouTubeVideoId = (url: string) => {
     if (!url) return null;
-    
-    // Handle different YouTube URL formats
+
     const patterns = [
-      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,           // youtube.com/watch?v=
-      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,             // youtube.com/embed/
-      /(?:youtube\.com\/v\/)([^&\n?#]+)/,                 // youtube.com/v/
-      /(?:youtu\.be\/)([^&\n?#]+)/,                       // youtu.be/
-      /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/           // any youtube.com with v= parameter
+      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/v\/)([^&\n?#]+)/,
+      /(?:youtu\.be\/)([^&\n?#]+)/,
+      /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/
     ];
-    
+
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match && match[1]) {
-        //console.log(`🔍 YouTube ID extracted: ${match[1]} from ${url}`);
         return match[1];
       }
     }
-    
-    console.warn(`⚠️ Could not extract YouTube ID from: ${url}`);
+
     return null;
   };
 
-  // Helper function to get YouTube thumbnail URL with fallback
   const getYouTubeThumbnail = (url: string, quality = 'hqdefault') => {
     const videoId = getYouTubeVideoId(url);
     if (!videoId) return null;
-    
-    // YouTube thumbnail qualities in order of preference:
-    // maxresdefault (1920x1080) - not always available
-    // hqdefault (480x360) - most reliable
-    // mqdefault (320x180) - fallback
-    // default (120x90) - always available
-    
-    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
-            // console.log(`🖼️ Generated thumbnail URL: ${thumbnailUrl}`);
-    return thumbnailUrl;
+    return `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
   };
 
-  // Helper function to get the best available YouTube thumbnail
   const getBestYouTubeThumbnail = (url: string) => {
     const videoId = getYouTubeVideoId(url);
     if (!videoId) return null;
-    
-    // Try hqdefault first (most reliable high quality)
     return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   };
 
-  // Helper function to get video type icon
-  const getVideoTypeIcon = (type: string) => {
-    switch (type) {
-      case 'match': return '🎮';
-      case 'highlight': return '⭐';
-      case 'tutorial': return '🎓';
-      case 'tournament': return '🏆';
-      default: return '📹';
-    }
-  };
-
-  // Helper function to record video view
   const recordVideoView = async (videoId?: string, matchId?: string) => {
     try {
       await supabase.rpc('record_video_view', {
@@ -978,65 +869,25 @@ export default function Home() {
     }
   };
 
-  // Function to open YouTube embed modal
   const openVideoEmbed = (video: FeaturedVideo) => {
     if (video.youtube_url) {
       const videoId = getYouTubeVideoId(video.youtube_url);
       if (videoId) {
-        setEmbedModal({
-          isOpen: true,
-          videoId: videoId,
-          title: video.title
-        });
+        setEmbedModal({ isOpen: true, videoId, title: video.title });
         recordVideoView(video.id);
       }
     }
   };
 
-  // Function to close embed modal
   const closeEmbedModal = () => {
-    setEmbedModal({
-      isOpen: false,
-      videoId: null,
-      title: ''
-    });
+    setEmbedModal({ isOpen: false, videoId: null, title: '' });
   };
 
-  // Parse patch notes with Infantry Online colors (simplified for feed)
-  const parsePatchNotesFeed = (content: string) => {
-    const lines = content.split('\n');
-    const updates: Array<{ date: string; changes: string[] }> = [];
-    let currentUpdate: { date: string; changes: string[] } | null = null;
+  // ── Recorded games theater helpers ──────────────────────────────────
 
-    for (const line of lines) {
-      // Check for date pattern (MM/DD/YYYY or similar)
-      const dateMatch = line.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-      if (dateMatch) {
-        if (currentUpdate) {
-          updates.push(currentUpdate);
-        }
-        currentUpdate = {
-          date: dateMatch[1],
-          changes: []
-        };
-      } else if (currentUpdate && line.trim() && !line.includes('====')) {
-        // Add non-empty lines that aren't separators
-        currentUpdate.changes.push(line.trim());
-      }
-    }
-
-    // Add the last update
-    if (currentUpdate) {
-      updates.push(currentUpdate);
-    }
-
-    return updates.slice(0, 3); // Return last 3 updates
-  };
-
-  // Helper functions for recorded games theater display
   const getDefenseClassOrder = (className: string): number => {
     const order: Record<string, number> = {
-      'Engineer': 1, 'Medic': 2, 'Rifleman': 3, 'Grenadier': 4, 
+      'Engineer': 1, 'Medic': 2, 'Rifleman': 3, 'Grenadier': 4,
       'Rocket': 5, 'Mortar': 6, 'Sniper': 7, 'Pilot': 8
     };
     return order[className] || 99;
@@ -1044,24 +895,24 @@ export default function Home() {
 
   const getOffenseClassOrder = (className: string): number => {
     const order: Record<string, number> = {
-      'Pilot': 1, 'Rifleman': 2, 'Grenadier': 3, 'Rocket': 4, 
+      'Pilot': 1, 'Rifleman': 2, 'Grenadier': 3, 'Rocket': 4,
       'Mortar': 5, 'Sniper': 6, 'Engineer': 7, 'Medic': 8
     };
     return order[className] || 99;
   };
 
   const getTeamColor = (teamName: string): string => {
-    if (teamName.includes('TI') || teamName.includes('Titan')) return '#3B82F6'; // Blue
-    if (teamName.includes('CO') || teamName.includes('Collective')) return '#EF4444'; // Red
-    return '#6B7280'; // Gray for unknown
+    if (teamName.includes('TI') || teamName.includes('Titan')) return '#3B82F6';
+    if (teamName.includes('CO') || teamName.includes('Collective')) return '#EF4444';
+    return '#6B7280';
   };
 
   const getPlayerWinStatus = (player: RecordedGamePlayer, game: RecordedGame): 'win' | 'loss' | 'unknown' => {
     if (!game.winningInfo) return 'unknown';
-    
+
     const playerTeam = player.team;
     const winnerTeam = game.winningInfo.winner;
-    
+
     if (playerTeam === winnerTeam) return 'win';
     if (playerTeam && winnerTeam && playerTeam !== winnerTeam) return 'loss';
     return 'unknown';
@@ -1069,24 +920,23 @@ export default function Home() {
 
   const getGroupedGamePlayers = (game: RecordedGame) => {
     if (!game?.players) return {};
-    
+
     const teamGroups = game.players.reduce((acc, player) => {
       const team = player.team || 'Unknown';
       if (!acc[team]) {
         acc[team] = { defense: [], offense: [] };
       }
-      
+
       const side = player.side || 'N/A';
       if (side === 'defense') {
         acc[team].defense.push(player);
       } else if (side === 'offense') {
         acc[team].offense.push(player);
       }
-      
+
       return acc;
     }, {} as Record<string, { defense: RecordedGamePlayer[], offense: RecordedGamePlayer[] }>);
 
-    // Sort within each team/side group
     Object.keys(teamGroups).forEach(team => {
       teamGroups[team].defense.sort((a, b) => {
         const orderA = getDefenseClassOrder(a.main_class || '');
@@ -1117,7 +967,7 @@ export default function Home() {
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
+
     if (diffInHours < 24) {
       return `${Math.floor(diffInHours)}h ago`;
     } else if (diffInHours < 48) {
@@ -1127,6 +977,8 @@ export default function Home() {
     }
   };
 
+  // ── Loading state ───────────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 flex items-center justify-center">
@@ -1135,13 +987,21 @@ export default function Home() {
     );
   }
 
+  // ── Current slide helpers ───────────────────────────────────────────
+  const slide = bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)];
+  const slideColor = slide ? getSlideColor(slide.color) : getSlideColor('cyan');
+
+  // ── Live game helpers ───────────────────────────────────────────────
+  const activePlayers = gameData.players.filter(p => p.class !== 'Spectator' && p.class !== 'Not Playing');
+  const hasLiveGame = gameData.arenaName && activePlayers.length > 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black relative overflow-hidden">
       <Navbar user={user} />
-      
+
       <main className="container mx-auto px-4 py-8 relative z-10">
         {/* Interactive Carousel Banner */}
-        <div 
+        <div
           ref={bannerRef}
           className="relative mb-8 overflow-hidden rounded-2xl shadow-2xl"
           style={{
@@ -1151,10 +1011,10 @@ export default function Home() {
           }}
         >
           {/* Video Background */}
-          <video 
-            autoPlay 
-            loop 
-            muted 
+          <video
+            autoPlay
+            loop
+            muted
             playsInline
             className="absolute inset-0 w-full h-full object-cover"
           >
@@ -1162,109 +1022,42 @@ export default function Home() {
             <source src="/CTFPL-Website-Header-1.mp4" type="video/mp4" />
             Your browser does not support the video tag.
           </video>
-          
+
           {/* Dynamic Overlay Gradient */}
-          <div 
-            className={`absolute inset-0 transition-all duration-1000 ${
-              bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] ? (
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'cyan' ? 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'purple' ? 'bg-gradient-to-r from-gray-900/90 via-purple-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'pink' ? 'bg-gradient-to-r from-gray-900/90 via-pink-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'green' ? 'bg-gradient-to-r from-gray-900/90 via-green-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'blue' ? 'bg-gradient-to-r from-gray-900/90 via-blue-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'orange' ? 'bg-gradient-to-r from-gray-900/90 via-orange-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'indigo' ? 'bg-gradient-to-r from-gray-900/90 via-indigo-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'teal' ? 'bg-gradient-to-r from-gray-900/90 via-teal-900/60 to-gray-900/90' :
-                bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)].color === 'red' ? 'bg-gradient-to-r from-red-900/90 via-red-900/60 to-gray-900/90' :
-                'bg-gradient-to-r from-yellow-900/60 to-gray-900/90'
-              ) : 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90'
-            }`}
-          ></div>
-          
+          <div className={`absolute inset-0 transition-all duration-1000 ${slideColor.overlay}`}></div>
+
           {/* Slide Content */}
           <div className="absolute inset-0 flex items-center justify-center">
-            {bannerSlides.length > 0 && bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)] && (
-              <div 
+            {slide && (
+              <div
                 className="text-center px-4 transition-all duration-1000 transform"
                 style={{
                   transform: `translateY(${scrollY * 0.2}px) scale(${Math.max(0.8, 1 - scrollY / 1000)})`,
                   filter: `brightness(${Math.max(0.7, 1 + scrollY / 500)})`
                 }}
               >
-                <h1 
-                  className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'text-cyan-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'text-purple-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'text-pink-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'text-green-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'text-blue-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'text-orange-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'text-indigo-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'text-teal-400' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'text-red-400' :
-                    'text-yellow-400'
-                  }`}
-                >
-                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.title}
+                <h1 className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${slideColor.text}`}>
+                  {slide.title}
                 </h1>
                 <p className="text-lg lg:text-2xl text-gray-200 mb-2 drop-shadow-lg transition-all duration-1000">
-                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.subtitle}
+                  {slide.subtitle}
                 </p>
                 <div className="text-gray-300 font-mono text-sm lg:text-base drop-shadow-lg mb-4 transition-all duration-1000">
-                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.description}
+                  {slide.description}
                 </div>
-                
-                {/* Call to Action Button */}
-                <button 
-                  className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 ${
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white hover:shadow-cyan-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white hover:shadow-purple-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white hover:shadow-pink-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white hover:shadow-green-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white hover:shadow-blue-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white hover:shadow-orange-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white hover:shadow-indigo-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white hover:shadow-teal-500/25' :
-                    bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white hover:shadow-red-500/25' :
-                    'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white hover:shadow-yellow-500/25'
-                  }`}
-                  onClick={() => {
-                    const currentBannerSlide = bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)];
-                    if (currentBannerSlide) {
-                      if (currentBannerSlide.highlight === "Build Your Team") {
-                        window.location.href = '/squads';
-                      } else if (currentBannerSlide.highlight === "Join the Pool") {
-                        window.location.href = '/free-agents';
-                      } else if (currentBannerSlide.highlight === "Enter the Arena") {
-                        window.location.href = '/matches';
-                      } else if (currentBannerSlide.highlight === "View Stats") {
-                        window.location.href = '/stats';
-                      } else if (currentBannerSlide.highlight === "Challenge Players") {
-                        window.location.href = '/dueling';
-                      } else if (currentBannerSlide.highlight === "Join Discussion") {
-                        window.location.href = '/forum';
-                      } else if (currentBannerSlide.highlight === "Read Latest") {
-                        window.location.href = '/news';
-                      } else if (currentBannerSlide.highlight === "Browse Shop") {
-                        window.location.href = '/perks';
-                      } else if (currentBannerSlide.highlight === "Make a Difference") {
-                        window.location.href = '/donate';
-                      } else if (currentBannerSlide.highlight === "Join the Battle") {
-                        window.location.href = '/dashboard';
-                      } else {
-                        window.location.href = '/dashboard';
-                      }
-                    }
-                  }}
+
+                <button
+                  className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 text-white ${slideColor.button}`}
+                  onClick={() => { window.location.href = slide.href; }}
                 >
-                  {bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.highlight}
+                  {slide.highlight}
                 </button>
               </div>
             )}
           </div>
-          
+
           {/* Navigation Arrows */}
-          <button 
+          <button
             onClick={() => setCurrentSlide((prev) => (prev - 1 + bannerSlides.length) % bannerSlides.length)}
             className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
           >
@@ -1272,8 +1065,8 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          
-          <button 
+
+          <button
             onClick={() => setCurrentSlide((prev) => (prev + 1) % bannerSlides.length)}
             className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
           >
@@ -1281,7 +1074,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          
+
           {/* Slide Indicators */}
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
             {bannerSlides.map((_, index) => (
@@ -1289,17 +1082,8 @@ export default function Home() {
                 key={index}
                 onClick={() => setCurrentSlide(index)}
                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  index === currentSlide 
-                    ? `${bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'cyan' ? 'bg-cyan-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'purple' ? 'bg-purple-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'pink' ? 'bg-pink-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'green' ? 'bg-green-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'blue' ? 'bg-blue-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'orange' ? 'bg-orange-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'indigo' ? 'bg-indigo-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'teal' ? 'bg-teal-400' :
-                        bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)]?.color === 'red' ? 'bg-red-400' :
-                        'bg-yellow-400'} scale-125` 
+                  index === currentSlide
+                    ? `${slideColor.dot} scale-125`
                     : 'bg-white/50 hover:bg-white/70'
                 }`}
               />
@@ -1307,16 +1091,14 @@ export default function Home() {
           </div>
         </div>
 
-
-
-        {/* CLEAN 3-COLUMN LAYOUT - Videos and News in same container */}
+        {/* CLEAN 3-COLUMN LAYOUT */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-          
-          {/* LEFT SIDEBAR (3 columns) - Proper breathing room */}
+
+          {/* LEFT SIDEBAR (3 columns) */}
           <div className="xl:col-span-3">
             <div className="space-y-3">
-              
-              {/* Online Users - Better spacing */}
+
+              {/* Online Users */}
               {onlineUsers.length > 0 && (
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
                   <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
@@ -1332,23 +1114,23 @@ export default function Home() {
                       {onlineUsers.slice(0, 8).map((user) => (
                         <div key={user.id} className="bg-gray-800/30 border border-green-500/10 rounded p-1.5">
                           <div className="flex items-center space-x-2">
-                            <UserAvatar 
+                            <UserAvatar
                               user={{
                                 avatar_url: user.avatar_url,
                                 in_game_alias: user.in_game_alias,
                                 email: null
-                              }} 
-                              size="sm" 
+                              }}
+                              size="sm"
                             />
-                                                          <div className="flex-1 min-w-0">
-                                <div className="text-green-400 text-sm font-mono truncate">
-                                  {user.in_game_alias}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-green-400 text-sm font-mono truncate">
+                                {user.in_game_alias}
+                              </div>
+                              {user.squad_tag && (
+                                <div className="text-gray-500 text-xs truncate">
+                                  [{user.squad_tag}] {user.squad_name}
                                 </div>
-                                {user.squad_tag && (
-                                  <div className="text-gray-500 text-xs truncate">
-                                    [{user.squad_tag}] {user.squad_name}
-                                  </div>
-                                )}
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1358,7 +1140,66 @@ export default function Home() {
                 </section>
               )}
 
-              {/* Server Status - Detailed with zones */}
+              {/* Live Game */}
+              {hasLiveGame && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
+                  <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
+                    <h3 className="text-yellow-400 font-bold text-sm tracking-wider flex items-center justify-between">
+                      ⚔️ LIVE GAME
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                      </span>
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-gray-900">
+                    <div className="text-center mb-2">
+                      <div className="text-yellow-400 font-bold text-sm">{gameData.arenaName}</div>
+                      {gameData.gameType && (
+                        <div className="text-gray-400 text-xs">{gameData.gameType}</div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {(() => {
+                        const teams = activePlayers.reduce((acc, p) => {
+                          const team = p.team || 'Unknown';
+                          if (!acc[team]) acc[team] = [];
+                          acc[team].push(p);
+                          return acc;
+                        }, {} as Record<string, GamePlayer[]>);
+
+                        return Object.entries(teams).map(([team, players]) => (
+                          <div key={team} className="bg-gray-800/50 rounded p-2">
+                            <div className="text-xs font-bold mb-1" style={{ color: getTeamColor(team) }}>
+                              {team} ({players.length})
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {players.slice(0, 8).map((p, i) => (
+                                <span
+                                  key={i}
+                                  className="text-xs font-mono"
+                                  style={{ color: getClassColor(p.class) }}
+                                  title={`${p.class}${getWeaponEmoji(p.weapon || '')}`}
+                                >
+                                  {p.alias}{i < Math.min(7, players.length - 1) ? ',' : ''}
+                                </span>
+                              ))}
+                              {players.length > 8 && (
+                                <span className="text-xs text-gray-500">+{players.length - 8}</span>
+                              )}
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className="text-center mt-2">
+                      <span className="text-gray-500 text-xs">{activePlayers.length} players</span>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* Server Status */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
                   <h3 className="text-blue-400 font-bold text-sm tracking-wider">📡 SERVER STATUS</h3>
@@ -1381,7 +1222,7 @@ export default function Home() {
                       ))}
                     </div>
                   )}
-                  
+
                   {serverData.lastUpdated && (
                     <p className="text-xs text-gray-500 mt-3 text-center font-mono">
                       {new Date(serverData.lastUpdated).toLocaleTimeString()}
@@ -1430,7 +1271,7 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Scheduled Matches - Only show if there are matches */}
+              {/* Scheduled Matches */}
               {upcomingMatches.length > 0 && (
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
                   <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
@@ -1488,11 +1329,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* CENTER CONTENT (6 columns) - News and Videos stacked */}
+          {/* CENTER CONTENT (6 columns) */}
           <div className="xl:col-span-6">
             <div className="space-y-3">
-              
-              {/* News Section at the top */}
+
+              {/* News Section */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-4 py-2 border-b border-blue-500/30">
                   <h3 className="text-lg font-bold text-blue-400 tracking-wider">News & Updates</h3>
@@ -1502,7 +1343,7 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Recent Recorded Games Theater - Featured prominently */}
+              {/* Recent Recorded Games Theater */}
               {showRecordedGamesTheater && recordedGames.length > 0 && (
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden mb-6">
                   <div className="bg-gray-700/50 px-4 py-2 border-b border-cyan-500/30">
@@ -1534,7 +1375,7 @@ export default function Home() {
                                     </a>
                                   )}
                                   {recordedGames[0]?.gameId && (
-                                    <Link 
+                                    <Link
                                       href={`/stats/game/${encodeURIComponent(recordedGames[0].gameId)}`}
                                       className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs transition-colors"
                                     >
@@ -1545,7 +1386,7 @@ export default function Home() {
                               </div>
                               <div className="p-3">
                                 {recordedGames[0]?.videoInfo?.youtube_url && !showVideoEmbed ? (
-                                  <div 
+                                  <div
                                     className="relative cursor-pointer group"
                                     onClick={() => setShowVideoEmbed(true)}
                                   >
@@ -1558,9 +1399,7 @@ export default function Home() {
                                           try {
                                             const target = e.target as HTMLImageElement;
                                             target.src = VIDEO_THUMBNAIL_PLACEHOLDER;
-                                          } catch (imgError) {
-                                            console.warn('Image error handler failed:', imgError);
-                                          }
+                                          } catch {}
                                         }}
                                       />
                                       <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-all duration-300">
@@ -1632,18 +1471,17 @@ export default function Home() {
 
                                   return Object.entries(groupedPlayers).map(([team, { defense, offense }]) => {
                                     try {
-                                      const winStatus = defense?.length > 0 ? getPlayerWinStatus(defense[0], recordedGames[0]) : 
+                                      const winStatus = defense?.length > 0 ? getPlayerWinStatus(defense[0], recordedGames[0]) :
                                                        offense?.length > 0 ? getPlayerWinStatus(offense[0], recordedGames[0]) : 'unknown';
-                                      
+
                                       return (
                                         <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                          {/* Team Header with Win/Loss */}
                                           <div className="flex items-center justify-between mb-2">
                                             <span className="text-gray-300 font-medium text-sm">{team}</span>
                                             {winStatus !== 'unknown' && (
                                               <div className={`px-3 py-1.5 rounded-md text-xs font-bold border-2 ${
-                                                winStatus === 'win' 
-                                                  ? 'bg-green-600/80 text-green-50 border-green-400 shadow-green-500/25 shadow-md' 
+                                                winStatus === 'win'
+                                                  ? 'bg-green-600/80 text-green-50 border-green-400 shadow-green-500/25 shadow-md'
                                                   : 'bg-red-600/80 text-red-50 border-red-400 shadow-red-500/25 shadow-md'
                                               }`}>
                                                 {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
@@ -1651,7 +1489,6 @@ export default function Home() {
                                             )}
                                           </div>
 
-                                          {/* Defense Players */}
                                           {defense && defense.length > 0 && (
                                             <div className="mb-2">
                                               <div className="text-blue-200 text-xs font-medium mb-1">🛡️ Defense</div>
@@ -1661,7 +1498,7 @@ export default function Home() {
                                                   return (
                                                     <div key={idx} className="bg-blue-500/10 rounded p-1.5">
                                                       <div className="flex items-center justify-between">
-                                                        <span 
+                                                        <span
                                                           className="font-medium text-xs truncate"
                                                           style={{ color: getClassColor(player.main_class || '') }}
                                                           title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
@@ -1679,7 +1516,6 @@ export default function Home() {
                                             </div>
                                           )}
 
-                                          {/* Offense Players */}
                                           {offense && offense.length > 0 && (
                                             <div>
                                               <div className="text-red-200 text-xs font-medium mb-1">⚔️ Offense</div>
@@ -1689,7 +1525,7 @@ export default function Home() {
                                                   return (
                                                     <div key={idx} className="bg-red-500/10 rounded p-1.5">
                                                       <div className="flex items-center justify-between">
-                                                        <span 
+                                                        <span
                                                           className="font-medium text-xs truncate"
                                                           style={{ color: getClassColor(player.main_class || '') }}
                                                           title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
@@ -1709,7 +1545,6 @@ export default function Home() {
                                         </div>
                                       );
                                     } catch (teamError) {
-                                      console.warn('Error rendering team:', teamError, team);
                                       return (
                                         <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
                                           <p className="text-gray-400 text-center text-sm">Error loading team data</p>
@@ -1717,8 +1552,7 @@ export default function Home() {
                                       );
                                     }
                                   });
-                                } catch (renderError) {
-                                  console.warn('Error rendering player stats:', renderError);
+                                } catch {
                                   return (
                                     <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
                                       <p className="text-gray-400 text-center text-sm">Unable to load player stats</p>
@@ -1758,7 +1592,7 @@ export default function Home() {
                                       </div>
                                     </div>
                                   )}
-                                  
+
                                   <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
                                     <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
                                       <svg className="w-3 h-3 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1767,7 +1601,7 @@ export default function Home() {
                                     </div>
                                   </div>
                                 </div>
-                                
+
                                 <div className="p-2">
                                   <h5 className="font-medium text-xs text-white group-hover:text-cyan-300 transition-colors truncate">
                                     {game.mapName} • {game.gameMode}
@@ -1786,7 +1620,7 @@ export default function Home() {
                 </section>
               )}
 
-              {/* Featured Videos below theater */}
+              {/* Featured Videos */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
                   <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>
@@ -1795,9 +1629,9 @@ export default function Home() {
                   {featuredVideos.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                       {featuredVideos.map((video) => {
-                        const thumbnailUrl = video.thumbnail_url || 
+                        const thumbnailUrl = video.thumbnail_url ||
                           (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
-                        
+
                         return (
                           <div key={video.id} className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-red-500/50 transition-all duration-300"
                           onClick={() => {
@@ -1810,12 +1644,12 @@ export default function Home() {
                           }}>
                             <div className="relative aspect-video overflow-hidden">
                               {thumbnailUrl ? (
-                                <img 
+                                <img
                                   src={thumbnailUrl}
                                   alt={video.title}
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                   onError={(e) => {
-                                    e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIyNSIgdmlld0JveD0iMCAwIDQwMCAyMjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjI1IiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTEyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzlDQTNBRiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+VmlkZW8gVGh1bWJuYWlsPC90ZXh0Pgo8L3N2Zz4K';
+                                    e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER;
                                   }}
                                 />
                               ) : (
@@ -1825,7 +1659,7 @@ export default function Home() {
                                   </div>
                                 </div>
                               )}
-                              
+
                               <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
                                 <div className="w-8 h-8 md:w-12 md:h-12 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
                                   <svg className="w-3 h-3 md:w-4 md:h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1834,7 +1668,7 @@ export default function Home() {
                                 </div>
                               </div>
                             </div>
-                            
+
                             <div className="p-2">
                               <h4 className="font-medium text-sm text-white group-hover:text-red-300 transition-colors truncate">
                                 {video.title}
@@ -1859,11 +1693,97 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR (3 columns) - Recent donations and top supporters */}
+          {/* RIGHT SIDEBAR (3 columns) */}
           <div className="xl:col-span-3">
             <div className="space-y-3">
-              
-              {/* Recent Donations - Compact */}
+
+              {/* ELO Leaderboard Widget */}
+              {eloLeaders.length > 0 && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
+                  <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
+                    <h3 className="text-cyan-400 font-bold text-sm tracking-wider flex items-center justify-between">
+                      🏅 TOP PLAYERS
+                      <Link href="/stats/elo" className="text-xs text-gray-400 hover:text-cyan-300 transition-colors">
+                        View All →
+                      </Link>
+                    </h3>
+                  </div>
+                  <div className="p-2 bg-gray-900">
+                    <div className="space-y-1">
+                      {eloLeaders.map((player, index) => {
+                        const tier = getEloTier(parseInt(player.weighted_elo || player.elo_rating || '0'));
+                        return (
+                          <Link key={player.player_name} href={`/stats/player/${encodeURIComponent(player.player_name)}`}>
+                            <div className="flex items-center gap-2 p-1.5 bg-gray-800/30 rounded hover:bg-gray-700/30 transition-colors cursor-pointer">
+                              <span className="text-xs font-bold w-5 text-center" style={{ color: tier.color }}>
+                                {index + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-white text-xs font-medium truncate block">
+                                  {player.player_name}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-mono font-bold" style={{ color: tier.color }}>
+                                  {parseInt(player.weighted_elo || player.elo_rating || '0')}
+                                </span>
+                                <span className="text-[10px] px-1 py-0.5 rounded font-bold" style={{ color: tier.color, backgroundColor: `${tier.color}20` }}>
+                                  {tier.name}
+                                </span>
+                              </div>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* Season Standings Widget */}
+              {activeSeason && seasonStandings.length > 0 && (
+                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
+                  <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
+                    <h3 className="text-purple-400 font-bold text-sm tracking-wider flex items-center justify-between">
+                      🏆 {activeSeason.league_name} S{activeSeason.season_number}
+                      <Link href="/league/standings" className="text-xs text-gray-400 hover:text-purple-300 transition-colors">
+                        Full Standings →
+                      </Link>
+                    </h3>
+                  </div>
+                  <div className="p-2 bg-gray-900">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-500 border-b border-gray-700">
+                          <th className="text-left py-1 px-1">#</th>
+                          <th className="text-left py-1">Team</th>
+                          <th className="text-center py-1">W</th>
+                          <th className="text-center py-1">L</th>
+                          <th className="text-right py-1 px-1">Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {seasonStandings.map((standing) => (
+                          <tr key={standing.squad_id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td className="py-1 px-1 text-gray-400 font-bold">{standing.rank}</td>
+                            <td className="py-1">
+                              <Link href={`/squads/${standing.squad_id}`} className="hover:text-purple-300 transition-colors">
+                                <span className="text-purple-400 font-bold">[{standing.squad_tag}]</span>
+                                <span className="text-gray-300 ml-1 truncate">{standing.squad_name}</span>
+                              </Link>
+                            </td>
+                            <td className="text-center py-1 text-green-400">{standing.wins}</td>
+                            <td className="text-center py-1 text-red-400">{standing.losses}</td>
+                            <td className="text-right py-1 px-1 text-yellow-400 font-bold">{standing.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* Recent Donations */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-3 py-1.5 border-b border-yellow-500/30">
                   <h3 className="text-sm font-bold text-yellow-400 tracking-wider">💝 Recent Donations</h3>
@@ -1887,7 +1807,7 @@ export default function Home() {
                             </div>
                             {donation.message && (
                               <div className="text-gray-400 text-[10px] truncate leading-tight">
-                                "{donation.message}"
+                                &ldquo;{donation.message}&rdquo;
                               </div>
                             )}
                           </div>
@@ -1904,7 +1824,7 @@ export default function Home() {
               </section>
 
               {/* Top Supporters */}
-              <TopSupportersWidget 
+              <TopSupportersWidget
                 showAdminControls={false}
                 maxSupporters={10}
                 className=""
@@ -1912,13 +1832,13 @@ export default function Home() {
 
             </div>
           </div>
-          
+
         </div>
       </main>
-      
+
       {/* YouTube Embed Modal */}
       {embedModal.isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -1940,7 +1860,7 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            
+
             <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
               {embedModal.videoId ? (
                 <iframe
@@ -1960,7 +1880,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-            
+
             <div className="p-4 bg-gray-800 flex items-center justify-between">
               <div className="text-sm text-gray-400">
                 🎬 Playing from YouTube
