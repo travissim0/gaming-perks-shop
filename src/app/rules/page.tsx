@@ -21,7 +21,7 @@ interface RulesEntry {
 const LEAGUE_RULES: Record<string, RulesEntry[]> = {
   ctfpl: [],
   ctfdl: [{ title: 'CTFDL Season 3 Rules', pdf: '/CTFDL-S3-Rules.pdf' }],
-  ovdl: [],
+  ovdl: [{ title: 'OVD League 2024/2025 Season 1 Rules', pdf: '/OVD-League-2024_2025-Season-1.pdf' }],
 };
 
 function RulesContent() {
