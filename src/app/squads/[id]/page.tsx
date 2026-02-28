@@ -89,6 +89,9 @@ export default function SquadDetailPage() {
   // Add user profile state for role checking
   const [userProfile, setUserProfile] = useState<any>(null);
   
+  // Member stats
+  const [memberStats, setMemberStats] = useState<Record<string, { kills: number; kd: number | null; captures: number; elo: number | null; eloTier: string | null }>>({});
+
   // Banner management states
   const [showBannerForm, setShowBannerForm] = useState(false);
   const [bannerUrl, setBannerUrl] = useState('');
@@ -156,6 +159,48 @@ export default function SquadDetailPage() {
     return () => { cancelled = true; };
   }, [user?.id, squad?.id]);
 
+  // Load member stats when squad data becomes available
+  useEffect(() => {
+    if (!squad?.members?.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [statsRes, eloRes] = await Promise.all([
+          fetch('/api/player-stats/leaderboard?gameMode=Combined&limit=1000&minGames=0').then(r => r.ok ? r.json() : { data: [] }),
+          fetch('/api/player-stats/elo-leaderboard?gameMode=Combined&limit=1000&minGames=0').then(r => r.ok ? r.json() : { data: [] }),
+        ]);
+        if (cancelled) return;
+        const statsByName: Record<string, any> = {};
+        ((statsRes.data || []) as any[]).forEach((p: any) => {
+          const key = (p.player_name || '').trim().toLowerCase();
+          if (key) statsByName[key] = p;
+        });
+        const eloByName: Record<string, any> = {};
+        ((eloRes.data || []) as any[]).forEach((p: any) => {
+          const key = (p.player_name || '').trim().toLowerCase();
+          if (key) eloByName[key] = p;
+        });
+        const result: Record<string, { kills: number; kd: number | null; captures: number; elo: number | null; eloTier: string | null }> = {};
+        squad.members.forEach(m => {
+          const alias = (m.in_game_alias || '').trim().toLowerCase();
+          const s = statsByName[alias];
+          const e = eloByName[alias];
+          result[m.player_id] = {
+            kills: s?.total_kills ?? 0,
+            kd: s?.kill_death_ratio != null ? Number(s.kill_death_ratio) : null,
+            captures: s?.total_captures ?? 0,
+            elo: e?.weighted_elo != null ? Number(e.weighted_elo) : null,
+            eloTier: e?.elo_tier?.name ?? null,
+          };
+        });
+        if (!cancelled) setMemberStats(result);
+      } catch (e) {
+        // Non-critical, stats just won't show
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [squad?.members]);
+
   // Load pending requests when squad data becomes available and user is captain/co-captain or admin
   useEffect(() => {
     if (squad && user && !pageLoading) {
@@ -199,8 +244,6 @@ export default function SquadDetailPage() {
 
     const { data: membersData } = await queries.getSquadMembers(squadId);
     
-    console.log('🛡️ [Squad Detail] Raw members data:', membersData);
-    
     const formattedSquad: Squad = {
       ...squadData,
       updated_at: squadData.updated_at || new Date().toISOString(),
@@ -219,22 +262,11 @@ export default function SquadDetailPage() {
       })) || []
     };
 
-    console.log('🛡️ [Squad Detail] Formatted squad:', {
-      id: formattedSquad.id,
-      name: formattedSquad.name,
-      tag: formattedSquad.tag,
-      is_legacy: formattedSquad.is_legacy,
-      membersCount: formattedSquad.members.length,
-      members: formattedSquad.members
-    });
-
     setSquad(formattedSquad);
   };
 
   const loadUserSquad = async () => {
     if (!user) return;
-    
-    console.log('🏴 [Squad Detail] Loading user squad for:', user.id);
     
     const { data: squadData } = await queries.getUserSquad(user.id);
     
@@ -246,10 +278,8 @@ export default function SquadDetailPage() {
         is_legacy: (squadData.squads as any).is_legacy || false
       };
       
-      console.log('🏴 [Squad Detail] Setting user squad:', userSquadInfo);
       setUserSquad(userSquadInfo);
     } else {
-      console.log('🏴 [Squad Detail] No user squad found, setting to null');
       setUserSquad(null);
     }
   };
@@ -362,7 +392,7 @@ export default function SquadDetailPage() {
         } catch (enhancedError: any) {
           // If enhanced columns don't exist, fall back to basic query
           if (enhancedError.message?.includes('column') && enhancedError.message?.includes('does not exist')) {
-            console.log('📝 Enhanced invite tracking columns not yet available, using basic query...');
+            // Enhanced invite tracking columns not yet available, using basic query
             const { data, error } = await supabase
               .from('squad_invites')
               .select(`
@@ -448,7 +478,6 @@ export default function SquadDetailPage() {
       }
 
       if (existingRequest) {
-        console.log('📋 Found existing request:', existingRequest);
         toast.error('You already have a pending join request for this squad');
         setHasExistingRequest(true);
         setIsRequesting(false);
@@ -735,73 +764,18 @@ export default function SquadDetailPage() {
   };
 
   const canRequestToJoin = () => {
-    console.log('🔍 canRequestToJoin check:', {
-      user: !!user,
-      squad: !!squad,
-      hasExistingRequest,
-      userSquad: userSquad?.id,
-      squadId: squad?.id,
-      isAlreadyMember: squad?.members.some(member => member.player_id === user?.id),
-      isActive: squad?.is_active,
-      isLegacy: squad?.is_legacy
-    });
-    
-    if (!user || !squad) {
-      console.log('❌ Failed basic checks');
-      return false;
-    }
-    
-    // Check if user is already a member of this squad
+    if (!user || !squad) return false;
     const isAlreadyMember = squad.members.some(member => member.player_id === user.id);
-    if (isAlreadyMember) {
-      console.log('❌ User is already a member of this squad');
-      return false;
-    }
-    
-    // BLOCK REQUESTS TO LEGACY SQUADS - They are invitation-only by captain
-    if (squad.is_legacy === true) {
-      console.log('❌ Cannot request to join legacy squad - invitation only');
-      return false;
-    }
-    
-    // Check if user is already in another active (non-legacy) squad
-    if (userSquad && userSquad.id !== squad.id && !(userSquad.is_legacy === true)) {
-      console.log('❌ User is in another active squad');
-      return false;
-    }
-    
-    // Can't request to join if user is the captain (shouldn't happen, but safety check)
-    if (squad.captain_id === user.id) {
-      console.log('❌ User is the captain');
-      return false;
-    }
-
-    // Must be in free agent pool to apply (when we have loaded status)
-    if (isInFreeAgentPool === false) {
-      console.log('❌ User is not in free agent pool');
-      return false;
-    }
-    
-    // Allow requests to active squads only (not legacy), and in free agent pool
-    console.log('✅ Can request to join active squad');
+    if (isAlreadyMember) return false;
+    if (squad.is_legacy === true) return false;
+    if (userSquad && userSquad.id !== squad.id && !(userSquad.is_legacy === true)) return false;
+    if (squad.captain_id === user.id) return false;
+    if (isInFreeAgentPool === false) return false;
     return true;
   };
 
   const isCurrentMember = () => {
-    // Check if user is actually in this squad's member list
-    // This works for both active and legacy squads
-    const isMember = user && squad && squad.members.some(member => member.player_id === user.id);
-    
-    console.log('🔍 isCurrentMember check:', {
-      userId: user?.id,
-      squadId: squad?.id,
-      squadName: squad?.name,
-      squadMembersCount: squad?.members?.length,
-      squadMembers: squad?.members?.map(m => ({ id: m.player_id, alias: m.in_game_alias })),
-      isMember
-    });
-    
-    return isMember;
+    return user && squad && squad.members.some(member => member.player_id === user.id);
   };
 
   const canLeaveSquad = () => {
@@ -1453,7 +1427,7 @@ export default function SquadDetailPage() {
                     {/* Leave Squad Button for Current Members */}
                     {canLeaveSquad() && (
                       <button
-                        onClick={leaveSquad}
+                        onClick={initiateLeaveSquad}
                         disabled={isRequesting}
                         className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 disabled:cursor-not-allowed"
                       >
@@ -1521,24 +1495,12 @@ export default function SquadDetailPage() {
                   {renderMemberCountBadges(squad.members, squad)}
                 </div>
                 
-                {/* Legend */}
-                <div className="bg-slate-700/30 border border-slate-600/30 rounded-lg p-4 mt-3">
-                  <div className="text-sm font-medium text-gray-300 mb-3">Badge Legend:</div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded-md text-sm border border-blue-500/30">Regular</span>
-                      <span className="text-gray-300 text-sm">Normal squad members</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-orange-600/20 text-orange-300 px-2 py-1 rounded-md text-sm border border-orange-500/30">Transitional</span>
-                      <span className="text-gray-300 text-sm">Players from other zones (Skirmish/USL) or new players</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-red-600/20 text-red-300 px-2 py-1 rounded-md text-sm border border-red-500/30 flex items-center gap-1">⚠️ Over Limit</span>
-                      <span className="text-gray-300 text-sm">Squad exceeds maximum capacity</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Compact legend - inline with member count */}
+                <p className="text-xs text-gray-500 mt-2">
+                  <span className="text-blue-400">R</span> = Regular &nbsp;
+                  <span className="text-orange-400">T</span> = Transitional (exempt from limit) &nbsp;
+                  👑 Captain &nbsp; ⭐ Co-Captain
+                </p>
               </div>
               
               {/* Mobile-optimized compact member list */}
@@ -1566,17 +1528,22 @@ export default function SquadDetailPage() {
                         <span className="text-lg md:text-2xl flex-shrink-0">{getRoleIcon(member.role)}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="font-semibold text-white text-sm md:text-base truncate">{member.in_game_alias}</p>
+                            <Link
+                              href={`/stats/player/${encodeURIComponent(member.in_game_alias)}`}
+                              className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline text-sm md:text-base truncate"
+                            >
+                              {member.in_game_alias}
+                            </Link>
                             {member.transitional_player ? (
-                              <span 
-                                className="text-orange-400 text-xs px-1.5 py-0.5 bg-orange-900/30 rounded border border-orange-500/30 cursor-help"
+                              <span
+                                className="text-orange-400 text-xs px-1.5 py-0.5 bg-orange-900/30 rounded border border-orange-500/30 cursor-help flex-shrink-0"
                                 title="Transitional Player - From other zones (Skirmish/USL) or new players, exempt from squad size limits"
                               >
-                                🔄 T
+                                T
                               </span>
                             ) : (
-                              <span 
-                                className="text-blue-400 text-xs px-1.5 py-0.5 bg-blue-900/30 rounded border border-blue-500/30 cursor-help"
+                              <span
+                                className="text-blue-400 text-xs px-1.5 py-0.5 bg-blue-900/30 rounded border border-blue-500/30 cursor-help flex-shrink-0"
                                 title="Regular Player - Counts toward squad size limit"
                               >
                                 R
@@ -1588,16 +1555,32 @@ export default function SquadDetailPage() {
                           </p>
                         </div>
                       </div>
-                      
+
+                      {/* Member Stats */}
+                      {memberStats[member.player_id] && (
+                        <div className="flex items-center gap-3 text-xs tabular-nums">
+                          <span className="text-gray-400" title="Kills">{memberStats[member.player_id].kills.toLocaleString()} <span className="text-gray-500">K</span></span>
+                          <span className="text-gray-400" title="K/D Ratio">{memberStats[member.player_id].kd != null ? memberStats[member.player_id].kd!.toFixed(2) : '—'} <span className="text-gray-500">K/D</span></span>
+                          <span className="text-gray-400" title="Captures">{memberStats[member.player_id].captures.toLocaleString()} <span className="text-gray-500">Caps</span></span>
+                          {memberStats[member.player_id].elo != null && (
+                            <span
+                              title={memberStats[member.player_id].eloTier || ''}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-cyan-400 bg-cyan-500/10 border border-cyan-500/30"
+                            >
+                              {Math.round(memberStats[member.player_id].elo!)}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                        <div className="text-sm text-gray-400 sm:text-right">
+                        <div className="text-sm text-gray-400 sm:text-right whitespace-nowrap">
                           Joined {new Date(member.joined_at).toLocaleDateString()}
                         </div>
-                        
-                        {/* Squad Management Actions - More compact on mobile */}
+
+                        {/* Squad Management Actions */}
                         {canManageSquad() && member.player_id !== user?.id && (
                           <div className="flex gap-1 flex-wrap">
-                            {/* Promote/Demote buttons */}
                             {isCaptain() && member.role === 'player' && (
                               <button
                                 onClick={() => promoteMember(member.id, member.in_game_alias, 'co_captain')}
@@ -1616,8 +1599,6 @@ export default function SquadDetailPage() {
                                 ⬇️
                               </button>
                             )}
-                            
-                            {/* Transfer ownership (captain only, to non-captains) */}
                             {isCaptain() && member.role !== 'captain' && (
                               <button
                                 onClick={() => transferOwnership(member.player_id, member.in_game_alias)}
@@ -1627,8 +1608,6 @@ export default function SquadDetailPage() {
                                 👑
                               </button>
                             )}
-                            
-                            {/* Kick button */}
                             {(isCaptain() || (canManageSquad() && member.role === 'player')) && (
                               <button
                                 onClick={() => kickMember(member.id, member.in_game_alias)}
@@ -1804,38 +1783,10 @@ export default function SquadDetailPage() {
                   </div>
                 )}
                 
-                {/* Legend for invite analytics */}
-                <div className="bg-slate-700/30 border border-slate-600/30 rounded-lg p-4 mt-6">
-                  <div className="text-sm font-medium text-gray-300 mb-3">Invite Analytics Legend:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-xs font-medium text-gray-400 mb-2">Status:</div>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-yellow-600/20 text-yellow-300 border border-yellow-500/30">⏳ Pending</span>
-                          <span className="text-gray-400">Awaiting response</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-green-600/20 text-green-300 border border-green-500/30">✅ Accepted</span>
-                          <span className="text-gray-400">Player joined squad</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-500/30">❌ Declined</span>
-                          <span className="text-gray-400">Player declined invite</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-400 mb-2">Tracking:</div>
-                      <div className="space-y-1 text-xs text-gray-300">
-                        <div>• <strong>Source:</strong> How invite was sent</div>
-                        <div>• <strong>Type:</strong> Purpose of invitation</div>
-                        <div>• <strong>Viewed:</strong> Player opened the invite</div>
-                        <div>• <strong>Response Time:</strong> Time to respond</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {/* Compact invite legend */}
+                <p className="text-xs text-gray-500 mt-4">
+                  ⏳ Pending &nbsp; ✅ Accepted &nbsp; ❌ Declined &nbsp;|&nbsp; Source = how sent &nbsp; Viewed = player opened it
+                </p>
               </div>
             </div>
           </div>
@@ -1882,6 +1833,33 @@ export default function SquadDetailPage() {
                   ))}
                 </ul>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Squad Confirmation Modal */}
+      {showLeaveConfirmation && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowLeaveConfirmation(false)}>
+          <div className="bg-gray-800 rounded-xl border border-red-500/30 w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-white mb-3">Leave Squad?</h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to leave <span className="text-cyan-400 font-semibold">[{squad.tag}] {squad.name}</span>? You will need to request to rejoin.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={leaveSquad}
+                disabled={isRequesting}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 text-white py-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+              >
+                {isRequesting ? 'Leaving...' : 'Yes, Leave'}
+              </button>
+              <button
+                onClick={() => setShowLeaveConfirmation(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
