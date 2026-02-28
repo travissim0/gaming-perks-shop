@@ -9,18 +9,21 @@ Reference for which tables and API routes belong to which system. Use this when 
 ### Tables
 | System | Prefix | Examples |
 |--------|--------|----------|
-| CTF (any league: CTFPL, CTFDL, OVDL, etc.) | `ctf_` | `ctf_squads`, `ctf_free_agents` |
-| Dueling (1v1) | `dueling_` | `dueling_matches`, `dueling_leaderboard` |
+| CTF (leagues, squads, dueling, free agents) | `ctf_` / `dueling_` / `ctfpl_` | `ctf_squads`, `dueling_matches`, `ctfpl_seasons` |
+| USL (BO9 series) | `usl_` (new) / `dueling_bo9_` (legacy) | `dueling_bo9_series`, `dueling_bo9_rounds` |
 | Triple Threat (3v3) | `tt_` | `tt_teams`, `tt_matches` |
 | Shared / Platform | no prefix | `profiles`, `private_messages` |
 | Community | `forum_` / `news_` | `forum_threads`, `news_posts` |
 | Zones | `zone_` | `zone_status`, `zone_population_history` |
 
+> **Note:** Regular 1v1 dueling (`dueling_` tables) is part of the CTF ecosystem. BO9 dueling (`dueling_bo9_` tables) belongs to USL, a completely separate system. Don't mix them up.
+
 ### API Routes
 | System | Route Prefix | Examples |
 |--------|-------------|----------|
 | CTF (new endpoints) | `/api/ctf/` | `/api/ctf/free-agents`, `/api/ctf/roster-lock` |
-| Dueling | `/api/dueling/` | `/api/dueling/matches`, `/api/dueling/stats` |
+| CTF Dueling (legacy) | `/api/dueling/` | `/api/dueling/matches`, `/api/dueling/stats` |
+| USL | `/api/usl/` | `/api/usl/bo9-stats` |
 | Triple Threat | `/api/triple-threat/` | `/api/triple-threat/stats`, `/api/triple-threat/series-analysis` |
 | Shared / Platform | `/api/` | `/api/avatars`, `/api/player-stats` |
 
@@ -28,7 +31,8 @@ Reference for which tables and API routes belong to which system. Use this when 
 | System | Route Prefix | Examples |
 |--------|-------------|----------|
 | CTF | `/league/` | `/league/standings`, `/league/match-reports` |
-| Dueling | `/dueling/` | `/dueling`, `/dueling/bo9-stats` |
+| CTF Dueling | `/dueling/` | `/dueling` |
+| USL | `/usl/` or `/dueling/bo9-stats` (legacy) | `/dueling/bo9-stats` |
 | Triple Threat | `/triple-threat/` | `/triple-threat/teams`, `/triple-threat/matches` |
 | Shared | `/` | `/profile`, `/dashboard`, `/donate` |
 
@@ -46,9 +50,11 @@ These existing CTF routes use generic paths. They still work and should NOT be m
 | `/api/match-reports/[id]/player-ratings/` | `/api/ctf/match-reports/[id]/player-ratings/` | Player rating submissions |
 | `/api/squad-ratings/` | `/api/ctf/squad-ratings/` | Squad rating system |
 | `/api/roster-lock-status/` | `/api/ctf/roster-lock-status/` | Roster lock checks |
+| `/api/dueling/` | `/api/ctf/dueling/` | Dueling API (part of CTF) |
 | `/free-agents` | `/league/free-agents` | Free agents page |
 | `/squads/` | `/league/squads/` | Squad management pages |
 | `/champions` | `/league/champions` | Hall of Champions |
+| `/dueling/bo9-stats` | `/usl/bo9-stats` | BO9 stats page (USL, not CTF) |
 
 ---
 
@@ -109,9 +115,9 @@ These are CTF-specific but use generic names. Do NOT reuse these names for other
 
 ---
 
-## Dueling Tables (1v1)
+## CTF Dueling Tables (1v1)
 
-All properly prefixed with `dueling_`. These are for the 1v1 arena dueling system.
+These are part of the CTF ecosystem — the 1v1 arena dueling that lives under the CTF section of the site. All prefixed with `dueling_`.
 
 | Table | Purpose |
 |-------|---------|
@@ -122,11 +128,18 @@ All properly prefixed with `dueling_`. These are for the 1v1 arena dueling syste
 | `dueling_kills` | Kill records from duels |
 | `recent_dueling_matches` | View/cache of recent matches |
 
-### BO9 Series (NOT CTF - standalone dueling format)
-| Table | Purpose |
-|-------|---------|
-| `dueling_bo9_series` | Best-of-9 series tracking |
-| `dueling_bo9_rounds` | Individual BO9 round results |
+> **Important:** These `dueling_` tables are CTF. Do NOT confuse with `dueling_bo9_` tables which belong to USL (see below).
+
+---
+
+## USL Tables (BO9 Series)
+
+USL is a **separate system from CTF**. The BO9 (Best-of-9) dueling format belongs here. Legacy tables use `dueling_bo9_` prefix; new USL tables should use `usl_`.
+
+| Table | Purpose | Notes |
+|-------|---------|-------|
+| `dueling_bo9_series` | Best-of-9 series tracking | Legacy name — would be `usl_bo9_series` today |
+| `dueling_bo9_rounds` | Individual BO9 round results | Legacy name — would be `usl_bo9_rounds` today |
 
 ---
 
@@ -238,9 +251,12 @@ Zone explorer and activity tracking. All prefixed with `zone_` or `scheduled_zon
 
 Building something for...
 - **CTF leagues (squads, matches, seasons, free agents)** -> table: `ctf_`, API: `/api/ctf/`, page: `/league/`
-- **1v1 dueling** -> table: `dueling_`, API: `/api/dueling/`, page: `/dueling/`
+- **CTF 1v1 dueling (leaderboard, matches, stats)** -> table: `dueling_`, API: `/api/dueling/`, page: `/dueling/`
+- **USL / BO9 series** -> table: `usl_` (new) / `dueling_bo9_` (legacy), API: `/api/usl/`, page: `/usl/`
 - **3v3 Triple Threat** -> table: `tt_`, API: `/api/triple-threat/`, page: `/triple-threat/`
 - **User accounts, messaging, donations** -> no prefix, API: `/api/`, page: `/`
 - **Forum / news** -> table: `forum_` / `news_`, page: `/forum/` / `/news/`
 - **Zone system** -> table: `zone_`, API: `/api/zone-*/`, page: `/zones/`
 - **A new game mode** -> pick a short prefix and be consistent (e.g., `koth_` for King of the Hill)
+
+> **⚠ Common mistake:** Regular dueling (`dueling_`) is CTF. BO9 dueling (`dueling_bo9_`) is USL. They are separate systems.
