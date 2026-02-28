@@ -6,75 +6,29 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-
-interface FreeAgentData {
-  id: string;
-  preferred_roles: string[];
-  secondary_roles: string[];
-  availability: string;
-  availability_days: string[];
-  availability_times: Record<string, { start: string; end: string }>;
-  skill_level: string;
-  class_ratings: Record<string, number>;
-  classes_to_try: string[];
-  notes: string;
-  contact_info: string;
-  timezone: string;
-}
-
-const CLASS_COLORS = {
-  'O INF': 'bg-red-500/20 text-red-300 border-red-500/30',
-  'D INF': 'bg-red-500/20 text-red-300 border-red-500/30',
-  'O HVY': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'D HVY': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'Medic': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  'SL': 'bg-green-500/20 text-green-300 border-green-500/30',
-  'Foot JT': 'bg-gray-400/20 text-gray-300 border-gray-400/30',
-  'Pack JT': 'bg-gray-400/20 text-gray-300 border-gray-400/30',
-  'Engineer': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  'Infil': 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-};
-
-const CLASS_OPTIONS = ['O INF', 'D INF', 'O HVY', 'D HVY', 'Medic', 'SL', 'Foot JT', 'Pack JT', 'Engineer', 'Infil'];
-
-const TIMEZONE_OPTIONS = [
-  { value: 'America/Los_Angeles', label: 'PST - Pacific' },
-  { value: 'America/Denver', label: 'MST - Mountain' },
-  { value: 'America/Phoenix', label: 'MST - Arizona' },
-  { value: 'America/Chicago', label: 'CST - Central' },
-  { value: 'America/New_York', label: 'EST - Eastern' },
-  { value: 'Europe/London', label: 'GMT - London' },
-  { value: 'Europe/Paris', label: 'CET - Central Europe' },
-  { value: 'Europe/Berlin', label: 'CET - Berlin' },
-  { value: 'Asia/Tokyo', label: 'JST - Tokyo' },
-  { value: 'Australia/Sydney', label: 'AEST - Sydney' },
-  { value: 'America/Toronto', label: 'EST - Toronto' },
-  { value: 'America/Vancouver', label: 'PST - Vancouver' }
-];
-
-const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+import FreeAgentJoinForm, { FreeAgentFormData } from '@/components/FreeAgentJoinForm';
 
 export default function UpdateFreeAgentPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [currentData, setCurrentData] = useState<any>(null);
+  const [currentData, setCurrentData] = useState<Partial<FreeAgentFormData> | null>(null);
 
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       router.push('/auth/login');
       return;
     }
-    loadCurrentFreeAgentData();
-  }, [user]);
+    if (user) {
+      loadCurrentFreeAgentData();
+    }
+  }, [user, authLoading]);
 
   const loadCurrentFreeAgentData = async () => {
     if (!user) return;
-
     try {
       setLoading(true);
-      
       const { data, error } = await supabase
         .from('free_agents')
         .select('*')
@@ -85,7 +39,19 @@ export default function UpdateFreeAgentPage() {
       if (error) throw error;
 
       if (data) {
-        setCurrentData(data);
+        setCurrentData({
+          preferred_roles: data.preferred_roles || [],
+          secondary_roles: data.secondary_roles || [],
+          availability: data.availability || '',
+          availability_days: data.availability_days || [],
+          availability_times: data.availability_times || {},
+          skill_level: data.skill_level || 'intermediate',
+          class_ratings: data.class_ratings || {},
+          classes_to_try: data.classes_to_try || [],
+          notes: data.notes || '',
+          contact_info: data.contact_info || '',
+          timezone: data.timezone || 'America/New_York',
+        });
       } else {
         toast.error('You are not currently in the free agent pool');
         router.push('/free-agents');
@@ -98,7 +64,41 @@ export default function UpdateFreeAgentPage() {
     }
   };
 
-  if (loading) {
+  const handleUpdate = async (formData: FreeAgentFormData) => {
+    if (!user) return;
+    setUpdating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Session expired. Please sign in again.');
+        return;
+      }
+
+      const response = await fetch('/api/free-agents/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update');
+      }
+
+      toast.success('Free agent info updated successfully!');
+      router.push('/free-agents');
+    } catch (error: any) {
+      console.error('Error updating free agent info:', error);
+      toast.error(error.message || 'Failed to update free agent info');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar />
@@ -109,40 +109,23 @@ export default function UpdateFreeAgentPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
-      <Navbar />
-      
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-4">
-            Update Free Agent Information
-          </h1>
-          <p className="text-gray-300 text-lg">
-            Feature coming soon! For now, please contact an admin to update your information.
-          </p>
-        </div>
-
-        <div className="bg-gray-800 rounded-lg p-6 text-center">
-          <p className="text-gray-300 mb-4">
-            We're working on this feature. In the meantime, you can:
-          </p>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={() => router.push('/free-agents')}
-              className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-6 rounded-lg transition-colors"
-            >
-              Back to Free Agents
-            </button>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg transition-colors"
-            >
-              Back to Dashboard
-            </button>
-          </div>
+  if (!currentData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-gray-400 text-lg">Loading...</p>
         </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <FreeAgentJoinForm
+      onSubmit={handleUpdate}
+      onCancel={() => router.push('/free-agents')}
+      initialData={currentData}
+      submitLabel={updating ? 'Updating...' : 'Update Free Agent Info'}
+    />
   );
-} 
+}

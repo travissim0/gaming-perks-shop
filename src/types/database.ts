@@ -54,7 +54,6 @@ export interface Profile {
   league_ban_reason?: string | null;
   league_ban_date?: string | null;
   avatar_url?: string | null;
-  hide_from_free_agents: boolean;
   transitional_player?: boolean; // Optional for backward compatibility
   created_at: string;
   updated_at: string;

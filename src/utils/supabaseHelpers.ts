@@ -103,15 +103,13 @@ async function retryWithContext<T>(
 export const getFreeAgents = async () => {
   try {
     const operation = async () => {
-      // Use regular supabase client to avoid caching issues with visibility changes
       const { data, error } = await supabase
         .from('free_agents')
         .select(`
           *,
           profiles!free_agents_player_id_fkey (
             in_game_alias,
-            avatar_url,
-            hide_from_free_agents
+            avatar_url
           )
         `)
         .order('created_at', { ascending: false });
