@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails } from '@/types/database';
+import Pagination from '@/components/Pagination';
 
 interface League {
   id: string;
@@ -24,6 +25,8 @@ export default function MatchReportsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [hasPermission, setHasPermission] = useState(false);
   const [permissionLoading, setPermissionLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
 
   useEffect(() => {
     fetchReports();
@@ -91,6 +94,11 @@ export default function MatchReportsPage() {
     return seasons.sort().reverse();
   };
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, seasonFilter, leagueFilter]);
+
   const filteredReports = reports.filter(report => {
     const matchesSearch = searchTerm === '' ||
       report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,6 +112,12 @@ export default function MatchReportsPage() {
 
     return matchesSearch && matchesSeason && matchesLeague;
   });
+
+  const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
+  const paginatedReports = filteredReports.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -279,7 +293,7 @@ export default function MatchReportsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {filteredReports.map((report) => (
+            {paginatedReports.map((report) => (
               <Link key={report.id} href={`/league/match-reports/${report.id}`}>
                 <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 cursor-pointer">
                   <div className="flex items-center justify-between mb-4">
@@ -358,6 +372,14 @@ export default function MatchReportsPage() {
                 </div>
               </Link>
             ))}
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredReports.length}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
           </div>
         )}
       </div>

@@ -73,7 +73,7 @@ export default function CreateMatchReportPage() {
         .order('season_number', { ascending: false });
       if (data) {
         setSeasonOptions(data);
-        const active = data.find((s: any) => s.status === 'active');
+        const active = data.find((s: SeasonOption) => s.status === 'active');
         if (active) {
           const name = active.season_name || `Season ${active.season_number}`;
           setFormData(prev => ({ ...prev, season_name: name }));
@@ -89,7 +89,7 @@ export default function CreateMatchReportPage() {
         .order('season_number', { ascending: false });
       if (data) {
         setSeasonOptions(data);
-        const active = data.find((s: any) => s.status === 'active');
+        const active = data.find((s: SeasonOption) => s.status === 'active');
         if (active) {
           const name = active.season_name || `Season ${active.season_number}`;
           setFormData(prev => ({ ...prev, season_name: name }));

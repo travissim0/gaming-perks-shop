@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { getClassColor, getClassColorStyle } from '@/utils/classColors';
+import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
 
 interface PlayerGameStats {
   id: number;
@@ -542,7 +543,7 @@ export default function GameStatsPage() {
                     >
                       <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden shadow-2xl">
                         <img
-                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || '/placeholder-video.jpg'}
+                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
                           alt={gameData.videoInfo.video_title || 'Match Video'}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           onError={(e) => {
@@ -780,7 +781,7 @@ export default function GameStatsPage() {
                     >
                       <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
                         <img
-                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || '/placeholder-video.jpg'}
+                          src={getYouTubeThumbnail(gameData.videoInfo.youtube_url, 'maxresdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
                           alt={gameData.videoInfo.video_title || 'Match Video'}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           onError={(e) => {

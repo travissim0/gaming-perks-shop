@@ -6,7 +6,8 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
-import type { MatchReportWithDetails, MatchPlayerRating } from '@/types/database';
+import type { MatchReportWithDetails, MatchPlayerRating, MatchReportComment } from '@/types/database';
+import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
 
 // Expandable Video Player Component
 const ExpandableVideoPlayer = ({ embedUrl, playerRating, isLeft }: { 
@@ -117,11 +118,16 @@ export default function MatchReportDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
+  const [comments, setComments] = useState<MatchReportComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
 
   useEffect(() => {
     if (params.id) {
       fetchReportDetails();
       checkPermissions();
+      fetchComments();
     }
   }, [params.id, user]);
 
@@ -170,6 +176,58 @@ export default function MatchReportDetailPage() {
     }
   };
 
+  const fetchComments = async () => {
+    try {
+      setLoadingComments(true);
+      const response = await fetch(`/api/match-reports/${params.id}/comments`);
+      const data = await response.json();
+      if (response.ok) {
+        setComments(data.comments || []);
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const submitComment = async () => {
+    if (!newComment.trim() || submittingComment) return;
+
+    try {
+      setSubmittingComment(true);
+      const response = await fetch(`/api/match-reports/${params.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setComments(prev => [...prev, data.comment]);
+        setNewComment('');
+      } else {
+        console.error('Error posting comment:', data.error);
+      }
+    } catch (err) {
+      console.error('Error submitting comment:', err);
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    try {
+      const response = await fetch(`/api/match-reports/${params.id}/comments?commentId=${commentId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setComments(prev => prev.filter(c => c.id !== commentId));
+      }
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -180,46 +238,7 @@ export default function MatchReportDetailPage() {
     });
   };
 
-  // Star rating utility functions (exact same as ratings page)
-  const getRatingColor = (rating: number) => {
-    if (rating >= 5.5) return 'text-purple-400';
-    if (rating >= 5.0) return 'text-green-400';
-    if (rating >= 4.5) return 'text-lime-400';
-    if (rating >= 4.0) return 'text-yellow-400';
-    if (rating >= 3.5) return 'text-amber-400';
-    if (rating >= 3.0) return 'text-orange-400';
-    if (rating >= 2.5) return 'text-red-400';
-    return 'text-red-500';
-  };
-
-  const getRatingBgColor = (rating: number) => {
-    if (rating >= 5.5) return 'bg-purple-500/20 border-purple-500/50';
-    if (rating >= 5.0) return 'bg-green-500/20 border-green-500/50';
-    if (rating >= 4.5) return 'bg-lime-500/20 border-lime-500/50';
-    if (rating >= 4.0) return 'bg-yellow-500/20 border-yellow-500/50';
-    if (rating >= 3.5) return 'bg-amber-500/20 border-amber-500/50';
-    if (rating >= 3.0) return 'bg-orange-500/20 border-orange-500/50';
-    if (rating >= 2.5) return 'bg-red-500/20 border-red-500/50';
-    return 'bg-red-600/20 border-red-600/50';
-  };
-
-  const getStarDisplay = (rating: number) => {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    const emptyStars = 6 - fullStars - (hasHalfStar ? 1 : 0);
-
-    return (
-      <div className="flex items-center space-x-1">
-        {[...Array(fullStars)].map((_, i) => (
-          <span key={`full-${i}`} className="text-yellow-400">★</span>
-        ))}
-        {hasHalfStar && <span className="text-yellow-400">☆</span>}
-        {[...Array(emptyStars)].map((_, i) => (
-          <span key={`empty-${i}`} className="text-gray-600">☆</span>
-        ))}
-      </div>
-    );
-  };
+  // Rating utilities imported from @/utils/ratingUtils
 
   // Extract embed code or create embed URL
   const getEmbedCode = (embedCodeOrUrl: string) => {
@@ -575,6 +594,118 @@ export default function MatchReportDetailPage() {
             </Link>
           </div>
         )}
+
+        {/* Comments Section */}
+        <div className="mt-12 bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700 rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <h3 className="text-2xl font-bold text-white">Comments</h3>
+            <span className="bg-gray-700 text-gray-300 text-sm font-medium px-2.5 py-0.5 rounded-full">
+              {comments.length}
+            </span>
+          </div>
+
+          {/* Comment Form */}
+          {user ? (
+            <div className="mb-6">
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Write a comment..."
+                maxLength={2000}
+                rows={3}
+                className="w-full bg-gray-900/50 border border-gray-600 rounded-lg p-3 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-500">
+                  {newComment.length}/2000
+                </span>
+                <button
+                  onClick={submitComment}
+                  disabled={!newComment.trim() || submittingComment}
+                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300"
+                >
+                  {submittingComment ? 'Posting...' : 'Post Comment'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 text-center py-4 bg-gray-900/30 border border-gray-700 rounded-lg">
+              <p className="text-gray-400">
+                <Link href="/login" className="text-cyan-400 hover:text-cyan-300 transition-colors">Log in</Link> to comment
+              </p>
+            </div>
+          )}
+
+          {/* Comment List */}
+          {loadingComments ? (
+            <div className="space-y-4">
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="animate-pulse flex space-x-3">
+                  <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-gray-700 rounded w-1/4"></div>
+                    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : comments.length > 0 ? (
+            <div className="space-y-4">
+              {comments.map((comment) => (
+                <div key={comment.id} className="flex space-x-3 bg-gray-900/30 border border-gray-700/50 rounded-lg p-4">
+                  {/* Avatar */}
+                  <div className="flex-shrink-0">
+                    {comment.author_avatar_url ? (
+                      <img
+                        src={comment.author_avatar_url}
+                        alt={comment.author_alias || 'Anonymous'}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+                        <span className="text-gray-400 text-sm font-bold">
+                          {(comment.author_alias || 'A').charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="text-sm font-semibold text-cyan-400">
+                        {comment.author_alias || 'Anonymous'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {formatRelativeTime(comment.created_at, { addSuffix: true })}
+                      </span>
+                    </div>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap break-words">
+                      {comment.content}
+                    </p>
+                  </div>
+
+                  {/* Delete Button */}
+                  {user && user.id === comment.user_id && (
+                    <button
+                      onClick={() => deleteComment(comment.id)}
+                      className="flex-shrink-0 text-gray-500 hover:text-red-400 transition-colors p-1"
+                      title="Delete comment"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500">Be the first to comment</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import type { MatchReportWithDetails, Profile } from '@/types/database';
+import { getRatingColor, getStarDisplay } from '@/utils/ratingUtils';
 
 export default function AddPlayerRatingPage() {
   const { user, session } = useAuth();
@@ -197,35 +198,7 @@ export default function AddPlayerRatingPage() {
     }
   };
 
-  // Star rating utility functions
-  const getRatingColor = (rating: number) => {
-    if (rating >= 5.5) return 'text-purple-400';
-    if (rating >= 5.0) return 'text-green-400';
-    if (rating >= 4.5) return 'text-lime-400';
-    if (rating >= 4.0) return 'text-yellow-400';
-    if (rating >= 3.5) return 'text-amber-400';
-    if (rating >= 3.0) return 'text-orange-400';
-    if (rating >= 2.5) return 'text-red-400';
-    return 'text-red-500';
-  };
-
-  const getStarDisplay = (rating: number) => {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    const emptyStars = 6 - fullStars - (hasHalfStar ? 1 : 0);
-
-    return (
-      <div className="flex items-center space-x-1">
-        {[...Array(fullStars)].map((_, i) => (
-          <span key={`full-${i}`} className="text-yellow-400">★</span>
-        ))}
-        {hasHalfStar && <span className="text-yellow-400">☆</span>}
-        {[...Array(emptyStars)].map((_, i) => (
-          <span key={`empty-${i}`} className="text-gray-600">☆</span>
-        ))}
-      </div>
-    );
-  };
+  // Rating utilities imported from @/utils/ratingUtils
 
   if (pageLoading) {
     return (

@@ -300,6 +300,17 @@ export interface MatchPlayerRating {
   updated_at: string;
 }
 
+export interface MatchReportComment {
+  id: string;
+  match_report_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  // Joined fields
+  author_alias?: string;
+  author_avatar_url?: string | null;
+}
+
 // =============================================================================
 // ENUMS
 // =============================================================================

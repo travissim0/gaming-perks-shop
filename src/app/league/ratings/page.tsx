@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { SquadRatingWithDetails } from '@/types/database';
+import { SYSTEM_USER_ID } from '@/lib/constants';
+import Pagination from '@/components/Pagination';
 
 interface League {
   id: string;
@@ -23,6 +25,8 @@ export default function SquadRatingsPage() {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [showUnofficialRatings, setShowUnofficialRatings] = useState(false);
   const [canManageRatings, setCanManageRatings] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
 
   useEffect(() => {
     fetchRatings();
@@ -94,9 +98,20 @@ export default function SquadRatingsPage() {
     return matchesSearch && matchesSeason && matchesLeague && matchesOfficialFilter;
   });
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedSeason, leagueFilter, showUnofficialRatings]);
+
   // Separate official and unofficial ratings for display
   const officialRatings = filteredRatings.filter(r => r.is_official === true);
   const unofficialRatings = filteredRatings.filter(r => r.is_official !== true);
+
+  const totalPages = Math.ceil(filteredRatings.length / ITEMS_PER_PAGE);
+  const paginatedRatings = filteredRatings.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -302,7 +317,7 @@ export default function SquadRatingsPage() {
           </div>
         ) : (
           <div className="grid gap-6">
-            {filteredRatings.map((rating) => (
+            {paginatedRatings.map((rating) => (
               <Link
                 key={rating.id}
                 href={`/league/ratings/${rating.id}`}
@@ -328,7 +343,7 @@ export default function SquadRatingsPage() {
                         </h3>
                         <p className="text-gray-400">
                           Analyzed by <span className="text-cyan-400">
-                            {rating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : rating.analyst_alias}
+                            {rating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : rating.analyst_alias}
                           </span>
                         </p>
                       </div>
@@ -374,6 +389,14 @@ export default function SquadRatingsPage() {
                 </div>
               </Link>
             ))}
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredRatings.length}
+              itemsPerPage={ITEMS_PER_PAGE}
+            />
           </div>
         )}
       </div>

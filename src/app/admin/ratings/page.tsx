@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
+import { SYSTEM_USER_ID } from '@/lib/constants';
 import { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
 
 // Available seasons (hardcoded list)
@@ -482,7 +483,7 @@ function AdminRatingsContent() {
 
     try {
       const newStatus = !rating.is_official;
-      const SYSTEM_ACCOUNT_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
+      const SYSTEM_ACCOUNT_ID = SYSTEM_USER_ID;
       
       // Prepare the payload
       const payload: any = {
@@ -646,7 +647,7 @@ function AdminRatingsContent() {
                           </h3>
                           <p className="text-gray-400">
                             By <span className="text-pink-400">
-                              {rating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : rating.analyst_alias}
+                              {rating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : rating.analyst_alias}
                             </span> • {rating.season_name}
                           </p>
                         </div>

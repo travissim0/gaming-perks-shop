@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
+import { SYSTEM_USER_ID } from '@/lib/constants';
+import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
 
 export default function IndividualSquadRatingPage() {
   const params = useParams();
@@ -48,45 +50,7 @@ export default function IndividualSquadRatingPage() {
     });
   };
 
-  const getRatingColor = (rating: number) => {
-    if (rating >= 5.5) return 'text-purple-400';
-    if (rating >= 5.0) return 'text-green-400';
-    if (rating >= 4.5) return 'text-lime-400';
-    if (rating >= 4.0) return 'text-yellow-400';
-    if (rating >= 3.5) return 'text-amber-400';
-    if (rating >= 3.0) return 'text-orange-400';
-    if (rating >= 2.5) return 'text-red-400';
-    return 'text-red-500';
-  };
-
-  const getRatingBgColor = (rating: number) => {
-    if (rating >= 5.5) return 'bg-purple-500/20 border-purple-500/50';
-    if (rating >= 5.0) return 'bg-green-500/20 border-green-500/50';
-    if (rating >= 4.5) return 'bg-lime-500/20 border-lime-500/50';
-    if (rating >= 4.0) return 'bg-yellow-500/20 border-yellow-500/50';
-    if (rating >= 3.5) return 'bg-amber-500/20 border-amber-500/50';
-    if (rating >= 3.0) return 'bg-orange-500/20 border-orange-500/50';
-    if (rating >= 2.5) return 'bg-red-500/20 border-red-500/50';
-    return 'bg-red-600/20 border-red-600/50';
-  };
-
-  const getStarDisplay = (rating: number) => {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    const emptyStars = 6 - fullStars - (hasHalfStar ? 1 : 0);
-
-    return (
-      <div className="flex items-center space-x-1">
-        {[...Array(fullStars)].map((_, i) => (
-          <span key={`full-${i}`} className="text-yellow-400">★</span>
-        ))}
-        {hasHalfStar && <span className="text-yellow-400">☆</span>}
-        {[...Array(emptyStars)].map((_, i) => (
-          <span key={`empty-${i}`} className="text-gray-600">☆</span>
-        ))}
-      </div>
-    );
-  };
+  // Rating utilities imported from @/utils/ratingUtils
 
   if (loading) {
     return (
@@ -186,7 +150,7 @@ export default function IndividualSquadRatingPage() {
         <div className="text-center mb-6">
           <h2 className="text-3xl font-bold text-gray-300 mb-2">
             Squad Breakdown by <span className="text-cyan-400">
-              {squadRating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : squadRating.analyst_alias}
+              {squadRating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : squadRating.analyst_alias}
             </span>
           </h2>
           <h3 className="text-xl text-gray-400 mb-2">({squadRating.season_name})</h3>
@@ -205,7 +169,7 @@ export default function IndividualSquadRatingPage() {
                   "{squadRating.analyst_quote}"
                 </blockquote>
                 <cite className="text-cyan-400 text-sm font-medium mt-2 block">
-                  — {squadRating.analyst_id === '7066f090-a1a1-4f5f-bf1a-374d0e06130c' ? 'Anonymous' : squadRating.analyst_alias}
+                  — {squadRating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : squadRating.analyst_alias}
                 </cite>
               </div>
             )}

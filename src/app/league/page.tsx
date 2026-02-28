@@ -10,6 +10,7 @@ import NewsSection from '@/components/NewsSection';
 import { useDonationMode } from '@/hooks/useDonationMode';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
 
 interface ServerStats {
   totalPlayers: number;
@@ -123,9 +124,50 @@ interface Match {
   match_type: string;
 }
 
+interface RecentGamePlayer {
+  name?: string;
+  player_name?: string;
+  alias?: string;
+}
+
+interface RecentGame {
+  gameId: string;
+  gameMode: string;
+  mapName: string;
+  gameDate: string;
+  playerDetails?: RecentGamePlayer[];
+  players?: RecentGamePlayer[];
+}
+
+interface SupabaseProfileRow {
+  id: string;
+  in_game_alias: string;
+  last_seen: string;
+  avatar_url: string | null;
+}
+
+interface SupabaseSquadRow {
+  id: string;
+  name: string;
+  tag: string;
+  banner_url?: string;
+  captain_id: string;
+  profiles: { in_game_alias: string } | null;
+}
+
+interface SupabaseMatchRow {
+  id: string;
+  title: string;
+  scheduled_at: string;
+  status: string;
+  match_type: string;
+  squad_a: { name: string } | null;
+  squad_b: { name: string } | null;
+}
+
 export default function Home() {
   const { user, loading } = useAuth();
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<Record<string, unknown> | null>(null);
   const [recentPatchNotes, setRecentPatchNotes] = useState<string>('');
   const [latestUpdateDate, setLatestUpdateDate] = useState<string>('');
   const [serverData, setServerData] = useState<ServerData>({
@@ -146,7 +188,7 @@ export default function Home() {
   const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
-  const [recentGames, setRecentGames] = useState<any[]>([]);
+  const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   
   // Recorded games state
   const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
@@ -424,16 +466,16 @@ export default function Home() {
         
         if (data.videos && Array.isArray(data.videos)) {
           // Auto-generate YouTube thumbnails if missing
-          const videosWithThumbnails = data.videos.map((video: any) => {
+          const videosWithThumbnails = data.videos.map((video: FeaturedVideo) => {
             const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
             const finalThumbnail = video.thumbnail_url || autoThumbnail;
-            
+
             console.log(`🎬 Video: "${video.title}"`);
             console.log(`  📺 YouTube URL: ${video.youtube_url || 'None'}`);
             console.log(`  🏷️ Stored Thumbnail: ${video.thumbnail_url || 'None'}`);
             console.log(`  🔧 Auto-Generated: ${autoThumbnail || 'None'}`);
             console.log(`  ✅ Final Thumbnail: ${finalThumbnail || 'None'}`);
-            
+
             return {
               ...video,
               thumbnail_url: finalThumbnail
@@ -459,7 +501,7 @@ export default function Home() {
           }
           
           if (data) {
-            const videosWithThumbnails = data.map((video: any) => {
+            const videosWithThumbnails = data.map((video: FeaturedVideo) => {
               const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
               const finalThumbnail = video.thumbnail_url || autoThumbnail;
               
@@ -510,7 +552,7 @@ export default function Home() {
           // Filter and format users, prioritizing those with in_game_alias but including others
           const formattedUsers = onlineData
             .filter(user => user.in_game_alias) // Only include users with proper aliases
-            .map((user: any) => ({
+            .map((user: SupabaseProfileRow) => ({
               id: user.id,
               in_game_alias: user.in_game_alias,
               last_seen: user.last_seen,
@@ -569,7 +611,7 @@ export default function Home() {
           const games = Array.isArray(data.games) ? data.games : [];
           console.log('🎬 Games in response:', games.length);
           
-          const gamesWithRecordings = games.filter((game: any) => {
+          const gamesWithRecordings = games.filter((game: RecordedGame) => {
             try {
               return game && 
                      typeof game === 'object' &&
@@ -587,7 +629,7 @@ export default function Home() {
           console.log('🎬 Sample game data:', gamesWithRecordings[0]);
           
           // Validate the games data structure before setting state
-          const validatedGames = gamesWithRecordings.map((game: any) => {
+          const validatedGames = gamesWithRecordings.map((game: RecordedGame) => {
             try {
               return {
                 ...game,
@@ -663,7 +705,7 @@ export default function Home() {
             .in('squad_id', squadIds)
             .eq('status', 'active');
           
-          const squads: Squad[] = data.map((squad: any) => ({
+          const squads: Squad[] = (data as unknown as SupabaseSquadRow[]).map((squad) => ({
             id: squad.id,
             name: squad.name,
             tag: squad.tag,
@@ -700,7 +742,7 @@ export default function Home() {
           .limit(5);
 
         if (!error && data) {
-          const matches: Match[] = data.map((match: any) => ({
+          const matches: Match[] = (data as unknown as SupabaseMatchRow[]).map((match) => ({
             id: match.id,
             title: match.title,
             scheduled_at: match.scheduled_at,
@@ -1367,7 +1409,7 @@ export default function Home() {
                               {new Date(game.gameDate).toLocaleDateString()}
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              {(game.playerDetails || game.players || []).slice(0, 4).map((player: any, pIndex: number) => (
+                              {(game.playerDetails || game.players || []).slice(0, 4).map((player: RecentGamePlayer, pIndex: number) => (
                                 <span key={pIndex} className="text-xs text-gray-300">
                                   {player.name || player.player_name || player.alias}{pIndex < Math.min(3, (game.playerDetails || game.players || []).length - 1) ? ',' : ''}
                                 </span>
@@ -1509,13 +1551,13 @@ export default function Home() {
                                   >
                                     <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
                                       <img
-                                        src={getYouTubeThumbnail(recordedGames[0].videoInfo.youtube_url, 'hqdefault') || '/placeholder-video.jpg'}
+                                        src={getYouTubeThumbnail(recordedGames[0].videoInfo.youtube_url, 'hqdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
                                         alt={recordedGames[0]?.videoInfo?.video_title || 'Match Recording'}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                         onError={(e) => {
                                           try {
                                             const target = e.target as HTMLImageElement;
-                                            target.src = '/placeholder-video.jpg';
+                                            target.src = VIDEO_THUMBNAIL_PLACEHOLDER;
                                           } catch (imgError) {
                                             console.warn('Image error handler failed:', imgError);
                                           }
@@ -1701,11 +1743,11 @@ export default function Home() {
                                 <div className="relative aspect-video overflow-hidden">
                                   {game.videoInfo.youtube_url ? (
                                     <img
-                                      src={getYouTubeThumbnail(game.videoInfo.youtube_url, 'hqdefault') || '/placeholder-video.jpg'}
+                                      src={getYouTubeThumbnail(game.videoInfo.youtube_url, 'hqdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
                                       alt={`${game.mapName} - ${game.gameMode}`}
                                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                       onError={(e) => {
-                                        e.currentTarget.src = '/placeholder-video.jpg';
+                                        e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER;
                                       }}
                                     />
                                   ) : (

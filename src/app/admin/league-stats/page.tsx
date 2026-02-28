@@ -6,6 +6,7 @@ import { Download, FileText, BarChart3, Users, Trophy, AlertCircle, CheckCircle,
 import { parseCSV, processPlayerStats, validatePlayerStats, ProcessedPlayerStat } from '@/lib/csv-parser';
 import CSVUploadZone from '@/components/admin/CSVUploadZone';
 import { useRouter } from 'next/navigation';
+import SeasonManagementModal from '@/components/admin/SeasonManagementModal';
 
 interface PlayerStat {
   id: number;
@@ -322,8 +323,15 @@ export default function LeagueStatsAdminPage() {
               Back to CTF Admin
             </button>
           </div>
-          <h1 className="text-3xl font-bold mb-2">League Match Statistics Admin</h1>
-          <p className="text-gray-400">Import and manage Tournament match data</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">League Match Statistics Admin</h1>
+              <p className="text-gray-400">Import and manage Tournament match data</p>
+            </div>
+            <div className="w-48">
+              <SeasonManagementModal />
+            </div>
+          </div>
         </div>
 
         {/* Stats Summary */}

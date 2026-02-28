@@ -164,15 +164,6 @@ export default function ZoneInterestPage() {
         if (profileIsAdmin) {
           adminStatus = true;
         }
-        
-        console.log('Admin status check:', {
-          user_email: user.email,
-          user_id: user.id,
-          profile_is_admin: profile.is_admin,
-          profile_ctf_role: profile.ctf_role,
-          profile_alias: profile.in_game_alias,
-          final_admin_status: adminStatus
-        });
       }
     } catch (error) {
       console.error('Exception checking admin status:', error);
@@ -273,16 +264,8 @@ export default function ZoneInterestPage() {
       });
       
       // Add test zone for site admins only
-      console.log('🔍 Checking admin status for test zone - Component state:', { 
-        isAdmin: isAdmin, 
-        adminCheckCompleted: adminCheckCompleted,
-        user_id: user?.id,
-        user_email: user?.email 
-      });
-      
       // Use the component's admin state instead of doing another check
       if (isAdmin && adminCheckCompleted) {
-        console.log('✅ Adding test zone for admin user');
         zoneOptions.push({
           name: 'TEST ZONE - Admin Only',
           key: 'test-zone-admin',
@@ -292,11 +275,8 @@ export default function ZoneInterestPage() {
           status: 'STOPPED'
         });
         
-        console.log('🧪 Creating test data for admin zone...');
         // Create fake test data for the test zone
         await createTestZoneData();
-      } else {
-        console.log('❌ Not adding test zone - Admin status:', { isAdmin, adminCheckCompleted });
       }
       
       setAvailableZones(zoneOptions);
@@ -321,10 +301,7 @@ export default function ZoneInterestPage() {
 
   const createTestZoneData = async () => {
     try {
-      console.log('Creating comprehensive test zone data...');
-      
       // Clear existing test data first
-      console.log('Clearing existing test data...');
       const { error: clearError } = await supabase
         .from('zone_interests')
         .delete()
@@ -333,8 +310,6 @@ export default function ZoneInterestPage() {
       if (clearError) {
         console.error('Error clearing existing test data:', clearError);
         // Continue anyway, might be first time
-      } else {
-        console.log('Existing test data cleared successfully');
       }
       
       // Also clear test events
@@ -345,8 +320,6 @@ export default function ZoneInterestPage() {
 
       if (clearEventsError) {
         console.error('Error clearing test events:', clearEventsError);
-      } else {
-        console.log('Test events cleared successfully');
       }
 
       // Create comprehensive test data across all zone types to showcase heatmap variety
@@ -506,31 +479,22 @@ export default function ZoneInterestPage() {
         }
       });
 
-      console.log(`Generated ${testInterests.length} test interest records across ${Object.keys(zoneKeys).length} zones`);
-      console.log(`Admin test zone entries: ${testInterests.filter(t => t.zone_name === 'test-zone-admin').length}`);
-      
       // Insert test data in batches to avoid overwhelming the database
       const batchSize = 50;
       for (let i = 0; i < testInterests.length; i += batchSize) {
         const batch = testInterests.slice(i, i + batchSize);
-        console.log(`Inserting batch ${Math.floor(i/batchSize) + 1}: ${batch.length} records`);
-        
         const { error } = await supabase
           .from('zone_interests')
           .insert(batch);
 
         if (error) {
           console.error(`Error inserting batch ${Math.floor(i/batchSize) + 1}:`, error);
-        } else {
-          console.log(`Batch ${Math.floor(i/batchSize) + 1} inserted successfully`);
         }
         
         // Small delay between batches
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      console.log('All test zone data created successfully');
-      
       // Also create some test scheduled events for the admin zone
       const testEvents = [
         {
@@ -563,8 +527,6 @@ export default function ZoneInterestPage() {
 
       if (eventsError) {
         console.error('Error creating test events:', eventsError);
-      } else {
-        console.log('Test events created successfully');
       }
       
     } catch (error) {
@@ -735,19 +697,7 @@ export default function ZoneInterestPage() {
       });
     });
 
-    console.log('🔍 Generating availability graph for', interests.length, 'interests');
-    let processedCount = 0;
-    let skippedCount = 0;
-
-    interests.forEach((interest, index) => {
-      if (index < 5) { // Debug first 5 entries
-        console.log(`Interest ${index}:`, {
-          alias: interest.player_alias,
-          days: interest.days_available,
-          timeRanges: interest.time_ranges
-        });
-      }
-
+    interests.forEach((interest) => {
       interest.days_available.forEach(day => {
         const timeRange = interest.time_ranges[day];
         if (timeRange && timeRange.start && timeRange.end) {
@@ -769,25 +719,11 @@ export default function ZoneInterestPage() {
                 dayAvailability[day][hour]++;
               }
             }
-            processedCount++;
           } catch (error) {
             console.error('Error parsing time range:', timeRange, error);
-            skippedCount++;
           }
-        } else {
-          if (index < 5) {
-            console.log(`No time range for ${day}:`, timeRange);
-          }
-          skippedCount++;
         }
       });
-    });
-
-    console.log('📊 Availability graph generation complete:', {
-      totalInterests: interests.length,
-      processedTimeRanges: processedCount,
-      skippedTimeRanges: skippedCount,
-      sampleDayData: dayAvailability['Monday']
     });
 
     return dayAvailability;
@@ -858,14 +794,6 @@ export default function ZoneInterestPage() {
   // Function to categorize zones
   const categorizeZones = async (zones: ZoneOption[]): Promise<ZoneCategory[]> => {
     // Filter out test zones for public users (only show to admins)
-    // Use the component's admin state
-    console.log('Categorizing zones - Admin check:', { 
-      isAdmin: isAdmin, 
-      adminCheckCompleted: adminCheckCompleted,
-      zones: zones.length,
-      user_id: user?.id,
-      user_email: user?.email 
-    });
     const publicZones = zones.filter(zone => {
       // Hide test zones from public users
       if (!isAdmin && (
@@ -1028,7 +956,6 @@ export default function ZoneInterestPage() {
             <>
               <button
                 onClick={async () => {
-                  console.log('Setting up database tables...');
                   try {
                     const response = await fetch('/api/admin/setup-zone-tables', {
                       method: 'POST'
@@ -1036,7 +963,6 @@ export default function ZoneInterestPage() {
                     const result = await response.json();
                     if (result.success) {
                       alert('Database tables setup completed!');
-                      console.log('Setup results:', result.results);
                     } else {
                       alert('Error setting up tables: ' + result.error);
                     }
@@ -1052,7 +978,6 @@ export default function ZoneInterestPage() {
               
               <button
                 onClick={async () => {
-                  console.log('Refreshing test data...');
                   await createTestZoneData();
                   await loadData(); // Reload all data
                 }}
@@ -1062,43 +987,8 @@ export default function ZoneInterestPage() {
               </button>
               
               <button
-                onClick={() => {
-                  console.log('=== DEBUGGING ZONE INTERESTS ===');
-                  console.log('Zone Interests Object:', zoneInterests);
-                  
-                  // Check test zone specifically
-                  const testZoneData = zoneInterests['test-zone-admin'];
-                  console.log('Test Zone Data:', testZoneData);
-                  
-                  if (testZoneData && testZoneData.length > 0) {
-                    console.log('Sample Test Zone Interest:', testZoneData[0]);
-                    
-                    // Test the heatmap generation
-                    const availabilityData = generateAvailabilityGraph(testZoneData);
-                    console.log('Generated Availability Data:', availabilityData);
-                    
-                    // Find peak activity
-                    const maxCount = Math.max(
-                      ...Object.values(availabilityData).flatMap(dayData => Object.values(dayData))
-                    );
-                    console.log('Max Count:', maxCount);
-                  } else {
-                    console.log('❌ No test zone data found');
-                  }
-                  
-                  // Show all zone keys
-                  console.log('All Zone Keys:', Object.keys(zoneInterests));
-                  console.log('Available Zones:', availableZones.map(z => ({ name: z.name, key: z.key })));
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-lg font-medium transition-all text-sm"
-              >
-                🔍 Debug Data
-              </button>
-              
-              <button
                 onClick={async () => {
                   if (confirm('Clear ALL test data? This will remove all TestPlayer entries.')) {
-                    console.log('Clearing test data...');
                     const { error } = await supabase
                       .from('zone_interests')
                       .delete()
@@ -1108,7 +998,6 @@ export default function ZoneInterestPage() {
                       console.error('Error clearing test data:', error);
                       alert('Error clearing test data: ' + error.message);
                     } else {
-                      console.log('Test data cleared successfully');
                       alert('Test data cleared successfully');
                       await loadData(); // Reload all data
                     }

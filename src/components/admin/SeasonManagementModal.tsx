@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { SYSTEM_USER_ID } from '@/lib/constants';
 
 interface Season {
   id: string;
@@ -35,7 +36,7 @@ interface League {
   description?: string | null;
 }
 
-const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c'; // System user for historical squads
+// SYSTEM_USER_ID imported from @/lib/constants
 
 // Helper functions to handle date timezone issues
 const formatDateForInput = (dateString: string | null): string => {

@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
 import { toast } from 'react-hot-toast';
 import { ProgressiveSection, useProgressiveData } from '@/components/ProgressiveSection';
+import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
 import { 
   VideoSkeleton, 
   UserListSkeleton, 
@@ -289,7 +290,7 @@ export default function Home() {
                         alt={video.title}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = '/placeholder-video.jpg';
+                          e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER;
                         }}
                       />
                     )}
