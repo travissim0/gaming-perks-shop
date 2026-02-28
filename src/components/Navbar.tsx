@@ -39,7 +39,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const [showSquadsDropdown, setShowSquadsDropdown] = useState(false);
   const [showStatsDropdown, setShowStatsDropdown] = useState(false);
   const [showCommunityDropdown, setShowCommunityDropdown] = useState(false);
-  const [showMiscDropdown, setShowMiscDropdown] = useState(false);
+  const [showToolsDropdown, setShowToolsDropdown] = useState(false);
   
   // Mobile dropdown states - simplified to one active dropdown at a time
   const [activeMobileDropdown, setActiveMobileDropdown] = useState<string | null>(null);
@@ -482,56 +482,27 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const squadsNavItems = [
     { href: '/squads', label: 'Squads', icon: '🛡️' },
     { href: '/squads/players', label: 'Players', icon: '👥' },
+    { href: '/free-agents', label: 'Free Agents', icon: '🎯' },
     { href: '/matches', label: 'Match Log', icon: '⚔️' },
-    { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
   ];
 
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
+    { href: '/dueling', label: 'Dueling', icon: '🗡️' },
   ];
-
 
   const communityNavItems = [
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
+    { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
     { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
   ];
 
-  const miscNavItems = [
+  const toolsNavItems = [
+    { href: '/perks', label: 'Perks Shop', icon: '🛍️' },
     { href: '/triple-threat', label: 'Triple Threat', icon: '⚡' },
-    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
-    { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
-    { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
-    { href: '/tools/blob-viewer/index.html', label: 'Blob Viewer', icon: '🖼️' },
-    { href: '/tools', label: 'All Tools', icon: '🔧' },
-  ];
-
-  // Navigation arrays for non-authenticated users (same as authenticated)
-  const publicSquadsNavItems = [
-    { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/squads/players', label: 'Players', icon: '👥' },
-    { href: '/matches', label: 'Match Log', icon: '⚔️' },
-    { href: '/dueling', label: 'Dueling Log', icon: '🗡️' },
-  ];
-
-  const publicStatsNavItems = [
-    { href: '/stats', label: 'Player Stats', icon: '📊' },
-    { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
-  ];
-
-  const publicCommunityNavItems = [
-    { href: '/forum', label: 'Forum', icon: '💬' },
-    { href: '/guides', label: 'Guides', icon: '📚' },
-    { href: '/community/zone-interest', label: 'Zone Interest', icon: '🎯' },
-    { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
-  ];
-
-  const publicMiscNavItems = [
-    { href: '/triple-threat', label: 'Triple Threat', icon: '⚡' },
-    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
-    { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
     { href: '/tools/blob-viewer/index.html', label: 'Blob Viewer', icon: '🖼️' },
     { href: '/tools', label: 'All Tools', icon: '🔧' },
@@ -683,13 +654,20 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         <span className="mr-3">📋</span>
                         Player Event Log
                       </Link>
+                      <Link
+                        href="/champions"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">👑</span>
+                        Hall of Champions
+                      </Link>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Squads Dropdown */}
-              <div 
+              <div
                 className="relative group"
                 onMouseEnter={() => setShowSquadsDropdown(true)}
                 onMouseLeave={() => setShowSquadsDropdown(false)}
@@ -709,7 +687,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     onMouseLeave={() => setShowSquadsDropdown(false)}
                   >
                     <div className="py-2">
-                      {publicSquadsNavItems.map((item) => (
+                      {squadsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -745,7 +723,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     onMouseLeave={() => setShowStatsDropdown(false)}
                   >
                     <div className="py-2">
-                      {publicStatsNavItems.map((item) => (
+                      {statsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -781,7 +759,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     onMouseLeave={() => setShowCommunityDropdown(false)}
                   >
                     <div className="py-2">
-                      {publicCommunityNavItems.map((item) => (
+                      {communityNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -796,28 +774,28 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 )}
               </div>
 
-              {/* Misc Dropdown */}
+              {/* Tools Dropdown */}
               <div 
                 className="relative group"
-                onMouseEnter={() => setShowMiscDropdown(true)}
-                onMouseLeave={() => setShowMiscDropdown(false)}
+                onMouseEnter={() => setShowToolsDropdown(true)}
+                onMouseLeave={() => setShowToolsDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
                   <span className="text-sm">🔧</span>
-                  <span className="font-medium">Misc</span>
+                  <span className="font-medium">Tools</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 
-                {showMiscDropdown && (
+                {showToolsDropdown && (
                   <div 
                     className="absolute top-full left-0 mt-0 w-48 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50"
-                    onMouseEnter={() => setShowMiscDropdown(true)}
-                    onMouseLeave={() => setShowMiscDropdown(false)}
+                    onMouseEnter={() => setShowToolsDropdown(true)}
+                    onMouseLeave={() => setShowToolsDropdown(false)}
                   >
                     <div className="py-2">
-                      {publicMiscNavItems.map((item) => (
+                      {toolsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -964,10 +942,21 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         <span className="mr-3">📋</span>
                         Player Event Log
                       </Link>
+                      <Link
+                        href="/champions"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">👑</span>
+                        Hall of Champions
+                      </Link>
                     </div>
                   )}
                 </div>
-                
+
                 {/* Squads Section */}
                 <div className="border-l-2 border-cyan-500/50 pl-2">
                   <button
@@ -984,7 +973,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   </button>
                   {activeMobileDropdown === 'squads' && (
                     <div className="ml-4 mt-2 space-y-1">
-                      {publicSquadsNavItems.map((item) => (
+                      {squadsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -1018,7 +1007,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   </button>
                   {activeMobileDropdown === 'stats' && (
                     <div className="ml-4 mt-2 space-y-1">
-                      {publicStatsNavItems.map((item) => (
+                      {statsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -1052,7 +1041,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   </button>
                   {activeMobileDropdown === 'community' && (
                     <div className="ml-4 mt-2 space-y-1">
-                      {publicCommunityNavItems.map((item) => (
+                      {communityNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -1070,23 +1059,23 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   )}
                 </div>
 
-                {/* Misc Section */}
+                {/* Tools Section */}
                 <div className="border-l-2 border-purple-500/50 pl-2">
                   <button
-                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'misc' ? null : 'misc')}
+                    onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'tools' ? null : 'misc')}
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
                       <span className="mr-3">🔧</span>
-                      Misc
+                      Tools
                     </div>
-                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'misc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'tools' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  {activeMobileDropdown === 'misc' && (
+                  {activeMobileDropdown === 'tools' && (
                     <div className="ml-4 mt-2 space-y-1">
-                      {publicMiscNavItems.map((item) => (
+                      {toolsNavItems.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -1169,7 +1158,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   <span className="font-medium">{item.label}</span>
                 </Link>
               ))}
-              {activeMobileDropdown === 'misc' && miscNavItems.map((item) => (
+              {activeMobileDropdown === 'tools' && toolsNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -1642,18 +1631,18 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               </svg>
             </button>
 
-            {/* Misc */}
+            {/* Tools */}
             <button 
-              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'misc' ? null : 'misc')}
+              onClick={() => setActiveMobileDropdown(activeMobileDropdown === 'tools' ? null : 'misc')}
               className={`flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r transition-all duration-300 rounded text-xs whitespace-nowrap ${
-                activeMobileDropdown === 'misc'
+                activeMobileDropdown === 'tools'
                   ? 'from-orange-600/30 to-red-600/30 text-orange-400' 
                   : 'hover:from-orange-600/20 hover:to-red-600/20'
               }`}
             >
               <span className="text-sm">🔧</span>
-              <span className="font-medium">Misc</span>
-              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'misc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span className="font-medium">Tools</span>
+              <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'tools' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -1752,6 +1741,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     <span className="mr-3 text-lg">📋</span>
                     <span className="font-medium">Player Event Log</span>
                   </Link>
+                  <Link
+                    href="/champions"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">👑</span>
+                    <span className="font-medium">Hall of Champions</span>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -1834,11 +1830,11 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               </div>
             </div>
 
-            {/* Misc Section */}
+            {/* Tools Section */}
             <div className="group relative">
               <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-orange-500/30 group-hover:shadow-lg group-hover:shadow-orange-500/20">
                 <span className="text-lg">🔧</span>
-                <span className="font-semibold">Misc</span>
+                <span className="font-semibold">Tools</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -1846,7 +1842,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               
               <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
                 <div className="py-3">
-                  {miscNavItems.map((item) => (
+                  {toolsNavItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
@@ -2025,9 +2021,9 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
 
 
                 <div>
-                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Misc</h4>
+                  <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Tools</h4>
                   <div className="space-y-1">
-                    {miscNavItems.map((item) => (
+                    {toolsNavItems.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
