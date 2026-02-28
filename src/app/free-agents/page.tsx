@@ -232,48 +232,39 @@ export default function FreeAgentsPage() {
 
   const loadActiveSquadMemberIds = async () => {
     try {
+      // Single query: fetch all active squad members with their squad info
       const { data, error } = await supabase
-        .from('squad_members')
-        .select('player_id, status, squads!inner(id, is_active, name, tag, is_legacy)')
-        .eq('status', 'active')
-        .eq('squads.is_active', true);
-
-      const playerIdsActive: string[] = [];
-      const displayMap: Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }> = {};
-      if (!error) {
-        (data || []).forEach((m: any) => {
-          if (m.player_id && m.squads) {
-            playerIdsActive.push(m.player_id);
-            displayMap[m.player_id] = {
-              id: m.squads.id,
-              name: m.squads.name,
-              tag: m.squads.tag,
-              is_legacy: m.squads.is_legacy,
-            };
-          }
-        });
-      }
-
-      // Also fetch any squad membership for display in the Squad column
-      const { data: anyData, error: anyErr } = await supabase
         .from('squad_members')
         .select('player_id, status, squads!inner(id, is_active, name, tag, is_legacy)')
         .eq('status', 'active');
 
-      if (!anyErr) {
-        (anyData || []).forEach((m: any) => {
-          if (m.player_id && m.squads) {
-            displayMap[m.player_id] = {
-              id: m.squads.id,
-              name: m.squads.name,
-              tag: m.squads.tag,
-              is_legacy: m.squads.is_legacy,
-            };
-          }
-        });
+      if (error) {
+        console.error('Error loading squad members:', error);
+        setActiveSquadMemberIds(new Set());
+        setPlayerIdToActiveSquad({});
+        return;
       }
 
-      setActiveSquadMemberIds(new Set(playerIdsActive));
+      const activeIds: string[] = [];
+      const displayMap: Record<string, { id: string; name: string; tag?: string | null; is_legacy?: boolean }> = {};
+
+      (data || []).forEach((m: any) => {
+        if (!m.player_id || !m.squads) return;
+        const squad = m.squads;
+        // Build display map for all squad memberships (active + legacy/inactive squads)
+        displayMap[m.player_id] = {
+          id: squad.id,
+          name: squad.name,
+          tag: squad.tag,
+          is_legacy: squad.is_legacy,
+        };
+        // Only count as "in active squad" if the squad itself is active
+        if (squad.is_active) {
+          activeIds.push(m.player_id);
+        }
+      });
+
+      setActiveSquadMemberIds(new Set(activeIds));
       setPlayerIdToActiveSquad(displayMap);
     } catch (e) {
       console.error('Error loading active squad member IDs:', e);
@@ -472,9 +463,9 @@ export default function FreeAgentsPage() {
           <div className="flex flex-wrap items-center gap-1">
             {uniqueTimes.map((t, idx) => (
               <div key={idx} className="flex items-center gap-1 bg-blue-500/20 border border-blue-500/30 rounded px-1.5 py-0.5">
-                <span className="text-green-400 text-[10px] font-medium">{formatTime(t.start)}</span>
-                <span className="text-gray-400 text-[10px]">-</span>
-                <span className="text-red-400 text-[10px] font-medium">{formatTime(t.end)}</span>
+                <span className="text-green-400 text-xs font-medium">{formatTime(t.start)}</span>
+                <span className="text-gray-400 text-xs">-</span>
+                <span className="text-red-400 text-xs font-medium">{formatTime(t.end)}</span>
               </div>
             ))}
           </div>
@@ -517,6 +508,14 @@ export default function FreeAgentsPage() {
 
       <main className="container mx-auto px-4 py-6">
         <div className="max-w-7xl mx-auto">
+
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-purple-400 tracking-wider mb-2">
+              Free Agent Pool
+            </h1>
+            <p className="text-gray-400">Players looking for squads — browse availability, class preferences, and reach out.</p>
+          </div>
 
           {/* Compact Controls */}
           <div className="bg-gradient-to-r from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-xl p-4 border border-cyan-500/20 shadow-xl mb-6">
@@ -718,6 +717,22 @@ export default function FreeAgentsPage() {
                               <div className="flex flex-wrap gap-1 mt-1">{renderClassBadges(agent, 'try')}</div>
                             </div>
                           )}
+                          {agent.class_ratings && Object.keys(agent.class_ratings).length > 0 && (
+                            <div>
+                              <span className="text-xs text-yellow-400 font-medium">Self Ratings:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {Object.entries(agent.class_ratings).map(([cls, rating]) => {
+                                  const colorClass = CLASS_COLORS[cls] || 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+                                  return (
+                                    <div key={cls} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${colorClass}`}>
+                                      <span className="leading-none">{cls}</span>
+                                      <span className="text-yellow-300 font-bold">{rating}/5</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -736,12 +751,47 @@ export default function FreeAgentsPage() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between pt-4 border-t border-gray-700/50">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span className="text-lg">📅</span>
-                          <span>Joined {new Date(agent.created_at).toLocaleDateString()}</span>
+                      <div className="pt-4 border-t border-gray-700/50 space-y-3">
+                        {/* Squad badge & contact info */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {playerIdToActiveSquad[agent.player_id] && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-blue-500/30 text-blue-300 bg-blue-500/10 text-xs">
+                              🛡️ {playerIdToActiveSquad[agent.player_id].name}
+                            </span>
+                          )}
+                          {agent.contact_info && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-indigo-500/30 text-indigo-300 bg-indigo-500/10 text-xs">
+                              💬 {agent.contact_info}
+                            </span>
+                          )}
                         </div>
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+
+                        {/* Action buttons & join date */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>📅</span>
+                            <span>Joined {new Date(agent.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openMessageModal(agent.player_id, agent.player_alias)}
+                              className="px-2 py-1 rounded-md text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30 transition-colors"
+                              aria-label={`Message ${agent.player_alias}`}
+                            >
+                              ✉ Message
+                            </button>
+                            {isCaptain && freeAgentPlayerIds.has(agent.player_id) && (
+                              <button
+                                onClick={() => invitePlayerToSquad(agent.player_id)}
+                                disabled={isInviting === agent.player_id}
+                                className={`px-2 py-1 rounded-md text-xs font-medium border transition-colors ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
+                                title={`Invite ${agent.player_alias} to your squad`}
+                              >
+                                {isInviting === agent.player_id ? '…' : '📩 Invite'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -758,7 +808,7 @@ export default function FreeAgentsPage() {
               )}
               <div className="bg-gradient-to-br from-gray-900/80 via-gray-800/80 to-gray-900/80 backdrop-blur-sm rounded-2xl border border-cyan-500/20 shadow-2xl overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-[10px]">
+                  <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gradient-to-r from-cyan-600/20 to-purple-600/20 border-b border-cyan-500/20">
                         <th
@@ -803,7 +853,7 @@ export default function FreeAgentsPage() {
                         <th className="px-4 py-3 text-left text-xs font-bold text-gray-300 w-[40%]">
                           <div className="flex items-center gap-2"><span className="text-lg">📝</span> Notes</div>
                         </th>
-                        <th className="px-1 py-1 text-left text-[9px] font-bold text-cyan-300 w-[0.33%] whitespace-nowrap">Actions</th>
+                        <th className="px-2 py-3 text-left text-xs font-bold text-cyan-300 whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -818,7 +868,12 @@ export default function FreeAgentsPage() {
                               <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                                 {agent.player_alias.charAt(0).toUpperCase()}
                               </div>
-                              <span className="font-medium text-white text-[10px]">{agent.player_alias}</span>
+                              <div>
+                                <span className="font-medium text-white text-sm">{agent.player_alias}</span>
+                                {agent.contact_info && (
+                                  <div className="text-xs text-gray-500">💬 {agent.contact_info}</div>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -846,18 +901,18 @@ export default function FreeAgentsPage() {
                             ) : <span className="text-gray-400 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-3 w-[28%]">
-                            <div className="text-gray-300 text-[10px]">{formatAvailability(agent)}</div>
+                            <div className="text-gray-300 text-xs">{formatAvailability(agent)}</div>
                           </td>
                           <td className="px-4 py-3 w-[40%]">
                             {agent.notes ? (
-                              <div className="text-gray-300 text-[10px] break-words whitespace-pre-line">{agent.notes}</div>
+                              <div className="text-gray-300 text-xs break-words whitespace-pre-line">{agent.notes}</div>
                             ) : <span className="text-gray-500 text-xs">—</span>}
                           </td>
-                          <td className="px-1 py-1 w-[0.33%] whitespace-nowrap">
+                          <td className="px-2 py-3 whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => openMessageModal(agent.player_id, agent.player_alias)}
-                                className="px-1 py-0 rounded-md text-[9px] font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30 leading-none"
+                                className="px-1.5 py-0.5 rounded-md text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-400/30"
                                 aria-label={`Message ${agent.player_alias}`}
                               >
                                 ✉
@@ -866,7 +921,7 @@ export default function FreeAgentsPage() {
                                 <button
                                   onClick={() => invitePlayerToSquad(agent.player_id)}
                                   disabled={isInviting === agent.player_id}
-                                  className={`px-1 py-0 rounded-md text-[9px] font-medium border ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
+                                  className={`px-1.5 py-0.5 rounded-md text-xs font-medium border ${isInviting === agent.player_id ? 'bg-gray-600 text-gray-300 border-gray-500' : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400/30'}`}
                                   title={`Invite ${agent.player_alias} to your squad`}
                                 >
                                   {isInviting === agent.player_id ? '…' : 'Inv'}
@@ -913,7 +968,7 @@ export default function FreeAgentsPage() {
                   className="w-full rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 focus:border-cyan-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-gray-300">Description</label>
+                <label className="mb-1 block text-sm text-gray-300">Message</label>
                 <textarea value={messageContent} onChange={(e) => setMessageContent(e.target.value)} rows={6}
                   placeholder="Write your message..."
                   className="w-full resize-y rounded-lg border border-gray-600 bg-gray-800 px-3 py-2 text-gray-200 focus:border-cyan-500 focus:outline-none" />

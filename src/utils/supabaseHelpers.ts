@@ -112,6 +112,7 @@ export const getFreeAgents = async () => {
             avatar_url
           )
         `)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -119,7 +120,6 @@ export const getFreeAgents = async () => {
         throw new Error(`Failed to fetch free agents: ${error.message}`);
       }
 
-      // Return all free agents - filtering will be done on the frontend
       return data || [];
     };
 
