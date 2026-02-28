@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
@@ -239,23 +238,10 @@ export default function BO9StatsPage() {
   // ── Render ──
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
       <Navbar user={user} />
 
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            href="/dueling"
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            ← Back to Dueling
-          </Link>
-          <h1 className="text-3xl font-bold text-purple-400 tracking-wider">
-            BO9 Series Stats
-          </h1>
-        </div>
-
         {/* Leaderboards - All 6 in one row */}
         {leaderboards && (
           <motion.div
@@ -281,7 +267,7 @@ export default function BO9StatsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 mb-6 border border-purple-500/30"
+          className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-6 border border-white/20"
         >
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 flex gap-2">
@@ -291,7 +277,7 @@ export default function BO9StatsPage() {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                className="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white placeholder-blue-300 focus:outline-none focus:border-cyan-400"
               />
               <button
                 onClick={handleSearch}
@@ -303,7 +289,7 @@ export default function BO9StatsPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500"
+              className="bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-cyan-400"
             >
               <option value="completed_at">Sort: Most Recent</option>
               <option value="total_duration_seconds">Sort: Duration</option>
@@ -320,13 +306,13 @@ export default function BO9StatsPage() {
         >
           {loading ? (
             <div className="flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
             </div>
           ) : recentSeries.length === 0 ? (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">&#9876;</div>
-              <h3 className="text-2xl font-semibold text-gray-300 mb-2">No BO9 Series Yet</h3>
-              <p className="text-gray-400">Completed series will appear here as they are played.</p>
+              <h3 className="text-2xl font-semibold text-blue-200 mb-2">No BO9 Series Yet</h3>
+              <p className="text-blue-300">Completed series will appear here as they are played.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -350,17 +336,17 @@ export default function BO9StatsPage() {
               <button
                 disabled={pagination.offset === 0}
                 onClick={() => setPagination(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }))}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
-              <span className="px-4 py-2 text-gray-300">
+              <span className="px-4 py-2 text-blue-200">
                 {pagination.offset + 1}–{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total}
               </span>
               <button
                 disabled={!pagination.hasMore}
                 onClick={() => setPagination(prev => ({ ...prev, offset: prev.offset + prev.limit }))}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>
@@ -402,7 +388,7 @@ function SeriesCard({
       {/* Summary row */}
       <button
         onClick={onToggle}
-        className="w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-600/50 hover:border-purple-500/50 transition-all p-4 text-left"
+        className="w-full bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 hover:border-cyan-400/50 transition-all p-4 text-left"
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Players & Score */}
@@ -411,7 +397,7 @@ function SeriesCard({
               <span className={`font-semibold truncate ${p1IsWinner ? 'text-green-400' : 'text-white'}`}>
                 {series.player1_alias}
               </span>
-              <span className="text-gray-400 font-mono text-lg font-bold shrink-0">
+              <span className="text-blue-300 font-mono text-lg font-bold shrink-0">
                 {series.final_score || '—'}
               </span>
               <span className={`font-semibold truncate ${p2IsWinner ? 'text-green-400' : 'text-white'}`}>
@@ -436,7 +422,7 @@ function SeriesCard({
           </div>
 
           {/* Meta */}
-          <div className="flex items-center gap-4 text-sm text-gray-400 shrink-0">
+          <div className="flex items-center gap-4 text-sm text-blue-300 shrink-0">
             <span>{series.total_rounds} rds</span>
             <span>{formatDuration(series.total_duration_seconds)}</span>
             <span className="hidden md:inline">{formatDate(series.completed_at)}</span>
@@ -460,10 +446,10 @@ function SeriesCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="bg-gray-800/50 border-x border-b border-gray-600/30 rounded-b-xl p-4 mt-[-4px]">
+            <div className="bg-white/5 border-x border-b border-white/10 rounded-b-xl p-4 mt-[-4px]">
               {roundsLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
                 </div>
               ) : (
                 <>
@@ -492,7 +478,7 @@ function SeriesCard({
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="text-gray-400 border-b border-gray-600">
+                          <tr className="text-blue-300 border-b border-white/10">
                             <th className="text-left py-2 px-2">Rd</th>
                             <th className="text-left py-2 px-2">Winner</th>
                             <th className="text-right py-2 px-2">HP Left</th>
@@ -519,9 +505,9 @@ function SeriesCard({
                             return (
                               <tr
                                 key={round.id || round.round_number}
-                                className={`border-b border-gray-700/50 ${isDraw ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-gray-700/30'}`}
+                                className={`border-b border-white/5 ${isDraw ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-white/5'}`}
                               >
-                                <td className="py-2 px-2 font-mono text-gray-400">{round.round_number}</td>
+                                <td className="py-2 px-2 font-mono text-blue-300">{round.round_number}</td>
                                 <td className="py-2 px-2">
                                   {isDraw ? (
                                     <span className="text-amber-400 font-medium">TIE</span>
@@ -533,16 +519,16 @@ function SeriesCard({
                                   {isDraw ? '—' : (round.winner_hp_remaining != null ? round.winner_hp_remaining : '—')}
                                 </td>
                                 <td className="py-2 px-2 text-right">{formatDuration(round.duration_seconds)}</td>
-                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-gray-400' : accuracyColor(wAcc)}`}>
+                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-blue-300' : accuracyColor(wAcc)}`}>
                                   {isDraw ? '—' : `${wAcc}%`}
                                 </td>
-                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-gray-400' : accuracyColor(lAcc)}`}>
+                                <td className={`py-2 px-2 text-right hidden sm:table-cell ${isDraw ? 'text-blue-300' : accuracyColor(lAcc)}`}>
                                   {isDraw ? '—' : `${lAcc}%`}
                                 </td>
-                                <td className="py-2 px-2 text-right hidden md:table-cell text-gray-300">
+                                <td className="py-2 px-2 text-right hidden md:table-cell text-blue-200">
                                   {isDraw ? '—' : `${round.winner_shots_hit ?? 0}/${round.winner_shots_fired ?? 0}`}
                                 </td>
-                                <td className="py-2 px-2 text-right hidden md:table-cell text-gray-300">
+                                <td className="py-2 px-2 text-right hidden md:table-cell text-blue-200">
                                   {isDraw ? '—' : `${round.loser_shots_hit ?? 0}/${round.loser_shots_fired ?? 0}`}
                                 </td>
                                 <td className="py-2 px-2 text-right font-mono">{isDraw ? '—' : (round.winner_kills ?? 0)}</td>
@@ -557,11 +543,11 @@ function SeriesCard({
                       </table>
                     </div>
                   ) : (
-                    <p className="text-gray-400 text-sm text-center py-4">No round data available for this series.</p>
+                    <p className="text-blue-300 text-sm text-center py-4">No round data available for this series.</p>
                   )}
 
                   {/* Series metadata */}
-                  <div className="flex flex-wrap gap-4 mt-4 pt-3 border-t border-gray-600/50 text-xs text-gray-400">
+                  <div className="flex flex-wrap gap-4 mt-4 pt-3 border-t border-white/10 text-xs text-blue-300">
                     <span>Arena: {series.arena_name || '—'}</span>
                     <span>Started: {formatDateTime(series.started_at)}</span>
                     <span>Completed: {formatDateTime(series.completed_at)}</span>
@@ -598,17 +584,17 @@ function PlayerSummary({
   accuracy: number;
 }) {
   return (
-    <div className={`bg-gray-800/50 rounded-lg p-3 border ${isWinner ? 'border-green-500/30' : 'border-gray-600/50'}`}>
+    <div className={`bg-white/5 rounded-lg p-3 border ${isWinner ? 'border-green-500/30' : 'border-white/10'}`}>
       <div className="flex items-center gap-2 mb-2">
         <span className={`font-semibold ${isWinner ? 'text-green-400' : 'text-white'}`}>{alias}</span>
         {isWinner && <span className="text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">WIN</span>}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        <div className="text-gray-400">Kills</div>
+        <div className="text-blue-300">Kills</div>
         <div className="text-right font-mono">{kills ?? 0}</div>
-        <div className="text-gray-400">Accuracy</div>
+        <div className="text-blue-300">Accuracy</div>
         <div className={`text-right font-mono ${accuracyColor(accuracy ?? 0)}`}>{accuracy ?? 0}%</div>
-        <div className="text-gray-400">Shots Hit</div>
+        <div className="text-blue-300">Shots Hit</div>
         <div className="text-right font-mono">{shotsHit ?? 0}/{shotsFired ?? 0}</div>
       </div>
     </div>
@@ -638,23 +624,23 @@ function LeaderboardList({
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-600/50 overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-600/50 bg-gray-700/30">
+    <div className="bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 overflow-hidden">
+      <div className="px-3 py-2 border-b border-white/10 bg-white/5">
         <h3 className="text-sm font-bold text-cyan-400">{title}</h3>
       </div>
       {entries.length === 0 ? (
-        <p className="text-center py-4 text-gray-400 text-xs">No data yet</p>
+        <p className="text-center py-4 text-blue-300 text-xs">No data yet</p>
       ) : (
-        <div className="divide-y divide-gray-700/50">
+        <div className="divide-y divide-white/5">
           {entries.map((entry, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-700/30 transition-colors">
-              <span className={`w-5 text-right text-xs font-mono ${i < 3 ? 'text-yellow-400 font-bold' : 'text-gray-500'}`}>
+            <div key={i} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 transition-colors">
+              <span className={`w-5 text-right text-xs font-mono ${i < 3 ? 'text-yellow-400 font-bold' : 'text-blue-400'}`}>
                 {i + 1}
               </span>
               <span className="flex-1 text-sm text-white truncate">{entry.alias}</span>
               <span className="text-xs font-mono text-cyan-400 font-bold">{getStat(entry)}</span>
               {showRecord && (
-                <span className="text-xs font-mono text-gray-500 w-10 text-right">{entry.series_won}-{entry.series_lost}</span>
+                <span className="text-xs font-mono text-blue-400 w-10 text-right">{entry.series_won}-{entry.series_lost}</span>
               )}
             </div>
           ))}
@@ -674,33 +660,33 @@ function SeriesLeaderboardList({
   entries: SeriesLeaderEntry[];
 }) {
   return (
-    <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-600/50 overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-600/50 bg-gray-700/30">
+    <div className="bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 overflow-hidden">
+      <div className="px-3 py-2 border-b border-white/10 bg-white/5">
         <h3 className="text-sm font-bold text-cyan-400">{title}</h3>
       </div>
       {entries.length === 0 ? (
-        <p className="text-center py-4 text-gray-400 text-xs">No data yet</p>
+        <p className="text-center py-4 text-blue-300 text-xs">No data yet</p>
       ) : (
-        <div className="divide-y divide-gray-700/50">
+        <div className="divide-y divide-white/5">
           {entries.map((entry, i) => {
             const badge = reasonBadge(entry.completion_reason || '');
             return (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-700/30 transition-colors">
-                <span className={`w-5 text-right text-xs font-mono ${i < 3 ? 'text-yellow-400 font-bold' : 'text-gray-500'}`}>
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 transition-colors">
+                <span className={`w-5 text-right text-xs font-mono ${i < 3 ? 'text-yellow-400 font-bold' : 'text-blue-400'}`}>
                   {i + 1}
                 </span>
                 <div className="flex-1 min-w-0 text-sm truncate">
                   <span className={entry.winner_alias === entry.player1_alias ? 'text-green-400' : 'text-white'}>
                     {entry.player1_alias}
                   </span>
-                  <span className="text-gray-500 mx-1">v</span>
+                  <span className="text-blue-400 mx-1">v</span>
                   <span className={entry.winner_alias === entry.player2_alias ? 'text-green-400' : 'text-white'}>
                     {entry.player2_alias}
                   </span>
                   {badge && <span className={`text-xs ${badge.className} px-1 py-0.5 rounded-full ml-1`}>{badge.label}</span>}
                 </div>
                 <span className="text-xs font-mono text-cyan-400 font-bold">{formatDuration(entry.total_duration_seconds)}</span>
-                <span className="text-xs font-mono text-gray-500">{entry.final_score}</span>
+                <span className="text-xs font-mono text-blue-400">{entry.final_score}</span>
               </div>
             );
           })}

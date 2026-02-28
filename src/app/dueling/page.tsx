@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
@@ -312,7 +311,7 @@ export default function DuelingPage() {
           </button>
           <button
             onClick={() => setActiveTab('matches')}
-            className={`px-6 py-3 font-medium transition-colors ${
+            className={`px-6 py-3 rounded-r-lg font-medium transition-colors ${
               activeTab === 'matches'
                 ? 'bg-cyan-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -320,12 +319,6 @@ export default function DuelingPage() {
           >
             Recent Matches
           </button>
-          <Link
-            href="/dueling/bo9-stats"
-            className="px-6 py-3 rounded-r-lg font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
-          >
-            BO9 Series
-          </Link>
         </div>
 
         {/* Filters */}
