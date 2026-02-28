@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Navbar from '@/components/Navbar';
+import NeutralNavbar from '@/components/home/NeutralNavbar';
 import { useAuth } from '@/lib/AuthContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ export default function BO9StatsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
-      <Navbar user={user} />
+      <NeutralNavbar />
 
       <div className="container mx-auto px-4 py-8">
         {/* Leaderboards - All 6 in one row */}
