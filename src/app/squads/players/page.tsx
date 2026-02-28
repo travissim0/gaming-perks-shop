@@ -9,16 +9,14 @@ import { useAuth } from '@/lib/AuthContext';
 interface PlayerRow {
   id: string;
   alias: string;
-  akas: string[];
   squadName: string | null;
   squadTag: string | null;
   squadId: string | null;
-  role: string | null;
   games: number;
-  wins: number;
-  losses: number;
   winRate: number | null;
   kd: number | null;
+  kills: number;
+  captures: number;
   elo: number | null;
   eloTier: string | null;
   lastActive: string | null;
@@ -32,12 +30,12 @@ export default function SquadsPlayersPage() {
   const [profiles, setProfiles] = useState<{ id: string; in_game_alias: string | null; hidden_from_players_list?: boolean }[]>([]);
   const [hidingId, setHidingId] = useState<string | null>(null);
   const [squadMap, setSquadMap] = useState<Record<string, { name: string; tag: string; id: string; role: string }>>({});
-  const [statsMap, setStatsMap] = useState<Record<string, { total_games: number; total_wins: number; total_losses: number; win_rate: number; kill_death_ratio: number; last_game_date: string | null; all_aliases: string | null }>>({});
-  const [eloMap, setEloMap] = useState<Record<string, { weighted_elo: number; elo_tier?: { name: string }; all_aliases: string | null }>>({});
+  const [statsMap, setStatsMap] = useState<Record<string, { total_games: number; total_kills: number; total_captures: number; win_rate: number; kill_death_ratio: number; last_game_date: string | null; all_aliases: string | null }>>({});
+  const [eloMap, setEloMap] = useState<Record<string, { weighted_elo: number; elo_tier?: { name: string } }>>({});
   const [search, setSearch] = useState('');
   const [squadFilter, setSquadFilter] = useState<'all' | 'squad' | 'no-squad'>('all');
-  const [sortBy, setSortBy] = useState<'alias' | 'squad' | 'games' | 'winRate' | 'kd' | 'elo'>('alias');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'alias' | 'squad' | 'games' | 'winRate' | 'kd' | 'kills' | 'captures' | 'elo' | 'lastActive'>('games');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     let cancelled = false;
@@ -69,13 +67,13 @@ export default function SquadsPlayersPage() {
 
         setSquadMap(squadRes);
 
-        const stats: Record<string, { total_games: number; total_wins: number; total_losses: number; win_rate: number; kill_death_ratio: number; last_game_date: string | null; all_aliases: string | null }> = {};
+        const stats: Record<string, { total_games: number; total_kills: number; total_captures: number; win_rate: number; kill_death_ratio: number; last_game_date: string | null; all_aliases: string | null }> = {};
         ((statsRes.data || []) as any[]).forEach((p: any) => {
           const key = (p.player_name || '').trim().toLowerCase();
           if (key) stats[key] = {
             total_games: p.total_games ?? 0,
-            total_wins: p.total_wins ?? 0,
-            total_losses: p.total_losses ?? 0,
+            total_kills: p.total_kills ?? 0,
+            total_captures: p.total_captures ?? 0,
             win_rate: Number(p.win_rate) ?? 0,
             kill_death_ratio: Number(p.kill_death_ratio) ?? 0,
             last_game_date: p.last_game_date || null,
@@ -84,18 +82,13 @@ export default function SquadsPlayersPage() {
         });
         setStatsMap(stats);
 
-        const elo: Record<string, { weighted_elo: number; elo_tier?: { name: string }; all_aliases: string | null }> = {};
-        (eloRes.data || []).forEach((p: any) => {
-          const key = (p.profile_id || (p.player_name || '').trim().toLowerCase());
-          if (key) elo[key] = {
-            weighted_elo: Number(p.weighted_elo) ?? 0,
-            elo_tier: p.elo_tier,
-            all_aliases: p.all_aliases ?? null,
-          };
-        });
+        const elo: Record<string, { weighted_elo: number; elo_tier?: { name: string } }> = {};
         (eloRes.data || []).forEach((p: any) => {
           const nameKey = (p.player_name || '').trim().toLowerCase();
-          if (nameKey && !elo[nameKey]) elo[nameKey] = { weighted_elo: Number(p.weighted_elo) ?? 0, elo_tier: p.elo_tier, all_aliases: p.all_aliases ?? null };
+          if (nameKey) elo[nameKey] = {
+            weighted_elo: Number(p.weighted_elo) ?? 0,
+            elo_tier: p.elo_tier,
+          };
         });
         setEloMap(elo);
       } catch (e) {
@@ -147,21 +140,6 @@ export default function SquadsPlayersPage() {
     }
   };
 
-  function parseAliases(allAliases: string | null | undefined, primaryAlias: string): string[] {
-    if (!allAliases || typeof allAliases !== 'string') return [];
-    const primary = primaryAlias.trim().toLowerCase();
-    const parts = allAliases.split(',').map(s => s.trim()).filter(Boolean);
-    const out: string[] = [];
-    const seen = new Set<string>([primary]);
-    for (const a of parts) {
-      const lower = a.toLowerCase();
-      if (!seen.has(lower)) {
-        seen.add(lower);
-        out.push(a);
-      }
-    }
-    return out;
-  }
 
   const rows: PlayerRow[] = useMemo(() => {
     const list: PlayerRow[] = profiles.map(p => {
@@ -169,25 +147,19 @@ export default function SquadsPlayersPage() {
       const aliasLower = alias.toLowerCase();
       const squad = squadMap[p.id];
       const stats = statsMap[aliasLower] || statsMap[alias];
-      const eloByProfile = eloMap[p.id];
       const eloByName = eloMap[aliasLower];
-      const eloData = eloByProfile || eloByName;
-      const statsAliases = parseAliases(stats?.all_aliases, alias);
-      const eloAliases = parseAliases(eloData?.all_aliases, alias);
-      const akas = [...new Set([...statsAliases, ...eloAliases])];
+      const eloData = eloByName;
       return {
         id: p.id,
         alias,
-        akas,
         squadName: squad?.name ?? null,
         squadTag: squad?.tag ?? null,
         squadId: squad?.id ?? null,
-        role: squad?.role ?? null,
         games: stats?.total_games ?? 0,
-        wins: stats?.total_wins ?? 0,
-        losses: stats?.total_losses ?? 0,
         winRate: stats?.win_rate != null ? stats.win_rate : null,
         kd: stats?.kill_death_ratio != null ? stats.kill_death_ratio : null,
+        kills: stats?.total_kills ?? 0,
+        captures: stats?.total_captures ?? 0,
         elo: eloData?.weighted_elo != null ? eloData.weighted_elo : null,
         eloTier: eloData?.elo_tier?.name ?? null,
         lastActive: stats?.last_game_date ?? null,
@@ -198,7 +170,6 @@ export default function SquadsPlayersPage() {
     let filtered = searchLower
       ? list.filter(r =>
           r.alias.toLowerCase().includes(searchLower) ||
-          r.akas.some(a => a.toLowerCase().includes(searchLower)) ||
           r.squadName?.toLowerCase().includes(searchLower) ||
           r.squadTag?.toLowerCase().includes(searchLower)
         )
@@ -216,7 +187,10 @@ export default function SquadsPlayersPage() {
         case 'games': diff = a.games - b.games; break;
         case 'winRate': diff = (a.winRate ?? 0) - (b.winRate ?? 0); break;
         case 'kd': diff = (a.kd ?? 0) - (b.kd ?? 0); break;
+        case 'kills': diff = a.kills - b.kills; break;
+        case 'captures': diff = a.captures - b.captures; break;
         case 'elo': diff = (a.elo ?? 0) - (b.elo ?? 0); break;
+        case 'lastActive': diff = (a.lastActive || '').localeCompare(b.lastActive || ''); break;
         default: break;
       }
       return diff * ord;
@@ -276,35 +250,40 @@ export default function SquadsPlayersPage() {
             <table className={`w-full text-left ${isAdmin ? 'min-w-[1000px]' : ''}`}>
               <thead>
                 <tr className="border-b border-gray-600 bg-gray-800/80">
-                  <th className="px-5 py-4 text-sm font-semibold text-cyan-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('alias')}>
+                  <th className="px-4 py-4 text-sm font-semibold text-cyan-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('alias')}>
                     Player {sortBy === 'alias' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">AKAs</th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('squad')}>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('squad')}>
                     Squad {sortBy === 'squad' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Role</th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('games')}>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('games')}>
                     Games {sortBy === 'games' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">W–L</th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('winRate')}>
-                    Win % {sortBy === 'winRate' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('winRate')}>
+                    Win% {sortBy === 'winRate' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('kd')}>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('kills')}>
+                    Kills {sortBy === 'kills' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('kd')}>
                     K/D {sortBy === 'kd' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300" onClick={() => toggleSort('elo')}>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('captures')}>
+                    Caps {sortBy === 'captures' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 text-right" onClick={() => toggleSort('elo')}>
                     ELO {sortBy === 'elo' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
                   </th>
-                  <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Profile</th>
-                  {isAdmin && <th className="px-5 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap min-w-[7rem]">Admin</th>}
+                  <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-cyan-300 whitespace-nowrap" onClick={() => toggleSort('lastActive')}>
+                    Last Active {sortBy === 'lastActive' && (sortOrder === 'desc' ? ' ▼' : ' ▲')}
+                  </th>
+                  {isAdmin && <th className="px-4 py-4 text-sm font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">Admin</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/80">
                 {rows.map(r => (
                   <tr key={r.id} className="bg-gray-800/30 hover:bg-gray-700/50 transition-colors">
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3">
                       <Link
                         href={profileUrl(r.alias)}
                         className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline"
@@ -312,22 +291,21 @@ export default function SquadsPlayersPage() {
                         {r.alias}
                       </Link>
                     </td>
-                    <td className="px-5 py-3 text-gray-400 text-sm">{r.akas.length ? r.akas.join(', ') : '—'}</td>
-                    <td className="px-5 py-3 text-gray-300">
+                    <td className="px-4 py-3 text-gray-300">
                       {r.squadId ? (
-                        <Link href={`/squads/${r.squadId}`} className="text-cyan-400 hover:text-cyan-300 hover:underline">
+                        <Link href={`/squads/${r.squadId}`} className="text-cyan-400 hover:text-cyan-300 hover:underline whitespace-nowrap">
                           [{r.squadTag}] {r.squadName}
                         </Link>
                       ) : (
                         <span className="text-gray-500">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-gray-400">{r.role ? r.role.replace('_', ' ') : '—'}</td>
-                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.games}</td>
-                    <td className="px-5 py-3 text-gray-300 tabular-nums whitespace-nowrap">{r.games ? `${r.wins}–${r.losses}` : '—'}</td>
-                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.winRate != null ? `${(r.winRate * 100).toFixed(1)}%` : '—'}</td>
-                    <td className="px-5 py-3 text-gray-300 tabular-nums">{r.kd != null ? r.kd.toFixed(2) : '—'}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-4 py-3 text-gray-300 tabular-nums text-right">{r.games || '—'}</td>
+                    <td className="px-4 py-3 text-gray-300 tabular-nums text-right">{r.winRate != null ? `${(r.winRate * 100).toFixed(1)}%` : '—'}</td>
+                    <td className="px-4 py-3 text-gray-300 tabular-nums text-right">{r.kills || '—'}</td>
+                    <td className="px-4 py-3 text-gray-300 tabular-nums text-right">{r.kd != null ? r.kd.toFixed(2) : '—'}</td>
+                    <td className="px-4 py-3 text-gray-300 tabular-nums text-right">{r.captures || '—'}</td>
+                    <td className="px-4 py-3 text-right">
                       {r.elo != null ? (
                         <span title={r.eloTier || ''} className="inline-flex items-center px-2 py-0.5 rounded font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/30">
                           {Math.round(r.elo)}
@@ -336,16 +314,11 @@ export default function SquadsPlayersPage() {
                         <span className="text-gray-500">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3">
-                      <Link
-                        href={profileUrl(r.alias)}
-                        className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-600/30 hover:border-cyan-500/50 transition-colors"
-                      >
-                        View profile
-                      </Link>
+                    <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
+                      {r.lastActive ? new Date(r.lastActive).toLocaleDateString() : '—'}
                     </td>
                     {isAdmin && (
-                      <td className="px-5 py-3 whitespace-nowrap min-w-[7rem]">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => hideFromList(r.id)}
@@ -353,7 +326,7 @@ export default function SquadsPlayersPage() {
                           className="text-sm text-amber-400 hover:text-amber-300 disabled:opacity-50"
                           title="Remove from players list (hidden for everyone)"
                         >
-                          {hidingId === r.id ? '…' : 'Hide from list'}
+                          {hidingId === r.id ? '…' : 'Hide'}
                         </button>
                       </td>
                     )}
