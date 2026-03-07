@@ -504,10 +504,7 @@ const SquadMaintenanceModal = () => {
                               disabled={settingCaptain}
                               className="w-full text-left px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex justify-between items-center disabled:opacity-50"
                             >
-                              <span className="text-white">{p.in_game_alias || p.display_name}</span>
-                              {p.in_game_alias && p.display_name && p.in_game_alias !== p.display_name && (
-                                <span className="text-gray-400 text-xs">({p.display_name})</span>
-                              )}
+                              <span className="text-white">{p.in_game_alias}</span>
                             </button>
                           ))}
                         </div>

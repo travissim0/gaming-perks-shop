@@ -37,33 +37,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Query must be at least 2 characters' }, { status: 400 });
   }
 
-  // Search by in_game_alias and display_name separately (more reliable than .or() with ilike)
-  const [byAlias, byDisplay] = await Promise.all([
-    supabaseAdmin
-      .from('profiles')
-      .select('id, in_game_alias, display_name')
-      .ilike('in_game_alias', `%${query}%`)
-      .limit(10),
-    supabaseAdmin
-      .from('profiles')
-      .select('id, in_game_alias, display_name')
-      .ilike('display_name', `%${query}%`)
-      .limit(10),
-  ]);
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, in_game_alias')
+    .ilike('in_game_alias', `%${query}%`)
+    .limit(10);
 
-  if (byAlias.error && byDisplay.error) {
-    return NextResponse.json({ error: byAlias.error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Merge and deduplicate
-  const seen = new Set<string>();
-  const players = [...(byAlias.data || []), ...(byDisplay.data || [])].filter(p => {
-    if (seen.has(p.id)) return false;
-    seen.add(p.id);
-    return true;
-  }).slice(0, 10);
-
-  return NextResponse.json({ players });
+  return NextResponse.json({ players: data || [] });
 }
 
 // Set captain for a squad (works for legacy squads with no members)
