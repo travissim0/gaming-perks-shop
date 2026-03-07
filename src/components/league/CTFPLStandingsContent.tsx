@@ -238,18 +238,14 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
           averagePointsPerSquad: Math.round(averagePoints * 10) / 10,
         });
 
-        // Fetch playoff/finals matches for bracket display
-        if (isCTFPL) {
-          const { data: playoffData } = await supabase
-            .from('ctfpl_matches')
-            .select('id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date')
-            .eq('season_number', seasonNumber)
-            .in('match_type', ['Playoffs', 'Finals'])
-            .order('match_date', { ascending: true });
-          setPlayoffMatches(playoffData || []);
-        } else {
-          setPlayoffMatches([]);
-        }
+        // Fetch playoff/finals matches for bracket display (all leagues use ctfpl_matches)
+        const { data: playoffData } = await supabase
+          .from('ctfpl_matches')
+          .select('id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date')
+          .eq('season_number', seasonNumber)
+          .in('match_type', ['Playoffs', 'Finals'])
+          .order('match_date', { ascending: true });
+        setPlayoffMatches(playoffData || []);
       } catch (error) {
         console.error('Error loading standings data:', error);
       } finally {
