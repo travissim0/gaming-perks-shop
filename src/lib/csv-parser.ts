@@ -51,29 +51,44 @@ export function parseCSV(csvText: string): PlayerStatRow[] {
   const lines = csvText.trim().split('\n');
   const headers = lines[0].split(',').map(h => h.trim());
   
-  const expectedHeaders = [
+  // Normalize header aliases (old CSV formats)
+  const headerAliases: Record<string, string> = {
+    'MainClass': 'MostPlayedClass',
+  };
+  const normalizedHeaders = headers.map(h => headerAliases[h] || h);
+
+  const requiredHeaders = [
     'PlayerName', 'Team', 'Kills', 'Deaths', 'Captures', 'CarrierKills',
     'CarryTimeSeconds', 'GameLengthMinutes', 'Result', 'MostPlayedClass',
-    'ClassSwaps', 'TurretDamage', 'GameMode', 'Side', 'BaseUsed', 'Accuracy',
-    'AvgResourceUnusedPerDeath', 'AvgExplosiveUnusedPerDeath', 'EBHits', 'LeftEarly'
+    'ClassSwaps', 'TurretDamage', 'GameMode', 'Side', 'BaseUsed'
   ];
 
-  // Validate headers
-  const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
+  // These columns are optional — old CSVs may not have them
+  // 'Accuracy', 'AvgResourceUnusedPerDeath', 'AvgExplosiveUnusedPerDeath', 'EBHits', 'LeftEarly'
+
+  // Validate required headers only
+  const missingHeaders = requiredHeaders.filter(h => !normalizedHeaders.includes(h));
   if (missingHeaders.length > 0) {
     throw new Error(`Missing CSV headers: ${missingHeaders.join(', ')}`);
   }
 
   const data: PlayerStatRow[] = [];
-  
+
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(',').map(v => v.trim());
     if (values.length === headers.length) {
       const row: any = {};
-      
-      headers.forEach((header, index) => {
+
+      // Defaults for optional columns
+      row.Accuracy = 0;
+      row.AvgResourceUnusedPerDeath = 0;
+      row.AvgExplosiveUnusedPerDeath = 0;
+      row.EBHits = 0;
+      row.LeftEarly = 'No';
+
+      normalizedHeaders.forEach((header, index) => {
         const value = values[index];
-        
+
         // Type conversion based on expected data types
         switch (header) {
           case 'Kills':
@@ -107,7 +122,7 @@ export function parseCSV(csvText: string): PlayerStatRow[] {
             row[header] = value;
         }
       });
-      
+
       data.push(row);
     }
   }
