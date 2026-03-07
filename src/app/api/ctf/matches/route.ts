@@ -146,7 +146,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!resolvedSquadAId || !resolvedSquadBId) {
-      return NextResponse.json({ error: 'Could not resolve squad IDs' }, { status: 400 });
+      const failed = [];
+      if (!resolvedSquadAId) failed.push(`Squad A: "${squad_a_name}"`);
+      if (!resolvedSquadBId) failed.push(`Squad B: "${squad_b_name}"`);
+      return NextResponse.json({ error: `Could not resolve squad IDs for: ${failed.join(', ')}` }, { status: 400 });
     }
 
     // Generate game_id for linking
@@ -318,7 +321,7 @@ async function resolveSquadId(name: string): Promise<string | null> {
 
   // Create historical squad
   const tag = name.slice(0, 4).toUpperCase();
-  const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+  const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
 
   const { data: newSquad, error } = await supabaseAdmin
     .from('squads')
