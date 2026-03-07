@@ -77,10 +77,10 @@ export default function MatchManagerPage() {
   // Match form state
   const [squadAName, setSquadAName] = useState('');
   const [squadAId, setSquadAId] = useState('');
-  const [squadAScore, setSquadAScore] = useState('');
+  const [squadAScore, setSquadAScore] = useState('0');
   const [squadBName, setSquadBName] = useState('');
   const [squadBId, setSquadBId] = useState('');
-  const [squadBScore, setSquadBScore] = useState('');
+  const [squadBScore, setSquadBScore] = useState('0');
   const [matchTitle, setMatchTitle] = useState('');
   const [playedAt, setPlayedAt] = useState(new Date().toISOString().split('T')[0]);
   const [isOvertime, setIsOvertime] = useState(false);
@@ -356,8 +356,8 @@ export default function MatchManagerPage() {
       setMessage({ type: 'success', text: parts.join(' ') });
 
       // Reset form
-      setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('');
-      setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('');
+      setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
+      setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
       setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
       setCsvPreview([]); setExistingGameId(''); setArenaName('');
       setPlayedAt(new Date().toISOString().split('T')[0]);
