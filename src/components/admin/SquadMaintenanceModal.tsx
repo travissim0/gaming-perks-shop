@@ -19,6 +19,14 @@ interface Squad {
   updated_at: string;
 }
 
+const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
+
+interface PlayerResult {
+  id: string;
+  in_game_alias: string;
+  display_name: string | null;
+}
+
 const SquadMaintenanceModal = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [squads, setSquads] = useState<Squad[]>([]);
@@ -26,11 +34,18 @@ const SquadMaintenanceModal = () => {
   const [editingSquad, setEditingSquad] = useState<Squad | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'legacy'>('all');
-  
+
   // Edit form state
   const [editName, setEditName] = useState('');
   const [editTag, setEditTag] = useState('');
   const [editDescription, setEditDescription] = useState('');
+
+  // Captain assignment state
+  const [captainSquadId, setCaptainSquadId] = useState<string | null>(null);
+  const [captainSearch, setCaptainSearch] = useState('');
+  const [captainResults, setCaptainResults] = useState<PlayerResult[]>([]);
+  const [captainSearching, setCaptainSearching] = useState(false);
+  const [settingCaptain, setSettingCaptain] = useState(false);
 
   const fetchSquads = async () => {
     try {
@@ -84,6 +99,70 @@ const SquadMaintenanceModal = () => {
     setEditName('');
     setEditTag('');
     setEditDescription('');
+  };
+
+  // Captain assignment functions
+  const startCaptainEdit = (squadId: string) => {
+    setCaptainSquadId(squadId);
+    setCaptainSearch('');
+    setCaptainResults([]);
+  };
+
+  const cancelCaptainEdit = () => {
+    setCaptainSquadId(null);
+    setCaptainSearch('');
+    setCaptainResults([]);
+  };
+
+  const searchPlayers = async (query: string) => {
+    setCaptainSearch(query);
+    if (query.length < 2) {
+      setCaptainResults([]);
+      return;
+    }
+    setCaptainSearching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`/api/ctf/squads/set-captain?q=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      setCaptainResults(data.players || []);
+    } catch {
+      setCaptainResults([]);
+    } finally {
+      setCaptainSearching(false);
+    }
+  };
+
+  const assignCaptain = async (playerId: string) => {
+    if (!captainSquadId) return;
+    setSettingCaptain(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/ctf/squads/set-captain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ squadId: captainSquadId, playerId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to set captain');
+        return;
+      }
+      toast.success(`Captain set to ${data.captain_alias}`);
+      cancelCaptainEdit();
+      await fetchSquads();
+    } catch {
+      toast.error('Failed to set captain');
+    } finally {
+      setSettingCaptain(false);
+    }
   };
 
   const saveSquadChanges = async () => {
@@ -354,12 +433,22 @@ const SquadMaintenanceModal = () => {
                                     {getSquadStatusBadge(squad)}
                                   </td>
                                   <td className="px-4 py-4 whitespace-nowrap text-center">
-                                    <button
-                                      onClick={() => startEdit(squad)}
-                                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                                    >
-                                      Edit
-                                    </button>
+                                    <div className="flex items-center justify-center gap-2">
+                                      <button
+                                        onClick={() => startEdit(squad)}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                                      >
+                                        Edit
+                                      </button>
+                                      {squad.captain_id === SYSTEM_USER_ID && (
+                                        <button
+                                          onClick={() => startCaptainEdit(squad.id)}
+                                          className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                                        >
+                                          Set Captain
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </>
                               )}
@@ -375,6 +464,45 @@ const SquadMaintenanceModal = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Captain Assignment Panel */}
+                  {captainSquadId && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-amber-400 font-semibold">
+                          Set Captain for: {squads.find(s => s.id === captainSquadId)?.name}
+                        </h3>
+                        <button onClick={cancelCaptainEdit} className="text-gray-400 hover:text-white text-sm">Cancel</button>
+                      </div>
+                      <input
+                        type="text"
+                        value={captainSearch}
+                        onChange={(e) => searchPlayers(e.target.value)}
+                        placeholder="Search player by in-game alias..."
+                        className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        autoFocus
+                      />
+                      {captainSearching && <div className="text-gray-400 text-sm py-1">Searching...</div>}
+                      {captainResults.length > 0 && (
+                        <div className="space-y-1">
+                          {captainResults.map((p) => (
+                            <button
+                              key={p.id}
+                              onClick={() => assignCaptain(p.id)}
+                              disabled={settingCaptain}
+                              className="w-full text-left px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex justify-between items-center disabled:opacity-50"
+                            >
+                              <span className="text-white">{p.in_game_alias}</span>
+                              {p.display_name && <span className="text-gray-400 text-xs">{p.display_name}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {captainSearch.length >= 2 && !captainSearching && captainResults.length === 0 && (
+                        <div className="text-gray-500 text-sm py-1">No players found</div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Description Edit Section */}
                   {editingSquad && (
