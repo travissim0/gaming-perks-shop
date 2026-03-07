@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('id, in_game_alias, display_name')
-    .ilike('in_game_alias', `%${query}%`)
+    .or(`in_game_alias.ilike.%${query}%,display_name.ilike.%${query}%`)
     .limit(10);
 
   if (error) {
