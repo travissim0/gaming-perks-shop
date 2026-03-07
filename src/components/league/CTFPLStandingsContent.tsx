@@ -91,6 +91,9 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
             if (selectedSeason === null) {
               setSelectedSeason(activeSeason.season_number);
             }
+          } else if (selectedSeason === null && seasonsData.length > 0) {
+            // No active season — default to most recent
+            setSelectedSeason(seasonsData[0].season_number);
           }
         }
       } else {
@@ -126,6 +129,9 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
             if (selectedSeason === null) {
               setSelectedSeason(activeSeason.season_number);
             }
+          } else if (selectedSeason === null && seasonsData.length > 0) {
+            // No active season — default to most recent
+            setSelectedSeason(seasonsData[0].season_number);
           }
         }
       }
