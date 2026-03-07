@@ -349,7 +349,8 @@ export default function MatchManagerPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || 'Failed to create match' });
+        const errorText = data.details ? `${data.error}: ${data.details}` : data.error || 'Failed to create match';
+        setMessage({ type: 'error', text: errorText });
         return;
       }
 
