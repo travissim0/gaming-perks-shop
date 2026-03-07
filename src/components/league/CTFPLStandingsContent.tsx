@@ -41,6 +41,18 @@ interface Season {
   third_place_squad_ids?: string[];
 }
 
+interface PlayoffMatch {
+  id: string;
+  match_type: string;
+  team_a_name: string;
+  team_b_name: string;
+  team_a_kills: number;
+  team_b_kills: number;
+  team_a_result: string;
+  team_b_result: string;
+  match_date: string;
+}
+
 interface LeagueStandingsProps {
   leagueSlug?: string;
   leagueName?: string;
@@ -56,6 +68,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
   const [seasonInfo, setSeasonInfo] = useState<Season | null>(null);
   const [allSeasons, setAllSeasons] = useState<Season[]>([]);
   const [allSquads, setAllSquads] = useState<{ id: string; name: string; tag: string }[]>([]);
+  const [playoffMatches, setPlayoffMatches] = useState<PlayoffMatch[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [seasonsLoading, setSeasonsLoading] = useState(true);
   const [navbarMobileMenuOpen, setNavbarMobileMenuOpen] = useState(false);
@@ -224,6 +237,19 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
           totalOvertimeGames,
           averagePointsPerSquad: Math.round(averagePoints * 10) / 10,
         });
+
+        // Fetch playoff/finals matches for bracket display
+        if (isCTFPL) {
+          const { data: playoffData } = await supabase
+            .from('ctfpl_matches')
+            .select('id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date')
+            .eq('season_number', seasonNumber)
+            .in('match_type', ['Playoffs', 'Finals'])
+            .order('match_date', { ascending: true });
+          setPlayoffMatches(playoffData || []);
+        } else {
+          setPlayoffMatches([]);
+        }
       } catch (error) {
         console.error('Error loading standings data:', error);
       } finally {
@@ -477,114 +503,149 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
           </p>
         </div>
 
+        {/* Playoff Bracket */}
         {(() => {
           const currentSeasonData = allSeasons.find((s) => s.season_number === selectedSeason);
-          return currentSeasonData?.status === 'completed';
-        })() && (
-          <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-xl shadow-2xl border border-yellow-500/30 overflow-hidden mb-8">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-yellow-400 flex items-center mb-6">
-                <Crown className="w-6 h-6 text-yellow-400 mr-3" />
-                Playoff Awards
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-b from-yellow-600/20 to-yellow-800/20 border border-yellow-500/50 rounded-lg p-4 text-center">
-                  <div className="text-yellow-400 text-4xl mb-2">🥇</div>
-                  <h3 className="text-yellow-400 font-bold text-lg mb-2">Golden Flag</h3>
-                  <p className="text-yellow-300 text-sm mb-3">1st Place</p>
-                  <div className="text-white font-medium">
-                    {(() => {
-                      const currentSeasonData = allSeasons.find((s) => s.season_number === selectedSeason);
-                      if (
-                        currentSeasonData?.status === 'active' ||
-                        currentSeasonData?.status === 'upcoming'
-                      ) {
-                        return <span className="text-gray-400 italic">TBD</span>;
-                      }
-                      if (
-                        currentSeasonData?.champion_squad_ids &&
-                        currentSeasonData.champion_squad_ids.length > 0
-                      ) {
-                        return (
-                          <div className="space-y-1">
-                            {currentSeasonData.champion_squad_ids.map((squadId: string, index: number) => (
-                              <div key={index} className="text-yellow-200">
-                                {getSquadDisplayName(squadId)}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-                      return <span className="text-gray-400 italic">No Data</span>;
-                    })()}
+          if (currentSeasonData?.status !== 'completed') return null;
+
+          const semiFinals = playoffMatches.filter(m => m.match_type === 'Playoffs');
+          const finals = playoffMatches.filter(m => m.match_type === 'Finals');
+
+          // If no playoff matches, fall back to champion/runner-up from season data
+          if (semiFinals.length === 0 && finals.length === 0) {
+            if (!currentSeasonData.champion_squad_ids?.length) return null;
+            return (
+              <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-xl shadow-2xl border border-yellow-500/30 overflow-hidden mb-8">
+                <div className="p-6 text-center">
+                  <Crown className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
+                  <h2 className="text-2xl font-bold text-yellow-400 mb-2">Season Champion</h2>
+                  <div className="text-xl text-white font-bold">
+                    {currentSeasonData.champion_squad_ids.map((id: string, i: number) => (
+                      <div key={i}>{getSquadDisplayName(id)}</div>
+                    ))}
                   </div>
+                  {currentSeasonData.runner_up_squad_ids?.length > 0 && (
+                    <div className="mt-3 text-gray-400">
+                      <span className="text-sm">Runner-up: </span>
+                      <span className="text-gray-200">
+                        {currentSeasonData.runner_up_squad_ids.map((id: string) => getSquadDisplayName(id)).join(', ')}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-gradient-to-b from-gray-400/20 to-gray-600/20 border border-gray-400/50 rounded-lg p-4 text-center">
-                  <div className="text-gray-300 text-4xl mb-2">🥈</div>
-                  <h3 className="text-gray-300 font-bold text-lg mb-2">Silver Flag</h3>
-                  <p className="text-gray-400 text-sm mb-3">2nd Place</p>
-                  <div className="text-white font-medium">
-                    {(() => {
-                      const currentSeasonData = allSeasons.find((s) => s.season_number === selectedSeason);
-                      if (
-                        currentSeasonData?.status === 'active' ||
-                        currentSeasonData?.status === 'upcoming'
-                      ) {
-                        return <span className="text-gray-400 italic">TBD</span>;
-                      }
-                      if (
-                        currentSeasonData?.runner_up_squad_ids &&
-                        currentSeasonData.runner_up_squad_ids.length > 0
-                      ) {
-                        return (
-                          <div className="space-y-1">
-                            {currentSeasonData.runner_up_squad_ids.map((squadId: string, index: number) => (
-                              <div key={index} className="text-gray-200">
-                                {getSquadDisplayName(squadId)}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-                      return <span className="text-gray-400 italic">No Data</span>;
-                    })()}
-                  </div>
+              </div>
+            );
+          }
+
+          const getWinner = (match: PlayoffMatch) =>
+            match.team_a_result === 'Win' ? match.team_a_name : match.team_b_name;
+          const getLoser = (match: PlayoffMatch) =>
+            match.team_a_result === 'Win' ? match.team_b_name : match.team_a_name;
+
+          const finalsMatch = finals[0] || null;
+          const champion = finalsMatch ? getWinner(finalsMatch) : null;
+
+          const MatchupCard = ({ match, label, highlight }: { match: PlayoffMatch | null; label: string; highlight?: boolean }) => {
+            if (!match) {
+              return (
+                <div className={`rounded-lg border border-gray-600/50 bg-gray-800/50 p-3 ${highlight ? 'min-w-[200px]' : 'min-w-[180px]'}`}>
+                  <div className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">{label}</div>
+                  <div className="text-gray-500 italic text-sm text-center py-2">TBD</div>
                 </div>
-                <div className="bg-gradient-to-b from-orange-600/20 to-orange-800/20 border border-orange-500/50 rounded-lg p-4 text-center">
-                  <div className="text-orange-400 text-4xl mb-2">🥉</div>
-                  <h3 className="text-orange-400 font-bold text-lg mb-2">Bronze Flag</h3>
-                  <p className="text-orange-300 text-sm mb-3">3rd Place</p>
-                  <div className="text-white font-medium">
-                    {(() => {
-                      const currentSeasonData = allSeasons.find((s) => s.season_number === selectedSeason);
-                      if (
-                        currentSeasonData?.status === 'active' ||
-                        currentSeasonData?.status === 'upcoming'
-                      ) {
-                        return <span className="text-gray-400 italic">TBD</span>;
-                      }
-                      if (
-                        currentSeasonData?.third_place_squad_ids &&
-                        currentSeasonData.third_place_squad_ids.length > 0
-                      ) {
-                        return (
-                          <div className="space-y-1">
-                            {currentSeasonData.third_place_squad_ids.map((squadId: string, index: number) => (
-                              <div key={index} className="text-orange-200">
-                                {getSquadDisplayName(squadId)}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-                      return <span className="text-gray-400 italic">No Data</span>;
-                    })()}
+              );
+            }
+            const aWon = match.team_a_result === 'Win';
+            const bWon = match.team_b_result === 'Win';
+            return (
+              <div className={`rounded-lg border ${highlight ? 'border-yellow-500/50 bg-gradient-to-b from-yellow-900/20 to-gray-800' : 'border-gray-600/50 bg-gray-800/80'} p-3 ${highlight ? 'min-w-[200px]' : 'min-w-[180px]'}`}>
+                <div className={`text-xs mb-2 font-medium uppercase tracking-wider ${highlight ? 'text-yellow-400' : 'text-gray-500'}`}>{label}</div>
+                <div className={`flex items-center justify-between py-1.5 px-2 rounded ${aWon ? 'bg-green-500/10' : 'bg-gray-700/30'}`}>
+                  <span className={`font-medium text-sm truncate mr-2 ${aWon ? 'text-green-300' : 'text-gray-400'}`}>
+                    {aWon && <span className="mr-1">{'>'}</span>}{match.team_a_name}
+                  </span>
+                  <span className={`font-mono font-bold text-sm ${aWon ? 'text-green-300' : 'text-gray-500'}`}>{match.team_a_kills}</span>
+                </div>
+                <div className={`flex items-center justify-between py-1.5 px-2 rounded mt-1 ${bWon ? 'bg-green-500/10' : 'bg-gray-700/30'}`}>
+                  <span className={`font-medium text-sm truncate mr-2 ${bWon ? 'text-green-300' : 'text-gray-400'}`}>
+                    {bWon && <span className="mr-1">{'>'}</span>}{match.team_b_name}
+                  </span>
+                  <span className={`font-mono font-bold text-sm ${bWon ? 'text-green-300' : 'text-gray-500'}`}>{match.team_b_kills}</span>
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-xl shadow-2xl border border-yellow-500/30 overflow-hidden mb-8">
+              <div className="p-6">
+                <h2 className="text-2xl font-bold text-yellow-400 flex items-center mb-6">
+                  <Crown className="w-6 h-6 text-yellow-400 mr-3" />
+                  Playoff Bracket
+                </h2>
+
+                {/* Desktop bracket layout */}
+                <div className="hidden md:flex items-center justify-center gap-4">
+                  {/* Semi-Finals Column */}
+                  {semiFinals.length > 0 && (
+                    <div className="flex flex-col gap-6 justify-center">
+                      {semiFinals.map((match, i) => (
+                        <MatchupCard key={match.id} match={match} label={`Semi-Final ${i + 1}`} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Connector lines */}
+                  {semiFinals.length > 0 && (
+                    <div className="flex flex-col items-center justify-center w-8">
+                      <div className="w-full border-t border-gray-500/50"></div>
+                      {semiFinals.length > 1 && (
+                        <>
+                          <div className="h-16 border-r border-gray-500/50"></div>
+                          <div className="w-full border-t border-gray-500/50"></div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Finals Column */}
+                  <div className="flex flex-col gap-4 justify-center">
+                    <MatchupCard match={finalsMatch} label="Finals" highlight />
                   </div>
+
+                  {/* Champion connector + display */}
+                  {champion && (
+                    <>
+                      <div className="flex items-center w-8">
+                        <div className="w-full border-t border-yellow-500/50"></div>
+                      </div>
+                      <div className="bg-gradient-to-b from-yellow-600/30 to-yellow-800/20 border-2 border-yellow-500/60 rounded-xl p-4 text-center min-w-[160px]">
+                        <Crown className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+                        <div className="text-xs text-yellow-400 font-medium uppercase tracking-wider mb-1">Champion</div>
+                        <div className="text-lg font-bold text-yellow-200">{champion}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Mobile stacked layout */}
+                <div className="md:hidden space-y-4">
+                  {/* Champion at top on mobile */}
+                  {champion && (
+                    <div className="bg-gradient-to-b from-yellow-600/30 to-yellow-800/20 border-2 border-yellow-500/60 rounded-xl p-4 text-center">
+                      <Crown className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+                      <div className="text-xs text-yellow-400 font-medium uppercase tracking-wider mb-1">Champion</div>
+                      <div className="text-lg font-bold text-yellow-200">{champion}</div>
+                    </div>
+                  )}
+                  <MatchupCard match={finalsMatch} label="Finals" highlight />
+                  {semiFinals.map((match, i) => (
+                    <MatchupCard key={match.id} match={match} label={`Semi-Final ${i + 1}`} />
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           <div className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 rounded-xl p-4 border border-cyan-500/30">
