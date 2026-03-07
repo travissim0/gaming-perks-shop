@@ -78,6 +78,13 @@ const NAV_CARDS = [
     color: 'bg-teal-600 hover:bg-teal-700',
   },
   {
+    href: '/admin/ctf/match-manager',
+    icon: '⚔️',
+    title: 'Match Manager',
+    description: 'Record matches & standings',
+    color: 'bg-indigo-600 hover:bg-indigo-700',
+  },
+  {
     href: '/matches',
     icon: '🏆',
     title: 'View Matches',
