@@ -648,7 +648,7 @@ export default function MatchManagerPage() {
                     </div>
                     <div className="max-h-32 overflow-y-auto text-xs text-gray-400">
                       {csvPreview.slice(0, 5).map((s, i) => (
-                        <div key={i}>{s.player_name} — {s.team} — K:{s.kills} D:{s.deaths} — {s.result}</div>
+                        <div key={i}>{s.player_name} — {s.team} — {s.main_class} — K:{s.kills} D:{s.deaths} — {s.result}</div>
                       ))}
                       {csvPreview.length > 5 && <div className="text-gray-500">...and {csvPreview.length - 5} more</div>}
                     </div>
