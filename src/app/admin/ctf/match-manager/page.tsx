@@ -87,6 +87,8 @@ export default function MatchManagerPage() {
   const [squadANoShow, setSquadANoShow] = useState(false);
   const [squadBNoShow, setSquadBNoShow] = useState(false);
   const [arenaName, setArenaName] = useState('');
+  const [matchLength, setMatchLength] = useState('');
+  const [mvp, setMvp] = useState('');
   const [existingGameId, setExistingGameId] = useState('');
 
   // Squad search state
@@ -326,6 +328,8 @@ export default function MatchManagerPage() {
         squad_a_no_show: squadANoShow,
         squad_b_no_show: squadBNoShow,
         arena_name: arenaName || undefined,
+        match_length: matchLength || undefined,
+        mvp: mvp || undefined,
         game_id: existingGameId || undefined,
       };
 
@@ -359,7 +363,7 @@ export default function MatchManagerPage() {
       setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
       setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
       setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
-      setCsvPreview([]); setExistingGameId(''); setArenaName('');
+      setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchLength(''); setMvp('');
       setPlayedAt(new Date().toISOString().split('T')[0]);
 
       // Refresh data
@@ -590,6 +594,30 @@ export default function MatchManagerPage() {
                 value={arenaName}
                 onChange={(e) => setArenaName(e.target.value)}
                 placeholder="e.g. CTF_Extreme"
+                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Match Length + MVP Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Match Length (optional)</label>
+              <input
+                type="text"
+                value={matchLength}
+                onChange={(e) => setMatchLength(e.target.value)}
+                placeholder="e.g. 22:45"
+                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">MVP (optional)</label>
+              <input
+                type="text"
+                value={mvp}
+                onChange={(e) => setMvp(e.target.value)}
+                placeholder="e.g. PlayerName"
                 className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
               />
             </div>

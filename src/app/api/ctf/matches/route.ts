@@ -124,6 +124,8 @@ export async function POST(request: NextRequest) {
       player_stats: playerStatsData,
       game_id: existingGameId,
       arena_name,
+      match_length,
+      mvp,
     } = body;
 
     // Validate required fields
@@ -177,19 +179,23 @@ export async function POST(request: NextRequest) {
 
     // Insert match record
     const matchTitle = title || `${squad_a_name} vs ${squad_b_name}`;
+    const matchInsert: Record<string, unknown> = {
+      title: matchTitle,
+      squad_a_name,
+      squad_b_name,
+      squad_a_score: parseInt(squad_a_score),
+      squad_b_score: parseInt(squad_b_score),
+      played_at: played_at || new Date().toISOString(),
+      status: 'completed',
+      season_number: parseInt(season_number),
+      game_id: gameId,
+    };
+    if (match_length) matchInsert.match_length = match_length;
+    if (mvp) matchInsert.mvp = mvp;
+
     const { data: match, error: matchError } = await supabaseAdmin
       .from('ctfpl_matches')
-      .insert({
-        title: matchTitle,
-        squad_a_name,
-        squad_b_name,
-        squad_a_score: parseInt(squad_a_score),
-        squad_b_score: parseInt(squad_b_score),
-        played_at: played_at || new Date().toISOString(),
-        status: 'completed',
-        season_number: parseInt(season_number),
-        game_id: gameId,
-      })
+      .insert(matchInsert)
       .select()
       .single();
 
