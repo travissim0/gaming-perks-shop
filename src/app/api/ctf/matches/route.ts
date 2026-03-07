@@ -41,15 +41,36 @@ export async function GET(request: NextRequest) {
     const seasonNum = parseInt(seasonNumber);
 
     // Fetch matches for this season
-    const { data: matches, error: matchesError } = await supabaseAdmin
+    const { data: rawMatches, error: matchesError } = await supabaseAdmin
       .from('ctfpl_matches')
       .select('*')
       .eq('season_number', seasonNum)
-      .order('played_at', { ascending: false });
+      .order('match_date', { ascending: false });
 
     if (matchesError) {
       console.error('Error fetching matches:', matchesError);
     }
+
+    // Transform DB columns to frontend format
+    const matches = (rawMatches || []).map((m: Record<string, unknown>) => ({
+      id: m.id,
+      title: `${m.team_a_name} vs ${m.team_b_name}`,
+      squad_a_name: m.team_a_name,
+      squad_b_name: m.team_b_name,
+      squad_a_score: m.team_a_kills,
+      squad_b_score: m.team_b_kills,
+      played_at: m.match_date,
+      status: m.match_type || 'Season',
+      season_number: m.season_number,
+      game_id: m.game_id,
+      team_a_result: m.team_a_result,
+      team_b_result: m.team_b_result,
+      arena_name: m.arena_name,
+      game_length_minutes: m.game_length_minutes,
+      mvp_player_name: m.mvp_player_name,
+      match_length: m.match_length,
+      mvp: m.mvp,
+    }));
 
     // Fetch standings — different view depending on league
     let standings = null;
@@ -90,7 +111,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      matches: matches || [],
+      matches,
       standings: standings || [],
     });
   } catch (error) {
@@ -116,7 +137,6 @@ export async function POST(request: NextRequest) {
       squad_b_id,
       squad_a_score,
       squad_b_score,
-      title,
       played_at,
       is_overtime,
       squad_a_no_show,
@@ -157,41 +177,55 @@ export async function POST(request: NextRequest) {
     // Generate game_id for linking
     const gameId = existingGameId || `CTF_Match_${Date.now()}`;
 
-    // Determine results
+    // Determine results (capitalized to match DB convention: 'Win', 'Loss')
     let team1Result: string;
     let team2Result: string;
 
     if (squad_a_no_show) {
-      team1Result = 'no_show';
-    } else if (squad_a_score > squad_b_score) {
-      team1Result = 'win';
+      team1Result = 'No Show';
+    } else if (parseInt(squad_a_score) > parseInt(squad_b_score)) {
+      team1Result = 'Win';
     } else {
-      team1Result = 'loss';
+      team1Result = 'Loss';
     }
 
     if (squad_b_no_show) {
-      team2Result = 'no_show';
-    } else if (squad_b_score > squad_a_score) {
-      team2Result = 'win';
+      team2Result = 'No Show';
+    } else if (parseInt(squad_b_score) > parseInt(squad_a_score)) {
+      team2Result = 'Win';
     } else {
-      team2Result = 'loss';
+      team2Result = 'Loss';
     }
 
-    // Insert match record
-    const matchTitle = title || `${squad_a_name} vs ${squad_b_name}`;
+    // Parse match length — accept "22:45" (mm:ss) or "22" (minutes)
+    let gameLengthMinutes: number | null = null;
+    if (match_length) {
+      if (match_length.includes(':')) {
+        const [mins, secs] = match_length.split(':').map(Number);
+        gameLengthMinutes = mins + (secs || 0) / 60;
+      } else {
+        gameLengthMinutes = parseFloat(match_length) || null;
+      }
+    }
+
+    // Insert match record using actual ctfpl_matches column names
     const matchInsert: Record<string, unknown> = {
-      title: matchTitle,
-      squad_a_name,
-      squad_b_name,
-      squad_a_score: parseInt(squad_a_score),
-      squad_b_score: parseInt(squad_b_score),
-      played_at: played_at || new Date().toISOString(),
-      status: 'completed',
+      team_a_name: squad_a_name,
+      team_b_name: squad_b_name,
+      team_a_squad_id: resolvedSquadAId,
+      team_b_squad_id: resolvedSquadBId,
+      team_a_result: team1Result,
+      team_b_result: team2Result,
+      team_a_kills: parseInt(squad_a_score) || 0,
+      team_b_kills: parseInt(squad_b_score) || 0,
+      match_date: played_at || new Date().toISOString(),
       season_number: parseInt(season_number),
       game_id: gameId,
+      match_type: 'Season',
     };
-    if (match_length) matchInsert.match_length = match_length;
-    if (mvp) matchInsert.mvp = mvp;
+    if (arena_name) matchInsert.arena_name = arena_name;
+    if (gameLengthMinutes !== null) matchInsert.game_length_minutes = gameLengthMinutes;
+    if (mvp) matchInsert.mvp_player_name = mvp;
 
     const { data: match, error: matchError } = await supabaseAdmin
       .from('ctfpl_matches')
@@ -205,16 +239,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Update standings via RPC — different function for CTFPL vs other leagues
+    // RPC expects lowercase: 'win', 'loss', 'no_show'
+    const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
+    const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
+
     let standingsError = null;
     if (leagueSlug === 'ctfpl') {
       const result = await supabaseAdmin.rpc('update_ctfpl_standings', {
         p_season_number: parseInt(season_number),
         p_team1_squad_id: resolvedSquadAId,
         p_team2_squad_id: resolvedSquadBId,
-        p_team1_result: team1Result,
-        p_team2_result: team2Result,
-        p_team1_overtime: is_overtime && team1Result === 'win' ? true : false,
-        p_team2_overtime: is_overtime && team2Result === 'win' ? true : false,
+        p_team1_result: rpcTeam1Result,
+        p_team2_result: rpcTeam2Result,
+        p_team1_overtime: is_overtime && rpcTeam1Result === 'win' ? true : false,
+        p_team2_overtime: is_overtime && rpcTeam2Result === 'win' ? true : false,
         p_team1_kills: parseInt(squad_a_score) || 0,
         p_team2_kills: parseInt(squad_b_score) || 0,
       });
@@ -240,10 +278,10 @@ export async function POST(request: NextRequest) {
             p_league_season_id: leagueSeason.id,
             p_team1_squad_id: resolvedSquadAId,
             p_team2_squad_id: resolvedSquadBId,
-            p_team1_result: team1Result,
-            p_team2_result: team2Result,
-            p_team1_overtime: is_overtime && team1Result === 'win' ? true : false,
-            p_team2_overtime: is_overtime && team2Result === 'win' ? true : false,
+            p_team1_result: rpcTeam1Result,
+            p_team2_result: rpcTeam2Result,
+            p_team1_overtime: is_overtime && rpcTeam1Result === 'win' ? true : false,
+            p_team2_overtime: is_overtime && rpcTeam2Result === 'win' ? true : false,
             p_team1_kills: parseInt(squad_a_score) || 0,
             p_team2_kills: parseInt(squad_b_score) || 0,
           });
