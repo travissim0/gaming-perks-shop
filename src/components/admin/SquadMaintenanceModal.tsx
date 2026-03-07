@@ -123,13 +123,25 @@ const SquadMaintenanceModal = () => {
     setCaptainSearching(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch(`/api/ctf/squads/set-captain?q=${encodeURIComponent(query)}`, {
+      if (!session) {
+        console.error('set-captain search: no session');
+        return;
+      }
+      const url = `/api/ctf/squads/set-captain?q=${encodeURIComponent(query)}`;
+      console.log('set-captain search:', url);
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
       });
       const data = await res.json();
+      console.log('set-captain response:', res.status, data);
+      if (!res.ok) {
+        toast.error(data.error || `Search failed (${res.status})`);
+        setCaptainResults([]);
+        return;
+      }
       setCaptainResults(data.players || []);
-    } catch {
+    } catch (err) {
+      console.error('set-captain search error:', err);
       setCaptainResults([]);
     } finally {
       setCaptainSearching(false);
