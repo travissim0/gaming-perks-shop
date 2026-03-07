@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const seasonNumber = searchParams.get('season_number');
+    const league = searchParams.get('league') || 'ctfpl';
 
     if (!seasonNumber) {
       return NextResponse.json({ error: 'season_number is required' }, { status: 400 });
@@ -48,19 +49,44 @@ export async function GET(request: NextRequest) {
 
     if (matchesError) {
       console.error('Error fetching matches:', matchesError);
-      // If season_number column doesn't exist, return empty
-      return NextResponse.json({ matches: [], standings: [] });
     }
 
-    // Fetch standings for this season
-    const { data: standings, error: standingsError } = await supabaseAdmin
-      .from('ctfpl_standings_with_rankings')
-      .select('*')
-      .eq('season_number', seasonNum)
-      .order('rank', { ascending: true });
+    // Fetch standings — different view depending on league
+    let standings = null;
+    if (league === 'ctfpl') {
+      const { data, error } = await supabaseAdmin
+        .from('ctfpl_standings_with_rankings')
+        .select('*')
+        .eq('season_number', seasonNum)
+        .order('rank', { ascending: true });
+      if (error) console.error('Error fetching ctfpl standings:', error);
+      standings = data;
+    } else {
+      // For non-CTFPL leagues, find the league_season_id first
+      const { data: leagueData } = await supabaseAdmin
+        .from('leagues')
+        .select('id')
+        .eq('slug', league)
+        .single();
 
-    if (standingsError) {
-      console.error('Error fetching standings:', standingsError);
+      if (leagueData) {
+        const { data: leagueSeason } = await supabaseAdmin
+          .from('league_seasons')
+          .select('id')
+          .eq('league_id', leagueData.id)
+          .eq('season_number', seasonNum)
+          .single();
+
+        if (leagueSeason) {
+          const { data, error } = await supabaseAdmin
+            .from('league_standings_with_rankings')
+            .select('*')
+            .eq('league_season_id', leagueSeason.id)
+            .order('rank', { ascending: true });
+          if (error) console.error('Error fetching league standings:', error);
+          standings = data;
+        }
+      }
     }
 
     return NextResponse.json({
@@ -82,6 +108,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      league: leagueSlug = 'ctfpl',
       season_number,
       squad_a_name,
       squad_b_name,
@@ -168,22 +195,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create match', details: matchError.message }, { status: 500 });
     }
 
-    // Update standings via RPC
-    const { error: standingsError } = await supabaseAdmin.rpc('update_ctfpl_standings', {
-      p_season_number: parseInt(season_number),
-      p_team1_squad_id: resolvedSquadAId,
-      p_team2_squad_id: resolvedSquadBId,
-      p_team1_result: team1Result,
-      p_team2_result: team2Result,
-      p_team1_overtime: is_overtime && team1Result === 'win' ? true : false,
-      p_team2_overtime: is_overtime && team2Result === 'win' ? true : false,
-      p_team1_kills: parseInt(squad_a_score) || 0,
-      p_team2_kills: parseInt(squad_b_score) || 0,
-    });
+    // Update standings via RPC — different function for CTFPL vs other leagues
+    let standingsError = null;
+    if (leagueSlug === 'ctfpl') {
+      const result = await supabaseAdmin.rpc('update_ctfpl_standings', {
+        p_season_number: parseInt(season_number),
+        p_team1_squad_id: resolvedSquadAId,
+        p_team2_squad_id: resolvedSquadBId,
+        p_team1_result: team1Result,
+        p_team2_result: team2Result,
+        p_team1_overtime: is_overtime && team1Result === 'win' ? true : false,
+        p_team2_overtime: is_overtime && team2Result === 'win' ? true : false,
+        p_team1_kills: parseInt(squad_a_score) || 0,
+        p_team2_kills: parseInt(squad_b_score) || 0,
+      });
+      standingsError = result.error;
+    } else {
+      // For non-CTFPL leagues, find league_season_id and use update_league_standings
+      const { data: leagueData } = await supabaseAdmin
+        .from('leagues')
+        .select('id')
+        .eq('slug', leagueSlug)
+        .single();
+
+      if (leagueData) {
+        const { data: leagueSeason } = await supabaseAdmin
+          .from('league_seasons')
+          .select('id')
+          .eq('league_id', leagueData.id)
+          .eq('season_number', parseInt(season_number))
+          .single();
+
+        if (leagueSeason) {
+          const result = await supabaseAdmin.rpc('update_league_standings', {
+            p_league_season_id: leagueSeason.id,
+            p_team1_squad_id: resolvedSquadAId,
+            p_team2_squad_id: resolvedSquadBId,
+            p_team1_result: team1Result,
+            p_team2_result: team2Result,
+            p_team1_overtime: is_overtime && team1Result === 'win' ? true : false,
+            p_team2_overtime: is_overtime && team2Result === 'win' ? true : false,
+            p_team1_kills: parseInt(squad_a_score) || 0,
+            p_team2_kills: parseInt(squad_b_score) || 0,
+          });
+          standingsError = result.error;
+        } else {
+          standingsError = { message: `No season found for ${leagueSlug} season ${season_number}` };
+        }
+      } else {
+        standingsError = { message: `League '${leagueSlug}' not found` };
+      }
+    }
 
     if (standingsError) {
       console.error('Error updating standings:', standingsError);
-      // Match was created but standings failed — report but don't fail entirely
       return NextResponse.json({
         match,
         game_id: gameId,

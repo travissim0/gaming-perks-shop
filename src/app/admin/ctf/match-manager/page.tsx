@@ -10,6 +10,12 @@ import { parseCSV, processPlayerStats, validatePlayerStats, ProcessedPlayerStat 
 import { toast } from 'react-hot-toast';
 import { ArrowLeft, Trophy, AlertCircle, CheckCircle, Loader2, Plus, Swords, ChevronDown } from 'lucide-react';
 
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 interface Season {
   id: string;
   season_number: number;
@@ -56,6 +62,10 @@ export default function MatchManagerPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [isCTFAdmin, setIsCTFAdmin] = useState(false);
+
+  // League state
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState<string>('ctfpl');
 
   // Season state
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -123,22 +133,50 @@ export default function MatchManagerPage() {
     checkAdmin();
   }, [user, authLoading, isCTFAdmin]);
 
-  // Fetch seasons (ALL statuses)
+  // Fetch leagues
+  useEffect(() => {
+    const fetchLeagues = async () => {
+      const { data } = await supabase
+        .from('leagues')
+        .select('id, slug, name')
+        .order('slug');
+      if (data) setLeagues(data);
+    };
+    fetchLeagues();
+  }, []);
+
+  // Fetch seasons (ALL statuses) when league changes
   useEffect(() => {
     const fetchSeasons = async () => {
-      const { data, error } = await supabase
-        .from('ctfpl_seasons')
-        .select('id, season_number, season_name, status')
-        .order('season_number', { ascending: false });
-      if (!error && data) {
+      let data: Season[] | null = null;
+
+      if (selectedLeague === 'ctfpl') {
+        const result = await supabase
+          .from('ctfpl_seasons')
+          .select('id, season_number, season_name, status')
+          .order('season_number', { ascending: false });
+        data = result.data;
+      } else {
+        const league = leagues.find(l => l.slug === selectedLeague);
+        if (!league) return;
+        const result = await supabase
+          .from('league_seasons')
+          .select('id, season_number, season_name, status')
+          .eq('league_id', league.id)
+          .order('season_number', { ascending: false });
+        data = result.data;
+      }
+
+      if (data) {
         setSeasons(data);
-        if (data.length > 0) {
-          setSelectedSeason(data[0]);
-        }
+        setSelectedSeason(data.length > 0 ? data[0] : null);
+      } else {
+        setSeasons([]);
+        setSelectedSeason(null);
       }
     };
     fetchSeasons();
-  }, []);
+  }, [selectedLeague, leagues]);
 
   // Fetch squads
   useEffect(() => {
@@ -178,7 +216,7 @@ export default function MatchManagerPage() {
     setLoadingData(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/ctf/matches?season_number=${selectedSeason.season_number}`, {
+      const res = await fetch(`/api/ctf/matches?season_number=${selectedSeason.season_number}&league=${selectedLeague}`, {
         headers: session ? { 'Authorization': `Bearer ${session.access_token}` } : {},
       });
       const data = await res.json();
@@ -274,6 +312,7 @@ export default function MatchManagerPage() {
       }
 
       const body: Record<string, unknown> = {
+        league: selectedLeague,
         season_number: selectedSeason.season_number,
         squad_a_name: squadAName,
         squad_b_name: squadBName,
@@ -376,23 +415,50 @@ export default function MatchManagerPage() {
           </div>
         </div>
 
-        {/* Season Selector */}
+        {/* League + Season Selector */}
         <div className="bg-gray-800 rounded-lg p-4 mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">Season</label>
-          <select
-            value={selectedSeason?.id || ''}
-            onChange={(e) => {
-              const s = seasons.find(s => s.id === e.target.value);
-              setSelectedSeason(s || null);
-            }}
-            className="bg-gray-700 text-white rounded-lg px-4 py-2 w-full max-w-md border border-gray-600 focus:border-indigo-500 focus:outline-none"
-          >
-            {seasons.map((s) => (
-              <option key={s.id} value={s.id}>
-                Season {s.season_number}{s.season_name ? ` - ${s.season_name}` : ''} ({s.status})
-              </option>
-            ))}
-          </select>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">League</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedLeague('ctfpl')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedLeague === 'ctfpl' ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                CTFPL
+              </button>
+              {leagues.map(league => (
+                <button
+                  key={league.slug}
+                  onClick={() => setSelectedLeague(league.slug)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    selectedLeague === league.slug ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {league.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Season</label>
+            <select
+              value={selectedSeason?.id || ''}
+              onChange={(e) => {
+                const s = seasons.find(s => s.id === e.target.value);
+                setSelectedSeason(s || null);
+              }}
+              className="bg-gray-700 text-white rounded-lg px-4 py-2 w-full max-w-md border border-gray-600 focus:border-indigo-500 focus:outline-none"
+            >
+              {seasons.length === 0 && <option value="">No seasons found</option>}
+              {seasons.map((s) => (
+                <option key={s.id} value={s.id}>
+                  Season {s.season_number}{s.season_name ? ` - ${s.season_name}` : ''} ({s.status})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Message */}
