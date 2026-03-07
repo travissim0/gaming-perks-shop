@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
       player_stats: playerStatsData,
       game_id: existingGameId,
       arena_name,
+      match_type,
       match_length,
       mvp,
     } = body;
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
       match_date: played_at || new Date().toISOString(),
       season_number: parseInt(season_number),
       game_id: gameId,
-      match_type: 'Season',
+      match_type: match_type || 'Season',
     };
     if (arena_name) matchInsert.arena_name = arena_name;
     if (gameLengthMinutes !== null) matchInsert.game_length_minutes = gameLengthMinutes;
@@ -238,13 +239,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create match', details: matchError.message }, { status: 500 });
     }
 
-    // Update standings via RPC — different function for CTFPL vs other leagues
-    // RPC expects lowercase: 'win', 'loss', 'no_show'
-    const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
-    const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
+    // Only update standings for Season matches (not Playoffs/Finals)
+    const effectiveMatchType = match_type || 'Season';
+    const shouldUpdateStandings = effectiveMatchType === 'Season';
 
     let standingsError = null;
-    if (leagueSlug === 'ctfpl') {
+    if (!shouldUpdateStandings) {
+      // Skip standings update for Playoffs/Finals
+    } else if (leagueSlug === 'ctfpl') {
+      const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
+      const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
       const result = await supabaseAdmin.rpc('update_ctfpl_standings', {
         p_season_number: parseInt(season_number),
         p_team1_squad_id: resolvedSquadAId,
@@ -259,6 +263,8 @@ export async function POST(request: NextRequest) {
       standingsError = result.error;
     } else {
       // For non-CTFPL leagues, find league_season_id and use update_league_standings
+      const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
+      const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
       const { data: leagueData } = await supabaseAdmin
         .from('leagues')
         .select('id')
@@ -333,7 +339,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       match,
       game_id: gameId,
-      standings_updated: true,
+      standings_updated: shouldUpdateStandings,
       stats_inserted: statsInserted,
     });
   } catch (error) {

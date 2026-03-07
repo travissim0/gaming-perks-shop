@@ -87,6 +87,7 @@ export default function MatchManagerPage() {
   const [squadANoShow, setSquadANoShow] = useState(false);
   const [squadBNoShow, setSquadBNoShow] = useState(false);
   const [arenaName, setArenaName] = useState('');
+  const [matchType, setMatchType] = useState('Season');
   const [matchLength, setMatchLength] = useState('');
   const [mvp, setMvp] = useState('');
   const [existingGameId, setExistingGameId] = useState('');
@@ -328,6 +329,7 @@ export default function MatchManagerPage() {
         squad_a_no_show: squadANoShow,
         squad_b_no_show: squadBNoShow,
         arena_name: arenaName || undefined,
+        match_type: matchType,
         match_length: matchLength || undefined,
         mvp: mvp || undefined,
         game_id: existingGameId || undefined,
@@ -364,7 +366,7 @@ export default function MatchManagerPage() {
       setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
       setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
       setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
-      setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchLength(''); setMvp('');
+      setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
       setPlayedAt(new Date().toISOString().split('T')[0]);
 
       // Refresh data
@@ -567,7 +569,27 @@ export default function MatchManagerPage() {
             </div>
           </div>
 
-          {/* Match Details Row */}
+          {/* Match Type + Details Row */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
+            <div className="flex gap-2">
+              {['Season', 'Playoffs', 'Finals'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setMatchType(type)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    matchType === type ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            {matchType !== 'Season' && (
+              <p className="text-xs text-yellow-400 mt-1">Standings will NOT be updated for {matchType} matches</p>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Match Title (optional)</label>
