@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-    const minGames = parseInt(searchParams.get('minGames') || '3');
+    const minGames = parseInt(searchParams.get('minGames') || '10');
     const playerName = searchParams.get('playerName') || '';
 
     console.log('ELO Leaderboard query:', {

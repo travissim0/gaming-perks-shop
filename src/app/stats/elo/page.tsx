@@ -67,7 +67,7 @@ const MIN_GAMES_OPTIONS = [
   { value: 0, label: 'All Players' },
   { value: 3, label: '3+ Games' },
   { value: 5, label: '5+ Games' },
-  { value: 10, label: '10+ Games' },
+  { value: 10, label: '10+ Games (Default)' },
   { value: 20, label: '20+ Games' }
 ];
 
@@ -81,7 +81,7 @@ export default function EloLeaderboardPage() {
   const [availableGameModes, setAvailableGameModes] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('weighted_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [minGames, setMinGames] = useState(3);
+  const [minGames, setMinGames] = useState(10);
   const [playerName, setPlayerName] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -489,20 +489,36 @@ export default function EloLeaderboardPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center">
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2"
-                          style={{ backgroundColor: player.elo_tier.color }}
-                        ></div>
-                        <span className="text-sm font-medium" style={{ color: player.elo_tier.color }}>
-                          {player.elo_tier.name}
-                        </span>
-                      </div>
+                      {player.total_games < 10 ? (
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 rounded-full mr-2 bg-gray-500 animate-pulse"></div>
+                          <span className="text-sm font-medium text-gray-400 italic">Provisional</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <div
+                            className="w-3 h-3 rounded-full mr-2"
+                            style={{ backgroundColor: player.elo_tier.color }}
+                          ></div>
+                          <span className="text-sm font-medium" style={{ color: player.elo_tier.color }}>
+                            {player.elo_tier.name}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="font-bold text-lg">{player.weighted_elo}</div>
-                      {player.elo_rating !== player.weighted_elo && (
-                        <div className="text-xs text-blue-300">Raw: {player.elo_rating}</div>
+                      {player.total_games < 10 ? (
+                        <div>
+                          <div className="font-bold text-lg text-gray-400">Placement</div>
+                          <div className="text-xs text-gray-500">{player.total_games}/10 games</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="font-bold text-lg">{player.weighted_elo}</div>
+                          {player.elo_rating !== player.weighted_elo && (
+                            <div className="text-xs text-blue-300">Raw: {player.elo_rating}</div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-yellow-400 font-medium">

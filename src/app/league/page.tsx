@@ -672,7 +672,7 @@ export default function Home() {
 
     const fetchEloLeaders = async () => {
       try {
-        const response = await fetch('/api/player-stats/elo-leaderboard?limit=10&minGames=3&sortBy=weighted_elo');
+        const response = await fetch('/api/player-stats/elo-leaderboard?limit=10&minGames=10&sortBy=weighted_elo');
         if (response.ok) {
           const data = await response.json();
           if (data.data && Array.isArray(data.data)) {
