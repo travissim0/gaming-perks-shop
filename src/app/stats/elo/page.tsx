@@ -251,11 +251,11 @@ export default function EloLeaderboardPage() {
 
   if (loading && players.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-500 mx-auto mb-4"></div>
           <p className="text-xl">Loading ELO leaderboard...</p>
           </div>
         </div>
@@ -265,15 +265,15 @@ export default function EloLeaderboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading ELO Leaderboard</h1>
-          <p className="text-blue-200 mb-4">{error}</p>
-          <button 
+          <p className="text-gray-400 mb-4">{error}</p>
+          <button
             onClick={() => fetchEloLeaderboard(0)}
-            className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
+            className="bg-cyan-600 hover:bg-cyan-700 px-6 py-2 rounded-lg transition-colors"
           >
             Retry
           </button>
@@ -284,7 +284,7 @@ export default function EloLeaderboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       <Navbar user={user} />
       
       <div className="container mx-auto px-4 py-8">
@@ -294,34 +294,35 @@ export default function EloLeaderboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 bg-clip-text text-transparent mb-2">
             ELO Leaderboard
           </h1>
-          <p className="text-xl text-blue-200">Competitive rankings based on skill and performance</p>
+          <p className="text-xl text-gray-400">Competitive rankings based on skill and performance</p>
         </motion.div>
 
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-lg rounded-xl p-6 mb-8 border border-white/20"
+          className="relative overflow-hidden bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 rounded-xl p-6 mb-8 border border-cyan-500/20 shadow-xl shadow-cyan-500/5"
         >
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
           {/* Game Mode Buttons Row */}
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
             <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Combined' ? 'bg-cyan-600 border-cyan-400 text-white scale-105' : 'bg-white/10 border-cyan-700 text-cyan-200 hover:bg-cyan-700/30 hover:text-white'}`}
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Combined' ? 'bg-cyan-600 border-cyan-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
               onClick={() => setGameMode('Combined')}
             >
               Combined<br /><span className="text-xs font-normal">OvD + Mix</span>
             </button>
             <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'OvD' ? 'bg-blue-600 border-blue-400 text-white scale-105' : 'bg-white/10 border-blue-700 text-blue-200 hover:bg-blue-700/30 hover:text-white'}`}
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'OvD' ? 'bg-blue-600 border-blue-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
               onClick={() => setGameMode('OvD')}
             >
               OvD<br /><span className="text-xs font-normal">Offense vs Defense</span>
             </button>
             <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Mix' ? 'bg-purple-600 border-purple-400 text-white scale-105' : 'bg-white/10 border-purple-700 text-purple-200 hover:bg-purple-700/30 hover:text-white'}`}
+              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Mix' ? 'bg-purple-600 border-purple-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
               onClick={() => setGameMode('Mix')}
             >
               Mix<br /><span className="text-xs font-normal">10v10</span>
@@ -333,11 +334,11 @@ export default function EloLeaderboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 gap-x-6 mb-4 w-full max-w-2xl min-w-0">
               {/* Sort By */}
               <div className="lg:col-span-2">
-                <label className="block text-sm font-medium text-blue-200 mb-2">Sort By</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Sort By</label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full min-w-[200px] max-w-xs bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                  className="w-full min-w-[200px] max-w-xs bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
                 >
                   {SORT_OPTIONS.map(option => (
                     <option key={option.value} value={option.value}>
@@ -349,11 +350,11 @@ export default function EloLeaderboardPage() {
 
               {/* Sort Order */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-2">Order</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Order</label>
                 <select
                   value={sortOrder}
                   onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
                 >
                   <option value="desc">Highest First</option>
                   <option value="asc">Lowest First</option>
@@ -362,11 +363,11 @@ export default function EloLeaderboardPage() {
 
               {/* Minimum Games */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-2">Min Games</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Min Games</label>
                 <select
                   value={minGames}
                   onChange={(e) => setMinGames(parseInt(e.target.value))}
-                  className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white [&>option]:bg-gray-800 [&>option]:text-white"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
                 >
                   {MIN_GAMES_OPTIONS.map(option => (
                     <option key={option.value} value={option.value}>
@@ -378,7 +379,7 @@ export default function EloLeaderboardPage() {
 
               {/* Player Search */}
               <div>
-                <label className="block text-sm font-medium text-blue-200 mb-2">Search Player</label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Search Player</label>
                 <div className="flex">
                   <input
                     type="text"
@@ -386,7 +387,7 @@ export default function EloLeaderboardPage() {
                     onChange={(e) => setSearchInput(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Player name..."
-                    className="flex-1 bg-white/20 border border-white/30 rounded-l-lg px-3 py-2 h-[42px] text-white placeholder-white/50"
+                    className="flex-1 bg-gray-800 border border-gray-600 rounded-l-lg px-3 py-2 h-[42px] text-white placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   />
                   <button
                     onClick={handleSearch}
@@ -409,7 +410,7 @@ export default function EloLeaderboardPage() {
           </div>
 
           {/* Results Summary */}
-          <div className="text-sm text-blue-200 text-center mt-2">
+          <div className="text-sm text-gray-400 text-center mt-2">
             Showing {players.length} of {pagination.total} players
             {minGames > 0 && ` with ${minGames}+ games`}
             {playerName && ` matching "${playerName}"`}
@@ -420,42 +421,52 @@ export default function EloLeaderboardPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20"
+          className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700/50"
         >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/20">
+              <thead className="bg-gradient-to-r from-gray-700 to-gray-800">
                 <tr>
                   {(!playerName || playerName.trim() === '') && (
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Rank</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank</th>
                   )}
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Player</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-blue-200">Tier</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">ELO</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">Peak</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">Confidence</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">Games</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">Win Rate</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">K/D</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-blue-200">Last Active</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-blue-200">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Player</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tier</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">ELO</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Peak</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Confidence</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Games</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Win Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">K/D</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Last Active</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-700/50">
                 {players.map((player, index) => (
                   <motion.tr
                     key={`${gameMode}-${player.player_name_normalized}-${player.game_mode}-${index}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="border-b border-white/10 hover:bg-white/5 transition-colors"
+                    className="hover:bg-gray-700/30 transition-colors duration-200"
                   >
                     {(!playerName || playerName.trim() === '') && (
                       <td className="px-4 py-3">
                         <div className="flex items-center">
-                          <span className="text-lg font-bold text-cyan-400">
-                            #{player.display_rank}
-                          </span>
+                          {player.display_rank <= 3 ? (
+                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                              player.display_rank === 1 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black' :
+                              player.display_rank === 2 ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white' :
+                              'bg-gradient-to-r from-amber-600 to-amber-700 text-white'
+                            }`}>
+                              {player.display_rank}
+                            </span>
+                          ) : (
+                            <span className="text-lg font-bold text-gray-400">
+                              #{player.display_rank}
+                            </span>
+                          )}
                         </div>
                       </td>
                     )}
@@ -464,7 +475,7 @@ export default function EloLeaderboardPage() {
                         {player.all_aliases && player.all_aliases !== player.player_name && (
                           <button
                             onClick={() => toggleRowExpansion(`${player.player_name_normalized}-${player.game_mode}`)}
-                            className="text-blue-400 hover:text-blue-300 transition-colors"
+                            className="text-gray-400 hover:text-cyan-400 transition-colors"
                           >
                             {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) ? 
                               <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -478,7 +489,7 @@ export default function EloLeaderboardPage() {
                             {player.player_name}
                           </Link>
                           {player.game_mode !== 'Combined' && (
-                            <div className="text-xs text-blue-300">{player.game_mode}</div>
+                            <div className="text-xs text-gray-500">{player.game_mode}</div>
                           )}
                           {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) && player.all_aliases && (
                             <div className="text-xs text-gray-400 mt-1">
@@ -516,7 +527,7 @@ export default function EloLeaderboardPage() {
                         <div>
                           <div className="font-bold text-lg">{player.weighted_elo}</div>
                           {player.elo_rating !== player.weighted_elo && (
-                            <div className="text-xs text-blue-300">Raw: {player.elo_rating}</div>
+                            <div className="text-xs text-gray-500">Raw: {player.elo_rating}</div>
                           )}
                         </div>
                       )}
@@ -528,7 +539,7 @@ export default function EloLeaderboardPage() {
                       <span className={getConfidenceColor(player.elo_confidence)}>
                         {getConfidenceLabel(player.elo_confidence)}
                       </span>
-                      <div className="text-xs text-blue-300">
+                      <div className="text-xs text-gray-500">
                         {(parseFloat(player.elo_confidence) * 100).toFixed(0)}%
                       </div>
                     </td>
@@ -550,7 +561,7 @@ export default function EloLeaderboardPage() {
                     <td className="px-4 py-3 text-center">
                       <Link
                         href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                        className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs transition-colors"
+                        className="bg-gray-700 hover:bg-gray-600 border border-gray-600 px-3 py-1 rounded-lg text-xs transition-colors text-gray-300 hover:text-white"
                       >
                         📊 Profile
                       </Link>
@@ -562,47 +573,47 @@ export default function EloLeaderboardPage() {
                 {loadingMore && Array.from({ length: 5 }).map((_, index) => (
                   <tr
                     key={`loading-${index}`}
-                    className="border-b border-white/10 animate-pulse"
+                    className="animate-pulse"
                   >
                     <td className="px-4 py-3">
-                      <div className="h-4 bg-white/20 rounded w-8"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-8"></div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="h-4 bg-white/20 rounded w-24 mb-1"></div>
-                      <div className="h-3 bg-white/10 rounded w-12"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-gray-700/30 rounded w-12"></div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center">
-                        <div className="w-3 h-3 bg-white/20 rounded-full mr-2"></div>
-                        <div className="h-4 bg-white/20 rounded w-16"></div>
+                        <div className="w-3 h-3 bg-gray-700/50 rounded-full mr-2"></div>
+                        <div className="h-4 bg-gray-700/50 rounded w-16"></div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-12 ml-auto mb-1"></div>
-                      <div className="h-3 bg-white/10 rounded w-8 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-12 ml-auto mb-1"></div>
+                      <div className="h-3 bg-gray-700/30 rounded w-8 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-12 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-12 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-8 ml-auto mb-1"></div>
-                      <div className="h-3 bg-white/10 rounded w-6 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-8 ml-auto mb-1"></div>
+                      <div className="h-3 bg-gray-700/30 rounded w-6 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-6 ml-auto mb-1"></div>
-                      <div className="h-3 bg-white/10 rounded w-12 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-6 ml-auto mb-1"></div>
+                      <div className="h-3 bg-gray-700/30 rounded w-12 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-8 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-8 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-white/20 rounded w-6 ml-auto"></div>
+                      <div className="h-4 bg-gray-700/50 rounded w-6 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="h-3 bg-white/20 rounded w-16 ml-auto"></div>
+                      <div className="h-3 bg-gray-700/50 rounded w-16 ml-auto"></div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <div className="h-6 bg-white/20 rounded w-16 mx-auto"></div>
+                      <div className="h-6 bg-gray-700/50 rounded w-16 mx-auto"></div>
                     </td>
                   </tr>
                 ))}
@@ -612,11 +623,11 @@ export default function EloLeaderboardPage() {
 
           {/* Load More Button */}
           {pagination.hasMore && (
-            <div className="p-4 text-center border-t border-white/20">
+            <div className="p-4 text-center border-t border-gray-700/50">
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 px-6 py-2 rounded transition-colors"
+                className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 px-6 py-2 rounded-lg transition-colors"
               >
                 {loadingMore ? 'Loading...' : 'Load More'}
               </button>
@@ -628,13 +639,14 @@ export default function EloLeaderboardPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-8 bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20"
+          className="relative overflow-hidden mt-8 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 rounded-xl p-6 border border-gray-700/50"
         >
-          <h3 className="text-xl font-bold text-cyan-400 mb-4">About ELO Rankings</h3>
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
+          <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 mb-4">About ELO Rankings</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h4 className="font-semibold text-blue-200 mb-2">How ELO Works</h4>
-              <ul className="text-sm text-blue-200 space-y-1">
+              <h4 className="font-semibold text-gray-300 mb-2">How ELO Works</h4>
+              <ul className="text-sm text-gray-400 space-y-1">
                 <li>• Based on wins/losses against opponents of similar skill</li>
                 <li>• New players start at 1200 ELO with a 10-game placement period</li>
                 <li>• Players in placement are marked as &quot;Provisional&quot; and not ranked</li>
@@ -643,8 +655,8 @@ export default function EloLeaderboardPage() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-200 mb-2">Tier System</h4>
-              <div className="grid grid-cols-3 gap-2 text-xs">
+              <h4 className="font-semibold text-gray-300 mb-2">Tier System</h4>
+              <div className="grid grid-cols-3 gap-2 text-xs text-gray-400">
                 <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-gray-500 mr-1"></div>Unranked (&lt;850)</div>
                 <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#CD7F32'}}></div>Bronze (850-949)</div>
                 <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#C0C0C0'}}></div>Silver (950-1049)</div>
