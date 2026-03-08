@@ -636,23 +636,24 @@ export default function EloLeaderboardPage() {
               <h4 className="font-semibold text-blue-200 mb-2">How ELO Works</h4>
               <ul className="text-sm text-blue-200 space-y-1">
                 <li>• Based on wins/losses against opponents of similar skill</li>
-                <li>• New players start at 1200 ELO</li>
-                <li>• Rating changes are larger for new players (low confidence)</li>
+                <li>• New players start at 1200 ELO with a 10-game placement period</li>
+                <li>• Players in placement are marked as &quot;Provisional&quot; and not ranked</li>
                 <li>• Weighted ELO considers rating confidence for fair rankings</li>
+                <li>• Tier is based on weighted ELO after completing placement</li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold text-blue-200 mb-2">Tier System</h4>
               <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-gray-500 mr-1"></div>Unranked (0-999)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#CD7F32'}}></div>Bronze (1000-1199)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#C0C0C0'}}></div>Silver (1200-1399)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FFD700'}}></div>Gold (1400-1599)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#E5E4E2'}}></div>Platinum (1600-1799)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#B9F2FF'}}></div>Diamond (1800-1999)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FF6B6B'}}></div>Master (2000-2199)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#9B59B6'}}></div>Grandmaster (2200-2399)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#F39C12'}}></div>Legend (2400-2800)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-gray-500 mr-1"></div>Unranked (&lt;850)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#CD7F32'}}></div>Bronze (850-949)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#C0C0C0'}}></div>Silver (950-1049)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FFD700'}}></div>Gold (1050-1149)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#E5E4E2'}}></div>Platinum (1150-1249)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#B9F2FF'}}></div>Diamond (1250-1349)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FF6B6B'}}></div>Master (1350-1449)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#9B59B6'}}></div>Grandmaster (1450-1599)</div>
+                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#F39C12'}}></div>Legend (1600+)</div>
               </div>
             </div>
           </div>
