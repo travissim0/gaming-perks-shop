@@ -312,11 +312,15 @@ export async function POST(request: NextRequest) {
     // Insert player stats if provided
     let statsInserted = 0;
     if (playerStatsData && Array.isArray(playerStatsData) && playerStatsData.length > 0) {
-      // Stamp each stat row with the match game_id and season
+      // Stamp each stat row with the match game_id, season, date, and mode
       const seasonLabel = `Season ${season_number}`;
+      const matchDate = played_at ? new Date(played_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const matchGameMode = match_type === 'Season' ? 'League' : match_type || 'League';
       const statsToInsert = playerStatsData.map((stat: Record<string, unknown>) => ({
         ...stat,
         game_id: gameId,
+        game_date: matchDate,
+        game_mode: matchGameMode,
         season: stat.season || seasonLabel,
         arena_name: stat.arena_name || arena_name || 'Unknown',
       }));
