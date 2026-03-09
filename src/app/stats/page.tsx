@@ -344,25 +344,25 @@ export default function PlayerStatsPage() {
   };
 
   const renderStatsTable = (stats: PlayerAggregateStats[], gameMode: string, pagination: any) => (
-    <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
+    <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700/50">
       <div className="overflow-x-auto">
         <table className="w-full text-xs lg:text-sm min-w-[600px]">
-          <thead className="bg-white/20">
+          <thead className="bg-gradient-to-r from-gray-700 to-gray-800">
             <tr>
-              <th className="px-1 py-2 lg:py-3 text-center text-xs lg:text-sm font-semibold text-blue-200 w-8"></th>
-              {visibleColumns.player && <th className="px-2 lg:px-3 py-2 lg:py-3 text-left text-xs lg:text-sm font-semibold text-blue-200 w-24 lg:w-32">Player</th>}
-              {visibleColumns.games && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200 w-12 lg:w-16">Games</th>}
-              {visibleColumns.winRate && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Win%</th>}
-              {visibleColumns.kills && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Kills</th>}
-              {visibleColumns.deaths && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Deaths</th>}
-              {visibleColumns.kd && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">K/D</th>}
-              {visibleColumns.captures && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Caps</th>}
-              {visibleColumns.ebHits && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">EB</th>}
-              {visibleColumns.turretDamage && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Turret</th>}
-              {visibleColumns.carryTime && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Carry</th>}
-              {visibleColumns.accuracy && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Acc%</th>}
-              {visibleColumns.classSwaps && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Swaps</th>}
-              {visibleColumns.lastActive && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-blue-200">Last Active</th>}
+              <th className="px-1 py-2 lg:py-3 text-center text-xs lg:text-sm font-semibold text-gray-400 w-8"></th>
+              {visibleColumns.player && <th className="px-2 lg:px-3 py-2 lg:py-3 text-left text-xs lg:text-sm font-semibold text-gray-400 w-24 lg:w-32">Player</th>}
+              {visibleColumns.games && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400 w-12 lg:w-16">Games</th>}
+              {visibleColumns.winRate && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Win%</th>}
+              {visibleColumns.kills && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Kills</th>}
+              {visibleColumns.deaths && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Deaths</th>}
+              {visibleColumns.kd && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">K/D</th>}
+              {visibleColumns.captures && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Caps</th>}
+              {visibleColumns.ebHits && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">EB</th>}
+              {visibleColumns.turretDamage && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Turret</th>}
+              {visibleColumns.carryTime && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Carry</th>}
+              {visibleColumns.accuracy && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Acc%</th>}
+              {visibleColumns.classSwaps && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Swaps</th>}
+              {visibleColumns.lastActive && <th className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm font-semibold text-gray-400">Last Active</th>}
             </tr>
           </thead>
           <tbody>
@@ -379,8 +379,8 @@ export default function PlayerStatsPage() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.02 }}
-                    className={`border-b border-white/10 hover:bg-white/10 transition-colors ${
-                      index % 2 === 0 ? 'bg-white/5' : 'bg-black/10'
+                    className={`border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${
+                      index % 2 === 0 ? 'bg-gray-800/30' : 'bg-gray-900/30'
                     } ${isExpanded ? 'bg-cyan-500/10' : ''}`}
                   >
                     {/* Expand/Collapse Button */}
@@ -388,7 +388,7 @@ export default function PlayerStatsPage() {
                       {hasAliases && (
                         <button
                           onClick={(e) => toggleRowExpansion(playerId, e)}
-                          className="text-blue-300 hover:text-cyan-400 transition-colors p-1 hover:bg-white/10 rounded"
+                          className="text-gray-500 hover:text-cyan-400 transition-colors p-1 hover:bg-gray-700/30 rounded"
                           title={isExpanded ? 'Hide aliases' : 'Show aliases'}
                         >
                           {isExpanded ? (
@@ -424,7 +424,7 @@ export default function PlayerStatsPage() {
                     {visibleColumns.accuracy && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{formatPercentage(player.avg_accuracy)}</td>}
                     {visibleColumns.classSwaps && <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-white">{player.total_class_swaps}</td>}
                     {visibleColumns.lastActive && (
-                      <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-blue-200">
+                      <td className="px-2 lg:px-3 py-2 lg:py-3 text-right text-xs lg:text-sm text-gray-400">
                         {formatDate(player.last_game_date)}
                       </td>
                     )}
@@ -485,7 +485,7 @@ export default function PlayerStatsPage() {
       </div>
 
       {pagination.hasMore && (
-        <div className="p-4 text-center border-t border-white/10">
+        <div className="p-4 text-center border-t border-gray-700/50">
           <button
             onClick={() => {
               if (activeTab === 'OvD') fetchStats('OvD', pagination.offset + pagination.limit);
@@ -493,7 +493,7 @@ export default function PlayerStatsPage() {
               else if (activeTab === 'Overall') fetchStats('Combined', pagination.offset + pagination.limit);
             }}
             disabled={loading}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-semibold transition-all duration-200 hover:scale-105"
+            className="bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-semibold transition-all duration-200 hover:scale-105"
           >
             {loading ? 'Loading...' : 'Load More'}
           </button>
@@ -503,7 +503,7 @@ export default function PlayerStatsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       <Navbar user={user} />
       
       {/* Mobile Filters Button */}
@@ -538,7 +538,7 @@ export default function PlayerStatsPage() {
                 
                 {/* Sort By */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Sort By</label>
                   <select
                     value={sortBy}
                     onChange={(e) => {setSortBy(e.target.value); setMobileFiltersOpen(false);}}
@@ -552,7 +552,7 @@ export default function PlayerStatsPage() {
 
                 {/* Sort Order */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Order</label>
                   <select
                     value={sortOrder}
                     onChange={(e) => {setSortOrder(e.target.value as 'asc' | 'desc'); setMobileFiltersOpen(false);}}
@@ -565,7 +565,7 @@ export default function PlayerStatsPage() {
 
                 {/* Date Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Time Period</label>
                   <select
                     value={dateFilter}
                     onChange={(e) => {setDateFilter(e.target.value); setMobileFiltersOpen(false);}}
@@ -579,7 +579,7 @@ export default function PlayerStatsPage() {
 
                 {/* Minimum Games Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Minimum Games</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Minimum Games</label>
                   <select
                     value={minGames}
                     onChange={(e) => {setMinGames(parseInt(e.target.value)); setMobileFiltersOpen(false);}}
@@ -593,7 +593,7 @@ export default function PlayerStatsPage() {
 
                 {/* Player Search */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Search Player</label>
                   <div className="flex gap-1">
                     <input
                       type="text"
@@ -657,9 +657,9 @@ export default function PlayerStatsPage() {
                     setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
-                  className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
+                  className="w-full p-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 transition-colors text-xs"
                 >
-                  <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
+                  <div className="text-gray-500 font-bold">🚩 Flag Caps</div>
                 </button>
                 
                 <button 
@@ -672,7 +672,7 @@ export default function PlayerStatsPage() {
                     setMinGames(10);
                     setMobileFiltersOpen(false);
                   }}
-                  className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
+                  className="w-full p-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 transition-colors text-xs"
                 >
                   <div className="text-purple-300 font-bold">🎮 Most Active</div>
                 </button>
@@ -735,7 +735,7 @@ export default function PlayerStatsPage() {
                          <div className="space-y-1.5">
                            {/* Defense team - flexible grid layout */}
                            <div className="flex items-start gap-1">
-                             <div className="text-blue-400 text-xs font-bold min-w-8 mt-0.5">🔵</div>
+                             <div className="text-cyan-400 text-xs font-bold min-w-8 mt-0.5">🔵</div>
                              <div className="grid grid-cols-5 gap-1 flex-1 min-w-0">
                                {game.players
                                  .filter((player: any) => player.side === 'defense')
@@ -825,7 +825,7 @@ export default function PlayerStatsPage() {
               className={`px-3 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap ${
                 activeTab === 'Overall'
                   ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gradient-to-r from-gray-700 to-gray-800'
               }`}
             >
               <span className="hidden sm:inline">📊 Overall Statistics</span>
@@ -836,7 +836,7 @@ export default function PlayerStatsPage() {
               className={`px-3 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap ${
                 activeTab === 'OvD'
                   ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg'
-                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gradient-to-r from-gray-700 to-gray-800'
               }`}
             >
               <span className="hidden sm:inline">⚔️ OvD Statistics</span>
@@ -846,8 +846,8 @@ export default function PlayerStatsPage() {
               onClick={() => setActiveTab('Mix')}
               className={`px-3 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold transition-all duration-200 text-sm lg:text-base whitespace-nowrap ${
                 activeTab === 'Mix'
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                  : 'bg-white/10 text-blue-200 hover:bg-white/20'
+                  ? 'bg-purple-600 text-white shadow-lg'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gradient-to-r from-gray-700 to-gray-800'
               }`}
             >
               <span className="hidden sm:inline">🏆 Mix Statistics</span>
@@ -892,7 +892,7 @@ export default function PlayerStatsPage() {
               className="text-center py-12"
             >
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-              <p className="text-blue-200">Loading player statistics...</p>
+              <p className="text-gray-400">Loading player statistics...</p>
             </motion.div>
           )}
 
@@ -901,14 +901,14 @@ export default function PlayerStatsPage() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-400/30 rounded-lg p-3"
+              className="mb-4 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-lg p-3"
             >
               <div className="flex items-center gap-2 text-sm">
-                <div className="flex items-center gap-1 text-blue-300">
+                <div className="flex items-center gap-1 text-gray-500">
                   <ChevronRight className="w-4 h-4" />
                   <span className="font-medium">💡 Tip:</span>
                 </div>
-                <span className="text-blue-100">
+                <span className="text-gray-300">
                   Look for the <strong>expand icon</strong> next to player names to view their known aliases and alternative identities.
                 </span>
               </div>
@@ -939,8 +939,8 @@ export default function PlayerStatsPage() {
               animate={{ opacity: 1 }}
               className="text-center py-12"
             >
-              <p className="text-xl text-blue-200 mb-4">No {activeTab} statistics found</p>
-              <p className="text-blue-300">Try adjusting your filters or search criteria</p>
+              <p className="text-xl text-gray-400 mb-4">No {activeTab} statistics found</p>
+              <p className="text-gray-500">Try adjusting your filters or search criteria</p>
             </motion.div>
           )}
         </div>
@@ -963,7 +963,7 @@ export default function PlayerStatsPage() {
                 
                 {/* Sort By */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Sort By</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Sort By</label>
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
@@ -977,7 +977,7 @@ export default function PlayerStatsPage() {
 
                 {/* Sort Order */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Order</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Order</label>
                   <select
                     value={sortOrder}
                     onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
@@ -990,7 +990,7 @@ export default function PlayerStatsPage() {
 
                 {/* Date Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Time Period</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Time Period</label>
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
@@ -1004,7 +1004,7 @@ export default function PlayerStatsPage() {
 
                 {/* Minimum Games Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Minimum Games</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Minimum Games</label>
                   <select
                     value={minGames}
                     onChange={(e) => setMinGames(parseInt(e.target.value))}
@@ -1018,7 +1018,7 @@ export default function PlayerStatsPage() {
 
                 {/* Player Search */}
                 <div>
-                  <label className="block text-xs font-medium text-blue-200 mb-1">Search Player</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Search Player</label>
                   <div className="flex gap-1">
                     <input
                       type="text"
@@ -1079,9 +1079,9 @@ export default function PlayerStatsPage() {
                     setSearchInput('');
                     setMinGames(10);
                   }}
-                  className="w-full p-2 bg-blue-900/30 border border-blue-500/30 rounded hover:bg-blue-800/40 transition-colors text-xs"
+                  className="w-full p-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 transition-colors text-xs"
                 >
-                  <div className="text-blue-300 font-bold">🚩 Flag Caps</div>
+                  <div className="text-gray-500 font-bold">🚩 Flag Caps</div>
                 </button>
                 
                 <button 
@@ -1093,7 +1093,7 @@ export default function PlayerStatsPage() {
                     setSearchInput('');
                     setMinGames(10);
                   }}
-                  className="w-full p-2 bg-purple-900/30 border border-purple-500/30 rounded hover:bg-purple-800/40 transition-colors text-xs"
+                  className="w-full p-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 transition-colors text-xs"
                 >
                   <div className="text-purple-300 font-bold">🎮 Most Active</div>
                 </button>
