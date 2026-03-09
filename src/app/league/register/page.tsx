@@ -55,7 +55,7 @@ export default function LeagueRegisterPage() {
       <Navbar />
       <main className="max-w-xl mx-auto px-4 py-16">
         <div className="bg-gray-800 border border-gray-600 rounded-xl p-8 text-center">
-          <h1 className="text-xl font-bold text-white mb-2">No active league/season</h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">No active league/season</h1>
           <p className="text-gray-400 mb-6">
             There is no active league or season open for registration right now. Please check back when a season is running to join the free agent pool or register for the league.
           </p>

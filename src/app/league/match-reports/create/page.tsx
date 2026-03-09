@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import type { Squad } from '@/types/database';
+import Navbar from '@/components/Navbar';
 
 interface League {
   id: string;
@@ -204,6 +205,7 @@ export default function CreateMatchReportPage() {
   if (permissionLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-20 bg-gray-700 rounded mb-8"></div>
@@ -217,6 +219,7 @@ export default function CreateMatchReportPage() {
   if (!hasPermission) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🚫</div>

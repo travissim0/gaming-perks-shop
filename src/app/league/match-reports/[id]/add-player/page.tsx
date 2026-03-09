@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import type { MatchReportWithDetails, Profile } from '@/types/database';
 import { getRatingColor, getStarDisplay } from '@/utils/ratingUtils';
+import Navbar from '@/components/Navbar';
 
 export default function AddPlayerRatingPage() {
   const { user, session } = useAuth();
@@ -203,6 +204,7 @@ export default function AddPlayerRatingPage() {
   if (pageLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-20 bg-gray-700 rounded mb-8"></div>
@@ -216,6 +218,7 @@ export default function AddPlayerRatingPage() {
   if (!hasPermission || !report) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🚫</div>

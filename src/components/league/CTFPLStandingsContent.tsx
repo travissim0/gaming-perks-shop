@@ -488,7 +488,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <Trophy className="w-8 h-8 text-cyan-400 mr-3" />
-            <h1 className="text-4xl font-bold text-white">{leagueName} Standings</h1>
+            <h1 className="text-4xl md:text-5xl font-bold text-white">{leagueName} Standings</h1>
           </div>
           <p className="text-gray-400 text-lg">
             {leagueName} - Season {selectedSeason || 'Loading...'}

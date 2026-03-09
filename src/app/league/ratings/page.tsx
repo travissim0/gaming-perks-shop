@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { SquadRatingWithDetails } from '@/types/database';
 import { SYSTEM_USER_ID } from '@/lib/constants';
 import Pagination from '@/components/Pagination';
+import Navbar from '@/components/Navbar';
 
 interface League {
   id: string;
@@ -125,6 +126,7 @@ export default function SquadRatingsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-12 bg-gray-700 rounded mb-6"></div>
@@ -142,6 +144,7 @@ export default function SquadRatingsPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6">
             <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Ratings</h2>
@@ -160,20 +163,8 @@ export default function SquadRatingsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <Navbar user={user} />
       <div className="container mx-auto px-4 py-8">
-        {/* Back to Home Button */}
-        <div className="mb-6">
-          <Link 
-            href="/"
-            className="inline-flex items-center text-cyan-400 hover:text-cyan-300 transition-colors group"
-          >
-            <svg className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Home
-          </Link>
-        </div>
-
         {/* Header */}
         <div className="mb-12">
           <div className="flex flex-col md:flex-row items-center justify-between mb-6">

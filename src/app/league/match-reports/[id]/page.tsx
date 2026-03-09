@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails, MatchPlayerRating, MatchReportComment } from '@/types/database';
 import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
+import Navbar from '@/components/Navbar';
 
 // Expandable Video Player Component
 const ExpandableVideoPlayer = ({ embedUrl, playerRating, isLeft }: { 
@@ -321,6 +322,7 @@ export default function MatchReportDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-20 bg-gray-700 rounded mb-8"></div>
@@ -339,6 +341,7 @@ export default function MatchReportDetailPage() {
   if (error || !report) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
             <div className="text-6xl mb-4">❌</div>

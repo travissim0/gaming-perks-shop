@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
 import { SYSTEM_USER_ID } from '@/lib/constants';
 import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
+import Navbar from '@/components/Navbar';
 
 export default function IndividualSquadRatingPage() {
   const params = useParams();
@@ -91,6 +92,7 @@ export default function IndividualSquadRatingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <Navbar />
       <div className="container mx-auto px-4 py-8">
         {/* Navigation Buttons */}
         <div className="flex items-center justify-between mb-8">

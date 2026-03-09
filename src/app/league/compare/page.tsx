@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import Navbar from '@/components/Navbar';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -314,6 +315,7 @@ export default function SquadComparePage() {
   // -----------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Back link */}
         <Link
