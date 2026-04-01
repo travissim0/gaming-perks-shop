@@ -692,6 +692,17 @@ export default function AdminDashboard() {
               </Link>
 
               <Link
+                href="/admin/launch-signups"
+                className="flex items-center gap-4 px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20"
+              >
+                <span className="text-3xl">🚀</span>
+                <div>
+                  <div className="font-semibold">Launch Signups</div>
+                  <div className="text-xs text-purple-400">Infantry 2 interest tracker</div>
+                </div>
+              </Link>
+
+              <Link
                 href="/admin/ratings"
                 className="flex items-center gap-4 px-4 py-3 bg-pink-600/20 hover:bg-pink-600/30 border border-pink-500/30 text-pink-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-pink-500/20"
               >

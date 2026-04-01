@@ -10,6 +10,7 @@ import HomeNewsSection from '@/components/home/HomeNewsSection';
 import TopSupportersWidget from '@/components/TopSupportersWidget';
 import UserAvatar from '@/components/UserAvatar';
 import AveragePopulationWidget from '@/components/zone-activity/AveragePopulationWidget';
+import LaunchSignupBanner from '@/components/home/LaunchSignupBanner';
 
 interface ServerStats {
   totalPlayers: number;
@@ -564,6 +565,9 @@ export default function HomeNew() {
 
             {/* Left Sidebar: Carousel + Donations + Supporters */}
             <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
+              {/* Infantry 2 Launch Signup */}
+              <LaunchSignupBanner />
+
               {/* Compact Carousel */}
               <DynamicHeroCarousel compact />
 
