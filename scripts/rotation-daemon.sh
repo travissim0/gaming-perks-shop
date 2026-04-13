@@ -9,7 +9,7 @@
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="/home/travis/infantry/server"
 ROTATE_SCRIPT="$SCRIPT_DIR/rotate-map.sh"
 ENV_FILE="$SCRIPT_DIR/.env"
 POLL_INTERVAL=5  # seconds between DB polls

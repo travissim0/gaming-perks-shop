@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-ZONE_DIR="/opt/infantry/server/League - USL Matches"
+ZONE_DIR="/home/travis/infantry/server/League - USL Matches"
 ASSETS_DIR="$ZONE_DIR/assets"
 SERVER_XML="$ZONE_DIR/server.xml"
 SCREEN_NAME="usl"
