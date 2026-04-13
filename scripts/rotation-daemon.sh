@@ -221,21 +221,24 @@ process_command() {
 
   case "$command" in
     swap-cfg)
-      local cfg
+      local cfg zone_name
       cfg=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['cfg'])" 2>/dev/null)
-      result=$("$ROTATE_SCRIPT" swap-cfg "$cfg" 2>&1)
+      zone_name=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('zone_name',''))" 2>/dev/null)
+      if [ -n "$zone_name" ]; then
+        result=$("$ROTATE_SCRIPT" swap-cfg "$cfg" "$zone_name" 2>&1)
+      else
+        result=$("$ROTATE_SCRIPT" swap-cfg "$cfg" 2>&1)
+      fi
       exit_code=$?
       ;;
     swap-lvl)
-      local lvl lio cfg
+      local lvl lio cfg zone_name
       lvl=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['lvl'])" 2>/dev/null)
       lio=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin)['lio'])" 2>/dev/null)
       cfg=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('cfg',''))" 2>/dev/null)
-      if [ -n "$cfg" ]; then
-        result=$("$ROTATE_SCRIPT" swap-lvl "$lvl" "$lio" "$cfg" 2>&1)
-      else
-        result=$("$ROTATE_SCRIPT" swap-lvl "$lvl" "$lio" 2>&1)
-      fi
+      zone_name=$(echo "$args_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('zone_name',''))" 2>/dev/null)
+      if [ -z "$cfg" ]; then cfg=""; fi
+      result=$("$ROTATE_SCRIPT" swap-lvl "$lvl" "$lio" "$cfg" "$zone_name" 2>&1)
       exit_code=$?
       ;;
     *)

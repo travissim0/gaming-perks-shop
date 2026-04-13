@@ -85,8 +85,9 @@ EOF
 
 cmd_swap_cfg() {
   local new_cfg="${1:-}"
+  local new_zone_name="${2:-}"
   if [ -z "$new_cfg" ]; then
-    json_error "Usage: rotate-map.sh swap-cfg <cfg_filename>"
+    json_error "Usage: rotate-map.sh swap-cfg <cfg_filename> [zone_name]"
   fi
 
   validate_filename "$new_cfg"
@@ -97,6 +98,8 @@ cmd_swap_cfg() {
 
   local previous_cfg
   previous_cfg=$(get_current_cfg)
+  local prev_zone_name
+  prev_zone_name=$(get_current_zone_name)
 
   # Stop zone
   stop_zone
@@ -104,16 +107,23 @@ cmd_swap_cfg() {
   # Update server.xml zoneConfig
   sed -i "s|zoneConfig value=\"[^\"]*\"|zoneConfig value=\"$new_cfg\"|" "$SERVER_XML"
 
+  # Update zoneName if provided
+  if [ -n "$new_zone_name" ]; then
+    sed -i "s|zoneName value=\"[^\"]*\"|zoneName value=\"$new_zone_name\"|" "$SERVER_XML"
+  fi
+
   # Get new map info
   local new_lvl
   new_lvl=$(get_cfg_field "$new_cfg" "LvlFile")
   local new_lio
   new_lio=$(get_cfg_field "$new_cfg" "LioFile")
+  local actual_zone_name
+  actual_zone_name=$(get_current_zone_name)
 
   # Restart zone
   if start_zone; then
     cat <<EOF
-{"success":true,"cfg":"$new_cfg","previous_cfg":"$previous_cfg","lvl":"$new_lvl","lio":"$new_lio"}
+{"success":true,"cfg":"$new_cfg","previous_cfg":"$previous_cfg","lvl":"$new_lvl","lio":"$new_lio","zoneName":"$actual_zone_name","previous_zoneName":"$prev_zone_name"}
 EOF
   else
     json_error "Zone failed to start after config swap"
@@ -124,9 +134,10 @@ cmd_swap_lvl() {
   local new_lvl="${1:-}"
   local new_lio="${2:-}"
   local target_cfg="${3:-}"
+  local new_zone_name="${4:-}"
 
   if [ -z "$new_lvl" ] || [ -z "$new_lio" ]; then
-    json_error "Usage: rotate-map.sh swap-lvl <lvl_file> <lio_file> [cfg_file]"
+    json_error "Usage: rotate-map.sh swap-lvl <lvl_file> <lio_file> [cfg_file] [zone_name]"
   fi
 
   validate_filename "$new_lvl"
@@ -156,6 +167,8 @@ cmd_swap_lvl() {
   prev_lvl=$(get_cfg_field "$target_cfg" "LvlFile")
   local prev_lio
   prev_lio=$(get_cfg_field "$target_cfg" "LioFile")
+  local prev_zone_name
+  prev_zone_name=$(get_current_zone_name)
 
   # Stop zone
   stop_zone
@@ -164,10 +177,18 @@ cmd_swap_lvl() {
   sed -i "s|^LvlFile=.*|LvlFile=$new_lvl|" "$ASSETS_DIR/$target_cfg"
   sed -i "s|^LioFile=.*|LioFile=$new_lio|" "$ASSETS_DIR/$target_cfg"
 
+  # Update zoneName if provided
+  if [ -n "$new_zone_name" ]; then
+    sed -i "s|zoneName value=\"[^\"]*\"|zoneName value=\"$new_zone_name\"|" "$SERVER_XML"
+  fi
+
+  local actual_zone_name
+  actual_zone_name=$(get_current_zone_name)
+
   # Restart zone
   if start_zone; then
     cat <<EOF
-{"success":true,"cfg":"$target_cfg","lvl":"$new_lvl","lio":"$new_lio","previous_lvl":"$prev_lvl","previous_lio":"$prev_lio"}
+{"success":true,"cfg":"$target_cfg","lvl":"$new_lvl","lio":"$new_lio","previous_lvl":"$prev_lvl","previous_lio":"$prev_lio","zoneName":"$actual_zone_name","previous_zoneName":"$prev_zone_name"}
 EOF
   else
     json_error "Zone failed to start after lvl/lio swap"

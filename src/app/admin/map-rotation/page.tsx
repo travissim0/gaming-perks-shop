@@ -77,6 +77,7 @@ export default function MapRotationPage() {
   const [selectedLvl, setSelectedLvl] = useState('');
   const [selectedLio, setSelectedLio] = useState('');
   const [targetCfgForCustom, setTargetCfgForCustom] = useState('');
+  const [zoneName, setZoneName] = useState('');
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [rotating, setRotating] = useState(false);
 
@@ -84,6 +85,14 @@ export default function MapRotationPage() {
   const [poolLoading, setPoolLoading] = useState(true);
   const [newPoolCfg, setNewPoolCfg] = useState('');
   const [newPoolName, setNewPoolName] = useState('');
+
+  // Map Presets
+  const [presets, setPresets] = useState<any[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(true);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetLvl, setNewPresetLvl] = useState('');
+  const [newPresetLio, setNewPresetLio] = useState('');
+  const [newPresetZoneName, setNewPresetZoneName] = useState('');
 
   const [scheduleWindowStart, setScheduleWindowStart] = useState('02:00');
   const [scheduleWindowEnd, setScheduleWindowEnd] = useState('08:00');
@@ -150,10 +159,35 @@ export default function MapRotationPage() {
     fetchLioFiles();
     fetchPlayerCount();
     fetchPool();
+    fetchPresets();
     fetchSchedule();
     fetchHistory();
     fetchCommands();
   }, []);
+
+  // Auto-guess LIO when LVL is selected
+  const handleLvlSelect = (lvl: string) => {
+    setSelectedLvl(lvl);
+    if (lvl) {
+      const baseName = lvl.replace(/\.lvl$/i, '');
+      const matchingLio = lioFiles.find(f => f.toLowerCase() === `${baseName}.lio`.toLowerCase());
+      setSelectedLio(matchingLio || '');
+    } else {
+      setSelectedLio('');
+    }
+  };
+
+  // Same auto-guess for preset form
+  const handlePresetLvlSelect = (lvl: string) => {
+    setNewPresetLvl(lvl);
+    if (lvl) {
+      const baseName = lvl.replace(/\.lvl$/i, '');
+      const matchingLio = lioFiles.find(f => f.toLowerCase() === `${baseName}.lio`.toLowerCase());
+      setNewPresetLio(matchingLio || '');
+    } else {
+      setNewPresetLio('');
+    }
+  };
 
   // Auto-refresh every 15 seconds
   useEffect(() => {
@@ -282,6 +316,21 @@ export default function MapRotationPage() {
     }
   };
 
+  const fetchPresets = async () => {
+    setPresetsLoading(true);
+    try {
+      const res = await apiFetch('/api/admin/map-rotation?action=presets');
+      const json = await res.json();
+      if (json.success && json.data) {
+        setPresets(json.data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching presets:', err);
+    } finally {
+      setPresetsLoading(false);
+    }
+  };
+
   const fetchCommands = async () => {
     try {
       const res = await apiFetch('/api/admin/map-rotation?action=commands');
@@ -302,22 +351,23 @@ export default function MapRotationPage() {
     try {
       let postBody: any;
 
+      const zn = zoneName.trim() || undefined;
+
       if (force) {
-        // Force rotate
         if (quickRotateTab === 'swap-cfg') {
           if (!selectedCfg) { toast.error('Please select a cfg file'); setRotating(false); return; }
-          postBody = { action: 'force-rotate', cfg: selectedCfg };
+          postBody = { action: 'force-rotate', cfg: selectedCfg, zone_name: zn };
         } else {
           if (!selectedLvl || !selectedLio) { toast.error('Please select both LVL and LIO files'); setRotating(false); return; }
-          postBody = { action: 'force-rotate', lvl: selectedLvl, lio: selectedLio, cfg: targetCfgForCustom || undefined };
+          postBody = { action: 'force-rotate', lvl: selectedLvl, lio: selectedLio, cfg: targetCfgForCustom || undefined, zone_name: zn };
         }
       } else {
         if (quickRotateTab === 'swap-cfg') {
           if (!selectedCfg) { toast.error('Please select a cfg file'); setRotating(false); return; }
-          postBody = { action: 'swap-cfg', cfg: selectedCfg };
+          postBody = { action: 'swap-cfg', cfg: selectedCfg, zone_name: zn };
         } else {
           if (!selectedLvl || !selectedLio) { toast.error('Please select both LVL and LIO files'); setRotating(false); return; }
-          postBody = { action: 'swap-lvl', lvl: selectedLvl, lio: selectedLio, cfg: targetCfgForCustom || undefined };
+          postBody = { action: 'swap-lvl', lvl: selectedLvl, lio: selectedLio, cfg: targetCfgForCustom || undefined, zone_name: zn };
         }
       }
 
@@ -380,6 +430,58 @@ export default function MapRotationPage() {
     } catch (err: any) {
       toast.error(err.message || 'Failed to remove pool entry');
     }
+  };
+
+  const handleSavePreset = async () => {
+    if (!newPresetName || !newPresetLvl || !newPresetLio) {
+      toast.error('Please fill in name, LVL, and LIO for the preset');
+      return;
+    }
+    try {
+      const res = await apiFetch('/api/admin/map-rotation', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'save-preset',
+          display_name: newPresetName,
+          lvl_file: newPresetLvl,
+          lio_file: newPresetLio,
+          zone_name: newPresetZoneName || newPresetName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save preset');
+      toast.success('Map preset saved');
+      setNewPresetName('');
+      setNewPresetLvl('');
+      setNewPresetLio('');
+      setNewPresetZoneName('');
+      fetchPresets();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleDeletePreset = async (id: string) => {
+    try {
+      const res = await apiFetch('/api/admin/map-rotation', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete-preset', id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setPresets(prev => prev.filter(p => p.id !== id));
+      toast.success('Preset deleted');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleLoadPreset = (preset: any) => {
+    setQuickRotateTab('custom-lvl-lio');
+    setSelectedLvl(preset.lvl_file);
+    setSelectedLio(preset.lio_file);
+    setZoneName(preset.zone_name || preset.display_name);
+    toast.success(`Loaded preset: ${preset.display_name}`);
   };
 
   const handleSaveSchedule = async () => {
@@ -569,6 +671,12 @@ export default function MapRotationPage() {
           {quickRotateTab === 'swap-cfg' && (
             <div className="space-y-4">
               <div>
+                <label className="block text-sm text-gray-400 mb-1">Zone Name <span className="text-gray-600">(optional, updates display name)</span></label>
+                <input type="text" value={zoneName} onChange={(e) => setZoneName(e.target.value)}
+                  placeholder={zoneStatus?.zoneName || 'Leave blank to keep current'}
+                  className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 placeholder-gray-500" />
+              </div>
+              <div>
                 <label className="block text-sm text-gray-400 mb-1">Select CFG File</label>
                 <select
                   value={selectedCfg}
@@ -596,15 +704,25 @@ export default function MapRotationPage() {
           {quickRotateTab === 'custom-lvl-lio' && (
             <div className="space-y-4">
               <div>
+                <label className="block text-sm text-gray-400 mb-1">Zone Name <span className="text-gray-600">(displayed in game)</span></label>
+                <input type="text" value={zoneName} onChange={(e) => setZoneName(e.target.value)}
+                  placeholder={zoneStatus?.zoneName || 'e.g. USL - Dragon\'s Lair'}
+                  className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 placeholder-gray-500" />
+              </div>
+              <div>
                 <label className="block text-sm text-gray-400 mb-1">Select LVL File</label>
-                <select value={selectedLvl} onChange={(e) => setSelectedLvl(e.target.value)}
+                <select value={selectedLvl} onChange={(e) => handleLvlSelect(e.target.value)}
                   className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500">
                   <option value="">-- Choose a LVL file --</option>
                   {lvlFiles.map((f) => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Select LIO File</label>
+                <label className="block text-sm text-gray-400 mb-1">
+                  Select LIO File
+                  {selectedLvl && !selectedLio && <span className="text-yellow-400 ml-2 text-xs">(no matching .lio found)</span>}
+                  {selectedLvl && selectedLio && <span className="text-green-400 ml-2 text-xs">(auto-matched)</span>}
+                </label>
                 <select value={selectedLio} onChange={(e) => setSelectedLio(e.target.value)}
                   className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500">
                   <option value="">-- Choose a LIO file --</option>
@@ -666,7 +784,98 @@ export default function MapRotationPage() {
           </div>
         )}
 
-        {/* ===== Section 3: Rotation Pool ===== */}
+        {/* ===== Section 3: Map Presets ===== */}
+        <section className="bg-gray-800/50 rounded-xl border border-purple-500/30 p-6 mb-6">
+          <h2 className="text-xl font-semibold text-purple-400 mb-2">Map Presets</h2>
+          <p className="text-gray-400 text-xs mb-4">Saved LVL/LIO/Zone Name pairings. Click "Load" to populate the Quick Rotate form. These will be used for public voting later.</p>
+
+          {presetsLoading ? (
+            <div className="animate-pulse space-y-3">
+              <div className="h-8 bg-gray-700 rounded w-full"></div>
+            </div>
+          ) : (
+            <>
+              {presets.length > 0 && (
+                <div className="overflow-x-auto mb-4">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">Name</th>
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">Zone Name</th>
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">LVL</th>
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">LIO</th>
+                        <th className="text-center py-2 px-3 text-gray-400 font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {presets.map((p) => (
+                        <tr key={p.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
+                          <td className="py-2 px-3 text-white font-medium">{p.display_name}</td>
+                          <td className="py-2 px-3 text-gray-300 text-xs">{p.zone_name}</td>
+                          <td className="py-2 px-3 text-gray-300 font-mono text-xs">{p.lvl_file}</td>
+                          <td className="py-2 px-3 text-gray-300 font-mono text-xs">{p.lio_file}</td>
+                          <td className="py-2 px-3 text-center space-x-2">
+                            <button onClick={() => handleLoadPreset(p)}
+                              className="text-cyan-400 hover:text-cyan-300 text-xs font-medium">Load</button>
+                            <button onClick={() => handleDeletePreset(p.id)}
+                              className="text-red-400 hover:text-red-300 text-xs font-medium">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-gray-700">
+                <h3 className="text-sm font-medium text-gray-300 mb-3">Save New Preset</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Preset Name</label>
+                    <input type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)}
+                      placeholder="e.g. Dragon's Lair CTF"
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Zone Name (in-game)</label>
+                    <input type="text" value={newPresetZoneName} onChange={(e) => setNewPresetZoneName(e.target.value)}
+                      placeholder="Defaults to preset name"
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">LVL File</label>
+                    <select value={newPresetLvl} onChange={(e) => handlePresetLvlSelect(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                      <option value="">-- Select LVL --</option>
+                      {lvlFiles.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      LIO File
+                      {newPresetLvl && newPresetLio && <span className="text-green-400 ml-1">(auto)</span>}
+                    </label>
+                    <select value={newPresetLio} onChange={(e) => setNewPresetLio(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                      <option value="">-- Select LIO --</option>
+                      {lioFiles.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button onClick={handleSavePreset}
+                      className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium">
+                      Save Preset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* ===== Section 4: Rotation Pool ===== */}
         <section className="bg-gray-800/50 rounded-xl border border-cyan-500/30 p-6 mb-6">
           <h2 className="text-xl font-semibold text-cyan-400 mb-4">Rotation Pool</h2>
 

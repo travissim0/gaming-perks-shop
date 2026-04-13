@@ -229,6 +229,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, data: { playerCount } });
       }
 
+      case 'presets': {
+        const { data, error } = await supabaseService
+          .from('map_presets')
+          .select('*')
+          .order('display_name', { ascending: true });
+
+        if (error) {
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, data });
+      }
+
       case 'commands': {
         // Get recent commands and their status (so admin can see pending/completed)
         const { data, error } = await supabaseService
@@ -292,7 +304,7 @@ export async function POST(request: NextRequest) {
   try {
     switch (action) {
       case 'swap-cfg': {
-        const { cfg } = body;
+        const { cfg, zone_name } = body;
         if (!cfg) {
           return NextResponse.json({ success: false, error: 'Missing cfg parameter' }, { status: 400 });
         }
@@ -345,9 +357,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Queue command for the daemon
+        const cmdArgs: Record<string, string> = { cfg: safeCfg };
+        if (zone_name) cmdArgs.zone_name = zone_name;
+
         const result = await queueRotationCommand(
           'swap-cfg',
-          { cfg: safeCfg },
+          cmdArgs,
           adminUser,
           playerCount,
           false
@@ -365,7 +380,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'swap-lvl': {
-        const { lvl, lio, cfg } = body;
+        const { lvl, lio, cfg, zone_name } = body;
         if (!lvl || !lio) {
           return NextResponse.json({ success: false, error: 'Missing lvl or lio parameter' }, { status: 400 });
         }
@@ -420,6 +435,7 @@ export async function POST(request: NextRequest) {
 
         const args: Record<string, string> = { lvl: safeLvl, lio: safeLio };
         if (safeCfg) args.cfg = safeCfg;
+        if (zone_name) args.zone_name = zone_name;
 
         const result = await queueRotationCommand('swap-lvl', args, adminUser, playerCount, false);
 
@@ -435,7 +451,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'force-rotate': {
-        const { cfg, lvl, lio } = body;
+        const { cfg, lvl, lio, zone_name } = body;
 
         if (!cfg && !lvl) {
           return NextResponse.json(
@@ -458,6 +474,7 @@ export async function POST(request: NextRequest) {
           command = 'swap-cfg';
           args.cfg = sanitizeFilename(cfg);
         }
+        if (zone_name) args.zone_name = zone_name;
 
         const result = await queueRotationCommand(
           command,
@@ -523,6 +540,50 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ success: true, message: 'Removed from pool' });
+      }
+
+      case 'save-preset': {
+        const { display_name, lvl_file, lio_file, zone_name: presetZoneName } = body;
+        if (!display_name || !lvl_file || !lio_file) {
+          return NextResponse.json(
+            { success: false, error: 'Missing display_name, lvl_file, or lio_file' },
+            { status: 400 }
+          );
+        }
+
+        const { data, error } = await supabaseService
+          .from('map_presets')
+          .insert({
+            display_name,
+            lvl_file: sanitizeFilename(lvl_file),
+            lio_file: sanitizeFilename(lio_file),
+            zone_name: presetZoneName || display_name,
+            created_by: adminUser.id,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, data });
+      }
+
+      case 'delete-preset': {
+        const { id } = body;
+        if (!id) {
+          return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 });
+        }
+
+        const { error } = await supabaseService
+          .from('map_presets')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, message: 'Preset deleted' });
       }
 
       case 'update-schedule': {
