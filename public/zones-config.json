@@ -1,0 +1,47 @@
+{
+  "zones": [
+    {
+      "key": "ctf",
+      "name": "CTF - Twin Peaks 2.0",
+      "directory": "CTF - Twin Peaks 2.0"
+    },
+    {
+      "key": "tp",
+      "name": "CTF - Twin Peaks Classic",
+      "directory": "CTF - Twin Peaks Classic"
+    },
+    {
+      "key": "usl",
+      "name": "League - USL Matches",
+      "directory": "League - USL Matches"
+    },
+    {
+      "key": "usl2",
+      "name": "League - USL Secondary",
+      "directory": "League - USL Secondary"
+    },
+    {
+      "key": "skMini",
+      "name": "Skirmish - Minimaps",
+      "directory": "Skirmish - Minimaps"
+    },
+    {
+      "key": "grav",
+      "name": "Sports - GravBall",
+      "directory": "Sports - GravBall"
+    },
+    {
+      "key": "arena",
+      "name": "Arcade - The Arena",
+      "directory": "Arcade - The Arena"
+    },
+    {
+      "key": "zz",
+      "name": "Bots - Zombie Zone",
+      "directory": "Bots - Zombie Zone"
+    }
+  ],
+  "zones_dir": "/root/Infantry/Zones",
+  "_comment": "To add a new zone: Add an entry to the 'zones' array with key, name, and directory fields. See ZONES_CONFIGURATION_README.md for details."
+}
+
