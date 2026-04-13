@@ -95,6 +95,9 @@ export default function MapRotationPage() {
   const [newPresetCfg, setNewPresetCfg] = useState('');
   const [newPresetZoneName, setNewPresetZoneName] = useState('');
   const [newPresetImageUrl, setNewPresetImageUrl] = useState('');
+  const [newPresetImageFile, setNewPresetImageFile] = useState<File | null>(null);
+  const [newPresetImagePreview, setNewPresetImagePreview] = useState<string | null>(null);
+  const [presetSaving, setPresetSaving] = useState(false);
 
   const [scheduleWindowStart, setScheduleWindowStart] = useState('02:00');
   const [scheduleWindowEnd, setScheduleWindowEnd] = useState('08:00');
@@ -434,12 +437,49 @@ export default function MapRotationPage() {
     }
   };
 
+  const handlePresetImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB');
+      return;
+    }
+    setNewPresetImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setNewPresetImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleSavePreset = async () => {
     if (!newPresetName || !newPresetLvl || !newPresetLio) {
       toast.error('Please fill in name, LVL, and LIO for the preset');
       return;
     }
+    setPresetSaving(true);
     try {
+      let imageUrl = newPresetImageUrl || undefined;
+
+      // Upload image file if selected
+      if (newPresetImageFile) {
+        const fileExt = newPresetImageFile.name.split('.').pop();
+        const fileName = `map-preview-${Date.now()}.${fileExt}`;
+        const filePath = `map-previews/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, newPresetImageFile, { upsert: true });
+
+        if (uploadError) {
+          throw new Error(`Image upload failed: ${uploadError.message}`);
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        imageUrl = publicUrl;
+      }
+
       const res = await apiFetch('/api/admin/map-rotation', {
         method: 'POST',
         body: JSON.stringify({
@@ -449,7 +489,7 @@ export default function MapRotationPage() {
           lio_file: newPresetLio,
           cfg_file: newPresetCfg || undefined,
           zone_name: newPresetZoneName || newPresetName,
-          preview_image_url: newPresetImageUrl || undefined,
+          preview_image_url: imageUrl,
         }),
       });
       const data = await res.json();
@@ -461,9 +501,13 @@ export default function MapRotationPage() {
       setNewPresetCfg('');
       setNewPresetZoneName('');
       setNewPresetImageUrl('');
+      setNewPresetImageFile(null);
+      setNewPresetImagePreview(null);
       fetchPresets();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setPresetSaving(false);
     }
   };
 
@@ -891,15 +935,27 @@ export default function MapRotationPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-3">
-                    <label className="block text-xs text-gray-500 mb-1">Preview Image URL <span className="text-gray-600">(for map voting)</span></label>
-                    <input type="text" value={newPresetImageUrl} onChange={(e) => setNewPresetImageUrl(e.target.value)}
-                      placeholder="https://example.com/maps/preview.jpg"
-                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500" />
+                    <label className="block text-xs text-gray-500 mb-1">Preview Image <span className="text-gray-600">(for map voting)</span></label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex-1 cursor-pointer">
+                        <div className="w-full bg-gray-700 border border-gray-600 border-dashed text-gray-400 rounded-lg px-3 py-2 text-sm hover:border-purple-500 hover:text-purple-400 transition-colors text-center">
+                          {newPresetImageFile ? newPresetImageFile.name : 'Click to upload image (max 5MB)'}
+                        </div>
+                        <input type="file" accept="image/*" onChange={handlePresetImageSelect} className="hidden" />
+                      </label>
+                      {newPresetImagePreview && (
+                        <div className="relative">
+                          <img src={newPresetImagePreview} alt="Preview" className="w-12 h-12 rounded object-cover border border-purple-500/50" />
+                          <button onClick={() => { setNewPresetImageFile(null); setNewPresetImagePreview(null); }}
+                            className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-600 rounded-full text-white text-xs flex items-center justify-center hover:bg-red-500">x</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-end">
-                    <button onClick={handleSavePreset}
-                      className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium">
-                      Save Preset
+                    <button onClick={handleSavePreset} disabled={presetSaving}
+                      className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+                      {presetSaving ? 'Saving...' : 'Save Preset'}
                     </button>
                   </div>
                 </div>
