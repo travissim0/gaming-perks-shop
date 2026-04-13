@@ -493,6 +493,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   ];
 
   const communityNavItems = [
+    { href: '/map-vote', label: 'Map Vote', icon: '🗳️' },
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
