@@ -141,7 +141,7 @@ export default function SiteAdminDashboard() {
         </div>
 
         {/* Management Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Users Management */}
           <Link href="/admin/users" className="group">
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-6 border border-gray-700 hover:border-blue-500 transition-all duration-200 group-hover:shadow-xl group-hover:shadow-blue-500/20">
@@ -188,6 +188,23 @@ export default function SiteAdminDashboard() {
               </p>
               <div className="flex items-center text-purple-400 group-hover:text-purple-300">
                 <span className="text-sm font-medium">Manage Videos</span>
+                <span className="ml-2">→</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Map Rotation Management */}
+          <Link href="/admin/map-rotation" className="group">
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-6 border border-gray-700 hover:border-cyan-500 transition-all duration-200 group-hover:shadow-xl group-hover:shadow-cyan-500/20">
+              <div className="flex items-center mb-4">
+                <div className="text-cyan-400 text-3xl mr-4">🗺️</div>
+                <h3 className="text-xl font-bold text-white">Map Rotation</h3>
+              </div>
+              <p className="text-gray-400 mb-4">
+                Manage map presets, rotation queue, and vote sessions
+              </p>
+              <div className="flex items-center text-cyan-400 group-hover:text-cyan-300">
+                <span className="text-sm font-medium">Manage Maps</span>
                 <span className="ml-2">→</span>
               </div>
             </div>

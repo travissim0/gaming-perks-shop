@@ -156,12 +156,12 @@ export default function NeutralNavbar() {
                         <span className="font-semibold">CTFPL</span>
                       </Link>
                       <Link
-                        href="/dueling/bo9-stats"
+                        href="/map-vote"
                         className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
                         onClick={() => setShowZonesDropdown(false)}
                       >
-                        <span>📊</span>
-                        <span className="font-semibold">USL</span>
+                        <span>🗳️</span>
+                        <span className="font-semibold">USL Map Vote</span>
                       </Link>
                       <Link
                         href="/triple-threat"
@@ -428,12 +428,12 @@ export default function NeutralNavbar() {
                     <span className="font-semibold">CTFPL</span>
                   </Link>
                   <Link
-                    href="/dueling/bo9-stats"
+                    href="/map-vote"
                     className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <span>📊</span>
-                    <span className="font-semibold">USL</span>
+                    <span>🗳️</span>
+                    <span className="font-semibold">USL Map Vote</span>
                   </Link>
                   <Link
                     href="/triple-threat"

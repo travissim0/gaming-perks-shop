@@ -59,7 +59,6 @@ export default function ImprovedNavbar({ user }: { user: any }) {
   ];
 
   const communityNavItems = [
-    { href: '/map-vote', label: 'Map Vote', icon: '🗳️' },
     { href: '/forum', label: 'Forum', icon: '💬' },
     { href: '/guides', label: 'Guides', icon: '📚' },
     { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
