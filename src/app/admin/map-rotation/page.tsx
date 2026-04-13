@@ -98,6 +98,7 @@ export default function MapRotationPage() {
   const [newPresetImageFile, setNewPresetImageFile] = useState<File | null>(null);
   const [newPresetImagePreview, setNewPresetImagePreview] = useState<string | null>(null);
   const [presetSaving, setPresetSaving] = useState(false);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
 
   const [scheduleWindowStart, setScheduleWindowStart] = useState('02:00');
   const [scheduleWindowEnd, setScheduleWindowEnd] = useState('08:00');
@@ -480,29 +481,26 @@ export default function MapRotationPage() {
         imageUrl = publicUrl;
       }
 
+      const isEditing = !!editingPresetId;
+      const payload: any = {
+        action: isEditing ? 'update-preset' : 'save-preset',
+        display_name: newPresetName,
+        lvl_file: newPresetLvl,
+        lio_file: newPresetLio,
+        cfg_file: newPresetCfg || undefined,
+        zone_name: newPresetZoneName || newPresetName,
+        preview_image_url: imageUrl,
+      };
+      if (isEditing) payload.id = editingPresetId;
+
       const res = await apiFetch('/api/admin/map-rotation', {
         method: 'POST',
-        body: JSON.stringify({
-          action: 'save-preset',
-          display_name: newPresetName,
-          lvl_file: newPresetLvl,
-          lio_file: newPresetLio,
-          cfg_file: newPresetCfg || undefined,
-          zone_name: newPresetZoneName || newPresetName,
-          preview_image_url: imageUrl,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save preset');
-      toast.success('Map preset saved');
-      setNewPresetName('');
-      setNewPresetLvl('');
-      setNewPresetLio('');
-      setNewPresetCfg('');
-      setNewPresetZoneName('');
-      setNewPresetImageUrl('');
-      setNewPresetImageFile(null);
-      setNewPresetImagePreview(null);
+      if (!res.ok) throw new Error(data.error || `Failed to ${isEditing ? 'update' : 'save'} preset`);
+      toast.success(isEditing ? 'Preset updated' : 'Map preset saved');
+      handleCancelEdit();
       fetchPresets();
     } catch (err: any) {
       toast.error(err.message);
@@ -533,6 +531,30 @@ export default function MapRotationPage() {
     setTargetCfgForCustom(preset.cfg_file || '');
     setZoneName(preset.zone_name || preset.display_name);
     toast.success(`Loaded preset: ${preset.display_name}`);
+  };
+
+  const handleEditPreset = (preset: any) => {
+    setEditingPresetId(preset.id);
+    setNewPresetName(preset.display_name);
+    setNewPresetZoneName(preset.zone_name || '');
+    setNewPresetCfg(preset.cfg_file || '');
+    setNewPresetLvl(preset.lvl_file || '');
+    setNewPresetLio(preset.lio_file || '');
+    setNewPresetImageUrl(preset.preview_image_url || '');
+    setNewPresetImageFile(null);
+    setNewPresetImagePreview(preset.preview_image_url || null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPresetId(null);
+    setNewPresetName('');
+    setNewPresetLvl('');
+    setNewPresetLio('');
+    setNewPresetCfg('');
+    setNewPresetZoneName('');
+    setNewPresetImageUrl('');
+    setNewPresetImageFile(null);
+    setNewPresetImagePreview(null);
   };
 
   const handleSaveSchedule = async () => {
@@ -878,6 +900,8 @@ export default function MapRotationPage() {
                           <td className="py-2 px-3 text-center space-x-2">
                             <button onClick={() => handleLoadPreset(p)}
                               className="text-cyan-400 hover:text-cyan-300 text-xs font-medium">Load</button>
+                            <button onClick={() => handleEditPreset(p)}
+                              className="text-yellow-400 hover:text-yellow-300 text-xs font-medium">Edit</button>
                             <button onClick={() => handleDeletePreset(p.id)}
                               className="text-red-400 hover:text-red-300 text-xs font-medium">Delete</button>
                           </td>
@@ -888,8 +912,18 @@ export default function MapRotationPage() {
                 </div>
               )}
 
-              <div className="pt-3 border-t border-gray-700">
-                <h3 className="text-sm font-medium text-gray-300 mb-3">Save New Preset</h3>
+              <div className={`pt-3 border-t ${editingPresetId ? 'border-yellow-500/50' : 'border-gray-700'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-gray-300">
+                    {editingPresetId ? 'Edit Preset' : 'Save New Preset'}
+                  </h3>
+                  {editingPresetId && (
+                    <button onClick={handleCancelEdit}
+                      className="text-xs text-gray-400 hover:text-white px-2 py-1 bg-gray-700 rounded">
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Preset Name</label>
@@ -954,8 +988,8 @@ export default function MapRotationPage() {
                   </div>
                   <div className="flex items-end">
                     <button onClick={handleSavePreset} disabled={presetSaving}
-                      className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
-                      {presetSaving ? 'Saving...' : 'Save Preset'}
+                      className={`w-full px-4 py-2 ${editingPresetId ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-purple-600 hover:bg-purple-700'} disabled:opacity-50 text-white rounded-lg text-sm font-medium`}>
+                      {presetSaving ? 'Saving...' : editingPresetId ? 'Update Preset' : 'Save Preset'}
                     </button>
                   </div>
                 </div>

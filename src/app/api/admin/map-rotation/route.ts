@@ -575,7 +575,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'update-preset': {
-        const { id, preview_image_url: imgUrl, display_name: dn, zone_name: zn } = body;
+        const { id, preview_image_url: imgUrl, display_name: dn, zone_name: zn, cfg_file: cf, lvl_file: lf, lio_file: liof } = body;
         if (!id) {
           return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 });
         }
@@ -584,6 +584,9 @@ export async function POST(request: NextRequest) {
         if (imgUrl !== undefined) updateData.preview_image_url = imgUrl;
         if (dn) updateData.display_name = dn;
         if (zn) updateData.zone_name = zn;
+        if (cf !== undefined) updateData.cfg_file = cf ? sanitizeFilename(cf) : null;
+        if (lf) updateData.lvl_file = sanitizeFilename(lf);
+        if (liof) updateData.lio_file = sanitizeFilename(liof);
 
         const { data, error } = await supabaseService
           .from('map_presets')
