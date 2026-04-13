@@ -333,203 +333,159 @@ export default function MapVotePage() {
       <div className="relative z-10">
         <NeutralNavbar />
 
-        <main className="max-w-[1400px] mx-auto px-4 py-8">
-          {/* Hero Header */}
-          <div className="text-center mb-10 animate-fadeIn">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-4">
-              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" style={{ boxShadow: '0 0 6px rgba(34,211,238,0.6)' }} />
-              <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-[0.15em]">Map Rotation Vote</span>
+        <main className="max-w-[1400px] mx-auto px-4 pt-4 pb-8">
+          {/* Compact Header */}
+          <div className="flex items-center justify-between mb-4 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-7 bg-gradient-to-b from-cyan-400 to-blue-500 rounded-full" />
+              <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide">USL Map Vote</h1>
+              {currentMap && (
+                <>
+                  <div className="w-px h-5 bg-gray-700 hidden sm:block" />
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${currentMap.running ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+                    <span className="text-gray-400 text-xs">Now: <span className="text-gray-300">{currentMap.zone_name || currentMap.cfg || 'Unknown'}</span></span>
+                  </div>
+                </>
+              )}
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 mb-3">
-              Choose the Next Map
-            </h1>
-            <p className="text-gray-400 text-sm md:text-base max-w-2xl mx-auto">
-              Vote for the next map rotation. The winning map will be loaded at the next scheduled rotation window.
-            </p>
+            <div className="flex items-center gap-3">
+              {voteSession && (
+                <span className="text-xs text-gray-500">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+              )}
+              {!voteSession && !loading && (
+                <span className="text-xs text-gray-500 bg-gray-800/50 px-2.5 py-1 rounded-full border border-gray-700/50">No active vote</span>
+              )}
+              {!user && (
+                <a href="/auth/login" className="text-xs text-cyan-500 hover:text-cyan-400 transition-colors">Log in to vote</a>
+              )}
+            </div>
           </div>
-
-          {/* Current Map Status */}
-          {currentMap && (
-            <div className="flex items-center justify-center gap-4 mb-8 animate-slideUp">
-              <div className="bg-gray-900/60 backdrop-blur-sm rounded-lg border border-gray-700/50 px-5 py-3 flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${currentMap.running ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-mono">Now Playing</span>
-                </div>
-                <div className="w-px h-5 bg-gray-700" />
-                <span className="text-white font-semibold">{currentMap.zone_name || currentMap.cfg || 'Unknown'}</span>
-              </div>
-            </div>
-          )}
 
           {/* USL Zone Section */}
           <section className="mb-12">
-            {/* Section Header */}
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-1 h-8 bg-gradient-to-b from-cyan-400 via-blue-400 to-purple-500 rounded-full" />
-              <div>
-                <h2 className="text-2xl font-bold text-white tracking-wide">USL Matches</h2>
-                <p className="text-gray-500 text-xs mt-0.5">usl_matches2.cfg rotation maps</p>
-              </div>
-              {voteSession && (
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-xs text-gray-500">{totalVotes} vote{totalVotes !== 1 ? 's' : ''} cast</span>
-                  {voteSession.ends_at && (
-                    <>
-                      <div className="w-px h-4 bg-gray-700" />
-                      <span className="text-xs text-amber-400 font-mono">
-                        Ends {new Date(voteSession.ends_at).toLocaleDateString()}
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Vote Status Banner */}
-            {!voteSession && !loading && (
-              <div className="bg-gray-900/60 backdrop-blur-sm rounded-xl border border-gray-700/50 p-8 text-center mb-6">
-                <div className="text-gray-500 text-lg mb-2">No Active Vote</div>
-                <p className="text-gray-600 text-sm">Check back later when an admin opens a voting session for the next map rotation.</p>
-              </div>
-            )}
 
             {/* Loading */}
             {loading && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="bg-gray-900/60 rounded-xl border border-gray-700/30 overflow-hidden animate-pulse">
-                    <div className="h-44 bg-gray-800/50" />
-                    <div className="p-4 space-y-3">
-                      <div className="h-5 bg-gray-800/50 rounded w-3/4" />
-                      <div className="h-3 bg-gray-800/50 rounded w-1/2" />
-                    </div>
-                  </div>
+                  <div key={i} className="aspect-[4/3] bg-gray-900/60 rounded-lg border border-gray-700/30 animate-pulse" />
                 ))}
               </div>
             )}
 
             {/* Map Cards Grid */}
             {!loading && presets.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {presets.map((preset, index) => {
                   const isMyVote = myVote === preset.id;
                   const isLeading = leadingPresetId === preset.id && totalVotes > 0;
                   const votes = voteCounts[preset.id] || 0;
                   const percentage = getVotePercentage(preset.id);
-                  const isHovered = hoveredCard === preset.id;
 
                   return (
                     <div
                       key={preset.id}
-                      className="group relative"
-                      style={{
-                        animation: `cardEntrance 0.5s ease-out ${index * 0.07}s both`,
-                      }}
-                      onMouseEnter={() => setHoveredCard(preset.id)}
-                      onMouseLeave={() => setHoveredCard(null)}
+                      className="group relative aspect-[4/3]"
+                      style={{ animation: `cardEntrance 0.5s ease-out ${index * 0.06}s both` }}
                     >
                       <div
                         className={`
-                          relative overflow-hidden rounded-xl border transition-all duration-300 cursor-pointer
+                          relative w-full h-full overflow-hidden rounded-lg border-2 transition-all duration-300 cursor-pointer
                           ${isMyVote
-                            ? 'border-cyan-400/60 bg-gray-900/80'
+                            ? 'border-cyan-400/70'
                             : isLeading
-                              ? 'border-amber-400/40 bg-gray-900/70'
-                              : 'border-gray-700/40 bg-gray-900/60 hover:border-cyan-500/40'
+                              ? 'border-amber-400/50'
+                              : 'border-gray-700/30 hover:border-cyan-500/50'
                           }
                         `}
                         style={{
                           animation: isMyVote ? 'selectedPulse 3s ease-in-out infinite' : isLeading ? 'leadingGlow 3s ease-in-out infinite' : undefined,
-                          backdropFilter: 'blur(8px)',
                         }}
                         onClick={() => voteSession && handleVote(preset.id)}
                       >
-                        {/* Top accent bar */}
-                        <div className={`h-1 ${isMyVote ? 'bg-gradient-to-r from-cyan-400 via-blue-400 to-cyan-400' : isLeading ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-400' : 'bg-gradient-to-r from-gray-700 via-gray-600 to-gray-700 group-hover:from-cyan-500/50 group-hover:via-blue-500/50 group-hover:to-cyan-500/50'}`} style={{ transition: 'all 0.3s' }} />
+                        {/* Full-bleed image */}
+                        {preset.preview_image_url ? (
+                          <img
+                            src={preset.preview_image_url}
+                            alt={preset.display_name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                            <span className="text-gray-600 text-sm font-medium">{cleanMapName(preset.display_name)}</span>
+                          </div>
+                        )}
 
-                        {/* Image Container */}
-                        <div className="relative h-44 overflow-hidden bg-gray-800/50">
-                          {preset.preview_image_url ? (
-                            <img
-                              src={preset.preview_image_url}
-                              alt={preset.display_name}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                              <div className="text-gray-600 text-center">
-                                <svg className="w-12 h-12 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                                </svg>
-                                <span className="text-xs">No Preview</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Overlay gradient */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/90 via-gray-900/20 to-transparent" />
-
-                          {/* Leading badge */}
-                          {isLeading && (
-                            <div className="absolute top-2 right-2 px-2 py-0.5 bg-amber-500/90 rounded-full text-[10px] font-bold text-black uppercase tracking-wider flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                              Leading
-                            </div>
-                          )}
-
-                          {/* Your vote checkmark */}
-                          {isMyVote && (
-                            <div className="absolute top-2 left-2 w-7 h-7 bg-cyan-500/90 rounded-full flex items-center justify-center" style={{ boxShadow: '0 0 12px rgba(34,211,238,0.5)' }}>
-                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                          )}
-
-                          {/* Hover vote overlay */}
-                          {voteSession && !isMyVote && (
-                            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-                              <div className="px-5 py-2.5 bg-cyan-500/90 rounded-lg text-white font-bold text-sm backdrop-blur-sm" style={{ boxShadow: '0 0 20px rgba(34,211,238,0.4)' }}>
-                                {voting ? 'Voting...' : 'Vote for this map'}
-                              </div>
-                            </div>
-                          )}
+                        {/* Persistent: map name at bottom (subtle) */}
+                        <div className="absolute bottom-0 inset-x-0 px-2.5 py-1.5 bg-gradient-to-t from-black/80 to-transparent">
+                          <span className="text-white text-xs font-bold drop-shadow-lg truncate block">
+                            {cleanMapName(preset.display_name)}
+                          </span>
                         </div>
 
-                        {/* Card Info */}
-                        <div className="p-4">
-                          <h3 className="text-white font-bold text-base mb-1 truncate group-hover:text-cyan-300 transition-colors">
+                        {/* Persistent: vote bar at very bottom */}
+                        {voteSession && percentage > 0 && (
+                          <div className="absolute bottom-0 inset-x-0 h-[3px]">
+                            <div
+                              className={`h-full transition-all duration-700 ease-out ${isMyVote ? 'bg-cyan-400' : isLeading ? 'bg-amber-400' : 'bg-gray-400/60'}`}
+                              style={{
+                                width: `${percentage}%`,
+                                boxShadow: isMyVote ? '0 0 6px rgba(34,211,238,0.6)' : isLeading ? '0 0 6px rgba(250,204,21,0.6)' : undefined,
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Persistent badges: top corners */}
+                        {isLeading && (
+                          <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-amber-500/90 rounded text-[9px] font-bold text-black uppercase tracking-wider flex items-center gap-0.5">
+                            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                            Leading
+                          </div>
+                        )}
+                        {isMyVote && (
+                          <div className="absolute top-1.5 left-1.5 w-6 h-6 bg-cyan-500/90 rounded-full flex items-center justify-center" style={{ boxShadow: '0 0 10px rgba(34,211,238,0.5)' }}>
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+
+                        {/* Hover overlay: full info + vote CTA */}
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-3">
+                          <h3 className="text-white font-bold text-sm text-center mb-1 drop-shadow-lg">
                             {cleanMapName(preset.display_name)}
                           </h3>
-                          <p className="text-gray-500 text-xs font-mono truncate mb-3">
-                            {preset.lvl_file}
-                          </p>
+                          <p className="text-gray-400 text-[10px] font-mono mb-3">{preset.lvl_file}</p>
 
-                          {/* Vote Bar */}
                           {voteSession && (
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className={`text-xs font-semibold ${isMyVote ? 'text-cyan-400' : isLeading ? 'text-amber-400' : 'text-gray-500'}`}>
+                            <>
+                              {/* Vote counts */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`text-xs font-semibold ${isMyVote ? 'text-cyan-400' : isLeading ? 'text-amber-400' : 'text-gray-300'}`}>
                                   {votes} vote{votes !== 1 ? 's' : ''}
                                 </span>
-                                <span className={`text-xs font-bold ${isMyVote ? 'text-cyan-400' : isLeading ? 'text-amber-400' : 'text-gray-500'}`}>
-                                  {percentage}%
-                                </span>
+                                {percentage > 0 && (
+                                  <span className={`text-xs font-bold ${isMyVote ? 'text-cyan-400' : isLeading ? 'text-amber-400' : 'text-gray-400'}`}>
+                                    ({percentage}%)
+                                  </span>
+                                )}
                               </div>
-                              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-700 ease-out ${isMyVote ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : isLeading ? 'bg-gradient-to-r from-amber-500 to-yellow-500' : 'bg-gradient-to-r from-gray-600 to-gray-500'}`}
-                                  style={{
-                                    width: `${percentage}%`,
-                                    animation: 'voteBarFill 0.8s ease-out',
-                                    boxShadow: isMyVote ? '0 0 8px rgba(34,211,238,0.4)' : isLeading ? '0 0 8px rgba(250,204,21,0.4)' : undefined,
-                                  }}
-                                />
-                              </div>
-                            </div>
+
+                              {/* Vote button */}
+                              {isMyVote ? (
+                                <div className="px-4 py-1.5 bg-cyan-500/20 border border-cyan-500/40 rounded-lg text-cyan-400 text-xs font-bold">
+                                  Your Vote
+                                </div>
+                              ) : (
+                                <div className="px-4 py-1.5 bg-cyan-500/90 rounded-lg text-white text-xs font-bold" style={{ boxShadow: '0 0 15px rgba(34,211,238,0.3)' }}>
+                                  {voting ? 'Voting...' : 'Vote'}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -547,15 +503,7 @@ export default function MapVotePage() {
             )}
           </section>
 
-          {/* Info Footer */}
-          <div className="text-center text-gray-600 text-xs pb-8">
-            {!user && (
-              <p className="mb-2">
-                <a href="/auth/login" className="text-cyan-500 hover:text-cyan-400 transition-colors">Log in</a> to cast your vote
-              </p>
-            )}
-            {myVote && <p className="text-gray-500">You can change your vote at any time during the voting period.</p>}
-          </div>
+          {myVote && <p className="text-center text-gray-600 text-xs mt-4">You can change your vote anytime.</p>}
         </main>
       </div>
     </div>
