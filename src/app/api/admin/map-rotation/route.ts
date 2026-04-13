@@ -543,7 +543,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'save-preset': {
-        const { display_name, lvl_file, lio_file, zone_name: presetZoneName } = body;
+        const { display_name, lvl_file, lio_file, cfg_file, zone_name: presetZoneName, preview_image_url } = body;
         if (!display_name || !lvl_file || !lio_file) {
           return NextResponse.json(
             { success: false, error: 'Missing display_name, lvl_file, or lio_file' },
@@ -551,15 +551,44 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const insertData: any = {
+          display_name,
+          lvl_file: sanitizeFilename(lvl_file),
+          lio_file: sanitizeFilename(lio_file),
+          zone_name: presetZoneName || display_name,
+          created_by: adminUser.id,
+        };
+        if (cfg_file) insertData.cfg_file = sanitizeFilename(cfg_file);
+        if (preview_image_url) insertData.preview_image_url = preview_image_url;
+
         const { data, error } = await supabaseService
           .from('map_presets')
-          .insert({
-            display_name,
-            lvl_file: sanitizeFilename(lvl_file),
-            lio_file: sanitizeFilename(lio_file),
-            zone_name: presetZoneName || display_name,
-            created_by: adminUser.id,
-          })
+          .insert(insertData)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Save preset error:', error);
+          return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, data });
+      }
+
+      case 'update-preset': {
+        const { id, preview_image_url: imgUrl, display_name: dn, zone_name: zn } = body;
+        if (!id) {
+          return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 });
+        }
+
+        const updateData: any = {};
+        if (imgUrl !== undefined) updateData.preview_image_url = imgUrl;
+        if (dn) updateData.display_name = dn;
+        if (zn) updateData.zone_name = zn;
+
+        const { data, error } = await supabaseService
+          .from('map_presets')
+          .update(updateData)
+          .eq('id', id)
           .select()
           .single();
 

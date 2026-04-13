@@ -92,7 +92,9 @@ export default function MapRotationPage() {
   const [newPresetName, setNewPresetName] = useState('');
   const [newPresetLvl, setNewPresetLvl] = useState('');
   const [newPresetLio, setNewPresetLio] = useState('');
+  const [newPresetCfg, setNewPresetCfg] = useState('');
   const [newPresetZoneName, setNewPresetZoneName] = useState('');
+  const [newPresetImageUrl, setNewPresetImageUrl] = useState('');
 
   const [scheduleWindowStart, setScheduleWindowStart] = useState('02:00');
   const [scheduleWindowEnd, setScheduleWindowEnd] = useState('08:00');
@@ -445,7 +447,9 @@ export default function MapRotationPage() {
           display_name: newPresetName,
           lvl_file: newPresetLvl,
           lio_file: newPresetLio,
+          cfg_file: newPresetCfg || undefined,
           zone_name: newPresetZoneName || newPresetName,
+          preview_image_url: newPresetImageUrl || undefined,
         }),
       });
       const data = await res.json();
@@ -454,7 +458,9 @@ export default function MapRotationPage() {
       setNewPresetName('');
       setNewPresetLvl('');
       setNewPresetLio('');
+      setNewPresetCfg('');
       setNewPresetZoneName('');
+      setNewPresetImageUrl('');
       fetchPresets();
     } catch (err: any) {
       toast.error(err.message);
@@ -480,6 +486,7 @@ export default function MapRotationPage() {
     setQuickRotateTab('custom-lvl-lio');
     setSelectedLvl(preset.lvl_file);
     setSelectedLio(preset.lio_file);
+    setTargetCfgForCustom(preset.cfg_file || '');
     setZoneName(preset.zone_name || preset.display_name);
     toast.success(`Loaded preset: ${preset.display_name}`);
   };
@@ -800,8 +807,10 @@ export default function MapRotationPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-700">
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">Preview</th>
                         <th className="text-left py-2 px-3 text-gray-400 font-medium">Name</th>
                         <th className="text-left py-2 px-3 text-gray-400 font-medium">Zone Name</th>
+                        <th className="text-left py-2 px-3 text-gray-400 font-medium">CFG</th>
                         <th className="text-left py-2 px-3 text-gray-400 font-medium">LVL</th>
                         <th className="text-left py-2 px-3 text-gray-400 font-medium">LIO</th>
                         <th className="text-center py-2 px-3 text-gray-400 font-medium">Actions</th>
@@ -810,8 +819,16 @@ export default function MapRotationPage() {
                     <tbody>
                       {presets.map((p) => (
                         <tr key={p.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
+                          <td className="py-2 px-3">
+                            {p.preview_image_url ? (
+                              <img src={p.preview_image_url} alt={p.display_name} className="w-12 h-12 rounded object-cover border border-gray-600" />
+                            ) : (
+                              <div className="w-12 h-12 rounded bg-gray-700 border border-gray-600 flex items-center justify-center text-gray-500 text-xs">N/A</div>
+                            )}
+                          </td>
                           <td className="py-2 px-3 text-white font-medium">{p.display_name}</td>
                           <td className="py-2 px-3 text-gray-300 text-xs">{p.zone_name}</td>
+                          <td className="py-2 px-3 text-gray-300 font-mono text-xs">{p.cfg_file || '-'}</td>
                           <td className="py-2 px-3 text-gray-300 font-mono text-xs">{p.lvl_file}</td>
                           <td className="py-2 px-3 text-gray-300 font-mono text-xs">{p.lio_file}</td>
                           <td className="py-2 px-3 text-center space-x-2">
@@ -843,7 +860,15 @@ export default function MapRotationPage() {
                       className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500" />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">CFG File</label>
+                    <select value={newPresetCfg} onChange={(e) => setNewPresetCfg(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                      <option value="">-- Select CFG --</option>
+                      {cfgFiles.map((c) => <option key={c.cfg} value={c.cfg}>{c.cfg}</option>)}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">LVL File</label>
                     <select value={newPresetLvl} onChange={(e) => handlePresetLvlSelect(e.target.value)}
@@ -862,6 +887,14 @@ export default function MapRotationPage() {
                       <option value="">-- Select LIO --</option>
                       {lioFiles.map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="md:col-span-3">
+                    <label className="block text-xs text-gray-500 mb-1">Preview Image URL <span className="text-gray-600">(for map voting)</span></label>
+                    <input type="text" value={newPresetImageUrl} onChange={(e) => setNewPresetImageUrl(e.target.value)}
+                      placeholder="https://example.com/maps/preview.jpg"
+                      className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 placeholder-gray-500" />
                   </div>
                   <div className="flex items-end">
                     <button onClick={handleSavePreset}
