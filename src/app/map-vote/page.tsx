@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -61,6 +61,152 @@ const generateWarpStars = (count: number) => {
   });
 };
 
+// ─── Map Inspector Modal ───
+function MapInspector({ preset, onClose }: { preset: MapPreset; onClose: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const posStart = useRef({ x: 0, y: 0 });
+
+  const MIN_SCALE = 0.5;
+  const MAX_SCALE = 6;
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.85 : 1.18;
+    setScale(s => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * delta)));
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    setDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    posStart.current = { ...position };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [position]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging) return;
+    setPosition({
+      x: posStart.current.x + (e.clientX - dragStart.current.x),
+      y: posStart.current.y + (e.clientY - dragStart.current.y),
+    });
+  }, [dragging]);
+
+  const handlePointerUp = useCallback(() => {
+    setDragging(false);
+  }, []);
+
+  const resetView = useCallback(() => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  }, []);
+
+  const zoomIn = () => setScale(s => Math.min(MAX_SCALE, s * 1.4));
+  const zoomOut = () => setScale(s => Math.max(MIN_SCALE, s / 1.4));
+
+  const handleDownload = async () => {
+    if (!preset.preview_image_url) return;
+    try {
+      const res = await fetch(preset.preview_image_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = preset.preview_image_url.split('.').pop()?.split('?')[0] || 'png';
+      a.download = `${preset.display_name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to download image');
+    }
+  };
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const cleanName = preset.display_name.replace(/^USL\s*-\s*/i, '').replace(/\s*\(Linux\)\s*$/i, '');
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.92)' }}>
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-900/80 border-b border-gray-700/50 shrink-0">
+        <div className="flex items-center gap-3">
+          <h2 className="text-white font-bold text-lg">{cleanName}</h2>
+          <span className="text-gray-500 text-xs font-mono">{preset.lvl_file}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Zoom controls */}
+          <button onClick={zoomOut} className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors" title="Zoom out">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" /></svg>
+          </button>
+          <span className="text-gray-400 text-xs font-mono min-w-[3.5rem] text-center">{Math.round(scale * 100)}%</span>
+          <button onClick={zoomIn} className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors" title="Zoom in">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" /></svg>
+          </button>
+          <button onClick={resetView} className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors" title="Reset view">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          </button>
+          <div className="w-px h-6 bg-gray-700 mx-1" />
+          {/* Download */}
+          {preset.preview_image_url && (
+            <button onClick={handleDownload} className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-cyan-400 transition-colors" title="Download map image">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            </button>
+          )}
+          {/* Close */}
+          <button onClick={onClose} className="p-1.5 rounded-lg bg-gray-800 hover:bg-red-500/80 text-gray-300 hover:text-white transition-colors" title="Close (Esc)">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Image viewport */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden select-none"
+        style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <div className="w-full h-full flex items-center justify-center">
+          {preset.preview_image_url ? (
+            <img
+              src={preset.preview_image_url}
+              alt={cleanName}
+              draggable={false}
+              className="max-w-none"
+              style={{
+                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                transition: dragging ? 'none' : 'transform 0.15s ease-out',
+              }}
+            />
+          ) : (
+            <div className="text-gray-500 text-lg">No preview image available</div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom hint */}
+      <div className="text-center py-2 text-gray-600 text-xs bg-gray-900/50 shrink-0">
+        Scroll to zoom &middot; Click &amp; drag to pan &middot; Press Esc to close
+      </div>
+    </div>
+  );
+}
+
 export default function MapVotePage() {
   const { user } = useAuth();
   const [presets, setPresets] = useState<MapPreset[]>([]);
@@ -72,6 +218,7 @@ export default function MapVotePage() {
   const [voting, setVoting] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [currentMap, setCurrentMap] = useState<any>(null);
+  const [inspecting, setInspecting] = useState<MapPreset | null>(null);
 
   const pageStars = useMemo(() => ({
     dust: generateStars(120, 'dust'),
@@ -454,12 +601,12 @@ export default function MapVotePage() {
                           </div>
                         )}
 
-                        {/* Hover overlay: full info + vote CTA */}
+                        {/* Hover overlay: full info + vote CTA + inspect/download */}
                         <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center p-3">
                           <h3 className="text-white font-bold text-sm text-center mb-1 drop-shadow-lg">
                             {cleanMapName(preset.display_name)}
                           </h3>
-                          <p className="text-gray-400 text-[10px] font-mono mb-3">{preset.lvl_file}</p>
+                          <p className="text-gray-400 text-[10px] font-mono mb-2">{preset.lvl_file}</p>
 
                           {voteSession && (
                             <>
@@ -487,6 +634,45 @@ export default function MapVotePage() {
                               )}
                             </>
                           )}
+
+                          {/* Inspect & Download row */}
+                          <div className="flex items-center gap-2 mt-2">
+                            {preset.preview_image_url && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setInspecting(preset); }}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-gray-700/80 hover:bg-gray-600/80 rounded text-[10px] text-gray-300 hover:text-white transition-colors"
+                                title="Inspect map"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" /></svg>
+                                Inspect
+                              </button>
+                            )}
+                            {preset.preview_image_url && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const res = await fetch(preset.preview_image_url!);
+                                    const blob = await res.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    const ext = preset.preview_image_url!.split('.').pop()?.split('?')[0] || 'png';
+                                    a.download = `${preset.display_name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                  } catch { toast.error('Download failed'); }
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-gray-700/80 hover:bg-gray-600/80 rounded text-[10px] text-gray-300 hover:text-white transition-colors"
+                                title="Download map image"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Download
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -506,6 +692,11 @@ export default function MapVotePage() {
           {myVote && <p className="text-center text-gray-600 text-xs mt-4">You can change your vote anytime.</p>}
         </main>
       </div>
+
+      {/* Map Inspector Modal */}
+      {inspecting && (
+        <MapInspector preset={inspecting} onClose={() => setInspecting(null)} />
+      )}
     </div>
   );
 }
