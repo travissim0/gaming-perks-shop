@@ -75,8 +75,25 @@ function MapInspector({ preset, onClose }: { preset: MapPreset; onClose: () => v
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.85 : 1.18;
-    setScale(s => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s * delta)));
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    // Cursor position relative to container center
+    const cx = e.clientX - rect.left - rect.width / 2;
+    const cy = e.clientY - rect.top - rect.height / 2;
+
+    const factor = e.deltaY > 0 ? 0.85 : 1.18;
+
+    setScale(prev => {
+      const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev * factor));
+      const ratio = next / prev;
+      // Adjust position so the point under the cursor stays fixed
+      setPosition(pos => ({
+        x: cx - (cx - pos.x) * ratio,
+        y: cy - (cy - pos.y) * ratio,
+      }));
+      return next;
+    });
   }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -104,8 +121,18 @@ function MapInspector({ preset, onClose }: { preset: MapPreset; onClose: () => v
     setPosition({ x: 0, y: 0 });
   }, []);
 
-  const zoomIn = () => setScale(s => Math.min(MAX_SCALE, s * 1.4));
-  const zoomOut = () => setScale(s => Math.max(MIN_SCALE, s / 1.4));
+  const zoomIn = () => setScale(prev => {
+    const next = Math.min(MAX_SCALE, prev * 1.4);
+    const ratio = next / prev;
+    setPosition(pos => ({ x: pos.x * ratio, y: pos.y * ratio }));
+    return next;
+  });
+  const zoomOut = () => setScale(prev => {
+    const next = Math.max(MIN_SCALE, prev / 1.4);
+    const ratio = next / prev;
+    setPosition(pos => ({ x: pos.x * ratio, y: pos.y * ratio }));
+    return next;
+  });
 
   const handleDownload = async () => {
     if (!preset.preview_image_url) return;
@@ -207,6 +234,50 @@ function MapInspector({ preset, onClose }: { preset: MapPreset; onClose: () => v
   );
 }
 
+// Helper: get time remaining until 9pm EST today (or show "closed" if past)
+function useVoteCountdown(session: VoteSession | null) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!session) return { active: false, label: '', timeLeft: '', closesAt: null };
+
+  // If session has ends_at, use it; otherwise default to 9pm EST today
+  let closesAt: Date;
+  if (session.ends_at) {
+    closesAt = new Date(session.ends_at);
+  } else {
+    // 9pm EST = 21:00 America/New_York
+    const estStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const estNow = new Date(estStr);
+    closesAt = new Date(estStr);
+    closesAt.setHours(21, 0, 0, 0);
+    // If already past 9pm EST, it closed today
+    if (estNow >= closesAt) {
+      return { active: false, label: 'Voting closed', timeLeft: 'Results pending', closesAt };
+    }
+  }
+
+  const diff = closesAt.getTime() - now.getTime();
+  if (diff <= 0) {
+    return { active: false, label: 'Voting closed', timeLeft: 'Results pending', closesAt };
+  }
+
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+
+  return { active: true, label: 'Closes at 9 PM EST', timeLeft: parts.join(' '), closesAt };
+}
+
 export default function MapVotePage() {
   const { user } = useAuth();
   const [presets, setPresets] = useState<MapPreset[]>([]);
@@ -219,6 +290,7 @@ export default function MapVotePage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [currentMap, setCurrentMap] = useState<any>(null);
   const [inspecting, setInspecting] = useState<MapPreset | null>(null);
+  const countdown = useVoteCountdown(voteSession);
 
   const pageStars = useMemo(() => ({
     dust: generateStars(120, 'dust'),
@@ -497,11 +569,26 @@ export default function MapVotePage() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              {voteSession && (
-                <span className="text-xs text-gray-500">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+              {voteSession && countdown.active && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+                  <div className="w-px h-4 bg-gray-700 hidden sm:block" />
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-cyan-400 text-xs font-mono font-semibold">{countdown.timeLeft}</span>
+                    <span className="text-gray-600 text-[10px]">{countdown.label}</span>
+                  </div>
+                </div>
+              )}
+              {voteSession && !countdown.active && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span className="text-amber-400 text-xs font-semibold">{countdown.label}</span>
+                  <span className="text-gray-500 text-[10px]">&middot; {countdown.timeLeft}</span>
+                </div>
               )}
               {!voteSession && !loading && (
-                <span className="text-xs text-gray-500 bg-gray-800/50 px-2.5 py-1 rounded-full border border-gray-700/50">No active vote</span>
+                <span className="text-xs text-gray-500 bg-gray-800/50 px-2.5 py-1 rounded-full border border-gray-700/50">No active vote today</span>
               )}
               {!user && (
                 <a href="/auth/login" className="text-xs text-cyan-500 hover:text-cyan-400 transition-colors">Log in to vote</a>
@@ -689,7 +776,12 @@ export default function MapVotePage() {
             )}
           </section>
 
-          {myVote && <p className="text-center text-gray-600 text-xs mt-4">You can change your vote anytime.</p>}
+          {voteSession && (
+            <div className="text-center mt-6 space-y-1">
+              {myVote && <p className="text-gray-600 text-xs">You can change your vote anytime before the poll closes.</p>}
+              <p className="text-gray-700 text-[10px]">Daily vote opens each morning and closes at 9 PM EST. The top-voted map is rotated in automatically.</p>
+            </div>
+          )}
         </main>
       </div>
 
