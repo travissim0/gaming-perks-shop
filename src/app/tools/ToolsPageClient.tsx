@@ -44,6 +44,16 @@ interface ReleaseNote {
   published_at: string;
 }
 
+function extractStats(html: string): { value: string; label: string }[] {
+  const stats: { value: string; label: string }[] = [];
+  const statRegex = /<div class="stat"><span class="value">(\d+)<\/span><span class="label">([^<]+)<\/span><\/div>/g;
+  let match;
+  while ((match = statRegex.exec(html)) !== null) {
+    stats.push({ value: match[1], label: match[2] });
+  }
+  return stats;
+}
+
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
@@ -182,14 +192,26 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                         }}
                       />
                       <div className="relative px-5 py-4">
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-3 flex-wrap">
                           <FileText className="w-3.5 h-3.5 text-cyan-400/60" />
                           <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-wider">Latest — v{manifest.version}</span>
                           {manifest.pub_date && (
-                            <span className="text-xs text-gray-500 font-mono ml-auto">
+                            <span className="text-xs text-gray-500 font-mono">
                               {formatDate(manifest.pub_date)}
                             </span>
                           )}
+                          {(() => {
+                            const stats = extractStats(manifest.notes);
+                            return stats.length > 0 ? (
+                              <div className="flex items-center gap-3 ml-auto">
+                                {stats.map((s) => (
+                                  <span key={s.label} className="text-[10px] font-mono text-gray-500">
+                                    <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                         <div
                           className="patch-notes-content"
@@ -258,24 +280,36 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                 {/* Patch notes content area */}
                 <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
                   <div className="divide-y divide-cyan-500/10">
-                    {releaseNotes.map((note) => (
-                      <div
-                        key={note.version}
-                        ref={(el) => { noteSectionRefs.current[note.version] = el; }}
-                        className="px-5 py-5 sm:px-8"
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className="text-cyan-400 font-mono text-sm font-bold">v{note.version}</span>
-                          <span className="text-[10px] text-gray-600 font-mono">
-                            {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </span>
-                        </div>
+                    {releaseNotes.map((note) => {
+                      const stats = extractStats(note.notes_html);
+                      return (
                         <div
-                          className="patch-notes-content"
-                          dangerouslySetInnerHTML={{ __html: note.notes_html }}
-                        />
-                      </div>
-                    ))}
+                          key={note.version}
+                          ref={(el) => { noteSectionRefs.current[note.version] = el; }}
+                          className="px-5 py-5 sm:px-8"
+                        >
+                          <div className="flex items-center gap-3 mb-3 flex-wrap">
+                            <span className="text-cyan-400 font-mono text-sm font-bold">v{note.version}</span>
+                            <span className="text-[10px] text-gray-600 font-mono">
+                              {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                            {stats.length > 0 && (
+                              <div className="flex items-center gap-3 ml-auto">
+                                {stats.map((s) => (
+                                  <span key={s.label} className="text-[10px] font-mono text-gray-500">
+                                    <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className="patch-notes-content"
+                            dangerouslySetInnerHTML={{ __html: note.notes_html }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
