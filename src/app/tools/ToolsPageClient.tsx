@@ -41,6 +41,14 @@ interface LatestBuild {
 }
 
 const GITHUB_REPO = 'travissim0/infantry-cfs-studio';
+const MANIFEST_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/latest.json';
+const DOWNLOAD_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/infantry-cfs-studio_latest_x64-setup.nsis.zip';
+
+interface AppManifest {
+  version: string;
+  notes: string;
+  pub_date: string;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -78,6 +86,7 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
   );
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentBuild, setCurrentBuild] = useState<LatestBuild | null>(latestBuild);
+  const [manifest, setManifest] = useState<AppManifest | null>(null);
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -85,6 +94,13 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
   const [uploadVersion, setUploadVersion] = useState('');
   const [uploadChangelog, setUploadChangelog] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch(MANIFEST_URL)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setManifest(data); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -237,47 +253,15 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
                   ))}
                 </div>
 
-                {/* Download buttons — Supabase build preferred, GitHub fallback */}
+                {/* Download button — permanent link to latest build */}
                 <div className="flex flex-wrap items-center gap-3">
-                  {currentBuild ? (
-                    <a
-                      href={currentBuild.download_url}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download {currentBuild.version}
-                      <span className="text-white/60 text-xs font-normal">({formatBytes(currentBuild.file_size)})</span>
-                    </a>
-                  ) : latestStable ? (
-                    <>
-                      {latestStable.assets
-                        .filter(a => a.name.endsWith('.exe'))
-                        .map(asset => (
-                          <a
-                            key={asset.name}
-                            href={asset.browser_download_url}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
-                          >
-                            <Download className="w-4 h-4" />
-                            Download {latestStable.tag_name}
-                            <span className="text-white/60 text-xs font-normal">({formatBytes(asset.size)})</span>
-                          </a>
-                        ))}
-                      {latestStable.assets
-                        .filter(a => a.name.endsWith('.msi'))
-                        .map(asset => (
-                          <a
-                            key={asset.name}
-                            href={asset.browser_download_url}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-800/80 hover:bg-gray-700/80 border border-gray-600/40 hover:border-cyan-500/40 rounded-lg text-gray-300 hover:text-white text-sm transition-all"
-                          >
-                            <Download className="w-4 h-4" />
-                            MSI Installer
-                            <span className="text-gray-500 text-xs">({formatBytes(asset.size)})</span>
-                          </a>
-                        ))}
-                    </>
-                  ) : null}
+                  <a
+                    href={DOWNLOAD_URL}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download {manifest ? `v${manifest.version}` : 'Latest'}
+                  </a>
                   <a
                     href={`https://github.com/${GITHUB_REPO}`}
                     target="_blank"
@@ -289,11 +273,39 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
                   </a>
                 </div>
 
-                {/* Pre-release notice */}
-                {!currentBuild && latestRelease && latestRelease.prerelease && latestRelease.tag_name !== latestStable?.tag_name && (
-                  <div className="mt-3 flex items-center gap-2 text-xs text-yellow-400/70 font-mono">
-                    <Tag className="w-3 h-3" />
-                    Pre-release {latestRelease.tag_name} available below
+                {/* Patch notes from manifest */}
+                {manifest?.notes && (
+                  <div className="mt-5">
+                    <div className="relative rounded border border-cyan-500/15 overflow-hidden"
+                      style={{
+                        background: `
+                          linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
+                          radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
+                        `,
+                      }}
+                    >
+                      <div
+                        className="absolute inset-0 pointer-events-none opacity-[0.025]"
+                        style={{
+                          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                        }}
+                      />
+                      <div className="relative px-5 py-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText className="w-3.5 h-3.5 text-cyan-400/60" />
+                          <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-wider">Patch Notes</span>
+                          {manifest.pub_date && (
+                            <span className="text-xs text-gray-500 font-mono ml-auto">
+                              {formatDate(manifest.pub_date)}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="patch-notes-content text-sm leading-relaxed text-gray-300 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-cyan-200 [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:list-none [&_ul]:space-y-1.5 [&_ul]:mb-3 [&_li]:flex [&_li]:items-start [&_li]:gap-2 [&_li]:before:content-['›'] [&_li]:before:text-cyan-500/60 [&_li]:before:mt-0 [&_li]:before:shrink-0 [&_b]:text-cyan-100 [&_b]:font-semibold [&_.date]:text-xs [&_.date]:text-gray-500 [&_.date]:font-mono [&_.date]:mb-3 [&_.stat-bar]:hidden"
+                          dangerouslySetInnerHTML={{ __html: manifest.notes }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
