@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Orbitron } from 'next/font/google';
-import { Download, ChevronRight, ExternalLink, Monitor, FileText, Tag, Upload, Loader2 } from 'lucide-react';
+import { Download, ExternalLink, Monitor, FileText, Upload, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -43,11 +43,19 @@ interface LatestBuild {
 const GITHUB_REPO = 'travissim0/infantry-cfs-studio';
 const MANIFEST_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/latest.json';
 const DOWNLOAD_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/infantry-cfs-studio_latest_x64-setup.nsis.zip';
+const RELEASE_NOTES_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/rest/v1/release_notes?select=version,notes_html,published_at&order=published_at.desc&limit=50';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5raW5wbXFuYmNqYWZ0cWR1dWpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxMjA0NzYsImV4cCI6MjA2MzY5NjQ3Nn0.83gXbk6MVOI341RBW7h_SXeSZcIIgI9BOBUX5e0ivv8';
 
 interface AppManifest {
   version: string;
   notes: string;
   pub_date: string;
+}
+
+interface ReleaseNote {
+  version: string;
+  notes_html: string;
+  published_at: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -64,29 +72,14 @@ function formatDate(dateString: string): string {
   });
 }
 
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/^### (.+)$/gm, '<h4 class="text-sm font-bold text-cyan-300 mt-4 mb-1.5 font-mono uppercase tracking-wider">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="text-base font-bold text-cyan-200 mt-5 mb-2 font-mono">$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2 class="text-lg font-bold text-white mt-5 mb-2">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-cyan-100 font-semibold">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code class="bg-gray-800/80 px-1.5 py-0.5 rounded text-cyan-300 text-xs font-mono">$1</code>')
-    .replace(/^- (.+)$/gm, '<li class="flex items-start gap-2 text-gray-300 text-sm leading-relaxed"><span class="text-cyan-500/60 mt-1 shrink-0">&rsaquo;</span><span>$1</span></li>')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-cyan-500/30 pl-3 text-gray-400 italic text-sm my-2">$1</blockquote>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">$1</a>')
-    .replace(/\n{2,}/g, '<div class="h-3"></div>')
-    .replace(/\n/g, '<br/>');
-}
-
 export default function ToolsPageClient({ releases, latestBuild }: { releases: Release[]; latestBuild: LatestBuild | null }) {
   const { user } = useAuth();
-  const [expandedRelease, setExpandedRelease] = useState<string | null>(
-    releases.length > 0 ? releases[0].tag_name : null
-  );
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentBuild, setCurrentBuild] = useState<LatestBuild | null>(latestBuild);
   const [manifest, setManifest] = useState<AppManifest | null>(null);
+  const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
+  const [activeNoteVersion, setActiveNoteVersion] = useState<string | null>(null);
+  const noteSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -99,6 +92,19 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
     fetch(MANIFEST_URL)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setManifest(data); })
+      .catch(() => {});
+
+    fetch(RELEASE_NOTES_URL, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((notes: ReleaseNote[]) => {
+        setReleaseNotes(notes);
+        if (notes.length > 0) setActiveNoteVersion(notes[0].version);
+      })
       .catch(() => {});
   }, []);
 
@@ -183,9 +189,6 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
       setUploadProgress('');
     }
   };
-
-  const latestStable = releases.find(r => !r.prerelease);
-  const latestRelease = releases[0];
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -273,7 +276,7 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
                   </a>
                 </div>
 
-                {/* Patch notes from manifest */}
+                {/* Latest patch notes from manifest */}
                 {manifest?.notes && (
                   <div className="mt-5">
                     <div className="relative rounded border border-cyan-500/15 overflow-hidden"
@@ -293,7 +296,7 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
                       <div className="relative px-5 py-4">
                         <div className="flex items-center gap-2 mb-3">
                           <FileText className="w-3.5 h-3.5 text-cyan-400/60" />
-                          <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-wider">Patch Notes</span>
+                          <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-wider">Latest — v{manifest.version}</span>
                           {manifest.pub_date && (
                             <span className="text-xs text-gray-500 font-mono ml-auto">
                               {formatDate(manifest.pub_date)}
@@ -301,7 +304,7 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
                           )}
                         </div>
                         <div
-                          className="patch-notes-content text-sm leading-relaxed text-gray-300 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:text-cyan-200 [&_h2]:mt-4 [&_h2]:mb-2 [&_ul]:list-none [&_ul]:space-y-1.5 [&_ul]:mb-3 [&_li]:flex [&_li]:items-start [&_li]:gap-2 [&_li]:before:content-['›'] [&_li]:before:text-cyan-500/60 [&_li]:before:mt-0 [&_li]:before:shrink-0 [&_b]:text-cyan-100 [&_b]:font-semibold [&_.date]:text-xs [&_.date]:text-gray-500 [&_.date]:font-mono [&_.date]:mb-3 [&_.stat-bar]:hidden"
+                          className="patch-notes-content"
                           dangerouslySetInnerHTML={{ __html: manifest.notes }}
                         />
                       </div>
@@ -380,139 +383,83 @@ export default function ToolsPageClient({ releases, latestBuild }: { releases: R
           </div>
         </section>
 
-        {/* ─── All Releases / Changelogs (temporarily hidden) ─────────────── */}
-        {false && <section className="mb-12">
-          <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
-            Releases & Changelogs
-          </h2>
+        {/* ─── Patch Note History ──────────────────────────────────────────── */}
+        {releaseNotes.length > 0 && (
+          <section className="mb-12">
+            <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
+              Patch Note History
+            </h2>
 
-          {releases.length === 0 ? (
-            <div className="p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-300 text-sm">
-              Could not load releases. <a href={`https://github.com/${GITHUB_REPO}/releases`} target="_blank" rel="noopener noreferrer" className="underline">View on GitHub</a>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-gray-700/30 overflow-hidden">
-              {releases.map((release, i) => {
-                const isOpen = expandedRelease === release.tag_name;
-                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'));
-                const msiAsset = release.assets.find(a => a.name.endsWith('.msi'));
+            <div className="relative rounded-lg border border-cyan-500/20 overflow-hidden"
+              style={{
+                background: 'linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%)',
+              }}
+            >
+              {/* Scan line overlay */}
+              <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.02]"
+                style={{
+                  backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                }}
+              />
 
-                return (
-                  <div key={release.tag_name} className={i < releases.length - 1 ? 'border-b border-gray-700/20' : ''}>
-                    {/* Row header */}
-                    <button
-                      onClick={() => setExpandedRelease(isOpen ? null : release.tag_name)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-cyan-500/5 transition-all duration-200 text-left"
-                    >
-                      <ChevronRight className={`w-4 h-4 transition-all duration-300 shrink-0 ${isOpen ? 'rotate-90 text-cyan-400' : 'text-gray-600'}`} />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm text-gray-200 font-medium">
-                          {release.name || release.tag_name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {release.prerelease && (
-                          <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 rounded">
-                            Pre-release
-                          </span>
-                        )}
-                        <span className="text-xs text-cyan-500/50 font-mono">
-                          {release.tag_name}
-                        </span>
-                        <span className="text-xs text-gray-500 font-medium">
-                          {formatDate(release.published_at)}
-                        </span>
-                      </div>
-                    </button>
-
-                    {/* Expanded content */}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateRows: isOpen ? '1fr' : '0fr',
-                        transition: 'grid-template-rows 400ms cubic-bezier(0.4, 0, 0.2, 1)',
-                      }}
-                    >
-                      <div className="overflow-hidden">
-                        <div
-                          style={{
-                            opacity: isOpen ? 1 : 0,
-                            transition: 'opacity 300ms ease-in-out',
-                            transitionDelay: isOpen ? '150ms' : '0ms',
-                          }}
-                        >
-                          <div className="h-px bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
-                          <div className="px-5 py-5 sm:px-8 bg-gray-900/50">
-                            {/* Download buttons for this release */}
-                            <div className="flex flex-wrap gap-2 mb-5">
-                              {exeAsset && (
-                                <a
-                                  href={exeAsset.browser_download_url}
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 hover:border-cyan-500/50 rounded-lg text-cyan-300 hover:text-cyan-200 text-sm font-medium transition-all"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  {exeAsset.name}
-                                  <span className="text-cyan-500/50 text-xs">({formatBytes(exeAsset.size)})</span>
-                                </a>
-                              )}
-                              {msiAsset && (
-                                <a
-                                  href={msiAsset.browser_download_url}
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800/60 hover:bg-gray-800/80 border border-gray-600/30 hover:border-gray-500/40 rounded-lg text-gray-400 hover:text-gray-300 text-sm transition-all"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  MSI
-                                  <span className="text-gray-600 text-xs">({formatBytes(msiAsset.size)})</span>
-                                </a>
-                              )}
-                              <a
-                                href={release.html_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-2 text-gray-500 hover:text-cyan-400 text-sm transition-colors"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                GitHub
-                              </a>
-                            </div>
-
-                            {/* Changelog body */}
-                            {release.body && (
-                              <div className="relative rounded border border-cyan-500/15 overflow-hidden"
-                                style={{
-                                  background: `
-                                    linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
-                                    radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
-                                  `,
-                                }}
-                              >
-                                <div
-                                  className="absolute inset-0 pointer-events-none opacity-[0.025]"
-                                  style={{
-                                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
-                                  }}
-                                />
-                                <div
-                                  className="absolute inset-0 pointer-events-none opacity-[0.08] mix-blend-overlay"
-                                  style={{
-                                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
-                                  }}
-                                />
-                                <div className="relative px-5 py-4 font-mono text-sm leading-relaxed"
-                                  dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+              <div className="relative z-20 flex flex-col md:flex-row">
+                {/* Navigation sidebar */}
+                <div className="md:w-48 lg:w-56 shrink-0 border-b md:border-b-0 md:border-r border-cyan-500/15 bg-gray-950/50">
+                  <div className="px-4 py-3 border-b border-cyan-500/15">
+                    <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
                   </div>
-                );
-              })}
+                  <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible md:overflow-y-auto md:max-h-[500px] custom-scrollbar">
+                    {releaseNotes.map((note) => (
+                      <button
+                        key={note.version}
+                        onClick={() => {
+                          setActiveNoteVersion(note.version);
+                          noteSectionRefs.current[note.version]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className={`shrink-0 w-full text-left px-4 py-2.5 transition-all border-b border-cyan-500/5 ${
+                          activeNoteVersion === note.version
+                            ? 'bg-cyan-500/10 border-l-2 border-l-cyan-400'
+                            : 'hover:bg-cyan-500/5 border-l-2 border-l-transparent'
+                        }`}
+                      >
+                        <div className={`text-sm font-mono font-bold ${activeNoteVersion === note.version ? 'text-cyan-300' : 'text-gray-400'}`}>
+                          v{note.version}
+                        </div>
+                        <div className="text-[10px] text-gray-600 font-mono mt-0.5">
+                          {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Patch notes content area */}
+                <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
+                  <div className="divide-y divide-cyan-500/10">
+                    {releaseNotes.map((note) => (
+                      <div
+                        key={note.version}
+                        ref={(el) => { noteSectionRefs.current[note.version] = el; }}
+                        className="px-5 py-5 sm:px-8"
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="text-cyan-400 font-mono text-sm font-bold">v{note.version}</span>
+                          <span className="text-[10px] text-gray-600 font-mono">
+                            {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <div
+                          className="patch-notes-content"
+                          dangerouslySetInnerHTML={{ __html: note.notes_html }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-        </section>}
+          </section>
+        )}
 
         {/* ─── Other Tools ────────────────────────────────────────────────── */}
         <section className="mb-12">
