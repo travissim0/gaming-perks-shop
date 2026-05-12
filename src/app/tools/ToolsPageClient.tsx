@@ -890,9 +890,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                         <img
                           src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
                           alt=""
-                          className="absolute inset-0 w-full h-full object-cover opacity-40"
+                          className="absolute inset-0 w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/50 to-[#050510]/20" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/90 via-[#050510]/40 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-transparent to-[#050510]/30" />
                         {/* Play button - centered */}
                         <button
                           onClick={(e) => {
@@ -914,8 +915,9 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               if (activeMedia?.type === 'image') {
                 return (
                   <>
-                    <img src={activeMedia.src} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/60 to-[#050510]/30" />
+                    <img src={activeMedia.src} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/90 via-[#050510]/40 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-transparent to-[#050510]/30" />
                   </>
                 );
               }
@@ -923,53 +925,54 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               return null;
             })()}
 
-            {/* Centered content overlay */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 px-4">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
-                <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
-                  Infantry Online Reimagined
-                </span>
-              </div>
-
-              <h1 className={`text-3xl md:text-5xl font-black tracking-wider mb-1 ${orbitron.className}`}>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
-                  style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
-                >
-                  INFANTRY v2
-                </span>
-              </h1>
-
-              {/* Active feature title & tagline */}
-              <p className="text-gray-200 text-sm md:text-lg mb-1 mt-3 font-semibold">
-                {FEATURES[activeFeatureIdx].title}
-                {FEATURES[activeFeatureIdx].isNew && (
-                  <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full align-middle">
-                    New
+            {/* Content overlay — left-aligned to leave space for media */}
+            <div className="absolute inset-0 flex items-center z-10 px-6 md:px-12">
+              <div className="max-w-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
+                  <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
+                    Infantry Online Reimagined
                   </span>
-                )}
-              </p>
-              <p className="text-gray-400 text-xs md:text-sm mb-5 max-w-md mx-auto">
-                {FEATURES[activeFeatureIdx].tagline}
-              </p>
+                </div>
 
-              {/* Download CTA */}
-              <a
-                href={DOWNLOAD_URL}
-                className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105"
-                style={{
-                  boxShadow: '0 0 20px rgba(34,211,238,0.4), 0 0 40px rgba(34,211,238,0.2)',
-                }}
-              >
-                <span className="relative z-10 flex items-center gap-2">
-                  <Download className="w-4 h-4" />
-                  Download {manifest ? `v${manifest.version}` : 'Latest'}
-                </span>
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-              </a>
+                <h1 className={`text-3xl md:text-5xl font-black tracking-wider mb-1 ${orbitron.className}`}>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
+                    style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
+                  >
+                    INFANTRY v2
+                  </span>
+                </h1>
 
-              {/* Navigation dots */}
-              <div className="flex items-center justify-center gap-2.5 mt-5">
+                {/* Active feature title & tagline */}
+                <p className="text-gray-200 text-sm md:text-lg mb-1 mt-3 font-semibold">
+                  {FEATURES[activeFeatureIdx].title}
+                  {FEATURES[activeFeatureIdx].isNew && (
+                    <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full align-middle">
+                      New
+                    </span>
+                  )}
+                </p>
+                <p className="text-gray-400 text-xs md:text-sm mb-5">
+                  {FEATURES[activeFeatureIdx].tagline}
+                </p>
+
+                {/* Download CTA */}
+                <a
+                  href={DOWNLOAD_URL}
+                  className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105"
+                  style={{
+                    boxShadow: '0 0 20px rgba(34,211,238,0.4), 0 0 40px rgba(34,211,238,0.2)',
+                  }}
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Download {manifest ? `v${manifest.version}` : 'Latest'}
+                  </span>
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                </a>
+
+                {/* Navigation dots */}
+                <div className="flex items-center gap-2.5 mt-5">
                 {FEATURES.map((feature, idx) => (
                   <button
                     key={feature.id}
@@ -995,9 +998,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             </div>
           </div>
         </div>
+        </div>
 
         {/* Hero carousel animations */}
-        <style jsx>{`
+        <style dangerouslySetInnerHTML={{ __html: `
           .hero-drift-far { animation: hDriftFar 20s ease-in-out infinite; }
           .hero-drift-mid { animation: hDriftMid 12s ease-in-out infinite; }
           .hero-drift-close { animation: hDriftClose 8s ease-in-out infinite; }
@@ -1040,7 +1044,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             25% { transform: translateX(700px) rotate(-20deg); opacity: 0; }
             100% { opacity: 0; }
           }
-        `}</style>
+        ` }} />
       </section>
 
       {/* ─── Main Content: Patch Notes (left) + Features (right) ─────────── */}
