@@ -1,14 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Orbitron } from 'next/font/google';
+import { supabase } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 import {
   Download, ExternalLink, Monitor, FileText, Play, ChevronDown,
   ChevronRight, Gamepad2, Eye, Palette, Wrench, MousePointerClick,
   ZoomIn, Shirt, Layout, Camera, Accessibility, Hammer, Sparkles,
-  Image as ImageIcon, Film,
+  Image as ImageIcon, Film, Pencil, Plus, Trash2, Link as LinkIcon,
+  Upload, X, GripVertical,
 } from 'lucide-react';
 
 const orbitron = Orbitron({
@@ -50,25 +53,23 @@ interface ReleaseNote {
   published_at: string;
 }
 
-// ── Feature showcase data ────────────────────────────────────────────
-// To add media: place GIFs/screenshots in /public/images/game-features/
-// and videos in /public/videos/game-features/, then update the media fields below.
-//
-// Supported media types:
-//   'image'   - png/jpg/gif from /public/images/game-features/
-//   'video'   - mp4/webm from /public/videos/game-features/
-//   'youtube' - YouTube video ID (the part after v= in the URL)
-//
-// Examples:
-//   { type: 'image', src: '/images/game-features/zoom.gif', alt: 'Zoom demo' }
-//   { type: 'video', src: '/videos/game-features/zoom.mp4' }
-//   { type: 'youtube', src: 'dQw4w9WgXcQ' }  // just the video ID
+// ── Feature & media types ────────────────────────────────────────────
 
 interface FeatureMedia {
+  id?: string;
   type: 'image' | 'video' | 'youtube';
   src: string;
   alt?: string;
-  poster?: string; // for local videos
+  poster?: string;
+}
+
+interface DbFeatureMedia {
+  id: string;
+  feature_id: string;
+  media_type: 'image' | 'video' | 'youtube';
+  src: string;
+  alt: string | null;
+  sort_order: number;
 }
 
 interface Feature {
@@ -78,7 +79,7 @@ interface Feature {
   tagline: string;
   description: string;
   bullets: string[];
-  media?: FeatureMedia[];  // array of screenshots/gifs/videos
+  media?: FeatureMedia[];
   isNew?: boolean;
 }
 
@@ -94,11 +95,6 @@ const FEATURES: Feature[] = [
       'Configurable zoom range and speed',
       'Maintains UI scaling at all zoom levels',
     ],
-    media: [
-      // Add your media here, e.g.:
-      // { type: 'image', src: '/images/game-features/dynamic-zoom.gif', alt: 'Dynamic zoom demonstration' },
-      // { type: 'video', src: '/videos/game-features/dynamic-zoom.mp4', poster: '/images/game-features/dynamic-zoom-poster.jpg' },
-    ],
     isNew: true,
   },
   {
@@ -112,7 +108,6 @@ const FEATURES: Feature[] = [
       'Visual waypoint indicators',
       'RTS-inspired command interface',
     ],
-    media: [],
     isNew: true,
   },
   {
@@ -126,7 +121,6 @@ const FEATURES: Feature[] = [
       'Browse all available uniforms',
       'Real-time preview in the UI',
     ],
-    media: [],
     isNew: true,
   },
   {
@@ -142,7 +136,6 @@ const FEATURES: Feature[] = [
       'Floating chat window with transparency',
       'Repositioned radar with better visibility',
     ],
-    media: [],
     isNew: true,
   },
   {
@@ -157,7 +150,6 @@ const FEATURES: Feature[] = [
       'Smooth pan and zoom controls',
       'Follow-player mode',
     ],
-    media: [],
     isNew: true,
   },
   {
@@ -171,7 +163,6 @@ const FEATURES: Feature[] = [
       'Enhanced team color differentiation',
       'Customizable color profiles',
     ],
-    media: [],
     isNew: true,
   },
   {
@@ -188,7 +179,6 @@ const FEATURES: Feature[] = [
       'Batch processing for bulk operations',
       'LIO editor for doors, switches, and portals',
     ],
-    media: [],
   },
 ];
 
@@ -212,19 +202,270 @@ function formatDate(dateString: string): string {
   });
 }
 
+function parseYoutubeId(input: string): string | null {
+  // Accept raw ID, full URL, or short URL
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+  for (const p of patterns) {
+    const match = input.match(p);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// ── Admin media editor ───────────────────────────────────────────────
+
+function AdminMediaEditor({
+  featureId,
+  media,
+  onUpdate,
+}: {
+  featureId: string;
+  media: FeatureMedia[];
+  onUpdate: () => void;
+}) {
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [youtubeInput, setYoutubeInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getToken = async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token;
+  };
+
+  const addYoutube = async () => {
+    const videoId = parseYoutubeId(youtubeInput.trim());
+    if (!videoId) {
+      toast.error('Invalid YouTube URL or video ID');
+      return;
+    }
+
+    const token = await getToken();
+    if (!token) { toast.error('Not logged in'); return; }
+
+    const res = await fetch('/api/feature-media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        feature_id: featureId,
+        media_type: 'youtube',
+        src: videoId,
+        sort_order: media.length,
+      }),
+    });
+
+    if (res.ok) {
+      toast.success('YouTube video added');
+      setYoutubeInput('');
+      setShowAddPanel(false);
+      onUpdate();
+    } else {
+      const err = await res.json();
+      toast.error(err.error || 'Failed to add video');
+    }
+  };
+
+  const uploadImage = async (file: File) => {
+    const token = await getToken();
+    if (!token) { toast.error('Not logged in'); return; }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('feature_id', featureId);
+
+      const uploadRes = await fetch('/api/feature-media/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        toast.error(err.error || 'Upload failed');
+        return;
+      }
+
+      const { url } = await uploadRes.json();
+
+      // Save to DB
+      const res = await fetch('/api/feature-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          feature_id: featureId,
+          media_type: 'image',
+          src: url,
+          alt: file.name.replace(/\.[^.]+$/, ''),
+          sort_order: media.length,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success('Image uploaded');
+        setShowAddPanel(false);
+        onUpdate();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to save');
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deleteMedia = async (mediaItem: FeatureMedia) => {
+    if (!mediaItem.id) return;
+    const token = await getToken();
+    if (!token) { toast.error('Not logged in'); return; }
+
+    const res = await fetch(`/api/feature-media?id=${mediaItem.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) {
+      toast.success('Media removed');
+      onUpdate();
+    } else {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      uploadImage(file);
+    } else {
+      toast.error('Only image files supported for drag & drop');
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      {/* Existing media with delete buttons */}
+      {media.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {media.map((m, i) => (
+            <div key={m.id || i} className="relative group/thumb">
+              <div className="w-20 h-14 rounded bg-gray-800 border border-gray-700/50 overflow-hidden flex items-center justify-center">
+                {m.type === 'youtube' ? (
+                  <div className="text-center">
+                    <Play className="w-4 h-4 text-red-400 mx-auto" />
+                    <span className="text-[8px] text-gray-500 font-mono">{m.src.slice(0, 6)}...</span>
+                  </div>
+                ) : (
+                  <img src={m.src} alt="" className="w-full h-full object-cover" />
+                )}
+              </div>
+              {m.id && (
+                <button
+                  onClick={() => deleteMedia(m)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3 text-white" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add media button / panel */}
+      {!showAddPanel ? (
+        <button
+          onClick={() => setShowAddPanel(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-cyan-400/70 hover:text-cyan-300 bg-cyan-500/5 hover:bg-cyan-500/10 border border-cyan-500/20 rounded-lg transition-all"
+        >
+          <Plus className="w-3 h-3" />
+          Add Media
+        </button>
+      ) : (
+        <div className="rounded-lg border border-cyan-500/20 bg-gray-900/80 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono text-cyan-400/70 uppercase tracking-wider">Add Media</span>
+            <button onClick={() => setShowAddPanel(false)} className="text-gray-500 hover:text-gray-300">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* YouTube input */}
+          <div>
+            <label className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1 block">YouTube URL or Video ID</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={youtubeInput}
+                onChange={(e) => setYoutubeInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addYoutube()}
+                placeholder="https://youtube.com/watch?v=... or video ID"
+                className="flex-1 px-3 py-1.5 text-sm bg-gray-800 border border-gray-700/50 rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-cyan-500/40"
+              />
+              <button
+                onClick={addYoutube}
+                disabled={!youtubeInput.trim()}
+                className="px-3 py-1.5 text-xs font-bold bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-colors disabled:opacity-30"
+              >
+                <Play className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Image upload / drag & drop */}
+          <div>
+            <label className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1 block">Upload Screenshot / GIF</label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex flex-col items-center justify-center gap-1.5 py-4 px-3 rounded-lg border-2 border-dashed cursor-pointer transition-all ${
+                dragOver
+                  ? 'border-cyan-400 bg-cyan-500/10'
+                  : 'border-gray-700/50 hover:border-gray-600 bg-gray-800/30'
+              }`}
+            >
+              {uploading ? (
+                <span className="text-xs text-cyan-400 font-mono animate-pulse">Uploading...</span>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 text-gray-500" />
+                  <span className="text-xs text-gray-500">Drop image here or click to browse</span>
+                  <span className="text-[10px] text-gray-600">PNG, JPG, GIF, WebP - Max 10MB</span>
+                </>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadImage(file);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Media renderer ───────────────────────────────────────────────────
 
 function FeatureMediaDisplay({ media, autoplay }: { media: FeatureMedia[]; autoplay?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
-  if (!media || media.length === 0) {
-    return (
-      <div className="w-full aspect-video rounded-lg bg-gray-800/50 border border-gray-700/30 flex flex-col items-center justify-center gap-2 text-gray-600">
-        <ImageIcon className="w-8 h-8" />
-        <span className="text-xs font-mono">Media coming soon</span>
-      </div>
-    );
-  }
+  if (!media || media.length === 0) return null;
 
   const current = media[activeIndex];
 
@@ -264,7 +505,7 @@ function FeatureMediaDisplay({ media, autoplay }: { media: FeatureMedia[]; autop
         <div className="flex gap-1.5 justify-center">
           {media.map((m, i) => (
             <button
-              key={i}
+              key={m.id || i}
               onClick={() => setActiveIndex(i)}
               className={`flex items-center justify-center w-6 h-6 rounded-full transition-all ${
                 i === activeIndex
@@ -290,15 +531,24 @@ function FeatureMediaDisplay({ media, autoplay }: { media: FeatureMedia[]; autop
 
 // ── Feature card ─────────────────────────────────────────────────────
 
-function FeatureCard({ feature }: { feature: Feature }) {
+function FeatureCard({
+  feature,
+  isAdmin,
+  dbMedia,
+  onMediaUpdate,
+}: {
+  feature: Feature;
+  isAdmin: boolean;
+  dbMedia: FeatureMedia[];
+  onMediaUpdate: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const hasMedia = feature.media && feature.media.length > 0;
+  const allMedia = dbMedia.length > 0 ? dbMedia : (feature.media || []);
+  const hasMedia = allMedia.length > 0;
 
   return (
-    <div
-      className="group relative rounded-xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gray-900/60 overflow-hidden transition-all duration-300"
-    >
-      {/* Header - always visible */}
+    <div className="group relative rounded-xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gray-900/60 overflow-hidden transition-all duration-300">
+      {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left p-5 flex items-start gap-4"
@@ -316,11 +566,25 @@ function FeatureCard({ feature }: { feature: Feature }) {
                 New
               </span>
             )}
+            {/* Subtle media count badge */}
+            {hasMedia && !expanded && (
+              <span className="px-1.5 py-0.5 text-[10px] font-mono text-gray-500 bg-gray-800/50 rounded">
+                {allMedia.length} media
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-400 mt-0.5">{feature.tagline}</p>
         </div>
-        <div className={`text-gray-500 transition-transform duration-200 mt-1 ${expanded ? 'rotate-90' : ''}`}>
-          <ChevronRight className="w-4 h-4" />
+        <div className="flex items-center gap-2 mt-1">
+          {/* Admin edit indicator */}
+          {isAdmin && (
+            <span className="text-amber-500/40 hover:text-amber-400 transition-colors" title="Admin: click to manage media">
+              <Pencil className="w-3.5 h-3.5" />
+            </span>
+          )}
+          <div className={`text-gray-500 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>
+            <ChevronRight className="w-4 h-4" />
+          </div>
         </div>
       </button>
 
@@ -328,7 +592,7 @@ function FeatureCard({ feature }: { feature: Feature }) {
       {expanded && (
         <div className="px-5 pb-5 border-t border-cyan-500/10">
           <div className={`mt-4 ${hasMedia ? 'grid grid-cols-1 lg:grid-cols-2 gap-5' : ''}`}>
-            {/* Text content */}
+            {/* Text */}
             <div>
               <p className="text-sm text-gray-300 leading-relaxed mb-3">
                 {feature.description}
@@ -343,16 +607,16 @@ function FeatureCard({ feature }: { feature: Feature }) {
               </ul>
             </div>
 
-            {/* Media */}
+            {/* Media display */}
             {hasMedia && (
               <div>
-                <FeatureMediaDisplay media={feature.media!} autoplay />
+                <FeatureMediaDisplay media={allMedia} autoplay />
               </div>
             )}
           </div>
 
-          {/* Media placeholder hint when no media */}
-          {!hasMedia && (
+          {/* No media placeholder (non-admin) */}
+          {!hasMedia && !isAdmin && (
             <div className="mt-4 w-full aspect-[21/9] rounded-lg bg-gray-800/30 border border-dashed border-gray-700/40 flex flex-col items-center justify-center gap-2 text-gray-600">
               <div className="flex gap-3">
                 <ImageIcon className="w-5 h-5" />
@@ -360,6 +624,15 @@ function FeatureCard({ feature }: { feature: Feature }) {
               </div>
               <span className="text-xs font-mono">Screenshots & videos coming soon</span>
             </div>
+          )}
+
+          {/* Admin media editor */}
+          {isAdmin && (
+            <AdminMediaEditor
+              featureId={feature.id}
+              media={allMedia}
+              onUpdate={onMediaUpdate}
+            />
           )}
         </div>
       )}
@@ -373,9 +646,55 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
   const [manifest, setManifest] = useState<AppManifest | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
   const [activeNoteVersion, setActiveNoteVersion] = useState<string | null>(null);
-  const [showAllFeatures, setShowAllFeatures] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [featureMediaMap, setFeatureMediaMap] = useState<Record<string, FeatureMedia[]>>({});
   const noteSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Check admin status
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', session.user.id)
+        .single();
+
+      setIsAdmin(!!profile?.is_admin);
+    };
+    checkAdmin();
+  }, []);
+
+  // Fetch feature media from DB
+  const loadFeatureMedia = useCallback(async () => {
+    try {
+      const res = await fetch('/api/feature-media');
+      if (!res.ok) return;
+      const data: DbFeatureMedia[] = await res.json();
+
+      const map: Record<string, FeatureMedia[]> = {};
+      for (const item of data) {
+        if (!map[item.feature_id]) map[item.feature_id] = [];
+        map[item.feature_id].push({
+          id: item.id,
+          type: item.media_type,
+          src: item.src,
+          alt: item.alt || undefined,
+        });
+      }
+      setFeatureMediaMap(map);
+    } catch {
+      // Silent fail — hardcoded media will be used as fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeatureMedia();
+  }, [loadFeatureMedia]);
+
+  // Fetch manifest & release notes
   useEffect(() => {
     fetch(MANIFEST_URL)
       .then(r => r.ok ? r.json() : null)
@@ -401,7 +720,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
 
       {/* ─── Hero Section ───────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-cyan-500/20">
-        {/* Background effects */}
         <div className="absolute inset-0"
           style={{
             background: `
@@ -411,7 +729,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             `,
           }}
         />
-        {/* Scan lines */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.015]"
           style={{
             backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
@@ -441,7 +758,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </p>
             </div>
 
-            {/* Download CTA */}
             <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
               <a
                 href={DOWNLOAD_URL}
@@ -479,6 +795,11 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             <h2 className={`text-2xl md:text-3xl font-black tracking-wide text-gray-200 ${orbitron.className}`}>
               What&apos;s New
             </h2>
+            {isAdmin && (
+              <span className="px-2 py-0.5 text-[10px] font-mono text-amber-400/60 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                Admin Mode
+              </span>
+            )}
           </div>
           <p className="text-gray-500 mb-8 max-w-2xl">
             Major improvements over the original Infantry client. Click any feature to learn more and see visuals.
@@ -486,7 +807,13 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
 
           <div className="space-y-3">
             {FEATURES.map((feature) => (
-              <FeatureCard key={feature.id} feature={feature} />
+              <FeatureCard
+                key={feature.id}
+                feature={feature}
+                isAdmin={isAdmin}
+                dbMedia={featureMediaMap[feature.id] || []}
+                onMediaUpdate={loadFeatureMedia}
+              />
             ))}
           </div>
         </section>
@@ -559,7 +886,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               />
 
               <div className="relative z-20 flex flex-col md:flex-row">
-                {/* Version sidebar */}
                 <div className="md:w-48 lg:w-56 shrink-0 border-b md:border-b-0 md:border-r border-cyan-500/15 bg-gray-950/50">
                   <div className="px-4 py-3 border-b border-cyan-500/15">
                     <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
@@ -589,7 +915,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                   </div>
                 </div>
 
-                {/* Patch notes content */}
                 <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
                   <div className="divide-y divide-cyan-500/10">
                     {releaseNotes.map((note) => {
@@ -629,7 +954,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           </section>
         )}
 
-        {/* ─── Web Tools (secondary) ──────────────────────────────────────── */}
+        {/* ─── Web Tools ──────────────────────────────────────────────────── */}
         <section className="pb-12">
           <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
             Web Tools
@@ -674,7 +999,6 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           </div>
         </section>
 
-        {/* Footer */}
         <div className="text-center py-8 border-t border-gray-800/50">
           <p className="text-gray-500 text-sm">
             Have suggestions?{' '}
