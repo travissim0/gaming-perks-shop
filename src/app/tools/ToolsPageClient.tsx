@@ -715,10 +715,25 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
       .catch(() => {});
   }, []);
 
+  // Auto-scrolling feature carousel
+  const [activeFeatureIdx, setActiveFeatureIdx] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
+
+  useEffect(() => {
+    if (carouselPaused) return;
+    const timer = setInterval(() => {
+      setActiveFeatureIdx(prev => (prev + 1) % FEATURES.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [carouselPaused]);
+
+  // Track which feature is expanded in the right panel
+  const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
 
-      {/* ─── Hero Section ───────────────────────────────────────────────── */}
+      {/* ─── Hero Section (compact) ──────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-cyan-500/20">
         <div className="absolute inset-0"
           style={{
@@ -735,24 +750,24 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           }}
         />
 
-        <div className="relative container mx-auto px-4 py-12 md:py-20 max-w-5xl">
-          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-6 inline-block">
+        <div className="relative container mx-auto px-4 py-8 md:py-12 max-w-7xl">
+          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-4 inline-block">
             &larr; Back to Home
           </Link>
 
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-3 mb-2">
                 <Gamepad2 className="w-5 h-5 text-cyan-400" />
                 <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
                   Infantry Online Reimagined
                 </span>
               </div>
-              <h1 className={`text-4xl md:text-5xl lg:text-6xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
+              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
                 Infantry
                 <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> v2</span>
               </h1>
-              <p className="text-gray-400 mt-4 max-w-xl text-lg leading-relaxed">
+              <p className="text-gray-400 mt-3 max-w-lg leading-relaxed">
                 A modernized Infantry Online client and complete developer toolkit.
                 New features, better visuals, and tools built for the modern era.
               </p>
@@ -786,177 +801,234 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
         </div>
       </section>
 
-      <div className="container mx-auto px-4 max-w-5xl">
-
-        {/* ─── What's New / Features ──────────────────────────────────────── */}
-        <section className="py-12">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
-            <h2 className={`text-2xl md:text-3xl font-black tracking-wide text-gray-200 ${orbitron.className}`}>
-              What&apos;s New
-            </h2>
-            {isAdmin && (
-              <span className="px-2 py-0.5 text-[10px] font-mono text-amber-400/60 bg-amber-500/10 border border-amber-500/20 rounded-full">
-                Admin Mode
-              </span>
-            )}
-          </div>
-          <p className="text-gray-500 mb-8 max-w-2xl">
-            Major improvements over the original Infantry client. Click any feature to learn more and see visuals.
-          </p>
-
-          <div className="space-y-3">
-            {FEATURES.map((feature) => (
-              <FeatureCard
+      {/* ─── Feature Carousel Banner ──────────────────────────────────────── */}
+      <section className="border-b border-cyan-500/10 bg-gray-900/40">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <div
+            className="flex items-stretch overflow-x-auto custom-scrollbar -mx-4 px-4 md:mx-0 md:px-0"
+            onMouseEnter={() => setCarouselPaused(true)}
+            onMouseLeave={() => setCarouselPaused(false)}
+          >
+            {FEATURES.map((feature, idx) => (
+              <button
                 key={feature.id}
-                feature={feature}
-                isAdmin={isAdmin}
-                dbMedia={featureMediaMap[feature.id] || []}
-                onMediaUpdate={loadFeatureMedia}
+                onClick={() => {
+                  setActiveFeatureIdx(idx);
+                  setExpandedFeatureId(feature.id);
+                  setCarouselPaused(true);
+                }}
+                className={`shrink-0 flex items-center gap-2.5 px-4 py-3 border-b-2 transition-all text-left ${
+                  idx === activeFeatureIdx
+                    ? 'border-cyan-400 bg-cyan-500/5'
+                    : 'border-transparent hover:border-cyan-500/20 hover:bg-cyan-500/5'
+                }`}
+              >
+                <span className={`transition-colors ${idx === activeFeatureIdx ? 'text-cyan-400' : 'text-gray-600'}`}>
+                  {feature.icon}
+                </span>
+                <span className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                  idx === activeFeatureIdx ? 'text-cyan-300' : 'text-gray-500'
+                }`}>
+                  {feature.title}
+                </span>
+                {feature.isNew && (
+                  <span className="px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/15 text-emerald-400 rounded-full leading-none">
+                    New
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {/* Carousel progress dots */}
+          <div className="flex justify-center gap-1 py-1.5">
+            {FEATURES.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => { setActiveFeatureIdx(idx); setCarouselPaused(true); }}
+                className={`h-0.5 rounded-full transition-all ${
+                  idx === activeFeatureIdx ? 'w-6 bg-cyan-400' : 'w-2 bg-gray-700 hover:bg-gray-600'
+                }`}
               />
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ─── Latest Update ──────────────────────────────────────────────── */}
-        {manifest?.notes && (
-          <section className="pb-12">
-            <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
-              style={{
-                background: `
-                  linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
-                  radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
-                `,
-              }}
-            >
-              <div className="absolute inset-0 pointer-events-none opacity-[0.02]"
+      {/* ─── Main Content: Patch Notes (left) + Features (right) ─────────── */}
+      <div className="container mx-auto px-4 max-w-7xl py-8">
+        <div className="flex flex-col lg:flex-row gap-6">
+
+          {/* ─── Left: Patch Notes ──────────────────────────────────────── */}
+          <div className="lg:w-1/2 space-y-6">
+            {/* Latest Update */}
+            {manifest?.notes && (
+              <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
                 style={{
-                  backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                  background: `
+                    linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
+                    radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
+                  `,
                 }}
-              />
-              <div className="relative px-5 py-4 sm:px-8 sm:py-6">
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
-                  <FileText className="w-4 h-4 text-cyan-400/60" />
-                  <span className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-wider">
-                    Latest Update &mdash; v{manifest.version}
-                  </span>
-                  {manifest.pub_date && (
-                    <span className="text-xs text-gray-500 font-mono">
-                      {formatDate(manifest.pub_date)}
+              >
+                <div className="absolute inset-0 pointer-events-none opacity-[0.02]"
+                  style={{
+                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                  }}
+                />
+                <div className="relative px-4 py-4 sm:px-6">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <FileText className="w-3.5 h-3.5 text-cyan-400/60" />
+                    <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
+                      Latest &mdash; v{manifest.version}
                     </span>
-                  )}
-                  {(() => {
-                    const stats = extractStats(manifest.notes);
-                    return stats.length > 0 ? (
-                      <div className="flex items-center gap-3 ml-auto">
-                        {stats.map((s) => (
-                          <span key={s.label} className="text-[10px] font-mono text-gray-500">
-                            <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
-                          </span>
+                    {manifest.pub_date && (
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {formatDate(manifest.pub_date)}
+                      </span>
+                    )}
+                    {(() => {
+                      const stats = extractStats(manifest.notes);
+                      return stats.length > 0 ? (
+                        <div className="flex items-center gap-3 ml-auto">
+                          {stats.map((s) => (
+                            <span key={s.label} className="text-[10px] font-mono text-gray-500">
+                              <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+                  <div
+                    className="patch-notes-content"
+                    dangerouslySetInnerHTML={{ __html: manifest.notes }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Patch Note History */}
+            {releaseNotes.length > 0 && (
+              <div>
+                <h2 className={`text-lg font-black tracking-wide text-gray-300 mb-3 ${orbitron.className}`}>
+                  Patch Note History
+                </h2>
+
+                <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%)',
+                  }}
+                >
+                  <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.02]"
+                    style={{
+                      backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                    }}
+                  />
+
+                  <div className="relative z-20 flex flex-col md:flex-row">
+                    <div className="md:w-36 lg:w-44 shrink-0 border-b md:border-b-0 md:border-r border-cyan-500/15 bg-gray-950/50">
+                      <div className="px-3 py-2 border-b border-cyan-500/15">
+                        <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
+                      </div>
+                      <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible md:overflow-y-auto md:max-h-[500px] custom-scrollbar">
+                        {releaseNotes.map((note) => (
+                          <button
+                            key={note.version}
+                            onClick={() => {
+                              setActiveNoteVersion(note.version);
+                              noteSectionRefs.current[note.version]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }}
+                            className={`shrink-0 w-full text-left px-3 py-2 transition-all border-b border-cyan-500/5 ${
+                              activeNoteVersion === note.version
+                                ? 'bg-cyan-500/10 border-l-2 border-l-cyan-400'
+                                : 'hover:bg-cyan-500/5 border-l-2 border-l-transparent'
+                            }`}
+                          >
+                            <div className={`text-xs font-mono font-bold ${activeNoteVersion === note.version ? 'text-cyan-300' : 'text-gray-400'}`}>
+                              v{note.version}
+                            </div>
+                            <div className="text-[10px] text-gray-600 font-mono">
+                              {formatDate(note.published_at)}
+                            </div>
+                          </button>
                         ))}
                       </div>
-                    ) : null;
-                  })()}
-                </div>
-                <div
-                  className="patch-notes-content"
-                  dangerouslySetInnerHTML={{ __html: manifest.notes }}
-                />
-              </div>
-            </div>
-          </section>
-        )}
+                    </div>
 
-        {/* ─── Patch Note History ────────────────────────────────────────── */}
-        {releaseNotes.length > 0 && (
-          <section className="pb-12">
-            <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
-              Patch Note History
-            </h2>
-
-            <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
-              style={{
-                background: 'linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%)',
-              }}
-            >
-              <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.02]"
-                style={{
-                  backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
-                }}
-              />
-
-              <div className="relative z-20 flex flex-col md:flex-row">
-                <div className="md:w-48 lg:w-56 shrink-0 border-b md:border-b-0 md:border-r border-cyan-500/15 bg-gray-950/50">
-                  <div className="px-4 py-3 border-b border-cyan-500/15">
-                    <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
-                  </div>
-                  <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible md:overflow-y-auto md:max-h-[500px] custom-scrollbar">
-                    {releaseNotes.map((note) => (
-                      <button
-                        key={note.version}
-                        onClick={() => {
-                          setActiveNoteVersion(note.version);
-                          noteSectionRefs.current[note.version]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
-                        className={`shrink-0 w-full text-left px-4 py-2.5 transition-all border-b border-cyan-500/5 ${
-                          activeNoteVersion === note.version
-                            ? 'bg-cyan-500/10 border-l-2 border-l-cyan-400'
-                            : 'hover:bg-cyan-500/5 border-l-2 border-l-transparent'
-                        }`}
-                      >
-                        <div className={`text-sm font-mono font-bold ${activeNoteVersion === note.version ? 'text-cyan-300' : 'text-gray-400'}`}>
-                          v{note.version}
-                        </div>
-                        <div className="text-[10px] text-gray-600 font-mono mt-0.5">
-                          {formatDate(note.published_at)}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
-                  <div className="divide-y divide-cyan-500/10">
-                    {releaseNotes.map((note) => {
-                      const stats = extractStats(note.notes_html);
-                      return (
-                        <div
-                          key={note.version}
-                          ref={(el) => { noteSectionRefs.current[note.version] = el; }}
-                          className="px-5 py-5 sm:px-8"
-                        >
-                          <div className="flex items-center gap-3 mb-3 flex-wrap">
-                            <span className="text-cyan-400 font-mono text-sm font-bold">v{note.version}</span>
-                            <span className="text-[10px] text-gray-600 font-mono">
-                              {formatDate(note.published_at)}
-                            </span>
-                            {stats.length > 0 && (
-                              <div className="flex items-center gap-3 ml-auto">
-                                {stats.map((s) => (
-                                  <span key={s.label} className="text-[10px] font-mono text-gray-500">
-                                    <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
-                                  </span>
-                                ))}
+                    <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
+                      <div className="divide-y divide-cyan-500/10">
+                        {releaseNotes.map((note) => {
+                          const stats = extractStats(note.notes_html);
+                          return (
+                            <div
+                              key={note.version}
+                              ref={(el) => { noteSectionRefs.current[note.version] = el; }}
+                              className="px-4 py-4 sm:px-6"
+                            >
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <span className="text-cyan-400 font-mono text-xs font-bold">v{note.version}</span>
+                                <span className="text-[10px] text-gray-600 font-mono">
+                                  {formatDate(note.published_at)}
+                                </span>
+                                {stats.length > 0 && (
+                                  <div className="flex items-center gap-2 ml-auto">
+                                    {stats.map((s) => (
+                                      <span key={s.label} className="text-[10px] font-mono text-gray-500">
+                                        <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div
-                            className="patch-notes-content"
-                            dangerouslySetInnerHTML={{ __html: note.notes_html }}
-                          />
-                        </div>
-                      );
-                    })}
+                              <div
+                                className="patch-notes-content"
+                                dangerouslySetInnerHTML={{ __html: note.notes_html }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* ─── Right: What's New Features ────────────────────────────── */}
+          <div className="lg:w-1/2">
+            <div className="flex items-center gap-3 mb-3">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <h2 className={`text-lg font-black tracking-wide text-gray-300 ${orbitron.className}`}>
+                What&apos;s New
+              </h2>
+              {isAdmin && (
+                <span className="px-2 py-0.5 text-[10px] font-mono text-amber-400/60 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                  Admin
+                </span>
+              )}
             </div>
-          </section>
-        )}
+            <p className="text-gray-500 text-sm mb-4">
+              Click any feature to see details and visuals.
+            </p>
+
+            <div className="space-y-2">
+              {FEATURES.map((feature) => (
+                <FeatureCard
+                  key={feature.id}
+                  feature={feature}
+                  isAdmin={isAdmin}
+                  dbMedia={featureMediaMap[feature.id] || []}
+                  onMediaUpdate={loadFeatureMedia}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ─── Web Tools ──────────────────────────────────────────────────── */}
-        <section className="pb-12">
-          <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
+        <section className="pt-8 pb-12">
+          <h2 className={`text-lg font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
             Web Tools
           </h2>
 
