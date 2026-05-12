@@ -710,7 +710,9 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
       .then(r => r.ok ? r.json() : [])
       .then((notes: ReleaseNote[]) => {
         setReleaseNotes(notes);
-        if (notes.length > 0) setActiveNoteVersion(notes[0].version);
+        // Default to second note (previous version) since latest is shown above
+        if (notes.length > 1) setActiveNoteVersion(notes[1].version);
+        else if (notes.length > 0) setActiveNoteVersion(notes[0].version);
       })
       .catch(() => {});
   }, []);
@@ -733,7 +735,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
 
-      {/* ─── Hero Section (compact) ──────────────────────────────────────── */}
+      {/* ─── Hero + Feature Carousel (combined) ─────────────────────────── */}
       <section className="relative overflow-hidden border-b border-cyan-500/20">
         <div className="absolute inset-0"
           style={{
@@ -750,38 +752,38 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           }}
         />
 
-        <div className="relative container mx-auto px-4 py-8 md:py-12 max-w-7xl">
-          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-4 inline-block">
+        <div className="relative container mx-auto px-4 pt-6 max-w-7xl">
+          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-3 inline-block">
             &larr; Back to Home
           </Link>
 
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Gamepad2 className="w-5 h-5 text-cyan-400" />
-                <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
+              <div className="flex items-center gap-2 mb-1">
+                <Gamepad2 className="w-4 h-4 text-cyan-400" />
+                <span className="text-[10px] font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
                   Infantry Online Reimagined
                 </span>
               </div>
-              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
+              <h1 className={`text-3xl md:text-4xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
                 Infantry
                 <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> v2</span>
               </h1>
-              <p className="text-gray-400 mt-3 max-w-lg leading-relaxed">
-                A modernized Infantry Online client and complete developer toolkit.
-                New features, better visuals, and tools built for the modern era.
+              <p className="text-gray-400 mt-2 max-w-md text-sm leading-relaxed">
+                A modernized Infantry Online client and developer toolkit.
+                New features, better visuals, and tools for the modern era.
               </p>
             </div>
 
-            <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
+            <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0">
               <a
                 href={DOWNLOAD_URL}
-                className="inline-flex items-center gap-3 px-7 py-3.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl font-bold text-white text-base transition-all hover:scale-[1.03] shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40"
+                className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl font-bold text-white text-sm transition-all hover:scale-[1.03] shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40"
               >
-                <Download className="w-5 h-5" />
+                <Download className="w-4 h-4" />
                 Download {manifest ? `v${manifest.version}` : 'Latest'}
               </a>
-              <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
+              <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono">
                 <span>Windows x64</span>
                 {manifest?.pub_date && (
                   <span>{formatDate(manifest.pub_date)}</span>
@@ -798,14 +800,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* ─── Feature Carousel Banner ──────────────────────────────────────── */}
-      <section className="border-b border-cyan-500/10 bg-gray-900/40">
-        <div className="container mx-auto px-4 max-w-7xl">
+          {/* Feature carousel tabs - inside hero */}
           <div
-            className="flex items-stretch overflow-x-auto custom-scrollbar -mx-4 px-4 md:mx-0 md:px-0"
+            className="flex items-stretch overflow-x-auto custom-scrollbar -mx-4 px-4 md:mx-0 md:px-0 border-t border-cyan-500/10"
             onMouseEnter={() => setCarouselPaused(true)}
             onMouseLeave={() => setCarouselPaused(false)}
           >
@@ -817,7 +815,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                   setExpandedFeatureId(feature.id);
                   setCarouselPaused(true);
                 }}
-                className={`shrink-0 flex items-center gap-2.5 px-4 py-3 border-b-2 transition-all text-left ${
+                className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 border-b-2 transition-all text-left ${
                   idx === activeFeatureIdx
                     ? 'border-cyan-400 bg-cyan-500/5'
                     : 'border-transparent hover:border-cyan-500/20 hover:bg-cyan-500/5'
@@ -826,29 +824,17 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                 <span className={`transition-colors ${idx === activeFeatureIdx ? 'text-cyan-400' : 'text-gray-600'}`}>
                   {feature.icon}
                 </span>
-                <span className={`text-sm font-medium whitespace-nowrap transition-colors ${
+                <span className={`text-xs font-medium whitespace-nowrap transition-colors ${
                   idx === activeFeatureIdx ? 'text-cyan-300' : 'text-gray-500'
                 }`}>
                   {feature.title}
                 </span>
                 {feature.isNew && (
-                  <span className="px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/15 text-emerald-400 rounded-full leading-none">
+                  <span className="px-1 py-0.5 text-[7px] font-mono font-bold uppercase bg-emerald-500/15 text-emerald-400 rounded-full leading-none">
                     New
                   </span>
                 )}
               </button>
-            ))}
-          </div>
-          {/* Carousel progress dots */}
-          <div className="flex justify-center gap-1 py-1.5">
-            {FEATURES.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => { setActiveFeatureIdx(idx); setCarouselPaused(true); }}
-                className={`h-0.5 rounded-full transition-all ${
-                  idx === activeFeatureIdx ? 'w-6 bg-cyan-400' : 'w-2 bg-gray-700 hover:bg-gray-600'
-                }`}
-              />
             ))}
           </div>
         </div>
@@ -907,8 +893,12 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </div>
             )}
 
-            {/* Patch Note History */}
-            {releaseNotes.length > 0 && (
+            {/* Patch Note History (exclude current version since it's shown above) */}
+            {(() => {
+              const historyNotes = manifest
+                ? releaseNotes.filter(n => n.version !== manifest.version)
+                : releaseNotes;
+              return historyNotes.length > 0 && (
               <div>
                 <h2 className={`text-lg font-black tracking-wide text-gray-300 mb-3 ${orbitron.className}`}>
                   Patch Note History
@@ -931,7 +921,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                         <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
                       </div>
                       <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible md:overflow-y-auto md:max-h-[500px] custom-scrollbar">
-                        {releaseNotes.map((note) => (
+                        {historyNotes.map((note) => (
                           <button
                             key={note.version}
                             onClick={() => {
@@ -957,7 +947,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
 
                     <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
                       <div className="divide-y divide-cyan-500/10">
-                        {releaseNotes.map((note) => {
+                        {historyNotes.map((note) => {
                           const stats = extractStats(note.notes_html);
                           return (
                             <div
@@ -992,7 +982,8 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                   </div>
                 </div>
               </div>
-            )}
+            );
+            })()}
           </div>
 
           {/* ─── Right: What's New Features ────────────────────────────── */}
