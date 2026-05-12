@@ -752,6 +752,12 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
 
   // Track which feature is expanded in the right panel
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+
+  // Reset playing video when carousel advances
+  useEffect(() => {
+    setPlayingVideoId(null);
+  }, [activeFeatureIdx]);
 
   return (
     <div className="min-h-screen text-white relative">
@@ -867,17 +873,41 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               const activeMedia = featureMediaMap[activeFeature.id]?.[0];
 
               if (activeMedia?.type === 'youtube') {
+                const isPlaying = playingVideoId === activeMedia.src;
                 return (
                   <>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${activeMedia.src}?autoplay=1&mute=1&loop=1&playlist=${activeMedia.src}&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1`}
-                      title={activeMedia.alt || 'Feature video'}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                      className="absolute inset-0 w-full h-full opacity-50 pointer-events-none"
-                      style={{ border: 'none' }}
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/50 to-[#050510]/20" />
+                    {isPlaying ? (
+                      <iframe
+                        src={`https://www.youtube.com/embed/${activeMedia.src}?autoplay=1&mute=1&loop=1&playlist=${activeMedia.src}&controls=1&rel=0&modestbranding=1&playsinline=1`}
+                        title={activeMedia.alt || 'Feature video'}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="absolute inset-0 w-full h-full z-20"
+                        style={{ border: 'none' }}
+                      />
+                    ) : (
+                      <>
+                        <img
+                          src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover opacity-40"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/50 to-[#050510]/20" />
+                        {/* Play button - centered */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPlayingVideoId(activeMedia.src);
+                            setCarouselPaused(true);
+                          }}
+                          className="absolute inset-0 z-20 flex items-center justify-center group/play"
+                        >
+                          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-red-600/90 group-hover/play:bg-red-500 flex items-center justify-center transition-all group-hover/play:scale-110 shadow-lg shadow-red-500/30">
+                            <Play className="w-7 h-7 md:w-8 md:h-8 text-white ml-1" />
+                          </div>
+                        </button>
+                      </>
+                    )}
                   </>
                 );
               }
