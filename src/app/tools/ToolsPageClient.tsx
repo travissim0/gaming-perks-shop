@@ -2,8 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Orbitron } from 'next/font/google';
-import { Download, ExternalLink, Monitor, FileText } from 'lucide-react';
+import {
+  Download, ExternalLink, Monitor, FileText, Play, ChevronDown,
+  ChevronRight, Gamepad2, Eye, Palette, Wrench, MousePointerClick,
+  ZoomIn, Shirt, Layout, Camera, Accessibility, Hammer, Sparkles,
+  Image as ImageIcon, Film,
+} from 'lucide-react';
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -44,6 +50,141 @@ interface ReleaseNote {
   published_at: string;
 }
 
+// ── Feature showcase data ────────────────────────────────────────────
+// To add media: place GIFs/screenshots in /public/images/game-features/
+// and videos in /public/videos/game-features/, then update the media fields below.
+// Supported media types: 'image' (png/jpg/gif), 'video' (mp4/webm)
+
+interface FeatureMedia {
+  type: 'image' | 'video';
+  src: string;
+  alt?: string;
+  poster?: string; // for videos
+}
+
+interface Feature {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  tagline: string;
+  description: string;
+  bullets: string[];
+  media?: FeatureMedia[];  // array of screenshots/gifs/videos
+  isNew?: boolean;
+}
+
+const FEATURES: Feature[] = [
+  {
+    id: 'dynamic-zoom',
+    icon: <ZoomIn className="w-5 h-5" />,
+    title: 'Dynamic Zoom',
+    tagline: 'See more of the battlefield',
+    description: 'Smoothly zoom in and out during gameplay for a wider tactical view or a closer look at the action. A completely new feature not available in the original client.',
+    bullets: [
+      'Mouse wheel zoom with smooth interpolation',
+      'Configurable zoom range and speed',
+      'Maintains UI scaling at all zoom levels',
+    ],
+    media: [
+      // Add your media here, e.g.:
+      // { type: 'image', src: '/images/game-features/dynamic-zoom.gif', alt: 'Dynamic zoom demonstration' },
+      // { type: 'video', src: '/videos/game-features/dynamic-zoom.mp4', poster: '/images/game-features/dynamic-zoom-poster.jpg' },
+    ],
+    isNew: true,
+  },
+  {
+    id: 'right-click-commands',
+    icon: <MousePointerClick className="w-5 h-5" />,
+    title: 'Right Click Move Commands',
+    tagline: 'RTS-style unit control',
+    description: 'Issue move commands with a simple right-click, bringing modern RTS-style controls to Infantry. Command bots and navigate with precision.',
+    bullets: [
+      'Right-click to set move destinations',
+      'Visual waypoint indicators',
+      'RTS-inspired command interface',
+    ],
+    media: [],
+    isNew: true,
+  },
+  {
+    id: 'uniform-previewer',
+    icon: <Shirt className="w-5 h-5" />,
+    title: 'Uniform Previewer',
+    tagline: 'Preview before you commit',
+    description: 'Browse and preview character uniforms and skins before selecting them. See exactly how your character will look in-game.',
+    bullets: [
+      'Full sprite preview with animations',
+      'Browse all available uniforms',
+      'Real-time preview in the UI',
+    ],
+    media: [],
+    isNew: true,
+  },
+  {
+    id: 'improved-ui',
+    icon: <Layout className="w-5 h-5" />,
+    title: 'Improved UI',
+    tagline: 'Modern HUD, classic feel',
+    description: 'A completely redesigned heads-up display with modern amenities while preserving the Infantry experience you know and love.',
+    bullets: [
+      'Animated ammo clip reloading indicator',
+      'Redesigned health and energy bars',
+      'Modern, readable fonts throughout',
+      'Floating chat window with transparency',
+      'Repositioned radar with better visibility',
+    ],
+    media: [],
+    isNew: true,
+  },
+  {
+    id: 'spectator-camera',
+    icon: <Camera className="w-5 h-5" />,
+    title: 'Enhanced Spectator Camera',
+    tagline: 'Watch the action unfold',
+    description: 'Improved spectator mode with independent camera controls, fog-of-war bypass, and smooth panning for a better viewing experience.',
+    bullets: [
+      'Independent camera movement',
+      'Bypasses fog of war for full visibility',
+      'Smooth pan and zoom controls',
+      'Follow-player mode',
+    ],
+    media: [],
+    isNew: true,
+  },
+  {
+    id: 'colorblind-mode',
+    icon: <Accessibility className="w-5 h-5" />,
+    title: 'Better Colorblind Support',
+    tagline: 'Accessible to everyone',
+    description: 'Expanded colorblind mode with more options and better visual differentiation, making the game accessible to all players.',
+    bullets: [
+      'Multiple colorblind mode presets',
+      'Enhanced team color differentiation',
+      'Customizable color profiles',
+    ],
+    media: [],
+    isNew: true,
+  },
+  {
+    id: 'dev-tools',
+    icon: <Hammer className="w-5 h-5" />,
+    title: 'Modern Dev Tools',
+    tagline: 'Built for today\'s OS',
+    description: 'A complete suite of developer tools rebuilt from the ground up for modern operating systems. Create and edit maps, sprites, and game assets with ease.',
+    bullets: [
+      'Visual map editor with GPU-powered rendering',
+      'CFS/BLO sprite browser and converter',
+      'PNG-to-CFS conversion pipeline',
+      'Seamless texture blending tools',
+      'Batch processing for bulk operations',
+      'LIO editor for doors, switches, and portals',
+    ],
+    media: [],
+  },
+];
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
 function extractStats(html: string): { value: string; label: string }[] {
   const stats: { value: string; label: string }[] = [];
   const statRegex = /<div class="stat"><span class="value">(\d+)<\/span><span class="label">([^<]+)<\/span><\/div>/g;
@@ -62,10 +203,151 @@ function formatDate(dateString: string): string {
   });
 }
 
+// ── Media renderer ───────────────────────────────────────────────────
+
+function FeatureMediaDisplay({ media }: { media: FeatureMedia[] }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  if (!media || media.length === 0) {
+    return (
+      <div className="w-full aspect-video rounded-lg bg-gray-800/50 border border-gray-700/30 flex flex-col items-center justify-center gap-2 text-gray-600">
+        <ImageIcon className="w-8 h-8" />
+        <span className="text-xs font-mono">Media coming soon</span>
+      </div>
+    );
+  }
+
+  const current = media[activeIndex];
+
+  return (
+    <div className="space-y-2">
+      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900 border border-cyan-500/20">
+        {current.type === 'video' ? (
+          <video
+            src={current.src}
+            poster={current.poster}
+            controls
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <Image
+            src={current.src}
+            alt={current.alt || 'Feature screenshot'}
+            fill
+            className="object-contain"
+            unoptimized={current.src.endsWith('.gif')}
+          />
+        )}
+      </div>
+      {media.length > 1 && (
+        <div className="flex gap-1.5 justify-center">
+          {media.map((m, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveIndex(i)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                i === activeIndex
+                  ? 'bg-cyan-400 scale-125'
+                  : 'bg-gray-600 hover:bg-gray-500'
+              }`}
+              aria-label={`View media ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Feature card ─────────────────────────────────────────────────────
+
+function FeatureCard({ feature }: { feature: Feature }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMedia = feature.media && feature.media.length > 0;
+
+  return (
+    <div
+      className="group relative rounded-xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gray-900/60 overflow-hidden transition-all duration-300"
+    >
+      {/* Header - always visible */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full text-left p-5 flex items-start gap-4"
+      >
+        <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0 text-cyan-400 group-hover:bg-cyan-500/20 transition-colors">
+          {feature.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-bold text-gray-200 group-hover:text-cyan-300 transition-colors">
+              {feature.title}
+            </h3>
+            {feature.isNew && (
+              <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-full">
+                New
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-400 mt-0.5">{feature.tagline}</p>
+        </div>
+        <div className={`text-gray-500 transition-transform duration-200 mt-1 ${expanded ? 'rotate-90' : ''}`}>
+          <ChevronRight className="w-4 h-4" />
+        </div>
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-5 pb-5 border-t border-cyan-500/10">
+          <div className={`mt-4 ${hasMedia ? 'grid grid-cols-1 lg:grid-cols-2 gap-5' : ''}`}>
+            {/* Text content */}
+            <div>
+              <p className="text-sm text-gray-300 leading-relaxed mb-3">
+                {feature.description}
+              </p>
+              <ul className="space-y-1.5">
+                {feature.bullets.map((bullet) => (
+                  <li key={bullet} className="flex items-start gap-2 text-sm text-gray-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60 shrink-0 mt-1.5" />
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Media */}
+            {hasMedia && (
+              <div>
+                <FeatureMediaDisplay media={feature.media!} />
+              </div>
+            )}
+          </div>
+
+          {/* Media placeholder hint when no media */}
+          {!hasMedia && (
+            <div className="mt-4 w-full aspect-[21/9] rounded-lg bg-gray-800/30 border border-dashed border-gray-700/40 flex flex-col items-center justify-center gap-2 text-gray-600">
+              <div className="flex gap-3">
+                <ImageIcon className="w-5 h-5" />
+                <Film className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-mono">Screenshots & videos coming soon</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────
+
 export default function ToolsPageClient({ releases }: { releases: Release[] }) {
   const [manifest, setManifest] = useState<AppManifest | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
   const [activeNoteVersion, setActiveNoteVersion] = useState<string | null>(null);
+  const [showAllFeatures, setShowAllFeatures] = useState(false);
   const noteSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
@@ -90,156 +372,160 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Header */}
-        <div className="mb-10">
-          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-4 inline-block">
+
+      {/* ─── Hero Section ───────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden border-b border-cyan-500/20">
+        {/* Background effects */}
+        <div className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse at 30% 20%, rgba(34,211,238,0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(59,130,246,0.06) 0%, transparent 50%),
+              linear-gradient(180deg, rgba(3,7,18,1) 0%, rgba(8,15,25,0.95) 100%)
+            `,
+          }}
+        />
+        {/* Scan lines */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.015]"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+          }}
+        />
+
+        <div className="relative container mx-auto px-4 py-12 md:py-20 max-w-5xl">
+          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-6 inline-block">
             &larr; Back to Home
           </Link>
-          <h1 className={`text-4xl md:text-5xl font-black tracking-wide text-gray-200 ${orbitron.className}`}>
-            Dev Tools
-          </h1>
-          <div className="mt-2 h-0.5 w-32 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full" />
-          <p className="text-gray-400 mt-4 max-w-2xl">
-            Desktop tools and utilities for Infantry Online development, mapping, and asset creation.
-          </p>
-        </div>
 
-        {/* ─── CFS Studio Featured Section ───────────────────────────────── */}
-        <section className="mb-12">
-          <div className="relative rounded-lg border border-cyan-500/30 bg-gray-950/90 overflow-hidden">
-            {/* Scan line overlay */}
-            <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.02]"
-              style={{
-                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
-              }}
-            />
-
-            {/* Top bar */}
-            <div className="relative z-20 flex items-center justify-between px-4 py-2 bg-cyan-500/10 border-b border-cyan-500/30">
-              <div className="flex items-center gap-3">
-                <Monitor className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-[0.2em]">Desktop Application</span>
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <Gamepad2 className="w-5 h-5 text-cyan-400" />
+                <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
+                  Infantry Online Reimagined
+                </span>
               </div>
-              <span className="text-[10px] font-mono text-cyan-500/60 tracking-wider">
-                Windows x64
-              </span>
+              <h1 className={`text-4xl md:text-5xl lg:text-6xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
+                Infantry
+                <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> CFS Studio</span>
+              </h1>
+              <p className="text-gray-400 mt-4 max-w-xl text-lg leading-relaxed">
+                A modernized Infantry Online client and complete developer toolkit.
+                New features, better visuals, and tools built for the modern era.
+              </p>
             </div>
 
-            <div className="relative z-20 p-6 sm:p-8">
-              <div className="flex-1">
-                <h2 className={`text-2xl md:text-3xl font-black text-white mb-2 ${orbitron.className}`}>
-                  Infantry CFS Studio
-                </h2>
-                <p className="text-gray-400 mb-4 leading-relaxed">
-                  Full-featured desktop toolkit for Infantry Online modding and asset management.
-                  Map editor with visual tile/object placement, CFS/BLO sprite viewer and converter,
-                  PNG-to-CFS pipeline, seamless texture blending, batch processing, and LIO editing.
-                </p>
-
-                {/* Feature highlights */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 mb-6">
-                  {[
-                    'Map editor with play-test mode',
-                    'CFS/BLO asset browser & exporter',
-                    'PNG to CFS conversion pipeline',
-                    'LIO door/switch/flag editing',
-                    'Seamless texture blending',
-                    'Batch processing & multi-map',
-                  ].map(feat => (
-                    <div key={feat} className="flex items-center gap-2 text-sm text-gray-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/60 shrink-0" />
-                      {feat}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Download button — permanent link to latest build */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <a
-                    href={DOWNLOAD_URL}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-lg font-bold text-white text-sm transition-all hover:scale-[1.02] shadow-lg shadow-cyan-500/20"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download {manifest ? `v${manifest.version}` : 'Latest'}
-                  </a>
-                  <a
-                    href={`https://github.com/${GITHUB_REPO}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 text-cyan-400/70 hover:text-cyan-300 text-sm transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    GitHub
-                  </a>
-                </div>
-
-                {/* Latest patch notes from manifest */}
-                {manifest?.notes && (
-                  <div className="mt-5">
-                    <div className="relative rounded border border-cyan-500/15 overflow-hidden"
-                      style={{
-                        background: `
-                          linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
-                          radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
-                        `,
-                      }}
-                    >
-                      <div
-                        className="absolute inset-0 pointer-events-none opacity-[0.025]"
-                        style={{
-                          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
-                        }}
-                      />
-                      <div className="relative px-5 py-4">
-                        <div className="flex items-center gap-2 mb-3 flex-wrap">
-                          <FileText className="w-3.5 h-3.5 text-cyan-400/60" />
-                          <span className="text-xs font-mono font-bold text-cyan-400/70 uppercase tracking-wider">Latest — v{manifest.version}</span>
-                          {manifest.pub_date && (
-                            <span className="text-xs text-gray-500 font-mono">
-                              {formatDate(manifest.pub_date)}
-                            </span>
-                          )}
-                          {(() => {
-                            const stats = extractStats(manifest.notes);
-                            return stats.length > 0 ? (
-                              <div className="flex items-center gap-3 ml-auto">
-                                {stats.map((s) => (
-                                  <span key={s.label} className="text-[10px] font-mono text-gray-500">
-                                    <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
-                        <div
-                          className="patch-notes-content"
-                          dangerouslySetInnerHTML={{ __html: manifest.notes }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+            {/* Download CTA */}
+            <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
+              <a
+                href={DOWNLOAD_URL}
+                className="inline-flex items-center gap-3 px-7 py-3.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl font-bold text-white text-base transition-all hover:scale-[1.03] shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40"
+              >
+                <Download className="w-5 h-5" />
+                Download {manifest ? `v${manifest.version}` : 'Latest'}
+              </a>
+              <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
+                <span>Windows x64</span>
+                {manifest?.pub_date && (
+                  <span>{formatDate(manifest.pub_date)}</span>
                 )}
+                <a
+                  href={`https://github.com/${GITHUB_REPO}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-cyan-500/50 hover:text-cyan-400 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  GitHub
+                </a>
               </div>
             </div>
-            <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+          </div>
+        </div>
+      </section>
+
+      <div className="container mx-auto px-4 max-w-5xl">
+
+        {/* ─── What's New / Features ──────────────────────────────────────── */}
+        <section className="py-12">
+          <div className="flex items-center gap-3 mb-2">
+            <Sparkles className="w-5 h-5 text-cyan-400" />
+            <h2 className={`text-2xl md:text-3xl font-black tracking-wide text-gray-200 ${orbitron.className}`}>
+              What&apos;s New
+            </h2>
+          </div>
+          <p className="text-gray-500 mb-8 max-w-2xl">
+            Major improvements over the original Infantry client. Click any feature to learn more and see visuals.
+          </p>
+
+          <div className="space-y-3">
+            {FEATURES.map((feature) => (
+              <FeatureCard key={feature.id} feature={feature} />
+            ))}
           </div>
         </section>
 
-        {/* ─── Patch Note History ──────────────────────────────────────────── */}
+        {/* ─── Latest Update ──────────────────────────────────────────────── */}
+        {manifest?.notes && (
+          <section className="pb-12">
+            <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
+              style={{
+                background: `
+                  linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%),
+                  radial-gradient(ellipse at 20% 50%, rgba(34,211,238,0.04) 0%, transparent 50%)
+                `,
+              }}
+            >
+              <div className="absolute inset-0 pointer-events-none opacity-[0.02]"
+                style={{
+                  backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+                }}
+              />
+              <div className="relative px-5 py-4 sm:px-8 sm:py-6">
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <FileText className="w-4 h-4 text-cyan-400/60" />
+                  <span className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-wider">
+                    Latest Update &mdash; v{manifest.version}
+                  </span>
+                  {manifest.pub_date && (
+                    <span className="text-xs text-gray-500 font-mono">
+                      {formatDate(manifest.pub_date)}
+                    </span>
+                  )}
+                  {(() => {
+                    const stats = extractStats(manifest.notes);
+                    return stats.length > 0 ? (
+                      <div className="flex items-center gap-3 ml-auto">
+                        {stats.map((s) => (
+                          <span key={s.label} className="text-[10px] font-mono text-gray-500">
+                            <span className="text-cyan-400/70 font-bold">{s.value}</span> {s.label.toLowerCase()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+                <div
+                  className="patch-notes-content"
+                  dangerouslySetInnerHTML={{ __html: manifest.notes }}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ─── Patch Note History ────────────────────────────────────────── */}
         {releaseNotes.length > 0 && (
-          <section className="mb-12">
+          <section className="pb-12">
             <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
               Patch Note History
             </h2>
 
-            <div className="relative rounded-lg border border-cyan-500/20 overflow-hidden"
+            <div className="relative rounded-xl border border-cyan-500/20 overflow-hidden"
               style={{
                 background: 'linear-gradient(180deg, rgba(8,15,25,0.95) 0%, rgba(5,10,20,0.98) 100%)',
               }}
             >
-              {/* Scan line overlay */}
               <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.02]"
                 style={{
                   backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
@@ -247,7 +533,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               />
 
               <div className="relative z-20 flex flex-col md:flex-row">
-                {/* Navigation sidebar */}
+                {/* Version sidebar */}
                 <div className="md:w-48 lg:w-56 shrink-0 border-b md:border-b-0 md:border-r border-cyan-500/15 bg-gray-950/50">
                   <div className="px-4 py-3 border-b border-cyan-500/15">
                     <span className="text-[10px] font-mono font-bold text-cyan-400/60 uppercase tracking-[0.15em]">Versions</span>
@@ -270,14 +556,14 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                           v{note.version}
                         </div>
                         <div className="text-[10px] text-gray-600 font-mono mt-0.5">
-                          {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {formatDate(note.published_at)}
                         </div>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Patch notes content area */}
+                {/* Patch notes content */}
                 <div className="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
                   <div className="divide-y divide-cyan-500/10">
                     {releaseNotes.map((note) => {
@@ -291,7 +577,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                           <div className="flex items-center gap-3 mb-3 flex-wrap">
                             <span className="text-cyan-400 font-mono text-sm font-bold">v{note.version}</span>
                             <span className="text-[10px] text-gray-600 font-mono">
-                              {new Date(note.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {formatDate(note.published_at)}
                             </span>
                             {stats.length > 0 && (
                               <div className="flex items-center gap-3 ml-auto">
@@ -317,21 +603,20 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           </section>
         )}
 
-        {/* ─── Other Tools ────────────────────────────────────────────────── */}
-        <section className="mb-12">
+        {/* ─── Web Tools (secondary) ──────────────────────────────────────── */}
+        <section className="pb-12">
           <h2 className={`text-xl font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
             Web Tools
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Blob Viewer */}
             <Link
               href="/tools/blob-viewer/index.html"
-              className="group relative rounded-lg border border-gray-600/20 hover:border-cyan-500/30 bg-gray-900/50 p-5 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/5"
+              className="group relative rounded-xl border border-gray-600/20 hover:border-cyan-500/30 bg-gray-900/50 p-5 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/5"
             >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5 text-green-400" />
+                  <Eye className="w-5 h-5 text-green-400" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-200 group-hover:text-cyan-300 transition-colors mb-1">
@@ -347,11 +632,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </div>
             </Link>
 
-            {/* Placeholder */}
-            <div className="relative rounded-lg border border-gray-700/15 bg-gray-900/30 p-5 opacity-60">
+            <div className="relative rounded-xl border border-gray-700/15 bg-gray-900/30 p-5 opacity-60">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-lg bg-gray-700/20 border border-gray-600/20 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5 text-gray-600" />
+                  <Wrench className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-500 mb-1">More Tools Coming</h3>
@@ -365,7 +649,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
         </section>
 
         {/* Footer */}
-        <div className="text-center pt-6 border-t border-gray-800/50">
+        <div className="text-center py-8 border-t border-gray-800/50">
           <p className="text-gray-500 text-sm">
             Have suggestions?{' '}
             <Link href="/forum" className="text-cyan-400/70 hover:text-cyan-300 transition-colors">

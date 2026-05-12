@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import ToolsPageClient from './ToolsPageClient';
 
 export const metadata: Metadata = {
-  title: 'Dev Tools - Free Infantry',
-  description: 'Desktop tools and utilities for Infantry Online development, mapping, and asset creation.',
+  title: 'Infantry Online Reimagined - Download & Features',
+  description: 'Download the modernized Infantry Online client with dynamic zoom, improved UI, right-click commands, and developer tools built for the modern era.',
 };
 
 const GITHUB_REPO = 'travissim0/infantry-cfs-studio';
