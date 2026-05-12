@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Orbitron } from 'next/font/google';
@@ -181,6 +181,20 @@ const FEATURES: Feature[] = [
     ],
   },
 ];
+
+// ── Star field generator ─────────────────────────────────────────────
+
+const generateStars = (count: number, layer: number) => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `star-${layer}-${i}`,
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    size: layer === 1 ? Math.random() * 2 + 1 : layer === 2 ? Math.random() * 1.5 + 0.5 : Math.random() + 0.3,
+    opacity: layer === 1 ? Math.random() * 0.5 + 0.5 : layer === 2 ? Math.random() * 0.4 + 0.3 : Math.random() * 0.3 + 0.2,
+    animationDuration: `${Math.random() * 3 + 2}s`,
+    animationDelay: `${Math.random() * 2}s`,
+  }));
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -717,6 +731,13 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
       .catch(() => {});
   }, []);
 
+  // Star field (memoized to prevent regeneration)
+  const heroStars = useMemo(() => ({
+    far: generateStars(60, 3),
+    mid: generateStars(35, 2),
+    close: generateStars(18, 1),
+  }), []);
+
   // Auto-scrolling feature carousel
   const [activeFeatureIdx, setActiveFeatureIdx] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
@@ -733,61 +754,98 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
   const [expandedFeatureId, setExpandedFeatureId] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen text-white relative">
+      {/* Page-wide deep space background */}
+      <div className="fixed inset-0 -z-10" style={{
+        background: 'linear-gradient(180deg, #050510 0%, #0a0e1a 40%, #080d18 70%, #050510 100%)',
+      }} />
+      <div className="fixed inset-0 -z-10">
+        {heroStars.far.map((star) => (
+          <div key={`bg-${star.id}`} className="absolute rounded-full bg-white" style={{
+            left: star.left, top: star.top,
+            width: star.size * 0.7, height: star.size * 0.7,
+            opacity: star.opacity * 0.4,
+          }} />
+        ))}
+      </div>
 
-      {/* ─── Hero + Feature Carousel (combined) ─────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-cyan-500/20">
-        <div className="absolute inset-0"
+      {/* ─── Hero Carousel (starfield style) ────────────────────────────── */}
+      <section
+        className="relative overflow-hidden border-b border-cyan-500/20"
+        onMouseEnter={() => setCarouselPaused(true)}
+        onMouseLeave={() => setCarouselPaused(false)}
+      >
+        {/* Deep space background */}
+        <div className="absolute inset-0" style={{
+          background: 'linear-gradient(180deg, #050510 0%, #0a0e1a 50%, #050510 100%)',
+        }} />
+
+        {/* Star layers */}
+        <div className="absolute inset-0 hero-drift-far">
+          {heroStars.far.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+            }} />
+          ))}
+        </div>
+        <div className="absolute inset-0 hero-drift-mid">
+          {heroStars.mid.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white animate-pulse" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }} />
+          ))}
+        </div>
+        <div className="absolute inset-0 hero-drift-close">
+          {heroStars.close.map((star) => (
+            <div key={star.id} className="absolute rounded-full bg-white animate-pulse" style={{
+              left: star.left, top: star.top,
+              width: star.size, height: star.size,
+              opacity: star.opacity,
+              boxShadow: `0 0 ${star.size * 3}px rgba(255,255,255,0.5)`,
+              animationDuration: star.animationDuration,
+              animationDelay: star.animationDelay,
+            }} />
+          ))}
+        </div>
+
+        {/* Nebula glow */}
+        <div
+          className="absolute inset-0 opacity-30 transition-all duration-500"
           style={{
-            background: `
-              radial-gradient(ellipse at 30% 20%, rgba(34,211,238,0.08) 0%, transparent 50%),
-              radial-gradient(ellipse at 70% 80%, rgba(59,130,246,0.06) 0%, transparent 50%),
-              linear-gradient(180deg, rgba(3,7,18,1) 0%, rgba(8,15,25,0.95) 100%)
-            `,
+            background: `radial-gradient(ellipse at 50% 60%, rgba(34,211,238,0.5) 0%, transparent 60%)`,
           }}
         />
-        <div className="absolute inset-0 pointer-events-none opacity-[0.015]"
+
+        {/* Shooting stars */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="hero-shoot-1" />
+          <div className="hero-shoot-2" />
+        </div>
+
+        {/* Accent line at top */}
+        <div className="absolute top-0 left-0 right-0 h-[2px]"
           style={{
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.4) 2px, rgba(34,211,238,0.4) 3px)',
+            background: 'linear-gradient(90deg, transparent, rgba(34,211,238,0.5), transparent)',
           }}
         />
 
-        <div className="relative container mx-auto px-4 pt-6 max-w-7xl">
-          <Link href="/" className="text-sm text-cyan-500/60 hover:text-cyan-400 transition-colors font-mono mb-3 inline-block">
-            &larr; Back to Home
-          </Link>
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Gamepad2 className="w-4 h-4 text-cyan-400" />
-                <span className="text-[10px] font-mono font-bold text-cyan-400/70 uppercase tracking-[0.2em]">
-                  Infantry Online Reimagined
-                </span>
-              </div>
-              <h1 className={`text-3xl md:text-4xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
-                Infantry
-                <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> v2</span>
-              </h1>
-              <p className="text-gray-400 mt-2 max-w-md text-sm leading-relaxed">
-                A modernized Infantry Online client and developer toolkit.
-                New features, better visuals, and tools for the modern era.
-              </p>
-            </div>
-
-            <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0">
-              <a
-                href={DOWNLOAD_URL}
-                className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl font-bold text-white text-sm transition-all hover:scale-[1.03] shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40"
-              >
-                <Download className="w-4 h-4" />
-                Download {manifest ? `v${manifest.version}` : 'Latest'}
-              </a>
-              <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono">
+        {/* Content */}
+        <div className="relative container mx-auto px-4 max-w-7xl">
+          {/* Top bar: back link + download */}
+          <div className="flex items-center justify-between pt-4 pb-2">
+            <Link href="/" className="text-xs text-cyan-500/50 hover:text-cyan-400 transition-colors font-mono">
+              &larr; Back to Home
+            </Link>
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-3 text-[10px] text-gray-500 font-mono">
                 <span>Windows x64</span>
-                {manifest?.pub_date && (
-                  <span>{formatDate(manifest.pub_date)}</span>
-                )}
+                {manifest?.pub_date && <span>{formatDate(manifest.pub_date)}</span>}
                 <a
                   href={`https://github.com/${GITHUB_REPO}`}
                   target="_blank"
@@ -801,43 +859,150 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             </div>
           </div>
 
-          {/* Feature carousel tabs - inside hero */}
-          <div
-            className="flex items-stretch overflow-x-auto custom-scrollbar -mx-4 px-4 md:mx-0 md:px-0 border-t border-cyan-500/10"
-            onMouseEnter={() => setCarouselPaused(true)}
-            onMouseLeave={() => setCarouselPaused(false)}
-          >
-            {FEATURES.map((feature, idx) => (
-              <button
-                key={feature.id}
-                onClick={() => {
-                  setActiveFeatureIdx(idx);
-                  setExpandedFeatureId(feature.id);
-                  setCarouselPaused(true);
-                }}
-                className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 border-b-2 transition-all text-left ${
-                  idx === activeFeatureIdx
-                    ? 'border-cyan-400 bg-cyan-500/5'
-                    : 'border-transparent hover:border-cyan-500/20 hover:bg-cyan-500/5'
-                }`}
-              >
-                <span className={`transition-colors ${idx === activeFeatureIdx ? 'text-cyan-400' : 'text-gray-600'}`}>
-                  {feature.icon}
+          {/* Carousel slide content */}
+          <div className="flex flex-col items-center justify-center text-center py-8 md:py-12 min-h-[220px]">
+            {/* Feature media background (if available) */}
+            {(() => {
+              const activeFeature = FEATURES[activeFeatureIdx];
+              const activeMedia = featureMediaMap[activeFeature.id]?.[0];
+              if (activeMedia?.type === 'youtube') {
+                return (
+                  <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                    <img
+                      src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                );
+              }
+              if (activeMedia?.type === 'image') {
+                return (
+                  <div className="absolute inset-0 opacity-15 pointer-events-none">
+                    <img src={activeMedia.src} alt="" className="w-full h-full object-cover" />
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
+                <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
+                  Infantry Online Reimagined
                 </span>
-                <span className={`text-xs font-medium whitespace-nowrap transition-colors ${
-                  idx === activeFeatureIdx ? 'text-cyan-300' : 'text-gray-500'
-                }`}>
-                  {feature.title}
+              </div>
+
+              <h1 className={`text-3xl md:text-5xl font-black tracking-wider mb-1 ${orbitron.className}`}>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
+                  style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
+                >
+                  INFANTRY v2
                 </span>
-                {feature.isNew && (
-                  <span className="px-1 py-0.5 text-[7px] font-mono font-bold uppercase bg-emerald-500/15 text-emerald-400 rounded-full leading-none">
+              </h1>
+
+              {/* Active feature title & tagline */}
+              <p className="text-gray-300 text-sm md:text-base mb-1 mt-3 font-semibold">
+                {FEATURES[activeFeatureIdx].title}
+                {FEATURES[activeFeatureIdx].isNew && (
+                  <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full">
                     New
                   </span>
                 )}
-              </button>
-            ))}
+              </p>
+              <p className="text-gray-400 text-xs md:text-sm mb-5 max-w-md mx-auto">
+                {FEATURES[activeFeatureIdx].tagline}
+              </p>
+
+              {/* Download CTA */}
+              <a
+                href={DOWNLOAD_URL}
+                className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105"
+                style={{
+                  boxShadow: '0 0 20px rgba(34,211,238,0.4), 0 0 40px rgba(34,211,238,0.2)',
+                }}
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  Download {manifest ? `v${manifest.version}` : 'Latest'}
+                </span>
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              </a>
+
+              {/* Navigation dots */}
+              <div className="flex items-center justify-center gap-2.5 mt-5">
+                {FEATURES.map((feature, idx) => (
+                  <button
+                    key={feature.id}
+                    onClick={() => {
+                      setActiveFeatureIdx(idx);
+                      setCarouselPaused(true);
+                      setTimeout(() => setCarouselPaused(false), 10000);
+                    }}
+                    className={`transition-all duration-300 ${idx === activeFeatureIdx ? 'scale-110' : 'hover:scale-105'}`}
+                    aria-label={`Go to ${feature.title}`}
+                  >
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                        idx === activeFeatureIdx
+                          ? 'bg-gradient-to-r from-cyan-400 to-blue-500 shadow-lg'
+                          : 'bg-gray-600 hover:bg-gray-500'
+                      }`}
+                      style={idx === activeFeatureIdx ? { boxShadow: '0 0 10px rgba(34,211,238,0.5)' } : {}}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Hero carousel animations */}
+        <style jsx>{`
+          .hero-drift-far { animation: hDriftFar 20s ease-in-out infinite; }
+          .hero-drift-mid { animation: hDriftMid 12s ease-in-out infinite; }
+          .hero-drift-close { animation: hDriftClose 8s ease-in-out infinite; }
+          @keyframes hDriftFar {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(3px, -2px); }
+            66% { transform: translate(-2px, 2px); }
+          }
+          @keyframes hDriftMid {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(-5px, 4px); }
+            66% { transform: translate(4px, -3px); }
+          }
+          @keyframes hDriftClose {
+            0%, 100% { transform: translate(0, 0); }
+            33% { transform: translate(8px, -5px); }
+            66% { transform: translate(-6px, 4px); }
+          }
+          .hero-shoot-1, .hero-shoot-2 {
+            position: absolute;
+            height: 1px;
+            border-radius: 999px;
+            opacity: 0;
+          }
+          .hero-shoot-1 {
+            top: 25%; left: -40px; width: 40px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+            box-shadow: 0 0 4px rgba(255,255,255,0.3);
+            animation: hShoot 7s ease-in-out infinite 2s;
+          }
+          .hero-shoot-2 {
+            top: 60%; left: -30px; width: 30px;
+            background: linear-gradient(90deg, transparent, rgba(100,200,255,0.5), transparent);
+            box-shadow: 0 0 3px rgba(100,200,255,0.2);
+            animation: hShoot 10s ease-in-out infinite 6s;
+          }
+          @keyframes hShoot {
+            0% { transform: translateX(0) rotate(-20deg); opacity: 0; }
+            5% { opacity: 1; }
+            25% { transform: translateX(700px) rotate(-20deg); opacity: 0; }
+            100% { opacity: 0; }
+          }
+        `}</style>
       </section>
 
       {/* ─── Main Content: Patch Notes (left) + Features (right) ─────────── */}
