@@ -859,34 +859,50 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             </div>
           </div>
 
-          {/* Carousel slide content */}
-          <div className="flex flex-col items-center justify-center text-center py-8 md:py-12 min-h-[220px]">
-            {/* Feature media background (if available) */}
+          {/* Carousel slide — 16:9 aspect ratio */}
+          <div className="relative w-full aspect-video max-h-[450px]">
+            {/* Media layer */}
             {(() => {
               const activeFeature = FEATURES[activeFeatureIdx];
               const activeMedia = featureMediaMap[activeFeature.id]?.[0];
+
               if (activeMedia?.type === 'youtube') {
                 return (
-                  <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                  <>
                     <img
                       src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
                       alt=""
-                      className="w-full h-full object-cover"
+                      className="absolute inset-0 w-full h-full object-cover opacity-40"
                     />
-                  </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/60 to-[#050510]/30" />
+                    {/* Play button overlay */}
+                    <a
+                      href={`https://www.youtube.com/watch?v=${activeMedia.src}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 bg-red-600/80 hover:bg-red-500 rounded-lg text-white text-xs font-bold transition-all hover:scale-105"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      Watch Video
+                    </a>
+                  </>
                 );
               }
               if (activeMedia?.type === 'image') {
                 return (
-                  <div className="absolute inset-0 opacity-15 pointer-events-none">
-                    <img src={activeMedia.src} alt="" className="w-full h-full object-cover" />
-                  </div>
+                  <>
+                    <img src={activeMedia.src} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/60 to-[#050510]/30" />
+                  </>
                 );
               }
+              // No media — stars show through
               return null;
             })()}
 
-            <div className="relative z-10">
+            {/* Centered content overlay */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 px-4">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
                 <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
@@ -903,10 +919,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </h1>
 
               {/* Active feature title & tagline */}
-              <p className="text-gray-300 text-sm md:text-base mb-1 mt-3 font-semibold">
+              <p className="text-gray-200 text-sm md:text-lg mb-1 mt-3 font-semibold">
                 {FEATURES[activeFeatureIdx].title}
                 {FEATURES[activeFeatureIdx].isNew && (
-                  <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full">
+                  <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full align-middle">
                     New
                   </span>
                 )}
