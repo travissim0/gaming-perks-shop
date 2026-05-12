@@ -211,7 +211,7 @@ export default function NeutralNavbar() {
                         onClick={() => setShowToolsDropdown(false)}
                       >
                         <span>🖥️</span>
-                        <span className="font-semibold">Infantry CFS Studio</span>
+                        <span className="font-semibold">Infantry v2</span>
                       </Link>
                     </div>
                   </div>
@@ -487,7 +487,7 @@ export default function NeutralNavbar() {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <span>🖥️</span>
-                    <span className="font-semibold">Infantry CFS Studio</span>
+                    <span className="font-semibold">Infantry v2</span>
                   </Link>
                 </div>
               )}

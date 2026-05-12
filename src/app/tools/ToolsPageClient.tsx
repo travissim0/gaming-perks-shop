@@ -433,7 +433,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               </div>
               <h1 className={`text-4xl md:text-5xl lg:text-6xl font-black tracking-wide text-white leading-tight ${orbitron.className}`}>
                 Infantry
-                <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> CFS Studio</span>
+                <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent"> v2</span>
               </h1>
               <p className="text-gray-400 mt-4 max-w-xl text-lg leading-relaxed">
                 A modernized Infantry Online client and complete developer toolkit.
