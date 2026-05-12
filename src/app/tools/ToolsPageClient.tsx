@@ -746,7 +746,7 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
     if (carouselPaused) return;
     const timer = setInterval(() => {
       setActiveFeatureIdx(prev => (prev + 1) % FEATURES.length);
-    }, 4000);
+    }, 8000);
     return () => clearInterval(timer);
   }, [carouselPaused]);
 
@@ -869,23 +869,15 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
               if (activeMedia?.type === 'youtube') {
                 return (
                   <>
-                    <img
-                      src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
-                      alt=""
-                      className="absolute inset-0 w-full h-full object-cover opacity-40"
+                    <iframe
+                      src={`https://www.youtube.com/embed/${activeMedia.src}?autoplay=1&mute=1&loop=1&playlist=${activeMedia.src}&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1`}
+                      title={activeMedia.alt || 'Feature video'}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                      className="absolute inset-0 w-full h-full opacity-50 pointer-events-none"
+                      style={{ border: 'none' }}
+                      loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/60 to-[#050510]/30" />
-                    {/* Play button overlay */}
-                    <a
-                      href={`https://www.youtube.com/watch?v=${activeMedia.src}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 bg-red-600/80 hover:bg-red-500 rounded-lg text-white text-xs font-bold transition-all hover:scale-105"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                      Watch Video
-                    </a>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/50 to-[#050510]/20" />
                   </>
                 );
               }
