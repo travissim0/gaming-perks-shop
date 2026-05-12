@@ -53,13 +53,22 @@ interface ReleaseNote {
 // ── Feature showcase data ────────────────────────────────────────────
 // To add media: place GIFs/screenshots in /public/images/game-features/
 // and videos in /public/videos/game-features/, then update the media fields below.
-// Supported media types: 'image' (png/jpg/gif), 'video' (mp4/webm)
+//
+// Supported media types:
+//   'image'   - png/jpg/gif from /public/images/game-features/
+//   'video'   - mp4/webm from /public/videos/game-features/
+//   'youtube' - YouTube video ID (the part after v= in the URL)
+//
+// Examples:
+//   { type: 'image', src: '/images/game-features/zoom.gif', alt: 'Zoom demo' }
+//   { type: 'video', src: '/videos/game-features/zoom.mp4' }
+//   { type: 'youtube', src: 'dQw4w9WgXcQ' }  // just the video ID
 
 interface FeatureMedia {
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'youtube';
   src: string;
   alt?: string;
-  poster?: string; // for videos
+  poster?: string; // for local videos
 }
 
 interface Feature {
@@ -205,7 +214,7 @@ function formatDate(dateString: string): string {
 
 // ── Media renderer ───────────────────────────────────────────────────
 
-function FeatureMediaDisplay({ media }: { media: FeatureMedia[] }) {
+function FeatureMediaDisplay({ media, autoplay }: { media: FeatureMedia[]; autoplay?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   if (!media || media.length === 0) {
@@ -222,13 +231,22 @@ function FeatureMediaDisplay({ media }: { media: FeatureMedia[] }) {
   return (
     <div className="space-y-2">
       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900 border border-cyan-500/20">
-        {current.type === 'video' ? (
+        {current.type === 'youtube' ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${current.src}?${autoplay ? 'autoplay=1&' : ''}mute=1&rel=0&modestbranding=1`}
+            title={current.alt || 'Feature video'}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+          />
+        ) : current.type === 'video' ? (
           <video
             src={current.src}
             poster={current.poster}
             controls
             loop
             muted
+            autoPlay={autoplay}
             playsInline
             className="w-full h-full object-contain"
           />
@@ -248,13 +266,21 @@ function FeatureMediaDisplay({ media }: { media: FeatureMedia[] }) {
             <button
               key={i}
               onClick={() => setActiveIndex(i)}
-              className={`w-2 h-2 rounded-full transition-all ${
+              className={`flex items-center justify-center w-6 h-6 rounded-full transition-all ${
                 i === activeIndex
-                  ? 'bg-cyan-400 scale-125'
-                  : 'bg-gray-600 hover:bg-gray-500'
+                  ? 'bg-cyan-500/20 ring-1 ring-cyan-400'
+                  : 'bg-gray-700/30 hover:bg-gray-600/40'
               }`}
               aria-label={`View media ${i + 1}`}
-            />
+            >
+              {m.type === 'youtube' ? (
+                <Play className="w-2.5 h-2.5 text-red-400" />
+              ) : m.type === 'video' ? (
+                <Film className="w-2.5 h-2.5 text-cyan-400" />
+              ) : (
+                <ImageIcon className="w-2.5 h-2.5 text-cyan-400" />
+              )}
+            </button>
           ))}
         </div>
       )}
@@ -320,7 +346,7 @@ function FeatureCard({ feature }: { feature: Feature }) {
             {/* Media */}
             {hasMedia && (
               <div>
-                <FeatureMediaDisplay media={feature.media!} />
+                <FeatureMediaDisplay media={feature.media!} autoplay />
               </div>
             )}
           </div>
