@@ -865,114 +865,53 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
             </div>
           </div>
 
-          {/* Carousel slide — 16:9 aspect ratio */}
-          <div className="relative w-full aspect-video max-h-[450px]">
-            {/* Media layer */}
-            {(() => {
-              const activeFeature = FEATURES[activeFeatureIdx];
-              const activeMedia = featureMediaMap[activeFeature.id]?.[0];
+          {/* Two-column carousel: text left, media right */}
+          <div className="flex flex-col md:flex-row items-center gap-6 py-8 md:py-10">
+            {/* Left: text content */}
+            <div className="flex-1 min-w-0 md:max-w-[45%]">
+              <div className="flex items-center gap-2 mb-2">
+                <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
+                <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
+                  Infantry Online Reimagined
+                </span>
+              </div>
 
-              if (activeMedia?.type === 'youtube') {
-                const isPlaying = playingVideoId === activeMedia.src;
-                return (
-                  <>
-                    {isPlaying ? (
-                      <iframe
-                        src={`https://www.youtube.com/embed/${activeMedia.src}?autoplay=1&mute=1&loop=1&playlist=${activeMedia.src}&controls=1&rel=0&modestbranding=1&playsinline=1`}
-                        title={activeMedia.alt || 'Feature video'}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="absolute inset-0 w-full h-full z-20"
-                        style={{ border: 'none' }}
-                      />
-                    ) : (
-                      <>
-                        <img
-                          src={`https://img.youtube.com/vi/${activeMedia.src}/maxresdefault.jpg`}
-                          alt=""
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/90 via-[#050510]/40 to-transparent" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-transparent to-[#050510]/30" />
-                        {/* Play button - centered */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPlayingVideoId(activeMedia.src);
-                            setCarouselPaused(true);
-                          }}
-                          className="absolute inset-0 z-20 flex items-center justify-center group/play"
-                        >
-                          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-red-600/90 group-hover/play:bg-red-500 flex items-center justify-center transition-all group-hover/play:scale-110 shadow-lg shadow-red-500/30">
-                            <Play className="w-7 h-7 md:w-8 md:h-8 text-white ml-1" />
-                          </div>
-                        </button>
-                      </>
-                    )}
-                  </>
-                );
-              }
-              if (activeMedia?.type === 'image') {
-                return (
-                  <>
-                    <img src={activeMedia.src} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#050510]/90 via-[#050510]/40 to-transparent" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-transparent to-[#050510]/30" />
-                  </>
-                );
-              }
-              // No media — stars show through
-              return null;
-            })()}
-
-            {/* Content overlay — left-aligned to leave space for media */}
-            <div className="absolute inset-0 flex items-center z-10 px-6 md:px-12">
-              <div className="max-w-md">
-                <div className="flex items-center gap-2 mb-2">
-                  <Gamepad2 className="w-4 h-4 text-cyan-400/60" />
-                  <span className="text-[10px] font-mono font-bold text-cyan-400/50 uppercase tracking-[0.2em]">
-                    Infantry Online Reimagined
-                  </span>
-                </div>
-
-                <h1 className={`text-3xl md:text-5xl font-black tracking-wider mb-1 ${orbitron.className}`}>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
-                    style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
-                  >
-                    INFANTRY v2
-                  </span>
-                </h1>
-
-                {/* Active feature title & tagline */}
-                <p className="text-gray-200 text-sm md:text-lg mb-1 mt-3 font-semibold">
-                  {FEATURES[activeFeatureIdx].title}
-                  {FEATURES[activeFeatureIdx].isNew && (
-                    <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full align-middle">
-                      New
-                    </span>
-                  )}
-                </p>
-                <p className="text-gray-400 text-xs md:text-sm mb-5">
-                  {FEATURES[activeFeatureIdx].tagline}
-                </p>
-
-                {/* Download CTA */}
-                <a
-                  href={DOWNLOAD_URL}
-                  className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105"
-                  style={{
-                    boxShadow: '0 0 20px rgba(34,211,238,0.4), 0 0 40px rgba(34,211,238,0.2)',
-                  }}
+              <h1 className={`text-3xl md:text-4xl lg:text-5xl font-black tracking-wider mb-1 ${orbitron.className}`}>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
+                  style={{ filter: 'drop-shadow(0 0 15px currentColor)' }}
                 >
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Download className="w-4 h-4" />
-                    Download {manifest ? `v${manifest.version}` : 'Latest'}
-                  </span>
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                </a>
+                  INFANTRY v2
+                </span>
+              </h1>
 
-                {/* Navigation dots */}
-                <div className="flex items-center gap-2.5 mt-5">
+              <p className="text-gray-200 text-sm md:text-lg mb-1 mt-3 font-semibold">
+                {FEATURES[activeFeatureIdx].title}
+                {FEATURES[activeFeatureIdx].isNew && (
+                  <span className="ml-2 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-400 rounded-full align-middle">
+                    New
+                  </span>
+                )}
+              </p>
+              <p className="text-gray-400 text-xs md:text-sm mb-5">
+                {FEATURES[activeFeatureIdx].tagline}
+              </p>
+
+              <a
+                href={DOWNLOAD_URL}
+                className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg font-bold text-white text-sm overflow-hidden transition-all duration-300 hover:scale-105"
+                style={{
+                  boxShadow: '0 0 20px rgba(34,211,238,0.4), 0 0 40px rgba(34,211,238,0.2)',
+                }}
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  <Download className="w-4 h-4" />
+                  Download {manifest ? `v${manifest.version}` : 'Latest'}
+                </span>
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              </a>
+
+              {/* Navigation dots */}
+              <div className="flex items-center gap-2.5 mt-5">
                 {FEATURES.map((feature, idx) => (
                   <button
                     key={feature.id}
@@ -996,8 +935,47 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                 ))}
               </div>
             </div>
+
+            {/* Right: media area — 16:9 */}
+            <div className="w-full md:w-[55%] shrink-0">
+              <div className="relative aspect-video rounded-lg overflow-hidden border border-cyan-500/20 bg-gray-900/50">
+                {(() => {
+                  const activeFeature = FEATURES[activeFeatureIdx];
+                  const activeMedia = featureMediaMap[activeFeature.id]?.[0];
+
+                  if (activeMedia?.type === 'youtube') {
+                    return (
+                      <iframe
+                        key={activeMedia.src}
+                        src={`https://www.youtube.com/embed/${activeMedia.src}?autoplay=1&mute=1&loop=1&playlist=${activeMedia.src}&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1`}
+                        title={activeMedia.alt || 'Feature video'}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="absolute inset-0 w-full h-full"
+                        style={{ border: 'none' }}
+                      />
+                    );
+                  }
+                  if (activeMedia?.type === 'image') {
+                    return (
+                      <img
+                        src={activeMedia.src}
+                        alt={activeMedia.alt || 'Feature screenshot'}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    );
+                  }
+                  // No media — starfield placeholder
+                  return (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600">
+                      <ImageIcon className="w-10 h-10 mb-2 opacity-30" />
+                      <span className="text-xs font-mono opacity-50">Media coming soon</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
-        </div>
         </div>
 
         {/* Hero carousel animations */}
