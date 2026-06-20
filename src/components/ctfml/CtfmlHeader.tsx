@@ -1,13 +1,21 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 type CtfmlPage = 'home' | 'rules' | 'squads' | 'standings' | 'matches';
 
 interface CtfmlHeaderProps {
   currentPage?: CtfmlPage;
+}
+
+interface Profile {
+  in_game_alias: string | null;
+  avatar_url: string | null;
+  is_admin: boolean | null;
+  ctf_role: string | null;
 }
 
 const NAV: { key: CtfmlPage; label: string; href: string }[] = [
@@ -19,11 +27,32 @@ const NAV: { key: CtfmlPage; label: string; href: string }[] = [
 ];
 
 /**
- * Fixed branded header/nav for the CTFML section. Mirrors TripleThreatHeader
- * structure but without the challenge/notification machinery (CTFML has none).
+ * Fixed branded header/nav for the CTFML section. Pulls the player's profile
+ * (alias / admin flags) from the `profiles` table — the alias is NOT in auth
+ * user_metadata.
  */
 export default function CtfmlHeader({ currentPage }: CtfmlHeaderProps) {
   const { user } = useAuth();
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('in_game_alias, avatar_url, is_admin, ctf_role')
+        .eq('id', user.id)
+        .maybeSingle();
+      setProfile((data as Profile) || null);
+    })();
+  }, [user]);
+
+  const isAdmin = !!profile && (profile.is_admin === true || profile.ctf_role === 'ctf_admin');
+  const alias = profile?.in_game_alias || (user?.user_metadata?.in_game_alias as string) || null;
+  const avatarUrl = profile?.avatar_url || (user?.user_metadata?.avatar_url as string) || null;
 
   const linkClasses = (page: CtfmlPage) =>
     currentPage === page
@@ -53,25 +82,39 @@ export default function CtfmlHeader({ currentPage }: CtfmlHeaderProps) {
               </Link>
             ))}
 
+            {isAdmin && (
+              <Link
+                href="/admin/ctfml"
+                className="px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 transition-all duration-300 font-medium"
+              >
+                Admin
+              </Link>
+            )}
+
             {user && (
               <div className="relative group">
-                {user.user_metadata?.avatar_url ? (
+                {avatarUrl ? (
                   <img
-                    src={user.user_metadata.avatar_url}
-                    alt={user.user_metadata?.in_game_alias || user.email || 'User'}
+                    src={avatarUrl}
+                    alt={alias || user.email || 'User'}
                     className="w-9 h-9 rounded-full border-2 border-gray-600 hover:border-emerald-400 transition-colors cursor-pointer"
                   />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-gray-600 hover:border-emerald-400 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer">
-                    {(user.user_metadata?.in_game_alias || user.email || 'U')[0].toUpperCase()}
+                    {(alias || user.email || 'U')[0].toUpperCase()}
                   </div>
                 )}
                 <div className="absolute top-full right-0 mt-2 bg-gray-900/95 backdrop-blur-sm border border-gray-600/50 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 min-w-[200px] z-50">
                   <div className="text-sm">
                     <div className="text-white font-medium mb-1">
-                      {user.user_metadata?.in_game_alias || 'No Alias Set'}
+                      {alias || 'No Alias Set'}
                     </div>
                     <div className="text-gray-400 text-xs">{user.email}</div>
+                    {isAdmin && (
+                      <div className="text-amber-300 text-xs mt-2 pt-2 border-t border-gray-600/50">
+                        CTF Admin
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
