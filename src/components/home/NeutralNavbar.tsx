@@ -179,6 +179,14 @@ export default function NeutralNavbar() {
                         <span>⚡</span>
                         <span className="font-semibold">Triple Threat</span>
                       </Link>
+                      <Link
+                        href="/league/ctfml"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span>🚩</span>
+                        <span className="font-semibold">CTFML</span>
+                      </Link>
                     </div>
                   </div>
                 )}
@@ -458,6 +466,14 @@ export default function NeutralNavbar() {
                   >
                     <span>⚡</span>
                     <span className="font-semibold">Triple Threat</span>
+                  </Link>
+                  <Link
+                    href="/league/ctfml"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>🚩</span>
+                    <span className="font-semibold">CTFML</span>
                   </Link>
                 </div>
               )}
