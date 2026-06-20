@@ -24,8 +24,8 @@ interface Squad {
 interface MatchRow {
   id: string;
   match_date: string;
-  side_a_score: number;
-  side_b_score: number;
+  side_a_result: string | null;
+  side_b_result: string | null;
   match_type: string;
   side_a_squad1_id: string;
   side_a_squad2_id: string;
@@ -35,7 +35,7 @@ interface MatchRow {
 
 const EMPTY_MATCH = {
   a1: '', a2: '', b1: '', b2: '',
-  scoreA: '0', scoreB: '0',
+  winner: 'A' as 'A' | 'B',
   matchType: 'Season',
   matchDate: new Date().toISOString().split('T')[0],
   arena: '',
@@ -112,7 +112,7 @@ export default function CtfmlAdminPage() {
     if (!seasonId) { setMatches([]); return; }
     const { data, error } = await supabase
       .from('ctfml_matches')
-      .select('id, match_date, side_a_score, side_b_score, match_type, side_a_squad1_id, side_a_squad2_id, side_b_squad1_id, side_b_squad2_id')
+      .select('id, match_date, side_a_result, side_b_result, match_type, side_a_squad1_id, side_a_squad2_id, side_b_squad1_id, side_b_squad2_id')
       .eq('season_id', seasonId)
       .order('match_date', { ascending: false })
       .limit(25);
@@ -175,12 +175,20 @@ export default function CtfmlAdminPage() {
     if (picks.some((p) => !p)) { toast.error('Pick all four squads'); return; }
     if (new Set(picks).size !== 4) { toast.error('All four squads must be different'); return; }
 
-    const scoreA = parseInt(m.scoreA, 10) || 0;
-    const scoreB = parseInt(m.scoreB, 10) || 0;
-
-    // Derive results (the standings RPC re-derives, but store complete rows).
-    const resultA = m.noShowA ? 'No Show' : scoreA > scoreB ? 'Win' : 'Loss';
-    const resultB = m.noShowB ? 'No Show' : scoreB > scoreA ? 'Win' : 'Loss';
+    // CTFML is pure win/loss. Derive each side's result from no-show flags
+    // and the winner pick.
+    let resultA: string;
+    let resultB: string;
+    if (m.noShowA && m.noShowB) {
+      resultA = 'No Show'; resultB = 'No Show';
+    } else if (m.noShowA) {
+      resultA = 'No Show'; resultB = 'Win';
+    } else if (m.noShowB) {
+      resultB = 'No Show'; resultA = 'Win';
+    } else {
+      resultA = m.winner === 'A' ? 'Win' : 'Loss';
+      resultB = m.winner === 'A' ? 'Loss' : 'Win';
+    }
 
     setSubmitting(true);
     try {
@@ -192,8 +200,6 @@ export default function CtfmlAdminPage() {
           side_a_squad2_id: m.a2,
           side_b_squad1_id: m.b1,
           side_b_squad2_id: m.b2,
-          side_a_score: scoreA,
-          side_b_score: scoreB,
           side_a_result: resultA,
           side_b_result: resultB,
           match_type: m.matchType,
@@ -354,10 +360,6 @@ export default function CtfmlAdminPage() {
                 </div>
                 <SquadSelect value={m.a1} onChange={(v) => setM({ ...m, a1: v })} exclude={[m.a2, m.b1, m.b2]} />
                 <SquadSelect value={m.a2} onChange={(v) => setM({ ...m, a2: v })} exclude={[m.a1, m.b1, m.b2]} />
-                <div>
-                  <label className="block text-xs text-white/60 mb-1">Score</label>
-                  <input type="number" min="0" value={m.scoreA} onChange={(e) => setM({ ...m, scoreA: e.target.value })} className={inputCls} />
-                </div>
               </div>
 
               {/* Side B */}
@@ -371,12 +373,35 @@ export default function CtfmlAdminPage() {
                 </div>
                 <SquadSelect value={m.b1} onChange={(v) => setM({ ...m, b1: v })} exclude={[m.a1, m.a2, m.b2]} />
                 <SquadSelect value={m.b2} onChange={(v) => setM({ ...m, b2: v })} exclude={[m.a1, m.a2, m.b1]} />
-                <div>
-                  <label className="block text-xs text-white/60 mb-1">Score</label>
-                  <input type="number" min="0" value={m.scoreB} onChange={(e) => setM({ ...m, scoreB: e.target.value })} className={inputCls} />
-                </div>
               </div>
             </div>
+
+            {/* Winner */}
+            {!m.noShowA && !m.noShowB ? (
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-sm text-white/60">Winner:</span>
+                <div className="inline-flex rounded-lg overflow-hidden border border-emerald-400/40">
+                  <button
+                    type="button"
+                    onClick={() => setM({ ...m, winner: 'A' })}
+                    className={`px-5 py-2 text-sm font-medium transition-colors ${m.winner === 'A' ? 'bg-emerald-500/30 text-emerald-100' : 'bg-gray-900 text-white/60 hover:bg-gray-800'}`}
+                  >
+                    Side A
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setM({ ...m, winner: 'B' })}
+                    className={`px-5 py-2 text-sm font-medium transition-colors ${m.winner === 'B' ? 'bg-sky-500/30 text-sky-100' : 'bg-gray-900 text-white/60 hover:bg-gray-800'}`}
+                  >
+                    Side B
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-sm text-amber-300/80">
+                No-show recorded — the other side is awarded the win.
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
@@ -424,16 +449,24 @@ export default function CtfmlAdminPage() {
             <p className="text-white/50 text-sm">No matches recorded for this season.</p>
           ) : (
             <div className="space-y-2">
-              {matches.map((mr) => (
-                <div key={mr.id} className="flex items-center justify-between bg-gray-950/60 border border-white/10 rounded-lg px-4 py-2 text-sm">
-                  <span className="text-white/80">
-                    {squadName(mr.side_a_squad1_id)} + {squadName(mr.side_a_squad2_id)}
-                    <span className="mx-2 text-emerald-300 font-bold">{mr.side_a_score}–{mr.side_b_score}</span>
-                    {squadName(mr.side_b_squad1_id)} + {squadName(mr.side_b_squad2_id)}
-                  </span>
-                  <span className="text-white/40 text-xs">{mr.match_type} · {new Date(mr.match_date).toLocaleDateString()}</span>
-                </div>
-              ))}
+              {matches.map((mr) => {
+                const aWon = mr.side_a_result === 'Win';
+                const bWon = mr.side_b_result === 'Win';
+                return (
+                  <div key={mr.id} className="flex items-center justify-between bg-gray-950/60 border border-white/10 rounded-lg px-4 py-2 text-sm">
+                    <span>
+                      <span className={aWon ? 'text-emerald-300 font-semibold' : 'text-white/50'}>
+                        {squadName(mr.side_a_squad1_id)} + {squadName(mr.side_a_squad2_id)}
+                      </span>
+                      <span className="mx-2 text-white/40">vs</span>
+                      <span className={bWon ? 'text-emerald-300 font-semibold' : 'text-white/50'}>
+                        {squadName(mr.side_b_squad1_id)} + {squadName(mr.side_b_squad2_id)}
+                      </span>
+                    </span>
+                    <span className="text-white/40 text-xs">{mr.match_type} · {new Date(mr.match_date).toLocaleDateString()}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

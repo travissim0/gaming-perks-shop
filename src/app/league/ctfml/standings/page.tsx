@@ -140,7 +140,6 @@ export default function CtfmlStandingsPage() {
                   <th className="px-3 py-3 text-center font-semibold">L</th>
                   <th className="px-3 py-3 text-center font-semibold">Pts</th>
                   <th className="px-3 py-3 text-center font-semibold">Win%</th>
-                  <th className="px-3 py-3 text-center font-semibold">Diff</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,9 +160,6 @@ export default function CtfmlStandingsPage() {
                     <td className="px-3 py-3 text-center text-rose-300">{r.losses}</td>
                     <td className="px-3 py-3 text-center text-white font-bold">{r.points}</td>
                     <td className="px-3 py-3 text-center text-white/80">{Number(r.win_percentage).toFixed(0)}%</td>
-                    <td className="px-3 py-3 text-center text-white/70">
-                      {r.score_difference > 0 ? `+${r.score_difference}` : r.score_difference}
-                    </td>
                   </tr>
                 ))}
               </tbody>

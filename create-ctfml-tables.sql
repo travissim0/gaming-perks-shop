@@ -527,22 +527,15 @@ BEGIN
         RETURN;  -- non-season games don't move standings
     END IF;
 
-    -- Derive normalized results
-    IF m.side_a_result = 'No Show' THEN a_result := 'no_show';
-    ELSIF m.side_a_score > m.side_b_score THEN a_result := 'win';
-    ELSE a_result := 'loss';
-    END IF;
+    -- CTFML is pure win/loss — read the explicit result, not a score.
+    a_result := CASE m.side_a_result WHEN 'No Show' THEN 'no_show' WHEN 'Win' THEN 'win' ELSE 'loss' END;
+    b_result := CASE m.side_b_result WHEN 'No Show' THEN 'no_show' WHEN 'Win' THEN 'win' ELSE 'loss' END;
 
-    IF m.side_b_result = 'No Show' THEN b_result := 'no_show';
-    ELSIF m.side_b_score > m.side_a_score THEN b_result := 'win';
-    ELSE b_result := 'loss';
-    END IF;
-
-    -- Propagate to all four squads
-    PERFORM ctfml_apply_squad_result(m.season_id, m.side_a_squad1_id, a_result, m.side_a_score, m.side_b_score);
-    PERFORM ctfml_apply_squad_result(m.season_id, m.side_a_squad2_id, a_result, m.side_a_score, m.side_b_score);
-    PERFORM ctfml_apply_squad_result(m.season_id, m.side_b_squad1_id, b_result, m.side_b_score, m.side_a_score);
-    PERFORM ctfml_apply_squad_result(m.season_id, m.side_b_squad2_id, b_result, m.side_b_score, m.side_a_score);
+    -- Propagate to all four squads (scores unused in CTFML — pass 0).
+    PERFORM ctfml_apply_squad_result(m.season_id, m.side_a_squad1_id, a_result, 0, 0);
+    PERFORM ctfml_apply_squad_result(m.season_id, m.side_a_squad2_id, a_result, 0, 0);
+    PERFORM ctfml_apply_squad_result(m.season_id, m.side_b_squad1_id, b_result, 0, 0);
+    PERFORM ctfml_apply_squad_result(m.season_id, m.side_b_squad2_id, b_result, 0, 0);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

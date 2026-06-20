@@ -201,40 +201,6 @@ export default function CtfmlSquadsPage() {
     }
   };
 
-  const handleLeaveOrDisband = async () => {
-    if (!user || !userSquad) return;
-    const isOwner = userSquad.owner_id === user.id;
-
-    if (isOwner) {
-      if (!confirm(`Disband ${userSquad.squad_name}? This removes the squad and all its members.`)) return;
-      try {
-        const { error } = await supabase.from('ctfml_squads').delete().eq('id', userSquad.id);
-        if (error) throw error;
-        toast.success('Squad disbanded');
-        loadSquads();
-        loadUserSquad();
-      } catch (err: any) {
-        toast.error('Failed to disband: ' + (err?.message || 'unknown error'));
-      }
-      return;
-    }
-
-    if (!confirm(`Leave ${userSquad.squad_name}?`)) return;
-    try {
-      const { error } = await supabase
-        .from('ctfml_squad_members')
-        .delete()
-        .eq('squad_id', userSquad.id)
-        .eq('player_id', user.id);
-      if (error) throw error;
-      toast.success('Left squad');
-      loadSquads();
-      loadUserSquad();
-    } catch (err: any) {
-      toast.error('Failed to leave: ' + (err?.message || 'unknown error'));
-    }
-  };
-
   return (
     <CtfmlBackground opacity={0.16}>
       <CtfmlHeader currentPage="squads" />
@@ -263,12 +229,12 @@ export default function CtfmlSquadsPage() {
                 <span className="text-sm text-white/80">
                   Your squad: <span className="text-emerald-200 font-semibold">{userSquad.squad_name}</span>
                 </span>
-                <button
-                  onClick={handleLeaveOrDisband}
-                  className="text-sm px-3 py-1 rounded-md bg-rose-500/20 border border-rose-400/40 text-rose-200 hover:bg-rose-500/30 transition-colors"
+                <Link
+                  href={`/league/ctfml/squads/${userSquad.id}`}
+                  className="text-sm px-3 py-1 rounded-md bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/30 transition-colors"
                 >
-                  {userSquad.owner_id === user.id ? 'Disband' : 'Leave'}
-                </button>
+                  Manage →
+                </Link>
               </div>
             )}
             {user && !userSquad && (

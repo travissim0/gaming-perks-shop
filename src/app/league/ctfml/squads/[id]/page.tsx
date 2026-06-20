@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import CtfmlBackground from '@/components/ctfml/CtfmlBackground';
 import CtfmlHeader from '@/components/ctfml/CtfmlHeader';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 
 interface Squad {
   id: string;
@@ -35,12 +37,18 @@ const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
 
 export default function CtfmlSquadDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { user } = useAuth();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [squad, setSquad] = useState<Squad | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const isOwner = !!user && !!squad && squad.owner_id === user.id;
+  const isMember = !!user && members.some((m) => m.player_id === user.id);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -69,6 +77,57 @@ export default function CtfmlSquadDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleRemove = async (member: Member) => {
+    if (!squad || !confirm(`Remove ${member.player_alias} from ${squad.squad_name}?`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('ctfml_squad_members')
+        .delete()
+        .eq('squad_id', squad.id)
+        .eq('player_id', member.player_id);
+      if (error) throw error;
+      toast.success(`Removed ${member.player_alias}`);
+      load();
+    } catch (err: any) {
+      toast.error('Failed to remove: ' + (err?.message || 'error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLeave = async () => {
+    if (!squad || !user || !confirm(`Leave ${squad.squad_name}?`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('ctfml_squad_members')
+        .delete()
+        .eq('squad_id', squad.id)
+        .eq('player_id', user.id);
+      if (error) throw error;
+      toast.success('Left squad');
+      router.push('/league/ctfml/squads');
+    } catch (err: any) {
+      toast.error('Failed to leave: ' + (err?.message || 'error'));
+      setBusy(false);
+    }
+  };
+
+  const handleDisband = async () => {
+    if (!squad || !confirm(`Disband ${squad.squad_name}? This removes the squad and all its members.`)) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from('ctfml_squads').delete().eq('id', squad.id);
+      if (error) throw error;
+      toast.success('Squad disbanded');
+      router.push('/league/ctfml/squads');
+    } catch (err: any) {
+      toast.error('Failed to disband: ' + (err?.message || 'error'));
+      setBusy(false);
+    }
+  };
+
   return (
     <CtfmlBackground opacity={0.16}>
       <CtfmlHeader currentPage="squads" />
@@ -87,7 +146,7 @@ export default function CtfmlSquadDetailPage() {
         {!loading && !error && squad && (
           <>
             {/* Header */}
-            <div className="mt-4 flex items-center gap-5 mb-8">
+            <div className="mt-4 flex items-center gap-5 mb-8 flex-wrap">
               {squad.squad_banner_url ? (
                 <img
                   src={squad.squad_banner_url}
@@ -99,15 +158,35 @@ export default function CtfmlSquadDetailPage() {
                   {(squad.squad_tag || squad.squad_name)[0]?.toUpperCase()}
                 </div>
               )}
-              <div>
+              <div className="flex-1 min-w-0">
                 <h1 className="text-3xl md:text-4xl font-black text-white">{squad.squad_name}</h1>
-                <div className="flex items-center gap-3 mt-1 text-sm text-white/70">
+                <div className="flex items-center gap-3 mt-1 text-sm text-white/70 flex-wrap">
                   {squad.squad_tag && <span className="text-emerald-300 font-mono">[{squad.squad_tag}]</span>}
                   <span>{members.length}/{squad.max_players} members</span>
                   <span className="text-white/40">·</span>
                   <span>since {new Date(squad.created_at).toLocaleDateString()}</span>
                 </div>
               </div>
+
+              {/* Owner / member actions */}
+              {isOwner && (
+                <button
+                  onClick={handleDisband}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-lg bg-rose-500/20 border border-rose-400/40 text-rose-200 hover:bg-rose-500/30 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  Disband squad
+                </button>
+              )}
+              {!isOwner && isMember && (
+                <button
+                  onClick={handleLeave}
+                  disabled={busy}
+                  className="px-4 py-2 rounded-lg bg-rose-500/20 border border-rose-400/40 text-rose-200 hover:bg-rose-500/30 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  Leave squad
+                </button>
+              )}
             </div>
 
             {/* Roster */}
@@ -137,6 +216,17 @@ export default function CtfmlSquadDetailPage() {
                         </div>
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-md border ${badge.cls}`}>{badge.label}</span>
+                      {/* Owner can remove any non-owner member */}
+                      {isOwner && mem.role !== 'owner' && (
+                        <button
+                          onClick={() => handleRemove(mem)}
+                          disabled={busy}
+                          title="Remove from squad"
+                          className="text-xs px-2 py-1 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-200 hover:bg-rose-500/30 transition-colors disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   );
                 })}
