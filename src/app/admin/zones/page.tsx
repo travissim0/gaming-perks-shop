@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
-import Navbar from '@/components/Navbar';
+import NeutralNavbar from '@/components/home/NeutralNavbar';
 import SpaceBackground from '@/components/SpaceBackground';
 
 interface ZoneInstance {
@@ -647,7 +647,7 @@ export default function ZoneManagementPage() {
     <div className="min-h-screen relative">
       <SpaceBackground />
       <div className="relative z-10">
-        <Navbar user={user} />
+        <NeutralNavbar />
         <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
