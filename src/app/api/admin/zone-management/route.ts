@@ -31,12 +31,14 @@ export async function GET(request: NextRequest) {
   try {
     const mapsZone = new URL(request.url).searchParams.get('maps');
     if (mapsZone) {
-      const { data, error } = await supabaseClient
-        .from('zone_maps')
-        .select('*')
-        .eq('zone_key', mapsZone);
-      if (error) throw error;
-      return NextResponse.json({ success: true, maps: data || [] });
+      // Reuse the curated map_presets (name + thumbnail) for previews; they are
+      // matched to a zone's available lvl/lio client-side.
+      const [mapsRes, presetsRes] = await Promise.all([
+        supabaseClient.from('zone_maps').select('*').eq('zone_key', mapsZone),
+        supabaseClient.from('map_presets').select('id,display_name,cfg_file,lvl_file,lio_file,preview_image_url'),
+      ]);
+      if (mapsRes.error) throw mapsRes.error;
+      return NextResponse.json({ success: true, maps: mapsRes.data || [], presets: presetsRes.data || [] });
     }
 
     const { data: rows, error } = await supabaseClient

@@ -122,6 +122,7 @@ export default function ZoneManagementPage() {
   const [mapsLoading, setMapsLoading] = useState(false);
   const [mapForm, setMapForm] = useState<{ cfg: string; lvl: string; lio: string }>({ cfg: '', lvl: '', lio: '' });
   const [mapMode, setMapMode] = useState<'pair' | 'manual'>('pair');
+  const [mapPresets, setMapPresets] = useState<any[]>([]);
   const [scheduledOperations, setScheduledOperations] = useState<ScheduledOperation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -400,12 +401,20 @@ export default function ZoneManagementPage() {
   const mapPairs = buildMapPairs(activeMapRow);
   const currentPairKey = `${mapForm.lvl}|${mapForm.lio}`;
   const showManualMap = mapMode === 'manual' || mapPairs.length === 0;
+  // Presets (name + thumbnail) whose lvl/lio actually exist for this zone.
+  const zonePresets = (() => {
+    if (!activeMapRow) return [];
+    const lvls = new Set<string>(activeMapRow.lvls || []);
+    const lios = new Set<string>(activeMapRow.lios || []);
+    return mapPresets.filter(p => lvls.has(p.lvl_file) && lios.has(p.lio_file));
+  })();
 
   // Open the Maps panel for a zone and load its config inventory
   const openMaps = async (zone: Zone) => {
     setMapsZone(zone);
     setMapsLoading(true);
     setMapsRows([]);
+    setMapPresets([]);
     setMapForm({ cfg: '', lvl: '', lio: '' });
     setMapMode('pair');
     try {
@@ -413,6 +422,7 @@ export default function ZoneManagementPage() {
       const data = await res.json();
       const rows: any[] = data.maps || [];
       setMapsRows(rows);
+      setMapPresets(data.presets || []);
       const host = resolveHost(zone);
       const row = rows.find(r => r.server_key === host) || rows[0];
       if (row) setMapForm({ cfg: row.current_cfg || '', lvl: row.current_lvl || '', lio: row.current_lio || '' });
@@ -1312,31 +1322,73 @@ export default function ZoneManagementPage() {
                 </div>
 
                 {!showManualMap ? (
-                  /* Primary: pick a single map (lvl+lio pairing) */
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Map <span className="text-red-400">*</span>
-                      <span className="text-gray-500 font-normal"> — sets lvl + lio together</span>
-                    </label>
-                    <select
-                      value={mapPairs.some(p => p.key === currentPairKey) ? currentPairKey : ''}
-                      onChange={(e) => {
-                        const p = mapPairs.find(x => x.key === e.target.value);
-                        if (p) setMapForm(prev => ({ ...prev, lvl: p.lvl, lio: p.lio }));
-                      }}
-                      className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                    >
-                      <option value="">Select a map…</option>
-                      {mapPairs.map(p => (
-                        <option key={p.key} value={p.key}>{p.label}  ({p.lvl} / {p.lio})</option>
-                      ))}
-                    </select>
-                    {mapForm.lvl && mapForm.lio && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        lvl: <span className="text-white">{mapForm.lvl}</span> · lio: <span className="text-white">{mapForm.lio}</span>
-                      </p>
+                  /* Primary: pick a map — thumbnail grid for curated presets, plus
+                     a full-list dropdown for everything else. */
+                  <div className="space-y-3">
+                    {zonePresets.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Featured maps</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                          {zonePresets.map((p: any) => {
+                            const selected = mapForm.lvl === p.lvl_file && mapForm.lio === p.lio_file;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setMapForm(prev => ({ ...prev, lvl: p.lvl_file, lio: p.lio_file }))}
+                                title={`${p.display_name} — ${p.lvl_file} / ${p.lio_file}`}
+                                className={`relative rounded-lg overflow-hidden border text-left transition-all ${
+                                  selected ? 'border-cyan-400 ring-2 ring-cyan-400/50' : 'border-gray-700 hover:border-cyan-500/50'
+                                }`}
+                              >
+                                <div className="aspect-video bg-gray-800">
+                                  {p.preview_image_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={p.preview_image_url} alt={p.display_name} loading="lazy" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-2xl text-gray-600">🗺</div>
+                                  )}
+                                </div>
+                                <div className="px-2 py-1">
+                                  <div className="text-xs text-white truncate">{p.display_name}</div>
+                                  <div className="text-[10px] text-gray-400 truncate">{p.lvl_file}</div>
+                                </div>
+                                {selected && (
+                                  <div className="absolute top-1 right-1 bg-cyan-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">✓</div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     )}
-                    <button type="button" onClick={() => setMapMode('manual')} className="text-xs text-cyan-400 hover:text-cyan-300 mt-2">
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        {zonePresets.length > 0 ? 'Or pick any map' : 'Map'} <span className="text-red-400">*</span>
+                        <span className="text-gray-500 font-normal"> — sets lvl + lio together</span>
+                      </label>
+                      <select
+                        value={mapPairs.some(p => p.key === currentPairKey) ? currentPairKey : ''}
+                        onChange={(e) => {
+                          const p = mapPairs.find(x => x.key === e.target.value);
+                          if (p) setMapForm(prev => ({ ...prev, lvl: p.lvl, lio: p.lio }));
+                        }}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      >
+                        <option value="">Select a map…</option>
+                        {mapPairs.map(p => (
+                          <option key={p.key} value={p.key}>{p.label}  ({p.lvl} / {p.lio})</option>
+                        ))}
+                      </select>
+                      {mapForm.lvl && mapForm.lio && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          lvl: <span className="text-white">{mapForm.lvl}</span> · lio: <span className="text-white">{mapForm.lio}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <button type="button" onClick={() => setMapMode('manual')} className="text-xs text-cyan-400 hover:text-cyan-300">
                       Pick lvl / lio individually →
                     </button>
                   </div>
