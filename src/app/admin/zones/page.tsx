@@ -82,6 +82,33 @@ const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
   };
 });
 
+type MapPair = { key: string; label: string; lvl: string; lio: string };
+
+// Build the set of lvl/lio pairings for a zone's map inventory:
+//  1. every cfg's (lvl, lio) is a curated pairing (labelled by the cfg name)
+//  2. plus lvl/lio files that share a base name (e.g. bloodcrpl.lvl/.lio)
+// Deduped by (lvl|lio). When no pairing covers a desired combo, the UI falls
+// back to selecting lvl and lio individually.
+function buildMapPairs(row: any): MapPair[] {
+  if (!row) return [];
+  const seen = new Set<string>();
+  const pairs: MapPair[] = [];
+  const add = (label: string, lvl: string, lio: string) => {
+    if (!lvl || !lio) return;
+    const key = `${lvl}|${lio}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push({ key, label, lvl, lio });
+  };
+  for (const c of (row.cfgs || [])) add(String(c.cfg || '').replace(/\.cfg$/i, ''), c.lvl, c.lio);
+  const lios = new Set<string>(row.lios || []);
+  for (const lvl of (row.lvls || [])) {
+    const base = String(lvl).replace(/\.lvl$/i, '');
+    if (lios.has(`${base}.lio`)) add(base, lvl, `${base}.lio`);
+  }
+  return pairs.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export default function ZoneManagementPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -94,6 +121,7 @@ export default function ZoneManagementPage() {
   const [mapsRows, setMapsRows] = useState<any[]>([]);
   const [mapsLoading, setMapsLoading] = useState(false);
   const [mapForm, setMapForm] = useState<{ cfg: string; lvl: string; lio: string }>({ cfg: '', lvl: '', lio: '' });
+  const [mapMode, setMapMode] = useState<'pair' | 'manual'>('pair');
   const [scheduledOperations, setScheduledOperations] = useState<ScheduledOperation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -369,6 +397,9 @@ export default function ZoneManagementPage() {
   const activeMapRow = mapsZone
     ? (mapsRows.find(r => r.server_key === resolveHost(mapsZone)) || mapsRows[0])
     : null;
+  const mapPairs = buildMapPairs(activeMapRow);
+  const currentPairKey = `${mapForm.lvl}|${mapForm.lio}`;
+  const showManualMap = mapMode === 'manual' || mapPairs.length === 0;
 
   // Open the Maps panel for a zone and load its config inventory
   const openMaps = async (zone: Zone) => {
@@ -376,6 +407,7 @@ export default function ZoneManagementPage() {
     setMapsLoading(true);
     setMapsRows([]);
     setMapForm({ cfg: '', lvl: '', lio: '' });
+    setMapMode('pair');
     try {
       const res = await fetch(`/api/admin/zone-management?maps=${encodeURIComponent(zone.key)}`);
       const data = await res.json();
@@ -1279,50 +1311,82 @@ export default function ZoneManagementPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Config file</label>
-                  <select
-                    value={mapForm.cfg}
-                    onChange={(e) => onMapCfgChange(e.target.value)}
-                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                  >
-                    {!activeMapRow.cfgs?.some((c: any) => c.cfg === mapForm.cfg) && (
-                      <option value={mapForm.cfg}>{mapForm.cfg || '(active cfg)'}</option>
+                {!showManualMap ? (
+                  /* Primary: pick a single map (lvl+lio pairing) */
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Map <span className="text-red-400">*</span>
+                      <span className="text-gray-500 font-normal"> — sets lvl + lio together</span>
+                    </label>
+                    <select
+                      value={mapPairs.some(p => p.key === currentPairKey) ? currentPairKey : ''}
+                      onChange={(e) => {
+                        const p = mapPairs.find(x => x.key === e.target.value);
+                        if (p) setMapForm(prev => ({ ...prev, lvl: p.lvl, lio: p.lio }));
+                      }}
+                      className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                    >
+                      <option value="">Select a map…</option>
+                      {mapPairs.map(p => (
+                        <option key={p.key} value={p.key}>{p.label}  ({p.lvl} / {p.lio})</option>
+                      ))}
+                    </select>
+                    {mapForm.lvl && mapForm.lio && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        lvl: <span className="text-white">{mapForm.lvl}</span> · lio: <span className="text-white">{mapForm.lio}</span>
+                      </p>
                     )}
-                    {(activeMapRow.cfgs || []).map((c: any) => (
-                      <option key={c.cfg} value={c.cfg}>{c.cfg}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">LvlFile <span className="text-red-400">*</span></label>
-                    <select
-                      value={mapForm.lvl}
-                      onChange={(e) => setMapForm(prev => ({ ...prev, lvl: e.target.value }))}
-                      className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                    >
-                      <option value="">Select .lvl…</option>
-                      {(activeMapRow.lvls || []).map((f: string) => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
+                    <button type="button" onClick={() => setMapMode('manual')} className="text-xs text-cyan-400 hover:text-cyan-300 mt-2">
+                      Pick lvl / lio individually →
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">LioFile <span className="text-red-400">*</span></label>
-                    <select
-                      value={mapForm.lio}
-                      onChange={(e) => setMapForm(prev => ({ ...prev, lio: e.target.value }))}
-                      className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                    >
-                      <option value="">Select .lio…</option>
-                      {(activeMapRow.lios || []).map((f: string) => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
+                ) : (
+                  /* Fallback: choose lvl and lio separately (no pairing, or manual) */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">LvlFile <span className="text-red-400">*</span></label>
+                        <select
+                          value={mapForm.lvl}
+                          onChange={(e) => setMapForm(prev => ({ ...prev, lvl: e.target.value }))}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        >
+                          <option value="">Select .lvl…</option>
+                          {(activeMapRow.lvls || []).map((f: string) => (<option key={f} value={f}>{f}</option>))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">LioFile <span className="text-red-400">*</span></label>
+                        <select
+                          value={mapForm.lio}
+                          onChange={(e) => setMapForm(prev => ({ ...prev, lio: e.target.value }))}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                        >
+                          <option value="">Select .lio…</option>
+                          {(activeMapRow.lios || []).map((f: string) => (<option key={f} value={f}>{f}</option>))}
+                        </select>
+                      </div>
+                    </div>
+                    <details className="text-xs text-gray-400">
+                      <summary className="cursor-pointer hover:text-gray-200">Advanced: which config to edit ({mapForm.cfg || 'active'})</summary>
+                      <select
+                        value={mapForm.cfg}
+                        onChange={(e) => onMapCfgChange(e.target.value)}
+                        className="w-full mt-2 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      >
+                        {!activeMapRow.cfgs?.some((c: any) => c.cfg === mapForm.cfg) && (
+                          <option value={mapForm.cfg}>{mapForm.cfg || '(active cfg)'}</option>
+                        )}
+                        {(activeMapRow.cfgs || []).map((c: any) => (<option key={c.cfg} value={c.cfg}>{c.cfg}</option>))}
+                      </select>
+                    </details>
+                    {mapPairs.length > 0 && (
+                      <button type="button" onClick={() => setMapMode('pair')} className="text-xs text-cyan-400 hover:text-cyan-300">
+                        ← Back to map list
+                      </button>
+                    )}
                   </div>
-                </div>
+                )}
 
                 <div className="flex gap-3 pt-2">
                   <button
