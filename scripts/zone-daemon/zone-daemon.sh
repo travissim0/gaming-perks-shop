@@ -57,6 +57,8 @@ for v in SERVER_KEY ZONES_BASE SUPABASE_URL SUPABASE_SERVICE_KEY; do
 done
 SERVER_LABEL="${SERVER_LABEL:-$SERVER_KEY}"
 REBUILD_SCRIPT="${REBUILD_SCRIPT:-}"
+ROTATE_SCRIPT="${ROTATE_SCRIPT:-$SCRIPT_DIR/rotate-map.sh}"
+MAPS_REFRESH_CYCLES="${MAPS_REFRESH_CYCLES:-12}"  # refresh zone_maps every N poll cycles (~60s at 5s)
 declare -A ZONE_DIRS  2>/dev/null || true
 declare -A ZONE_NAMES 2>/dev/null || true
 
@@ -129,13 +131,40 @@ rebuild_zone() {
   return $rc
 }
 
-execute_action() {  # zone action -> propagates exit code
-  local zone="$1" action="$2"
+# Map rotation: point a zone's cfg at a new lvl/lio (file edit) then restart so
+# the zone loads it. rotate-map.sh does the edit; the daemon owns stop/start.
+swap_map() {
+  local tag="$1" cfg="$2" lvl="$3" lio="$4"
+  local dir; dir="$(zone_dir "$tag")"
+  [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { echo "zone dir not found for $tag ($dir)"; return 1; }
+  [ -x "$ROTATE_SCRIPT" ] || { echo "ROTATE_SCRIPT not executable ($ROTATE_SCRIPT)"; return 1; }
+  log "Swapping map for $tag: cfg='$cfg' lvl='$lvl' lio='$lio'"
+  local res; res="$("$ROTATE_SCRIPT" "$dir" swap-lvl-lio "$cfg" "$lvl" "$lio" 2>&1)"
+  if ! echo "$res" | jq -e '.success==true' >/dev/null 2>&1; then
+    local e; e="$(echo "$res" | jq -r '.error // empty' 2>/dev/null)"
+    echo "map edit failed: ${e:-$res}"; return 1
+  fi
+  # reload the new map with a restart
+  if restart_zone "$tag"; then
+    echo "map set on ${cfg:-active cfg}: lvl=$lvl lio=$lio (zone restarted)"
+    return 0
+  fi
+  echo "map edited but zone failed to restart"; return 1
+}
+
+execute_action() {  # zone action [args_json] -> propagates exit code
+  local zone="$1" action="$2" args="${3:-}"
   case "$action" in
     start)   start_zone   "$zone" ;;
     stop)    stop_zone    "$zone" ;;
     restart) restart_zone "$zone" ;;
     rebuild) rebuild_zone "$zone" ;;
+    swap-lvl-lio)
+      local cfg lvl lio
+      cfg=$(jq -r '.cfg // ""' <<<"$args" 2>/dev/null)
+      lvl=$(jq -r '.lvl // ""' <<<"$args" 2>/dev/null)
+      lio=$(jq -r '.lio // ""' <<<"$args" 2>/dev/null)
+      swap_map "$zone" "$cfg" "$lvl" "$lio" ;;
     *)       log "ERROR unknown action '$action'"; return 1 ;;
   esac
 }
@@ -170,6 +199,34 @@ report_status() {
   sb POST "zone_status" "$record" >/dev/null
 }
 
+# ---- map rotation reporting -------------------------------------------------
+# Upsert one zone_maps row per zone (keyed "<server>:<tag>") with the current
+# cfg/lvl/lio and the available cfgs/lvls/lios, so the console can offer swaps.
+build_maps_record() {  # tag -> JSON record (or empty if zone has no assets)
+  local tag="$1" dir; dir="$(zone_dir "$tag")"
+  [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir/assets" ] || return 1
+  [ -x "$ROTATE_SCRIPT" ] || return 1
+  local st cfgs lvls lios
+  st="$("$ROTATE_SCRIPT" "$dir" status 2>/dev/null)"
+  echo "$st" | jq -e '.success==true' >/dev/null 2>&1 || return 1
+  cfgs="$("$ROTATE_SCRIPT" "$dir" list-cfgs 2>/dev/null)"; echo "$cfgs" | jq -e 'type=="array"' >/dev/null 2>&1 || cfgs="[]"
+  lvls="$("$ROTATE_SCRIPT" "$dir" list-lvls 2>/dev/null)"; echo "$lvls" | jq -e 'type=="array"' >/dev/null 2>&1 || lvls="[]"
+  lios="$("$ROTATE_SCRIPT" "$dir" list-lios 2>/dev/null)"; echo "$lios" | jq -e 'type=="array"' >/dev/null 2>&1 || lios="[]"
+  jq -nc \
+    --arg id "${SERVER_KEY}:${tag}" --arg sk "$SERVER_KEY" --arg zk "$tag" \
+    --argjson st "$st" --argjson cfgs "$cfgs" --argjson lvls "$lvls" --argjson lios "$lios" \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
+    '{id:$id, server_key:$sk, zone_key:$zk, current_cfg:$st.cfg, current_lvl:$st.lvl,
+      current_lio:$st.lio, zone_name:$st.zoneName, cfgs:$cfgs, lvls:$lvls, lios:$lios, updated_at:$ts}'
+}
+
+report_maps() {
+  for tag in "${!ZONE_DIRS[@]}"; do
+    local rec; rec="$(build_maps_record "$tag")" || continue
+    sb POST "zone_maps" "$rec" >/dev/null
+  done
+}
+
 # ---- command processing -----------------------------------------------------
 process_commands() {
   local rows; rows="$(sb GET "zone_commands?status=eq.pending&host=eq.${SERVER_KEY}&order=created_at.asc")"
@@ -180,11 +237,12 @@ process_commands() {
     return 0
   fi
   echo "$rows" | jq -c '.[]' 2>/dev/null | while read -r row; do
-    local id action zone admin
+    local id action zone admin args
     id=$(jq -r '.id'       <<<"$row")
     action=$(jq -r '.action'   <<<"$row")
     zone=$(jq -r '.zone'     <<<"$row")
     admin=$(jq -r '.admin_id // empty' <<<"$row")
+    args=$(jq -c '.args // {}' <<<"$row" 2>/dev/null)
     [ -z "$id" ] || [ "$id" = "null" ] && continue
 
     log "CMD $id: $action $zone (host=$SERVER_KEY)"
@@ -192,7 +250,7 @@ process_commands() {
        "{\"status\":\"processing\",\"started_at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\"}" >/dev/null
 
     local msg status
-    if msg="$(execute_action "$zone" "$action" 2>&1)"; then status="completed"; else status="failed"; fi
+    if msg="$(execute_action "$zone" "$action" "$args" 2>&1)"; then status="completed"; else status="failed"; fi
     local result; result=$(printf '%s' "Zone $zone $action $status. ${msg}" | jq -Rs .)
     sb PATCH "zone_commands?id=eq.$id" \
        "{\"status\":\"$status\",\"completed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\",\"result_message\":$result}" >/dev/null
@@ -211,14 +269,19 @@ case "${1:-daemon}" in
   daemon)
     log "zone-daemon starting: key=$SERVER_KEY base=$ZONES_BASE zones=[${!ZONE_DIRS[*]}]"
     db_test || { log "FATAL db_test failed"; exit 1; }
+    report_maps   # initial maps snapshot
+    cyc=0
     while true; do
       report_status
       process_commands
+      cyc=$((cyc + 1))
+      if [ $((cyc % MAPS_REFRESH_CYCLES)) -eq 0 ]; then report_maps; fi
       sleep "$POLL_INTERVAL"
     done
     ;;
-  once)    report_status; process_commands ;;
+  once)    report_status; report_maps; process_commands ;;
   status)  build_zones_json | jq . ;;
+  maps)    for tag in "${!ZONE_DIRS[@]}"; do build_maps_record "$tag" | jq -c '{id,current_cfg,current_lvl,current_lio,cfgs:(.cfgs|length),lvls:(.lvls|length),lios:(.lios|length)}' 2>/dev/null; done ;;
   test)    db_test ;;
-  *) echo "Usage: $0 [daemon|once|status|test]"; exit 1 ;;
+  *) echo "Usage: $0 [daemon|once|status|maps|test]"; exit 1 ;;
 esac

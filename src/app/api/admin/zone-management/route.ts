@@ -11,7 +11,7 @@ const supabaseClient = createClient(
 );
 
 const STALE_SECONDS = 60; // a server's status row older than this = offline
-const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild'];
+const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'swap-lvl-lio'];
 
 // Server key -> human label + zone base dir. The daemon stores its SERVER_KEY
 // as the zone_status row id; this map gives the UI a friendly label without
@@ -26,8 +26,19 @@ type ZoneEntry = { name?: string; status?: string; directory?: string };
 
 // GET - merge every server's status row into a single per-zone view that
 // records which server(s) each zone lives on and where it is running.
-export async function GET() {
+// GET ?maps=<zoneKey> instead returns the per-server map inventory for a zone.
+export async function GET(request: NextRequest) {
   try {
+    const mapsZone = new URL(request.url).searchParams.get('maps');
+    if (mapsZone) {
+      const { data, error } = await supabaseClient
+        .from('zone_maps')
+        .select('*')
+        .eq('zone_key', mapsZone);
+      if (error) throw error;
+      return NextResponse.json({ success: true, maps: data || [] });
+    }
+
     const { data: rows, error } = await supabaseClient
       .from('zone_status')
       .select('*')
@@ -130,13 +141,16 @@ async function resolveTargetHost(zone: string, action: string): Promise<{ host: 
 // POST - queue a command for the daemon on the target server to execute.
 export async function POST(request: NextRequest) {
   try {
-    const { action, zone, admin_id, host } = await request.json();
+    const { action, zone, admin_id, host, args } = await request.json();
 
     if (!VALID_ACTIONS.includes(action)) {
       return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
     if (!zone) {
       return NextResponse.json({ success: false, error: 'Zone required' }, { status: 400 });
+    }
+    if (action === 'swap-lvl-lio' && (!args?.lvl || !args?.lio)) {
+      return NextResponse.json({ success: false, error: 'swap-lvl-lio requires args.lvl and args.lio' }, { status: 400 });
     }
 
     let targetHost: string | null = host || null;
@@ -157,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseClient
       .from('zone_commands')
-      .insert({ action, zone, admin_id: admin_id || null, host: targetHost, status: 'pending' })
+      .insert({ action, zone, admin_id: admin_id || null, host: targetHost, status: 'pending', args: args || null })
       .select()
       .single();
 
