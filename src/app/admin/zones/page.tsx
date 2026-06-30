@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import SpaceBackground from '@/components/SpaceBackground';
 
 interface Zone {
   name: string;
@@ -587,10 +588,14 @@ export default function ZoneManagementPage() {
     return `${seconds}s`;
   };
 
+  // Shared translucent "glass" panel style (matches the home page redesign)
+  const panelClass = "bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm border border-cyan-500/20 rounded-2xl shadow-xl shadow-cyan-500/5";
+
   if (!user || !hasAdminAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-white text-xl">
+      <div className="min-h-screen relative flex items-center justify-center">
+        <SpaceBackground />
+        <div className={`relative z-10 px-8 py-6 ${panelClass} text-cyan-100 text-xl`}>
           {authLoading ? 'Loading...' : 'Access Denied'}
         </div>
       </div>
@@ -598,14 +603,19 @@ export default function ZoneManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      <Navbar user={user} />
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="min-h-screen relative">
+      <SpaceBackground />
+      <div className="relative z-10">
+        <Navbar user={user} />
+        <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Infantry Zone Management
-          </h1>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-1.5 h-8 bg-gradient-to-b from-cyan-400 via-blue-400 to-green-400 rounded-full" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 uppercase tracking-wider">
+              Infantry Zone Management
+            </h1>
+          </div>
           <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-2">
             <p className="text-gray-400">
               Manage Infantry game zones remotely
@@ -678,7 +688,7 @@ export default function ZoneManagementPage() {
 
         {/* Command History Section */}
         {showHistory && (
-          <div className="mb-8 bg-gray-800/50 border border-gray-600/50 rounded-lg p-6">
+          <div className={`mb-8 p-6 ${panelClass}`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-white">Command History</h2>
               <button
@@ -752,7 +762,7 @@ export default function ZoneManagementPage() {
 
         {/* Scheduled Operations Section */}
         {scheduledOperations.length > 0 && (
-          <div className="mb-8 bg-gray-800/50 border border-gray-600/50 rounded-lg p-6">
+          <div className={`mb-8 p-6 ${panelClass}`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-white">Scheduled Operations</h2>
               <div className="flex items-center gap-2">
@@ -843,7 +853,7 @@ export default function ZoneManagementPage() {
         ) : sortedAndFilteredZones.length > 0 ? (
           <>
             {/* Desktop Table */}
-            <div className="hidden lg:block bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 overflow-hidden">
+            <div className={`hidden lg:block overflow-hidden ${panelClass}`}>
               {/* Table Header */}
               <div className="bg-gray-700/50 border-b border-gray-600/30">
                 <div className="grid grid-cols-12 gap-4 px-6 py-3 text-sm font-medium text-gray-300">
@@ -961,7 +971,7 @@ export default function ZoneManagementPage() {
               {sortedAndFilteredZones.map((zone) => (
                 <div
                   key={zone.key}
-                  className="bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-600/30 p-4"
+                  className={`p-4 ${panelClass}`}
                 >
                   {/* Zone Header */}
                   <div className="flex items-center justify-between mb-3">
@@ -1009,7 +1019,7 @@ export default function ZoneManagementPage() {
           </>
         
         ) : (
-          <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-600/20">
+          <div className={`text-center py-12 ${panelClass}`}>
             <div className="text-gray-400 text-lg mb-2">
               {zones.length === 0 ? 'No zones found' : 'No zones match your filter'}
             </div>
@@ -1024,17 +1034,17 @@ export default function ZoneManagementPage() {
         {/* Quick Stats */}
         {!loading && zones.length > 0 && (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-600/20 text-center">
+            <div className={`p-4 text-center ${panelClass}`}>
               <div className="text-2xl font-bold text-white">{zones.length}</div>
               <div className="text-sm text-gray-400">Total Zones</div>
             </div>
-            <div className="bg-green-900/20 rounded-lg p-4 border border-green-500/30 text-center">
+            <div className="bg-green-900/20 backdrop-blur-sm rounded-2xl p-4 border border-green-500/30 text-center">
               <div className="text-2xl font-bold text-green-300">
                 {zones.filter(z => z.status === 'RUNNING').length}
               </div>
               <div className="text-sm text-green-400">Running</div>
             </div>
-            <div className="bg-red-900/20 rounded-lg p-4 border border-red-500/30 text-center">
+            <div className="bg-red-900/20 backdrop-blur-sm rounded-2xl p-4 border border-red-500/30 text-center">
               <div className="text-2xl font-bold text-red-300">
                 {zones.filter(z => z.status === 'STOPPED').length}
               </div>
@@ -1046,8 +1056,8 @@ export default function ZoneManagementPage() {
 
       {/* Schedule Operation Modal */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900/95 border border-cyan-500/20 rounded-2xl shadow-xl shadow-cyan-500/10 p-6 max-w-md w-full">
             <h3 className="text-xl font-semibold text-white mb-4">Schedule Zone Operation</h3>
 
             <div className="space-y-4">
@@ -1173,6 +1183,7 @@ export default function ZoneManagementPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 } 
