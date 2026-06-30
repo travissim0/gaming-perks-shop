@@ -56,3 +56,8 @@ CREATE TABLE IF NOT EXISTS zone_maps (
   lios        jsonb DEFAULT '[]'::jsonb,   -- ["map.lio", ...]
   updated_at  timestamptz
 );
+
+-- Enable RLS with NO policies: the daemon (write) and the API (read) both use
+-- the service-role key, which bypasses RLS, so this just blocks anon/auth keys
+-- from reading the table directly. Nothing client-side queries it.
+ALTER TABLE zone_maps ENABLE ROW LEVEL SECURITY;
