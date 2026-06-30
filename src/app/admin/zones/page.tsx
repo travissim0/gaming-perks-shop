@@ -8,11 +8,31 @@ import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
 import SpaceBackground from '@/components/SpaceBackground';
 
+interface ZoneInstance {
+  server: string;
+  label: string;
+  status: 'RUNNING' | 'STOPPED' | 'UNKNOWN';
+  online: boolean;
+}
+
 interface Zone {
   name: string;
-  status: 'RUNNING' | 'STOPPED';
+  status: 'RUNNING' | 'STOPPED' | 'UNKNOWN';
   key: string;
   playerCount?: number;
+  runningOn?: string | null;
+  availableOn?: string[];
+  instances?: ZoneInstance[];
+}
+
+interface ServerInfo {
+  key: string;
+  label: string;
+  base_dir?: string | null;
+  hostname?: string | null;
+  last_update?: string;
+  age_seconds?: number;
+  online: boolean;
 }
 
 interface ZoneData {
@@ -66,6 +86,9 @@ export default function ZoneManagementPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [zones, setZones] = useState<Zone[]>([]);
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  // Per-zone server override (auto-detect + manual override). Keyed by zone key.
+  const [selectedHost, setSelectedHost] = useState<{ [zoneKey: string]: string }>({});
   const [scheduledOperations, setScheduledOperations] = useState<ScheduledOperation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -252,15 +275,19 @@ export default function ZoneManagementPage() {
       }
       
       const data = await response.json();
-      
-      // Convert to Zone array format
-      const zoneArray: Zone[] = Object.entries(data.zones).map(([key, zone]: [string, any]) => ({
+
+      // Convert to Zone array format (multi-server aware)
+      const zoneArray: Zone[] = Object.entries(data.zones || {}).map(([key, zone]: [string, any]) => ({
         key,
         name: zone.name,
         status: zone.status,
+        runningOn: zone.runningOn ?? null,
+        availableOn: zone.availableOn ?? [],
+        instances: zone.instances ?? [],
         playerCount: serverPlayerData[key] || 0
       }));
-      
+
+      setServers(data.servers || []);
       setZones(zoneArray);
       setLastUpdated(new Date());
       setMessage(null); // Clear any previous error messages
@@ -281,8 +308,19 @@ export default function ZoneManagementPage() {
     }
   };
 
+  // Resolve which server a command should target: explicit override, else the
+  // server the zone runs on, else the only server that has it (auto-detect).
+  const resolveHost = (zone: Zone): string => {
+    if (selectedHost[zone.key]) return selectedHost[zone.key];
+    if (zone.runningOn) return zone.runningOn;
+    if (zone.availableOn && zone.availableOn.length >= 1) return zone.availableOn[0];
+    return '';
+  };
+
+  const serverLabel = (key: string) => servers.find(s => s.key === key)?.label || key;
+
   // Execute zone action
-  const executeZoneAction = async (zoneKey: string, action: 'start' | 'stop' | 'restart') => {
+  const executeZoneAction = async (zoneKey: string, action: 'start' | 'stop' | 'restart' | 'rebuild', host?: string) => {
     try {
       setActionLoading(`${zoneKey}-${action}`);
       setMessage(null);
@@ -296,18 +334,21 @@ export default function ZoneManagementPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action, zone: zoneKey, admin_id: session?.user?.id }),
+        body: JSON.stringify({ action, zone: zoneKey, admin_id: session?.user?.id, host: host || undefined }),
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
-        toast.success(`Zone ${zoneKey} ${action} successful`);
+        toast.success(`${action} queued for ${zoneKey} on ${serverLabel(data.host)}`);
         // Single delayed refresh to allow action to take effect
         setTimeout(() => {
           fetchZoneStatus(false);
           fetchScheduledOperations();
         }, 2000);
+      } else if (response.status === 409) {
+        // Ambiguous target - tell the admin to pick a server explicitly.
+        toast.error(`Pick a server for ${zoneKey} first (it exists on ${(data.candidates || []).map(serverLabel).join(', ') || 'multiple servers'})`);
       } else {
         throw new Error(data.error || `Failed to ${action} zone`);
       }
@@ -630,6 +671,29 @@ export default function ZoneManagementPage() {
 
         {/* Removed inline message banner to prevent layout shift. Using toasts instead. */}
 
+        {/* Daemon / server status strip */}
+        {servers.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {servers.map((s) => (
+              <div
+                key={s.key}
+                title={`${s.hostname || ''} · ${s.base_dir || ''} · updated ${s.last_update ? new Date(s.last_update).toLocaleTimeString() : 'n/a'}`}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+                  s.online
+                    ? 'bg-green-900/20 text-green-300 border-green-500/30'
+                    : 'bg-red-900/20 text-red-300 border-red-500/30'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${s.online ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                {s.label}
+                <span className="text-gray-400">
+                  {s.online ? 'online' : `offline${typeof s.age_seconds === 'number' ? ` ${s.age_seconds}s` : ''}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Controls */}
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className="flex flex-wrap gap-2">
@@ -864,12 +928,7 @@ export default function ZoneManagementPage() {
                     Zone Name {getSortIcon('name')}
                   </button>
                   <div className="col-span-4 text-center">Actions</div>
-                  <button
-                    onClick={() => handleSort('key')}
-                    className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
-                  >
-                    Key {getSortIcon('key')}
-                  </button>
+                  <div className="col-span-2">Server</div>
                   <button
                     onClick={() => handleSort('status')}
                     className="col-span-2 text-left hover:text-white transition-colors flex items-center gap-2"
@@ -887,18 +946,19 @@ export default function ZoneManagementPage() {
                     key={zone.key}
                     className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-700/30 transition-colors"
                   >
-                    {/* Zone Name */}
-                    <div className="col-span-3 flex items-center">
+                    {/* Zone Name + key */}
+                    <div className="col-span-3 flex flex-col justify-center min-w-0">
                       <div className="text-white font-medium truncate">{zone.name}</div>
+                      <code className="text-cyan-300/80 text-xs">{zone.key}</code>
                     </div>
 
                     {/* Actions */}
-                    <div className="col-span-4 flex items-center justify-start gap-2">
+                    <div className="col-span-4 flex items-center justify-start gap-1.5">
                       {/* Start Button */}
                       <button
-                        onClick={() => executeZoneAction(zone.key, 'start')}
+                        onClick={() => executeZoneAction(zone.key, 'start', resolveHost(zone))}
                         disabled={zone.status === 'RUNNING' || actionLoading === `${zone.key}-start`}
-                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[52px] justify-center"
                       >
                         {actionLoading === `${zone.key}-start` ? (
                           <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
@@ -909,9 +969,9 @@ export default function ZoneManagementPage() {
 
                       {/* Stop Button */}
                       <button
-                        onClick={() => executeZoneAction(zone.key, 'stop')}
+                        onClick={() => executeZoneAction(zone.key, 'stop', resolveHost(zone))}
                         disabled={zone.status === 'STOPPED' || actionLoading === `${zone.key}-stop`}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[52px] justify-center"
                       >
                         {actionLoading === `${zone.key}-stop` ? (
                           <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
@@ -922,9 +982,9 @@ export default function ZoneManagementPage() {
 
                       {/* Restart Button */}
                       <button
-                        onClick={() => executeZoneAction(zone.key, 'restart')}
+                        onClick={() => executeZoneAction(zone.key, 'restart', resolveHost(zone))}
                         disabled={actionLoading === `${zone.key}-restart`}
-                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[60px] justify-center"
+                        className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[52px] justify-center"
                       >
                         {actionLoading === `${zone.key}-restart` ? (
                           <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
@@ -932,13 +992,43 @@ export default function ZoneManagementPage() {
                           <>🔄 Restart</>
                         )}
                       </button>
+
+                      {/* Rebuild Button */}
+                      <button
+                        onClick={() => executeZoneAction(zone.key, 'rebuild', resolveHost(zone))}
+                        disabled={actionLoading === `${zone.key}-rebuild`}
+                        title="Stop, deploy latest server build, and restart"
+                        className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[58px] justify-center"
+                      >
+                        {actionLoading === `${zone.key}-rebuild` ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>
+                        ) : (
+                          <>🛠 Rebuild</>
+                        )}
+                      </button>
                     </div>
 
-                    {/* Zone Key */}
+                    {/* Server (auto-detected, with override when on multiple) */}
                     <div className="col-span-2 flex items-center">
-                      <code className="text-cyan-300 text-sm bg-gray-900/50 px-2 py-1 rounded">
-                        {zone.key}
-                      </code>
+                      {(zone.availableOn?.length || 0) > 1 ? (
+                        <select
+                          value={resolveHost(zone)}
+                          onChange={(e) => setSelectedHost(prev => ({ ...prev, [zone.key]: e.target.value }))}
+                          className="w-full bg-gray-700 border border-gray-600 rounded text-white text-xs px-2 py-1 focus:outline-none focus:border-cyan-500"
+                        >
+                          {zone.availableOn!.map(h => (
+                            <option key={h} value={h}>
+                              {serverLabel(h)}{zone.runningOn === h ? ' ●' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : zone.availableOn?.length === 1 ? (
+                        <span className="text-xs text-gray-300 truncate" title={serverLabel(zone.availableOn[0])}>
+                          {serverLabel(zone.availableOn[0])}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500">—</span>
+                      )}
                     </div>
 
                     {/* Status */}
@@ -946,10 +1036,12 @@ export default function ZoneManagementPage() {
                       <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                         zone.status === 'RUNNING'
                           ? 'bg-green-900/30 text-green-300 border border-green-500/30'
+                          : zone.status === 'UNKNOWN'
+                          ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-500/30'
                           : 'bg-red-900/30 text-red-300 border border-red-500/30'
                       }`}>
                         <div className={`w-2 h-2 rounded-full ${
-                          zone.status === 'RUNNING' ? 'bg-green-400' : 'bg-red-400'
+                          zone.status === 'RUNNING' ? 'bg-green-400' : zone.status === 'UNKNOWN' ? 'bg-yellow-400' : 'bg-red-400'
                         }`}></div>
                         {zone.status}
                       </div>
@@ -978,7 +1070,7 @@ export default function ZoneManagementPage() {
                     <div className="flex items-center space-x-3">
                       {/* Status Indicator */}
                       <div className={`w-3 h-3 rounded-full ${
-                        zone.status === 'RUNNING' ? 'bg-green-400' : 'bg-red-400'
+                        zone.status === 'RUNNING' ? 'bg-green-400' : zone.status === 'UNKNOWN' ? 'bg-yellow-400' : 'bg-red-400'
                       }`}></div>
                       <div>
                         <h3 className="text-white font-medium truncate">{zone.name}</h3>
@@ -989,12 +1081,30 @@ export default function ZoneManagementPage() {
                     </div>
                   </div>
 
+                  {/* Server selector (when the zone exists on more than one server) */}
+                  {(zone.availableOn?.length || 0) > 1 ? (
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-400 mb-1">Server</label>
+                      <select
+                        value={resolveHost(zone)}
+                        onChange={(e) => setSelectedHost(prev => ({ ...prev, [zone.key]: e.target.value }))}
+                        className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-2 focus:outline-none focus:border-cyan-500"
+                      >
+                        {zone.availableOn!.map(h => (
+                          <option key={h} value={h}>{serverLabel(h)}{zone.runningOn === h ? ' ●' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (zone.availableOn?.length === 1 && (
+                    <div className="mb-2 text-xs text-gray-400">Server: <span className="text-gray-200">{serverLabel(zone.availableOn[0])}</span></div>
+                  ))}
+
                   {/* Action Dropdown */}
-                  <div className="mt-3">
+                  <div className="mt-1">
                     <select
                       onChange={(e) => {
                         if (e.target.value) {
-                          executeZoneAction(zone.key, e.target.value as 'start' | 'stop' | 'restart');
+                          executeZoneAction(zone.key, e.target.value as 'start' | 'stop' | 'restart' | 'rebuild', resolveHost(zone));
                           e.target.value = ''; // Reset dropdown
                         }
                       }}
@@ -1004,13 +1114,14 @@ export default function ZoneManagementPage() {
                       <option value="">
                         {actionLoading?.startsWith(zone.key) ? 'Processing...' : 'Select Action'}
                       </option>
-                      {zone.status === 'STOPPED' && (
+                      {zone.status !== 'RUNNING' && (
                         <option value="start">▶ Start Zone</option>
                       )}
                       {zone.status === 'RUNNING' && (
                         <option value="stop">⏹ Stop Zone</option>
                       )}
                       <option value="restart">🔄 Restart Zone</option>
+                      <option value="rebuild">🛠 Rebuild Zone</option>
                     </select>
                   </div>
                 </div>

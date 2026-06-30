@@ -1,0 +1,15 @@
+[Unit]
+Description=Infantry Zone Control Daemon (__SERVER_KEY__)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__SCRIPT_DIR__
+ExecStart=/bin/bash __SCRIPT_DIR__/zone-daemon.sh daemon
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
