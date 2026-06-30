@@ -10,6 +10,11 @@ WorkingDirectory=__SCRIPT_DIR__
 ExecStart=/bin/bash __SCRIPT_DIR__/zone-daemon.sh daemon
 Restart=always
 RestartSec=10
+# IMPORTANT: only kill the daemon process on stop/restart, NOT the zone
+# `screen` sessions it spawned (start/rebuild). With the default
+# KillMode=control-group, restarting the daemon would kill every zone it
+# launched (they live in the service cgroup). KillMode=process leaves them up.
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target

@@ -64,5 +64,11 @@ Server A (`travis@167.71.118.224`, base `/opt/infantry`, scripts in
 * `screen` sessions are per-user. The daemon controls zones started by **its own
   user**. A zone running under a different account won't be stoppable by the
   daemon until zones are consolidated under one service user.
+* The systemd unit **must** set `KillMode=process`. Zones the daemon starts/rebuilds
+  become `screen` processes inside the service cgroup; with the default
+  `KillMode=control-group`, restarting the daemon (deploy, crash, `Restart=always`)
+  would kill every daemon-started zone. `KillMode=process` kills only the daemon.
+  (Server B starts the daemon via cron/`setsid`, so this doesn't apply there; a
+  precise `pkill -xf "bash zone-daemon.sh daemon"` leaves zones running.)
 * `start`/`rebuild` of a zone require that zone's folder (and a `ZoneServer.dll`)
   to exist in the server's `ZONES_BASE`.
