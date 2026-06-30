@@ -19,4 +19,6 @@ ALTER TABLE zone_commands ADD COLUMN IF NOT EXISTS host text;
 -- required (the API only reads rows where source = 'zone-daemon', so these are
 -- already ignored), but keeps the table tidy:
 DELETE FROM zone_status WHERE id LIKE 'ping-test-%' OR id = 'current';
-UPDATE zone_commands SET status = 'cancelled' WHERE status IN ('pending', 'processing');
+-- NOTE: zone_commands has a CHECK constraint on status that does not allow
+-- 'cancelled', so delete orphaned old-format rows (no host) instead.
+DELETE FROM zone_commands WHERE status IN ('pending', 'processing') AND host IS NULL;

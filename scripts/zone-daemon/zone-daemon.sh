@@ -112,10 +112,21 @@ restart_zone() { stop_zone "$1"; sleep 2; start_zone "$1"; }
 rebuild_zone() {
   local tag="$1"
   if [ -z "$REBUILD_SCRIPT" ] || [ ! -x "$REBUILD_SCRIPT" ]; then
-    log "ERROR rebuild $tag: REBUILD_SCRIPT not set/executable ($REBUILD_SCRIPT)"; return 1
+    echo "REBUILD_SCRIPT not set or not executable ($REBUILD_SCRIPT)"
+    return 1
   fi
   log "Rebuilding $tag via $REBUILD_SCRIPT"
-  "$REBUILD_SCRIPT" "$tag" >>"$LOG_FILE" 2>&1
+  local out rc
+  out="$("$REBUILD_SCRIPT" "$tag" 2>&1)"
+  rc=$?
+  # full script output to the daemon log for debugging
+  printf '%s\n' "$out" >> "$LOG_FILE"
+  # concise summary back to the caller -> stored in zone_commands.result_message
+  local release steps
+  release="$(printf '%s' "$out" | grep -oE 'releases/download/[^/]+/' | head -1 | sed -E 's#releases/download/##; s#/$##')"
+  steps="$(printf '%s' "$out" | grep -E '==> |started |stopped |SKIP |ERROR' | sed -E 's/^[[:space:]]+//' | awk '{printf "%s%s", sep, $0; sep="; "}')"
+  echo "build=${release:-unknown}; ${steps:-no steps captured}"
+  return $rc
 }
 
 execute_action() {  # zone action -> propagates exit code
