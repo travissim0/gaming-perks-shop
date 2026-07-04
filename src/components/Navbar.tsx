@@ -2129,13 +2129,23 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         </Link>
                       )}
                       {(isAdmin || isZoneAdmin) && (
-                        <Link 
-                          href="/admin/zones" 
+                        <Link
+                          href="/admin/zones"
                           onClick={() => setIsMobileMenuOpen(false)}
                           className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 rounded transition-colors"
                         >
                           <span className="mr-3 text-orange-400">🖥️</span>
                           Zone Management
+                        </Link>
+                      )}
+                      {(isAdmin || isZoneAdmin) && (
+                        <Link
+                          href="/admin/infantry-db"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className="flex items-center px-3 py-2 text-gray-300 hover:text-sky-400 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <span className="mr-3 text-sky-400">🗄️</span>
+                          Database
                         </Link>
                       )}
                       {isAdmin && (

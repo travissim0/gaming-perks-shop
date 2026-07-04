@@ -305,6 +305,16 @@ export default function NeutralNavbar() {
                                 Zones
                               </Link>
                             )}
+                            {(isAdmin || isZoneAdmin) && (
+                              <Link
+                                href="/admin/infantry-db"
+                                className="flex items-center px-3 py-2 text-gray-300 hover:text-sky-400 hover:bg-sky-600/10 transition-all text-sm"
+                                onClick={() => setShowAdminDropdown(false)}
+                              >
+                                <span className="mr-2">🗄️</span>
+                                Database
+                              </Link>
+                            )}
                             {isCtfAdmin && (
                               <Link
                                 href="/admin/ctf"
