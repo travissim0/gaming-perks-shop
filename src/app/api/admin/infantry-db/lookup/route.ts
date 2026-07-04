@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSiteAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
+import { requireZoneAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
 import { lookupAccounts, LookupType } from '@/lib/infantryDb';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 const VALID_TYPES: LookupType[] = ['auto', 'account', 'alias', 'email'];
 
 export async function GET(request: NextRequest) {
-  const auth = await requireSiteAdmin(request);
+  const auth = await requireZoneAdmin(request);
   if (!auth.ok) return auth.response;
 
   const q = request.nextUrl.searchParams.get('q')?.trim() ?? '';

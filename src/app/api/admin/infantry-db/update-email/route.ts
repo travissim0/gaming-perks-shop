@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSiteAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
+import { requireZoneAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
 import { updateAccountEmail } from '@/lib/infantryDb';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireSiteAdmin(request);
+  const auth = await requireZoneAdmin(request);
   if (!auth.ok) return auth.response;
 
   let body: { accountId?: unknown; email?: unknown };

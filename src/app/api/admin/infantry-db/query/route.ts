@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSiteAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
+import { requireZoneAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
 import {
   assertReadOnlySql,
   escapeLike,
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 const MAX_ROWS = 500;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireSiteAdmin(request);
+  const auth = await requireZoneAdmin(request);
   if (!auth.ok) return auth.response;
 
   let body: { sql?: unknown; canned?: unknown; param?: unknown };

@@ -205,9 +205,13 @@ export default function InfantryDbPage() {
 
     const checkAdmin = async () => {
       try {
-        const { data, error } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single();
-        if (error || !data?.is_admin) {
-          toast.error('Unauthorized: Admin access required');
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_admin, is_zone_admin')
+          .eq('id', user.id)
+          .single();
+        if (error || (!data?.is_zone_admin && !data?.is_admin)) {
+          toast.error('Unauthorized: Zone admin access required');
           router.push('/dashboard');
           return;
         }

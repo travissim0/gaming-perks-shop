@@ -1434,7 +1434,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           </Link>
                         )}
                         {(isAdmin || isZoneAdmin) && (
-                          <Link 
+                          <Link
                             href="/admin/zones"
                             className="flex items-center px-2 py-1.5 text-gray-300 hover:text-orange-400 hover:bg-gradient-to-r hover:from-orange-600/10 hover:to-orange-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-orange-400 text-xs font-medium"
                             title="Zone Management"
@@ -1442,6 +1442,17 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           >
                             <span className="mr-2 text-orange-400">🖥️</span>
                             <span>Zones</span>
+                          </Link>
+                        )}
+                        {(isAdmin || isZoneAdmin) && (
+                          <Link
+                            href="/admin/infantry-db"
+                            className="flex items-center px-2 py-1.5 text-gray-300 hover:text-sky-400 hover:bg-gradient-to-r hover:from-sky-600/10 hover:to-sky-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-sky-400 text-xs font-medium"
+                            title="Game Database"
+                            onClick={() => setShowAdminDropdown(false)}
+                          >
+                            <span className="mr-2 text-sky-400">🗄️</span>
+                            <span>Database</span>
                           </Link>
                         )}
                         {isCtfAdmin && (

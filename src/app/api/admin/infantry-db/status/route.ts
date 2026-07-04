@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSiteAdmin } from '@/lib/adminApiAuth';
+import { requireZoneAdmin } from '@/lib/adminApiAuth';
 import { getInfantryDb, getCannedQueries } from '@/lib/infantryDb';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const auth = await requireSiteAdmin(request);
+  const auth = await requireZoneAdmin(request);
   if (!auth.ok) return auth.response;
 
   try {

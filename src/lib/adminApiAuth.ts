@@ -8,11 +8,12 @@ export interface AdminAuthResult {
 }
 
 /**
- * Server-side admin gate for API routes: validates the Bearer token and
- * requires profiles.is_admin. Returns a ready-to-send error response when
- * the caller is not an authenticated site admin.
+ * Server-side gate for the Infantry DB admin routes: validates the Bearer token
+ * and requires a zone admin (profiles.is_zone_admin) or a site admin
+ * (profiles.is_admin as a super-admin override). Returns a ready-to-send error
+ * response when the caller is not authorized.
  */
-export async function requireSiteAdmin(request: NextRequest): Promise<AdminAuthResult> {
+export async function requireZoneAdmin(request: NextRequest): Promise<AdminAuthResult> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
@@ -30,11 +31,11 @@ export async function requireSiteAdmin(request: NextRequest): Promise<AdminAuthR
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('is_admin')
+    .select('is_admin, is_zone_admin')
     .eq('id', user.id)
     .single();
-  if (profile?.is_admin !== true) {
-    return { ok: false, response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) };
+  if (profile?.is_zone_admin !== true && profile?.is_admin !== true) {
+    return { ok: false, response: NextResponse.json({ error: 'Zone admin access required' }, { status: 403 }) };
   }
 
   return { ok: true, userId: user.id };

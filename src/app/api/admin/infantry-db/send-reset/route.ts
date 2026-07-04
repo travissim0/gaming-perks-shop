@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSiteAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
+import { requireZoneAdmin, auditInfantryDb } from '@/lib/adminApiAuth';
 import { createResetToken } from '@/lib/infantryDb';
 import { sendResetEmail } from '@/lib/infantryMailer';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  const auth = await requireSiteAdmin(request);
+  const auth = await requireZoneAdmin(request);
   if (!auth.ok) return auth.response;
 
   let body: { accountId?: unknown };
