@@ -61,6 +61,13 @@ export interface InfantrySchema {
     created: string;
     expires: string;
   } | null;
+  zn: {
+    id: string;
+    name: string;
+    active: string;
+    ip: string;
+    port: string;
+  } | null;
 }
 
 interface InfantryDb {
@@ -122,6 +129,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
   const aliases = pickTable('Aliases', 'alias');
   const resetTokens = pickTable('ResetTokens', 'resetToken', 'resettokens');
   const bans = pickTable('Bans', 'ban');
+  const zones = pickTable('Zones', 'zone');
   if (!accounts || !aliases) {
     throw new Error(
       `Could not locate account/alias tables in this database. Tables found: ${[...tables.values()].join(', ') || '(none)'}. ` +
@@ -130,28 +138,33 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
   }
 
   // Fetch columns for every table we care about in one query, routed by name.
-  const wanted: Record<string, string | null> = { acc: accounts, ali: aliases, rt: resetTokens, bn: bans };
-  const colReq = pool.request();
-  const paramNames: string[] = [];
-  let pIdx = 0;
-  for (const tbl of Object.values(wanted)) {
-    if (!tbl) continue;
-    const p = `p${pIdx++}`;
-    colReq.input(p, tbl);
-    paramNames.push(`@${p}`);
-  }
-  const colRes = await colReq.query(
-    `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (${paramNames.join(', ')})`
-  );
   const accCols = new Map<string, string>();
   const aliCols = new Map<string, string>();
   const rtCols = new Map<string, string>();
   const bnCols = new Map<string, string>();
+  const znCols = new Map<string, string>();
+  const tableMaps: Array<[string, Map<string, string>]> = [];
+  const addTable = (tbl: string | null, m: Map<string, string>) => {
+    if (tbl) tableMaps.push([tbl, m]);
+  };
+  addTable(accounts, accCols);
+  addTable(aliases, aliCols);
+  addTable(resetTokens, rtCols);
+  addTable(bans, bnCols);
+  addTable(zones, znCols);
+
+  const colReq = pool.request();
+  const paramNames = tableMaps.map(([tbl], i) => {
+    colReq.input(`p${i}`, tbl);
+    return `@p${i}`;
+  });
+  const colRes = await colReq.query(
+    `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (${paramNames.join(', ')})`
+  );
+  const byName = new Map(tableMaps.map(([tbl, m]) => [tbl.toLowerCase(), m]));
   for (const r of colRes.recordset) {
-    const tn = String(r.TABLE_NAME);
-    const target =
-      tn === accounts ? accCols : tn === aliases ? aliCols : resetTokens && tn === resetTokens ? rtCols : bnCols;
-    target.set(String(r.COLUMN_NAME).toLowerCase(), String(r.COLUMN_NAME));
+    const m = byName.get(String(r.TABLE_NAME).toLowerCase());
+    if (m) m.set(String(r.COLUMN_NAME).toLowerCase(), String(r.COLUMN_NAME));
   }
 
   const col = (cols: Map<string, string>, table: string, ...candidates: string[]) => {
@@ -176,7 +189,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
       aliases,
       bans,
       resetTokens,
-      zones: pickTable('Zones', 'zone'),
+      zones,
       helpcalls: pickTable('Helpcalls', 'helps', 'helpcall'),
       histories: pickTable('Histories', 'history'),
       squads: pickTable('Squads', 'squad'),
@@ -223,6 +236,15 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
           zone: col(bnCols, bans, 'ZoneId', 'zone'),
           created: col(bnCols, bans, 'Created', 'created'),
           expires: col(bnCols, bans, 'Expires', 'expires'),
+        }
+      : null,
+    zn: zones
+      ? {
+          id: col(znCols, zones, 'ZoneId', 'id'),
+          name: col(znCols, zones, 'Name', 'name'),
+          active: col(znCols, zones, 'Active', 'active'),
+          ip: col(znCols, zones, 'Ip', 'IP', 'ip'),
+          port: col(znCols, zones, 'Port', 'port'),
         }
       : null,
   };
@@ -531,6 +553,163 @@ export async function updateAccountEmail(
     .query(`UPDATE [${t.accounts}] SET [${acc.email}] = @email WHERE [${acc.id}] = @id`);
 
   return { accountName: String(name), oldEmail: String(oldEmail ?? ''), newEmail };
+}
+
+// ---------------------------------------------------------------------------
+// Alias transfer
+// ---------------------------------------------------------------------------
+
+export interface AliasTransfer {
+  aliasId: number;
+  aliasName: string;
+  fromAccountId: number;
+  fromAccountName: string;
+  toAccountId: number;
+  toAccountName: string;
+}
+
+/** Resolve a target account by numeric ID or exact (case-insensitive) name. */
+async function resolveAccount(target: string): Promise<{ id: number; name: string }> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, acc } = schema;
+  const trimmed = target.trim();
+  if (!trimmed) throw new Error('Target account is required');
+
+  if (/^\d+$/.test(trimmed)) {
+    const r = await pool
+      .request()
+      .input('id', Number(trimmed))
+      .query(`SELECT [${acc.id}] AS id, [${acc.name}] AS name FROM [${t.accounts}] WHERE [${acc.id}] = @id`);
+    if (r.recordset.length === 0) throw new Error(`No account with ID ${trimmed}`);
+    return { id: Number(r.recordset[0].id), name: String(r.recordset[0].name) };
+  }
+  const r = await pool
+    .request()
+    .input('name', trimmed)
+    .query(`SELECT [${acc.id}] AS id, [${acc.name}] AS name FROM [${t.accounts}] WHERE [${acc.name}] = @name`);
+  if (r.recordset.length === 0) throw new Error(`No account named "${trimmed}" — try the numeric account ID`);
+  if (r.recordset.length > 1) throw new Error(`Multiple accounts named "${trimmed}" — use the numeric account ID`);
+  return { id: Number(r.recordset[0].id), name: String(r.recordset[0].name) };
+}
+
+async function getAliasOwner(
+  aliasId: number
+): Promise<{ name: string; accountId: number; accountName: string }> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, acc, ali } = schema;
+  const r = await pool
+    .request()
+    .input('id', aliasId)
+    .query(
+      `SELECT l.[${ali.name}] AS aliasName, a.[${acc.id}] AS accountId, a.[${acc.name}] AS accountName
+       FROM [${t.aliases}] l JOIN [${t.accounts}] a ON a.[${acc.id}] = l.[${ali.accountId}]
+       WHERE l.[${ali.id}] = @id`
+    );
+  if (r.recordset.length === 0) throw new Error(`Alias ${aliasId} not found`);
+  return {
+    name: String(r.recordset[0].aliasName),
+    accountId: Number(r.recordset[0].accountId),
+    accountName: String(r.recordset[0].accountName),
+  };
+}
+
+/** Resolve the transfer (no write) so the UI can confirm before executing. */
+export async function previewAliasTransfer(aliasId: number, target: string): Promise<AliasTransfer> {
+  const alias = await getAliasOwner(aliasId);
+  const to = await resolveAccount(target);
+  if (to.id === alias.accountId) {
+    throw new Error(`Alias "${alias.name}" is already on account "${to.name}"`);
+  }
+  return {
+    aliasId,
+    aliasName: alias.name,
+    fromAccountId: alias.accountId,
+    fromAccountName: alias.accountName,
+    toAccountId: to.id,
+    toAccountName: to.name,
+  };
+}
+
+/**
+ * Move an alias to another account. Only the alias's account FK changes — the
+ * alias keeps its id, so all Players/Stats rows (which key on AliasId) follow it.
+ */
+export async function transferAlias(aliasId: number, toAccountId: number): Promise<AliasTransfer> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, acc, ali } = schema;
+  const alias = await getAliasOwner(aliasId);
+  const to = await pool
+    .request()
+    .input('id', toAccountId)
+    .query(`SELECT [${acc.name}] AS name FROM [${t.accounts}] WHERE [${acc.id}] = @id`);
+  if (to.recordset.length === 0) throw new Error(`Target account ${toAccountId} not found`);
+  if (toAccountId === alias.accountId) {
+    throw new Error(`Alias "${alias.name}" is already on that account`);
+  }
+
+  await pool
+    .request()
+    .input('alias', aliasId)
+    .input('acct', toAccountId)
+    .query(`UPDATE [${t.aliases}] SET [${ali.accountId}] = @acct WHERE [${ali.id}] = @alias`);
+
+  return {
+    aliasId,
+    aliasName: alias.name,
+    fromAccountId: alias.accountId,
+    fromAccountName: alias.accountName,
+    toAccountId,
+    toAccountName: String(to.recordset[0].name),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Zone activation
+// ---------------------------------------------------------------------------
+
+export interface ZoneRow {
+  id: number;
+  name: string;
+  active: boolean;
+  ip: string | null;
+  port: number | null;
+}
+
+export async function listZones(): Promise<ZoneRow[]> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, zn } = schema;
+  if (!t.zones || !zn) return [];
+  const r = await pool.request().query(
+    `SELECT [${zn.id}] AS id, [${zn.name}] AS name, [${zn.active}] AS active, [${zn.ip}] AS ip, [${zn.port}] AS port
+     FROM [${t.zones}] ORDER BY [${zn.active}] DESC, [${zn.name}]`
+  );
+  return r.recordset.map((z: Record<string, unknown>) => ({
+    id: Number(z.id),
+    name: String(z.name),
+    active: Number(z.active) === 1,
+    ip: z.ip ? String(z.ip) : null,
+    port: z.port != null ? Number(z.port) : null,
+  }));
+}
+
+export async function setZoneActive(
+  zoneId: number,
+  active: boolean
+): Promise<{ zoneId: number; name: string; active: boolean }> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, zn } = schema;
+  if (!t.zones || !zn) throw new Error('This database has no zone table');
+  const cur = await pool
+    .request()
+    .input('id', zoneId)
+    .query(`SELECT [${zn.name}] AS name FROM [${t.zones}] WHERE [${zn.id}] = @id`);
+  if (cur.recordset.length === 0) throw new Error(`Zone ${zoneId} not found`);
+  await pool
+    .request()
+    .input('id', zoneId)
+    .input('active', active ? 1 : 0)
+    .query(`UPDATE [${t.zones}] SET [${zn.active}] = @active WHERE [${zn.id}] = @id`);
+  return { zoneId, name: String(cur.recordset[0].name), active };
 }
 
 export interface ResetToken {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +49,14 @@ interface ResetHistoryEntry {
   expireDate: string | null;
   used: boolean;
   status: 'used' | 'expired' | 'active';
+}
+
+interface ZoneRow {
+  id: number;
+  name: string;
+  active: boolean;
+  ip: string | null;
+  port: number | null;
 }
 
 interface CannedQueryMeta {
@@ -188,6 +196,14 @@ export default function InfantryDbPage() {
   const [sendingResetId, setSendingResetId] = useState<number | null>(null);
   const [openHistory, setOpenHistory] = useState<Set<number>>(new Set());
   const [resetHistory, setResetHistory] = useState<Record<number, ResetHistoryEntry[] | 'loading'>>({});
+  const [transferAliasId, setTransferAliasId] = useState<number | null>(null);
+  const [transferTarget, setTransferTarget] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [zones, setZones] = useState<ZoneRow[] | null>(null);
+  const [zonesOpen, setZonesOpen] = useState(false);
+  const [zonesLoading, setZonesLoading] = useState(false);
+  const [zoneFilter, setZoneFilter] = useState('');
+  const [togglingZone, setTogglingZone] = useState<number | null>(null);
 
   const [selectedCanned, setSelectedCanned] = useState<CannedQueryMeta | null>(null);
   const [cannedParam, setCannedParam] = useState('');
@@ -345,38 +361,111 @@ export default function InfantryDbPage() {
     fetchHistory(accountId);
   };
 
-  // Inline yes/no toast — resolves true if the admin clicks "Send it"
-  const confirmToast = (message: string): Promise<boolean> =>
+  // Inline yes/no confirmation toast — resolves true only if the admin confirms.
+  // Resolves false on cancel or after 25s so callers never hang.
+  const confirmToast = (message: string, confirmLabel = 'Confirm'): Promise<boolean> =>
     new Promise((resolve) => {
-      toast(
+      let settled = false;
+      const finish = (val: boolean, id?: string) => {
+        if (settled) return;
+        settled = true;
+        if (id) toast.dismiss(id);
+        resolve(val);
+      };
+      const id = toast(
         (t) => (
           <div className="flex flex-col gap-2">
             <span className="text-sm">{message}</span>
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  resolve(true);
-                }}
+                onClick={() => finish(true, t.id)}
                 className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-xs font-semibold text-white"
               >
-                Send it
+                {confirmLabel}
               </button>
               <button
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  resolve(false);
-                }}
+                onClick={() => finish(false, t.id)}
                 className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs text-white"
               >
-                No
+                Cancel
               </button>
             </div>
           </div>
         ),
-        { duration: 8000 }
+        { duration: Infinity }
       );
+      setTimeout(() => finish(false, id), 25000);
     });
+
+  const doTransfer = async (alias: InfantryAlias) => {
+    const target = transferTarget.trim();
+    if (!target) {
+      toast.error('Enter a target account (name or ID)');
+      return;
+    }
+    setTransferring(true);
+    try {
+      const pvRes = await authedFetch('/api/admin/infantry-db/transfer-alias', {
+        method: 'POST',
+        body: JSON.stringify({ aliasId: alias.aliasId, target }),
+      });
+      const pv = await pvRes.json();
+      if (!pvRes.ok) throw new Error(pv.error || 'Transfer failed');
+
+      const ok = await confirmToast(
+        `Move alias "${pv.aliasName}" from "${pv.fromAccountName}" to "${pv.toAccountName}" (#${pv.toAccountId})?`,
+        'Move it'
+      );
+      if (!ok) return;
+
+      const exRes = await authedFetch('/api/admin/infantry-db/transfer-alias', {
+        method: 'POST',
+        body: JSON.stringify({ aliasId: alias.aliasId, toAccountId: pv.toAccountId, confirm: true }),
+      });
+      const ex = await exRes.json();
+      if (!exRes.ok) throw new Error(ex.error || 'Transfer failed');
+      toast.success(`Moved "${ex.aliasName}" to ${ex.toAccountName}`);
+      setTransferAliasId(null);
+      setTransferTarget('');
+      runSearch();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Transfer failed');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const fetchZones = async () => {
+    setZonesLoading(true);
+    try {
+      const res = await authedFetch('/api/admin/infantry-db/zones');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load zones');
+      setZones(data.zones);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load zones');
+    } finally {
+      setZonesLoading(false);
+    }
+  };
+
+  const toggleZone = async (z: ZoneRow) => {
+    setTogglingZone(z.id);
+    try {
+      const res = await authedFetch('/api/admin/infantry-db/zones', {
+        method: 'POST',
+        body: JSON.stringify({ zoneId: z.id, active: !z.active }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Toggle failed');
+      setZones((prev) => (prev ? prev.map((x) => (x.id === z.id ? { ...x, active: data.active } : x)) : prev));
+      toast.success(`${data.name} → ${data.active ? 'active' : 'inactive'}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Toggle failed');
+    } finally {
+      setTogglingZone(null);
+    }
+  };
 
   const saveEmail = async (account: InfantryAccount) => {
     const email = editEmail.trim();
@@ -398,7 +487,7 @@ export default function InfantryDbPage() {
       );
       setEditingId(null);
       toast.success(`Email updated for ${data.accountName}`);
-      if (await confirmToast(`Also send a password-reset email to ${email}?`)) {
+      if (await confirmToast(`Also send a password-reset email to ${email}?`, 'Send it')) {
         await sendReset(updated, true);
       }
     } catch (err: unknown) {
@@ -631,18 +720,79 @@ export default function InfantryDbPage() {
                     </div>
 
                     {account.aliases.length > 0 && (
-                      <div className="mt-2">
-                        <SortableTable
-                          columns={['Alias', 'Created', 'Last Access', 'Hours', 'Last IP']}
-                          rows={account.aliases.map((a) => [
-                            a.stealth ? `${a.name} (stealth)` : a.name,
-                            a.creation?.slice(0, 10) ?? null,
-                            a.lastAccess ?? null,
-                            Math.round((a.timePlayedMinutes / 60) * 10) / 10,
-                            a.ip,
-                          ])}
-                          maxHeightClass="max-h-56"
-                        />
+                      <div className="mt-2 overflow-x-auto max-h-64 overflow-y-auto rounded-lg border border-gray-700/60">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-gray-950/95 backdrop-blur-sm z-10">
+                            <tr className="text-left text-gray-300">
+                              <th className="px-3 py-2 font-semibold">Alias</th>
+                              <th className="px-3 py-2 font-semibold">Created</th>
+                              <th className="px-3 py-2 font-semibold">Last Access</th>
+                              <th className="px-3 py-2 font-semibold">Hours</th>
+                              <th className="px-3 py-2 font-semibold">Last IP</th>
+                              <th className="px-3 py-2 font-semibold text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {account.aliases.map((a) => (
+                              <Fragment key={a.aliasId}>
+                                <tr className="border-b border-gray-800/60 last:border-0 odd:bg-white/[0.02] hover:bg-cyan-500/5">
+                                  <td className="px-3 py-1.5 text-white">
+                                    {a.name}
+                                    {a.stealth && <span className="ml-1 text-xs text-gray-500">(stealth)</span>}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-gray-400">{a.creation?.slice(0, 10) ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-400">{a.lastAccess ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-300">
+                                    {Math.round((a.timePlayedMinutes / 60) * 10) / 10}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-gray-500 font-mono text-xs">{a.ip ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-right">
+                                    <button
+                                      onClick={() => {
+                                        setTransferAliasId(transferAliasId === a.aliasId ? null : a.aliasId);
+                                        setTransferTarget('');
+                                      }}
+                                      title="Transfer this alias to another account"
+                                      className="px-2 py-0.5 bg-gray-700/60 hover:bg-cyan-600/40 border border-gray-600/40 rounded text-xs transition-colors whitespace-nowrap"
+                                    >
+                                      ⇄ Transfer
+                                    </button>
+                                  </td>
+                                </tr>
+                                {transferAliasId === a.aliasId && (
+                                  <tr className="bg-cyan-500/5">
+                                    <td colSpan={6} className="px-3 py-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs text-cyan-300">Move &quot;{a.name}&quot; to account:</span>
+                                        <input
+                                          value={transferTarget}
+                                          onChange={(e) => setTransferTarget(e.target.value)}
+                                          onKeyDown={(e) => e.key === 'Enter' && doTransfer(a)}
+                                          placeholder="account name or ID"
+                                          autoFocus
+                                          className="px-2.5 py-1 bg-black/50 border border-cyan-400/40 rounded text-sm text-white w-52 focus:outline-none focus:border-cyan-300"
+                                        />
+                                        <button
+                                          onClick={() => doTransfer(a)}
+                                          disabled={transferring}
+                                          className="px-3 py-1 bg-cyan-600/70 hover:bg-cyan-500/70 disabled:opacity-50 rounded text-xs font-semibold"
+                                        >
+                                          {transferring ? '...' : 'Move'}
+                                        </button>
+                                        <button
+                                          onClick={() => setTransferAliasId(null)}
+                                          className="px-2 py-1 text-gray-500 hover:text-gray-300 text-xs"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
 
@@ -814,6 +964,88 @@ export default function InfantryDbPage() {
               )}
             </section>
           )}
+
+          {/* Zone activation — collapsed by default */}
+          <section className={`${glass} border-orange-400/20 p-3.5`}>
+            <button
+              onClick={() => {
+                const next = !zonesOpen;
+                setZonesOpen(next);
+                if (next && !zones) fetchZones();
+              }}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <span className="text-base font-semibold text-orange-300">
+                🖥️ Zone Activation{' '}
+                <span className="text-xs font-normal text-gray-400">
+                  set any zone entry active/inactive in the directory (incl. ones not on the Zones console)
+                </span>
+              </span>
+              <span className="text-gray-500 text-sm">{zonesOpen ? '▲' : '▼'}</span>
+            </button>
+            {zonesOpen && (
+              <div className="mt-2.5">
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                  <input
+                    value={zoneFilter}
+                    onChange={(e) => setZoneFilter(e.target.value)}
+                    placeholder="Filter zones..."
+                    className="w-full sm:w-64 px-3 py-1.5 bg-black/40 border border-gray-600/60 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-400/60"
+                  />
+                  {zones && (
+                    <span className="text-xs text-gray-500">
+                      {zones.filter((z) => z.active).length} active / {zones.length} total
+                    </span>
+                  )}
+                </div>
+                {zonesLoading ? (
+                  <div className="text-sm text-gray-500">Loading...</div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-700/60">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-gray-950/95 backdrop-blur-sm z-10">
+                        <tr className="text-left text-gray-300">
+                          <th className="px-3 py-2 font-semibold">Zone</th>
+                          <th className="px-3 py-2 font-semibold">Address</th>
+                          <th className="px-3 py-2 font-semibold text-right">Active</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(zones ?? [])
+                          .filter((z) => z.name.toLowerCase().includes(zoneFilter.toLowerCase()))
+                          .map((z) => (
+                            <tr
+                              key={z.id}
+                              className="border-b border-gray-800/60 last:border-0 odd:bg-white/[0.02] hover:bg-orange-500/5"
+                            >
+                              <td className="px-3 py-1.5 text-white">
+                                {z.name} <span className="text-xs text-gray-500">#{z.id}</span>
+                              </td>
+                              <td className="px-3 py-1.5 text-gray-500 font-mono text-xs">
+                                {z.ip ?? '—'}:{z.port ?? '—'}
+                              </td>
+                              <td className="px-3 py-1.5 text-right">
+                                <button
+                                  onClick={() => toggleZone(z)}
+                                  disabled={togglingZone === z.id}
+                                  className={`px-2.5 py-0.5 rounded text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                                    z.active
+                                      ? 'bg-green-500/20 border-green-400/40 text-green-300 hover:bg-green-500/30'
+                                      : 'bg-gray-700/40 border-gray-600/40 text-gray-400 hover:bg-gray-600/40'
+                                  }`}
+                                >
+                                  {togglingZone === z.id ? '...' : z.active ? '● Active' : '○ Inactive'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
           {/* SQL console — collapsed by default */}
           <section className={`${glass} border-amber-400/20 p-3.5`}>
