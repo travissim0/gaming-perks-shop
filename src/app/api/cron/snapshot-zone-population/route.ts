@@ -27,46 +27,30 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch live zone population data
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const response = await fetch('https://jovan-s.com/zonepop-raw.php', {
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch zone data: ${response.status}`);
+    // Snapshot the live counts (from the on-host reporter, stored in
+    // zone_population_live) into the history table for the trend charts.
+    const supabase = getServiceSupabase();
+    const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: live, error: liveError } = await supabase
+      .from('zone_population_live')
+      .select('zone_title, player_count, updated_at')
+      .gte('updated_at', since);
+    if (liveError) {
+      throw new Error(`Failed to read live population: ${liveError.message}`);
     }
 
-    const text = await response.text();
-    if (!text || text.trim().length === 0) {
-      throw new Error('Empty response from zone API');
-    }
-
-    let apiZones: ApiZone[];
-    try {
-      apiZones = JSON.parse(text);
-    } catch {
-      throw new Error('Invalid JSON from zone API');
-    }
-
-    if (!Array.isArray(apiZones)) {
-      throw new Error('Zone API returned non-array data');
-    }
+    const apiZones: ApiZone[] = (live || []).map((z) => ({
+      Title: z.zone_title,
+      PlayerCount: typeof z.player_count === 'number' ? z.player_count : 0,
+    }));
 
     const snapshotId = crypto.randomUUID();
 
-    // Calculate total players across all API zones
     const totalServerPlayers = apiZones.reduce(
       (sum, z) => sum + (typeof z.PlayerCount === 'number' ? z.PlayerCount : 0),
       0
     );
 
-    // Record every zone from the API directly
     const rows = apiZones
       .filter((z) => z.Title && typeof z.Title === 'string')
       .map((z) => ({
@@ -78,11 +62,10 @@ export async function GET(request: NextRequest) {
       }));
 
     if (rows.length === 0) {
-      throw new Error('No valid zones found in API response');
+      // No fresh live data (reporter down) — record nothing rather than false zeros.
+      return NextResponse.json({ success: true, zones_recorded: 0, note: 'no fresh live data' });
     }
 
-    // Insert via service client
-    const supabase = getServiceSupabase();
     const { error } = await supabase.from('zone_population_history').insert(rows);
 
     if (error) {

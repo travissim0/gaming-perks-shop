@@ -1,54 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServiceSupabase } from '@/lib/supabase';
+
+// How stale a reported count may be before we ignore it (reporter runs ~1/min).
+const FRESH_MS = 5 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
   try {
-    // Fetch data from the Free Infantry zone population API with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    // Live per-zone counts come from the on-host reporter (see
+    // scripts/zone-daemon/zone-pop-reporter.py), stored in zone_population_live.
+    const supabase = getServiceSupabase();
+    const since = new Date(Date.now() - FRESH_MS).toISOString();
+    const { data, error } = await supabase
+      .from('zone_population_live')
+      .select('zone_title, player_count, updated_at')
+      .gte('updated_at', since);
 
-    const response = await fetch('https://jovan-s.com/zonepop-raw.php', {
-      next: { revalidate: 60 }, // Cache for 60 seconds
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch server data: ${response.status} ${response.statusText}`);
+    if (error) {
+      throw new Error(`Failed to read zone population: ${error.message}`);
     }
 
-    const text = await response.text();
-    
-    // Validate that we have content before parsing
-    if (!text || text.trim().length === 0) {
-      throw new Error('Empty response from server API');
-    }
+    const activeZones = (data || [])
+      .filter((zone) => typeof zone.player_count === 'number' && zone.player_count > 0)
+      .map((zone) => ({ title: zone.zone_title || 'Unknown Zone', playerCount: zone.player_count }))
+      .sort((a, b) => b.playerCount - a.playerCount);
 
-    let zones;
-    try {
-      zones = JSON.parse(text);
-    } catch (parseError) {
-      console.error('JSON Parse Error:', parseError);
-      console.error('Response text:', text.substring(0, 500)); // Log first 500 chars
-      throw new Error('Invalid JSON response from server API');
-    }
-
-    // Ensure zones is an array
-    if (!Array.isArray(zones)) {
-      throw new Error('Server API returned non-array data');
-    }
-    
-    // Filter zones with players > 0, extract Title and PlayerCount, and sort by player count (high to low)
-    const activeZones = zones
-      .filter((zone: any) => zone && typeof zone.PlayerCount === 'number' && zone.PlayerCount > 0)
-      .map((zone: any) => ({
-        title: zone.Title || 'Unknown Zone',
-        playerCount: zone.PlayerCount
-      }))
-      .sort((a: any, b: any) => b.playerCount - a.playerCount);
-
-    // Calculate totals
-    const totalPlayers = activeZones.reduce((sum: number, zone: any) => sum + zone.playerCount, 0);
+    const totalPlayers = activeZones.reduce((sum, zone) => sum + zone.playerCount, 0);
     const activeGames = activeZones.length;
 
     return NextResponse.json({
@@ -56,11 +32,10 @@ export async function GET(request: NextRequest) {
       stats: {
         totalPlayers,
         activeGames,
-        serverStatus: totalPlayers > 0 ? 'online' : 'offline'
+        serverStatus: totalPlayers > 0 ? 'online' : 'offline',
       },
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
     });
-
   } catch (error: any) {
     console.error('Error fetching server status:', error);
     
