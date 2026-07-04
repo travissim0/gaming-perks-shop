@@ -117,10 +117,10 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
     );
   }
 
-  const colReq = pool.request().input('a', sql.NVarChar, accounts).input('b', sql.NVarChar, aliases);
+  const colReq = pool.request().input('a', accounts).input('b', aliases);
   let colFilter = '@a, @b';
   if (resetTokens) {
-    colReq.input('c', sql.NVarChar, resetTokens);
+    colReq.input('c', resetTokens);
     colFilter += ', @c';
   }
   const colRes = await colReq.query(
@@ -278,7 +278,7 @@ export async function runReadQuery(
   const request = pool.request();
   request.stream = true;
   for (const [key, value] of Object.entries(opts.params ?? {})) {
-    request.input(key, typeof value === 'number' ? sql.Int : sql.NVarChar, value);
+    request.input(key, value);
   }
 
   const prefixed = `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;\nSET LOCK_TIMEOUT 5000;\n${sqlText}`;
@@ -363,7 +363,7 @@ export async function lookupAccounts(query: string, type: LookupType): Promise<I
 
   const idRes = await pool
     .request()
-    .input('q', sql.NVarChar, pattern)
+    .input('q', pattern)
     .query(`SELECT DISTINCT TOP 25 u.id FROM (${parts.join(' UNION ')}) u ORDER BY u.id DESC`);
   const ids: number[] = idRes.recordset.map((r: { id: number }) => Number(r.id)).filter(Number.isFinite);
   if (ids.length === 0) return [];
@@ -429,7 +429,7 @@ export async function updateAccountEmail(
 
   const current = await pool
     .request()
-    .input('id', sql.Int, accountId)
+    .input('id', accountId)
     .query(
       `SELECT [${acc.name}] AS name, [${acc.email}] AS email FROM [${t.accounts}] WHERE [${acc.id}] = @id`
     );
@@ -440,8 +440,8 @@ export async function updateAccountEmail(
 
   await pool
     .request()
-    .input('id', sql.Int, accountId)
-    .input('email', sql.NVarChar, newEmail)
+    .input('id', accountId)
+    .input('email', newEmail)
     .query(`UPDATE [${t.accounts}] SET [${acc.email}] = @email WHERE [${acc.id}] = @id`);
 
   return { accountName: String(name), oldEmail: String(oldEmail ?? ''), newEmail };
@@ -472,7 +472,7 @@ export async function createResetToken(accountId: number): Promise<ResetToken> {
 
   const accRes = await pool
     .request()
-    .input('id', sql.Int, accountId)
+    .input('id', accountId)
     .query(`SELECT [${acc.name}] AS name, [${acc.email}] AS email FROM [${t.accounts}] WHERE [${acc.id}] = @id`);
   if (accRes.recordset.length === 0) throw new Error(`Account ${accountId} not found`);
   const name = String(accRes.recordset[0].name);
@@ -486,10 +486,10 @@ export async function createResetToken(accountId: number): Promise<ResetToken> {
 
   const ins = await pool
     .request()
-    .input('account', sql.BigInt, accountId)
-    .input('name', sql.NVarChar, name)
-    .input('token', sql.NVarChar, token)
-    .input('ttl', sql.Int, ttlHours)
+    .input('account', accountId)
+    .input('name', name)
+    .input('token', token)
+    .input('ttl', ttlHours)
     .query(
       `INSERT INTO [${t.resetTokens}] ([${rt.accountId}], [${rt.name}], [${rt.token}], [${rt.expireDate}], [${rt.tokenUsed}])
        OUTPUT CONVERT(varchar(19), INSERTED.[${rt.expireDate}], 120) AS expireDate
@@ -518,8 +518,8 @@ export async function getResetHistory(accountId: number, limit = 10): Promise<Re
 
   const res = await pool
     .request()
-    .input('account', sql.BigInt, accountId)
-    .input('limit', sql.Int, Math.min(Math.max(limit, 1), 50))
+    .input('account', accountId)
+    .input('limit', Math.min(Math.max(limit, 1), 50))
     .query(
       `SELECT TOP (@limit) [${rt.id}] AS tokenId, [${rt.token}] AS token,
               CONVERT(varchar(19), [${rt.expireDate}], 120) AS expireDate,
