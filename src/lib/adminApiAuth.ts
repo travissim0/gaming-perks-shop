@@ -46,7 +46,7 @@ export async function requireSiteAdmin(request: NextRequest): Promise<AdminAuthR
  */
 export async function auditInfantryDb(
   adminId: string,
-  action: 'lookup' | 'update_email' | 'query' | 'canned',
+  action: 'lookup' | 'update_email' | 'query' | 'canned' | 'send_reset',
   details: Record<string, unknown>
 ): Promise<void> {
   try {

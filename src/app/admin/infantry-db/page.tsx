@@ -109,14 +109,14 @@ function SortableTable({ columns, rows, maxHeightClass = 'max-h-[30rem]' }: {
 
   return (
     <div className={`overflow-x-auto ${maxHeightClass} overflow-y-auto rounded-lg border border-gray-700/60`}>
-      <table className="w-full text-xs">
+      <table className="w-full text-sm">
         <thead className="sticky top-0 bg-gray-950/95 backdrop-blur-sm z-10">
-          <tr className="text-left text-gray-400">
+          <tr className="text-left text-gray-300">
             {columns.map((col, i) => (
               <th
                 key={i}
                 onClick={() => toggleSort(i)}
-                className="px-2.5 py-1.5 font-semibold border-b border-gray-700/60 whitespace-nowrap cursor-pointer select-none hover:text-cyan-300 transition-colors"
+                className="px-3 py-2 font-semibold border-b border-gray-700/60 whitespace-nowrap cursor-pointer select-none hover:text-cyan-300 transition-colors"
                 title="Click to sort"
               >
                 {col}
@@ -129,7 +129,7 @@ function SortableTable({ columns, rows, maxHeightClass = 'max-h-[30rem]' }: {
           {sorted.map((row, ri) => (
             <tr key={ri} className="border-b border-gray-800/60 last:border-0 odd:bg-white/[0.02] hover:bg-cyan-500/5">
               {row.map((cell, ci) => (
-                <td key={ci} className="px-2.5 py-1 text-gray-300 whitespace-nowrap max-w-sm truncate">
+                <td key={ci} className="px-3 py-1.5 text-gray-200 whitespace-nowrap max-w-sm truncate">
                   {cell === null ? <span className="text-gray-600 italic">null</span> : String(cell)}
                 </td>
               ))}
@@ -137,7 +137,7 @@ function SortableTable({ columns, rows, maxHeightClass = 'max-h-[30rem]' }: {
           ))}
         </tbody>
       </table>
-      {rows.length === 0 && <div className="p-3 text-center text-gray-500 text-xs">No rows.</div>}
+      {rows.length === 0 && <div className="p-3 text-center text-gray-500 text-sm">No rows.</div>}
     </div>
   );
 }
@@ -147,6 +147,11 @@ export default function InfantryDbPage() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
+
+  // SpaceBackground positions stars with Math.random(), so it only matches
+  // after mount — gate it client-side to avoid a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [status, setStatus] = useState<DbStatus | null>(null);
 
@@ -158,6 +163,7 @@ export default function InfantryDbPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editEmail, setEditEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+  const [sendingResetId, setSendingResetId] = useState<number | null>(null);
 
   const [selectedCanned, setSelectedCanned] = useState<CannedQueryMeta | null>(null);
   const [cannedParam, setCannedParam] = useState('');
@@ -166,6 +172,7 @@ export default function InfantryDbPage() {
   const [running, setRunning] = useState<string | null>(null);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [resultLabel, setResultLabel] = useState('');
+  const [resultCollapsed, setResultCollapsed] = useState(false);
 
   const authedFetch = useCallback(async (url: string, init?: RequestInit) => {
     const {
@@ -249,6 +256,62 @@ export default function InfantryDbPage() {
     }
   };
 
+  const sendReset = async (account: InfantryAccount, silent = false): Promise<boolean> => {
+    if (!account.email) {
+      if (!silent) toast.error('No email on file for this account');
+      return false;
+    }
+    setSendingResetId(account.accountId);
+    try {
+      const res = await authedFetch('/api/admin/infantry-db/send-reset', {
+        method: 'POST',
+        body: JSON.stringify({ accountId: account.accountId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send reset');
+      toast.success(`Reset email sent to ${data.email}`);
+      return true;
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send reset');
+      return false;
+    } finally {
+      setSendingResetId(null);
+    }
+  };
+
+  // Inline yes/no toast — resolves true if the admin clicks "Send it"
+  const confirmToast = (message: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      toast(
+        (t) => (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm">{message}</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  resolve(true);
+                }}
+                className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-xs font-semibold text-white"
+              >
+                Send it
+              </button>
+              <button
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  resolve(false);
+                }}
+                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs text-white"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 8000 }
+      );
+    });
+
   const saveEmail = async (account: InfantryAccount) => {
     const email = editEmail.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -263,11 +326,15 @@ export default function InfantryDbPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Update failed');
+      const updated = { ...account, email };
       setAccounts((prev) =>
-        prev ? prev.map((a) => (a.accountId === account.accountId ? { ...a, email } : a)) : prev
+        prev ? prev.map((a) => (a.accountId === account.accountId ? updated : a)) : prev
       );
       setEditingId(null);
       toast.success(`Email updated for ${data.accountName}`);
+      if (await confirmToast(`Also send a password-reset email to ${email}?`)) {
+        await sendReset(updated, true);
+      }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Update failed');
     } finally {
@@ -286,6 +353,7 @@ export default function InfantryDbPage() {
       if (!res.ok) throw new Error(data.error || 'Query failed');
       setResult(data);
       setResultLabel(label);
+      setResultCollapsed(false);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Query failed');
     } finally {
@@ -326,7 +394,7 @@ export default function InfantryDbPage() {
   if (loading || checkingAdmin) {
     return (
       <div className="min-h-screen relative text-white">
-        <SpaceBackground />
+        {mounted && <SpaceBackground />}
         <div className="relative z-10">
           <NeutralNavbar />
           <div className="flex items-center justify-center pt-32 text-gray-400">Loading...</div>
@@ -340,31 +408,31 @@ export default function InfantryDbPage() {
 
   return (
     <div className="min-h-screen relative text-white">
-      <SpaceBackground />
+      {mounted && <SpaceBackground />}
       <div className="relative z-10">
         <NeutralNavbar />
         <main className="max-w-7xl mx-auto px-4 py-5 space-y-4">
           {/* Header row */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-baseline gap-3">
-              <h1 className="text-xl font-bold tracking-wide bg-gradient-to-r from-cyan-300 via-blue-300 to-purple-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold tracking-wide bg-gradient-to-r from-cyan-300 via-blue-300 to-purple-400 bg-clip-text text-transparent">
                 🗄️ Infantry Game Database
               </h1>
-              <span className="text-xs text-gray-500 hidden sm:inline">
+              <span className="text-sm text-gray-400 hidden sm:inline">
                 lookup · email fixes · read-only queries
               </span>
             </div>
             {status === null ? (
-              <span className="text-xs text-gray-500">Checking connection...</span>
+              <span className="text-sm text-gray-400">Checking connection...</span>
             ) : status.connected ? (
-              <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-green-500/10 border border-green-400/30 text-green-300 text-xs backdrop-blur-sm">
+              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-400/30 text-green-300 text-sm backdrop-blur-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                 {status.database} · {status.counts?.accounts.toLocaleString()} accounts ·{' '}
                 {status.counts?.aliases.toLocaleString()} aliases
               </span>
             ) : (
               <span
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-400/30 text-red-300 text-xs"
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 border border-red-400/30 text-red-300 text-sm"
                 title={status.error}
               >
                 ● offline — {status.error?.slice(0, 100)}
@@ -381,12 +449,12 @@ export default function InfantryDbPage() {
                 onChange={(e) => setSearchQ(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runSearch()}
                 placeholder="Search account name, alias, or email..."
-                className="flex-1 px-3 py-1.5 text-sm bg-black/40 border border-gray-600/60 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400/70 focus:ring-1 focus:ring-cyan-400/30"
+                className="flex-1 px-3.5 py-2 text-base bg-black/40 border border-gray-600/60 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400/70 focus:ring-1 focus:ring-cyan-400/30"
               />
               <select
                 value={searchType}
                 onChange={(e) => setSearchType(e.target.value as LookupType)}
-                className="px-2.5 py-1.5 text-sm bg-black/40 border border-gray-600/60 rounded-lg text-gray-200 focus:outline-none focus:border-cyan-400/70"
+                className="px-3 py-2 text-sm bg-black/40 border border-gray-600/60 rounded-lg text-gray-200 focus:outline-none focus:border-cyan-400/70"
               >
                 <option value="auto">Everything</option>
                 <option value="account">Account name</option>
@@ -396,7 +464,7 @@ export default function InfantryDbPage() {
               <button
                 onClick={runSearch}
                 disabled={searching}
-                className="px-5 py-1.5 text-sm bg-cyan-500/80 hover:bg-cyan-400/80 disabled:opacity-50 rounded-lg font-semibold text-white transition-colors shadow-lg shadow-cyan-500/20"
+                className="px-6 py-2 text-sm bg-cyan-500/80 hover:bg-cyan-400/80 disabled:opacity-50 rounded-lg font-semibold text-white transition-colors shadow-lg shadow-cyan-500/20"
               >
                 {searching ? '...' : 'Search'}
               </button>
@@ -404,27 +472,27 @@ export default function InfantryDbPage() {
 
             {accounts !== null && (
               <div className="mt-3 space-y-2.5">
-                {accounts.length === 0 && <div className="text-gray-500 text-xs">No accounts matched.</div>}
+                {accounts.length === 0 && <div className="text-gray-500 text-sm">No accounts matched.</div>}
                 {accounts.map((account) => (
                   <div
                     key={account.accountId}
                     className="bg-black/30 backdrop-blur-sm rounded-lg border border-gray-700/50 p-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap text-sm">
+                      <div className="flex items-center gap-2 flex-wrap text-base">
                         <span className="font-bold text-white">{account.name}</span>
-                        <span className="text-[11px] text-gray-500">#{account.accountId}</span>
+                        <span className="text-xs text-gray-500">#{account.accountId}</span>
                         {account.permission > 0 && (
-                          <span className="px-1.5 py-0.5 rounded bg-purple-500/15 border border-purple-400/30 text-purple-300 text-[11px]">
+                          <span className="px-1.5 py-0.5 rounded bg-purple-500/15 border border-purple-400/30 text-purple-300 text-xs">
                             perm {account.permission}
                           </span>
                         )}
                         {account.silenced && (
-                          <span className="px-1.5 py-0.5 rounded bg-red-500/15 border border-red-400/30 text-red-300 text-[11px]">
+                          <span className="px-1.5 py-0.5 rounded bg-red-500/15 border border-red-400/30 text-red-300 text-xs">
                             silenced
                           </span>
                         )}
-                        <span className="text-[11px] text-gray-500">
+                        <span className="text-xs text-gray-400">
                           created {account.dateCreated?.slice(0, 10) ?? '?'} · last {account.lastAccess ?? '?'}
                         </span>
                       </div>
@@ -435,26 +503,26 @@ export default function InfantryDbPage() {
                             value={editEmail}
                             onChange={(e) => setEditEmail(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && saveEmail(account)}
-                            className="px-2.5 py-1 bg-black/50 border border-cyan-400/50 rounded text-xs text-white w-60 focus:outline-none focus:border-cyan-300"
+                            className="px-3 py-1.5 bg-black/50 border border-cyan-400/50 rounded text-sm text-white w-64 focus:outline-none focus:border-cyan-300"
                             autoFocus
                           />
                           <button
                             onClick={() => saveEmail(account)}
                             disabled={savingEmail}
-                            className="px-2.5 py-1 bg-green-500/80 hover:bg-green-400/80 disabled:opacity-50 rounded text-xs font-semibold"
+                            className="px-3 py-1.5 bg-green-500/80 hover:bg-green-400/80 disabled:opacity-50 rounded text-sm font-semibold"
                           >
                             {savingEmail ? '...' : 'Save'}
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
-                            className="px-2.5 py-1 bg-gray-700/80 hover:bg-gray-600/80 rounded text-xs"
+                            className="px-3 py-1.5 bg-gray-700/80 hover:bg-gray-600/80 rounded text-sm"
                           >
                             ✕
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs ${account.email ? 'text-cyan-300' : 'text-red-400 italic'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm ${account.email ? 'text-cyan-300' : 'text-red-400 italic'}`}>
                             {account.email || '(no email)'}
                           </span>
                           <button
@@ -462,10 +530,18 @@ export default function InfantryDbPage() {
                               setEditingId(account.accountId);
                               setEditEmail(account.email);
                             }}
-                            className="px-1.5 py-0.5 bg-gray-700/60 hover:bg-gray-600/60 border border-gray-600/40 rounded text-[11px] transition-colors"
+                            className="px-2 py-1 bg-gray-700/60 hover:bg-gray-600/60 border border-gray-600/40 rounded text-xs transition-colors"
                             title="Edit email"
                           >
-                            ✏️
+                            ✏️ Edit
+                          </button>
+                          <button
+                            onClick={() => sendReset(account)}
+                            disabled={sendingResetId === account.accountId || !account.email}
+                            title={account.email ? 'Email a password-reset link to this account' : 'No email on file'}
+                            className="px-2 py-1 bg-cyan-600/40 hover:bg-cyan-500/40 border border-cyan-500/40 rounded text-xs transition-colors disabled:opacity-40"
+                          >
+                            {sendingResetId === account.accountId ? '...' : '✉️ Send reset'}
                           </button>
                         </div>
                       )}
@@ -499,20 +575,22 @@ export default function InfantryDbPage() {
             ) : (
               <div className="space-y-1.5">
                 {CATEGORY_ORDER.filter((cat) => cannedByCategory.has(cat)).map((cat) => (
-                  <div key={cat} className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500 w-24 shrink-0">{cat}</span>
+                  <div key={cat} className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-purple-300/90 w-28 shrink-0">
+                      {cat}
+                    </span>
                     {cannedByCategory.get(cat)!.map((canned) => (
                       <button
                         key={canned.key}
                         onClick={() => clickCanned(canned)}
                         disabled={running !== null}
                         title={canned.description}
-                        className={`px-2.5 py-0.5 text-xs rounded-full border transition-colors disabled:opacity-50 ${
+                        className={`px-3 py-1 text-sm rounded-full border transition-colors disabled:opacity-50 ${
                           selectedCanned?.key === canned.key
                             ? 'bg-purple-500/25 border-purple-400/60 text-purple-200'
                             : running === canned.key
                               ? 'bg-purple-500/25 border-purple-400/60 text-purple-200 animate-pulse'
-                              : 'bg-white/[0.04] border-gray-600/50 text-gray-300 hover:border-purple-400/50 hover:text-purple-200'
+                              : 'bg-white/[0.04] border-gray-600/50 text-gray-200 hover:border-purple-400/50 hover:text-purple-200'
                         }`}
                       >
                         {canned.label}
@@ -522,27 +600,27 @@ export default function InfantryDbPage() {
                   </div>
                 ))}
                 {selectedCanned?.param && (
-                  <div className="flex items-center gap-2 pt-1.5 border-t border-gray-700/40 mt-2">
-                    <span className="text-xs text-purple-300">{selectedCanned.label}</span>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-700/40 mt-2">
+                    <span className="text-sm text-purple-300">{selectedCanned.label}</span>
                     <input
                       type="text"
                       value={cannedParam}
                       onChange={(e) => setCannedParam(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && runSelectedCanned()}
                       placeholder={selectedCanned.param.placeholder}
-                      className="w-56 px-2.5 py-1 bg-black/40 border border-purple-400/40 rounded text-xs text-white placeholder-gray-600 focus:outline-none focus:border-purple-300"
+                      className="w-60 px-3 py-1.5 bg-black/40 border border-purple-400/40 rounded text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-300"
                       autoFocus
                     />
                     <button
                       onClick={runSelectedCanned}
                       disabled={running !== null}
-                      className="px-3 py-1 bg-purple-500/70 hover:bg-purple-400/70 disabled:opacity-50 rounded text-xs font-semibold"
+                      className="px-4 py-1.5 bg-purple-500/70 hover:bg-purple-400/70 disabled:opacity-50 rounded text-sm font-semibold"
                     >
                       {running === selectedCanned.key ? '...' : 'Run'}
                     </button>
                     <button
                       onClick={() => setSelectedCanned(null)}
-                      className="px-2 py-1 text-gray-500 hover:text-gray-300 text-xs"
+                      className="px-2 py-1.5 text-gray-500 hover:text-gray-300 text-sm"
                     >
                       ✕
                     </button>
@@ -556,21 +634,39 @@ export default function InfantryDbPage() {
           {result && (
             <section className={`${glass} border-gray-500/20 p-3.5`}>
               <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                <h2 className="text-sm font-semibold text-white">
-                  {resultLabel}{' '}
-                  <span className="font-normal text-gray-400">
-                    — {result.rowCount} row{result.rowCount === 1 ? '' : 's'}
-                    {result.truncated && ' (capped at 500)'} · {result.ms}ms
-                  </span>
-                </h2>
                 <button
-                  onClick={downloadCsv}
-                  className="px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.1] border border-gray-600/50 rounded text-xs transition-colors"
+                  onClick={() => setResultCollapsed((c) => !c)}
+                  className="flex items-center gap-2 text-left"
+                  title={resultCollapsed ? 'Expand' : 'Collapse'}
                 >
-                  ⬇ CSV
+                  <span className="text-gray-500 text-xs">{resultCollapsed ? '▶' : '▼'}</span>
+                  <h2 className="text-base font-semibold text-white">
+                    {resultLabel}{' '}
+                    <span className="font-normal text-sm text-gray-400">
+                      — {result.rowCount} row{result.rowCount === 1 ? '' : 's'}
+                      {result.truncated && ' (capped at 500)'} · {result.ms}ms
+                    </span>
+                  </h2>
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={downloadCsv}
+                    className="px-3 py-1 bg-white/[0.05] hover:bg-white/[0.1] border border-gray-600/50 rounded text-sm transition-colors"
+                  >
+                    ⬇ CSV
+                  </button>
+                  <button
+                    onClick={() => setResult(null)}
+                    title="Dismiss results"
+                    className="px-2.5 py-1 bg-white/[0.05] hover:bg-red-500/20 border border-gray-600/50 hover:border-red-400/40 rounded text-sm transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <SortableTable key={`${resultLabel}-${result.ms}`} columns={result.columns} rows={result.rows} />
+              {!resultCollapsed && (
+                <SortableTable key={`${resultLabel}-${result.ms}`} columns={result.columns} rows={result.rows} />
+              )}
             </section>
           )}
 
@@ -580,10 +676,10 @@ export default function InfantryDbPage() {
               onClick={() => setConsoleOpen((o) => !o)}
               className="w-full flex items-center justify-between text-left"
             >
-              <span className="text-sm font-semibold text-amber-300">
-                📟 SQL Console <span className="text-[11px] font-normal text-gray-500">read-only · single SELECT · 500 row cap</span>
+              <span className="text-base font-semibold text-amber-300">
+                📟 SQL Console <span className="text-xs font-normal text-gray-400">read-only · single SELECT · 500 row cap</span>
               </span>
-              <span className="text-gray-500 text-xs">{consoleOpen ? '▲' : '▼'}</span>
+              <span className="text-gray-500 text-sm">{consoleOpen ? '▲' : '▼'}</span>
             </button>
             {consoleOpen && (
               <div className="mt-2.5">
@@ -593,12 +689,12 @@ export default function InfantryDbPage() {
                   placeholder={'SELECT TOP 10 * FROM account ORDER BY dateCreated DESC'}
                   rows={3}
                   spellCheck={false}
-                  className="w-full px-3 py-2 bg-black/60 border border-gray-600/60 rounded-lg text-green-300 font-mono text-xs placeholder-gray-700 focus:outline-none focus:border-amber-400/60"
+                  className="w-full px-3 py-2 bg-black/60 border border-gray-600/60 rounded-lg text-green-300 font-mono text-sm placeholder-gray-700 focus:outline-none focus:border-amber-400/60"
                 />
                 <button
                   onClick={() => runQuery({ sql: consoleSql }, 'Console query')}
                   disabled={running !== null || !consoleSql.trim()}
-                  className="mt-1.5 px-4 py-1.5 bg-amber-500/80 hover:bg-amber-400/80 disabled:opacity-50 rounded-lg text-xs font-semibold text-white transition-colors"
+                  className="mt-1.5 px-5 py-1.5 bg-amber-500/80 hover:bg-amber-400/80 disabled:opacity-50 rounded-lg text-sm font-semibold text-white transition-colors"
                 >
                   {running === 'console' ? 'Running...' : 'Run Query'}
                 </button>

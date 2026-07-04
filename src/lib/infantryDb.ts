@@ -1,4 +1,5 @@
 import sql from 'mssql';
+import { randomBytes } from 'crypto';
 
 // Server-only access to the Infantry Online game database (MS SQL Server).
 // Credentials come from .env.local (INFANTRY_DB_*) and never reach the client.
@@ -41,6 +42,13 @@ export interface InfantrySchema {
     ip: string;
     stealth: string | null;
   };
+  rt: {
+    accountId: string;
+    name: string;
+    token: string;
+    expireDate: string;
+    tokenUsed: string;
+  } | null;
 }
 
 interface InfantryDb {
@@ -100,6 +108,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
 
   const accounts = pickTable('Accounts', 'account');
   const aliases = pickTable('Aliases', 'alias');
+  const resetTokens = pickTable('ResetTokens', 'resetToken', 'resettokens');
   if (!accounts || !aliases) {
     throw new Error(
       `Could not locate account/alias tables in this database. Tables found: ${[...tables.values()].join(', ') || '(none)'}. ` +
@@ -107,15 +116,21 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
     );
   }
 
-  const colRes = await pool
-    .request()
-    .input('a', sql.NVarChar, accounts)
-    .input('b', sql.NVarChar, aliases)
-    .query(`SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (@a, @b)`);
+  const colReq = pool.request().input('a', sql.NVarChar, accounts).input('b', sql.NVarChar, aliases);
+  let colFilter = '@a, @b';
+  if (resetTokens) {
+    colReq.input('c', sql.NVarChar, resetTokens);
+    colFilter += ', @c';
+  }
+  const colRes = await colReq.query(
+    `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (${colFilter})`
+  );
   const accCols = new Map<string, string>();
   const aliCols = new Map<string, string>();
+  const rtCols = new Map<string, string>();
   for (const r of colRes.recordset) {
-    const target = String(r.TABLE_NAME) === accounts ? accCols : aliCols;
+    const tn = String(r.TABLE_NAME);
+    const target = tn === accounts ? accCols : tn === aliases ? aliCols : rtCols;
     target.set(String(r.COLUMN_NAME).toLowerCase(), String(r.COLUMN_NAME));
   }
 
@@ -140,7 +155,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
       accounts,
       aliases,
       bans: pickTable('Bans', 'ban'),
-      resetTokens: pickTable('ResetTokens', 'resetToken', 'resettokens'),
+      resetTokens,
       zones: pickTable('Zones', 'zone'),
       helpcalls: pickTable('Helpcalls', 'helps', 'helpcall'),
       histories: pickTable('Histories', 'history'),
@@ -167,6 +182,15 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
       ip: col(aliCols, aliases, 'IpAddress', 'IPAddress', 'ip'),
       stealth: optCol(aliCols, 'Stealth'),
     },
+    rt: resetTokens
+      ? {
+          accountId: col(rtCols, resetTokens, 'AccountId', 'account'),
+          name: col(rtCols, resetTokens, 'Name'),
+          token: col(rtCols, resetTokens, 'Token'),
+          expireDate: col(rtCols, resetTokens, 'ExpireDate', 'expireDate'),
+          tokenUsed: col(rtCols, resetTokens, 'TokenUsed', 'tokenUsed'),
+        }
+      : null,
   };
 }
 
@@ -419,6 +443,58 @@ export async function updateAccountEmail(
     .query(`UPDATE [${t.accounts}] SET [${acc.email}] = @email WHERE [${acc.id}] = @id`);
 
   return { accountName: String(name), oldEmail: String(oldEmail ?? ''), newEmail };
+}
+
+export interface ResetToken {
+  accountName: string;
+  email: string;
+  token: string;
+  expireDate: string;
+}
+
+/**
+ * Reproduces the Infantry account server's password-reset flow: inserts one new
+ * row into the reset-token table (append-only — never touches existing rows) and
+ * returns the generated token so the caller can email the reset link.
+ *
+ * The token matches the live format exactly: base64 of 8 random bytes (12 chars).
+ * Expiry is computed with the SQL server's own clock (DATEADD/GETDATE) so it can't
+ * drift due to timezone differences between the web host and the DB box.
+ */
+export async function createResetToken(accountId: number): Promise<ResetToken> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, acc, rt } = schema;
+  if (!t.resetTokens || !rt) {
+    throw new Error('This database has no reset-token table');
+  }
+
+  const accRes = await pool
+    .request()
+    .input('id', sql.Int, accountId)
+    .query(`SELECT [${acc.name}] AS name, [${acc.email}] AS email FROM [${t.accounts}] WHERE [${acc.id}] = @id`);
+  if (accRes.recordset.length === 0) throw new Error(`Account ${accountId} not found`);
+  const name = String(accRes.recordset[0].name);
+  const email = String(accRes.recordset[0].email ?? '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Account has no valid email address on file');
+  }
+
+  const token = randomBytes(8).toString('base64'); // 12-char base64, matches live tokens
+  const ttlHours = Math.max(1, parseInt(process.env.INFANTRY_RESET_TTL_HOURS || '24', 10) || 24);
+
+  const ins = await pool
+    .request()
+    .input('account', sql.BigInt, accountId)
+    .input('name', sql.NVarChar, name)
+    .input('token', sql.NVarChar, token)
+    .input('ttl', sql.Int, ttlHours)
+    .query(
+      `INSERT INTO [${t.resetTokens}] ([${rt.accountId}], [${rt.name}], [${rt.token}], [${rt.expireDate}], [${rt.tokenUsed}])
+       OUTPUT CONVERT(varchar(19), INSERTED.[${rt.expireDate}], 120) AS expireDate
+       VALUES (@account, @name, @token, DATEADD(HOUR, @ttl, GETDATE()), 0)`
+    );
+
+  return { accountName: name, email, token, expireDate: String(ins.recordset[0].expireDate) };
 }
 
 // ---------------------------------------------------------------------------
