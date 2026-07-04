@@ -29,6 +29,14 @@ interface InfantryAccount {
   aliases: InfantryAlias[];
 }
 
+interface ResetHistoryEntry {
+  tokenId: number;
+  token: string;
+  expireDate: string | null;
+  used: boolean;
+  status: 'used' | 'expired' | 'active';
+}
+
 interface CannedQueryMeta {
   key: string;
   label: string;
@@ -164,6 +172,8 @@ export default function InfantryDbPage() {
   const [editEmail, setEditEmail] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
   const [sendingResetId, setSendingResetId] = useState<number | null>(null);
+  const [openHistory, setOpenHistory] = useState<Set<number>>(new Set());
+  const [resetHistory, setResetHistory] = useState<Record<number, ResetHistoryEntry[] | 'loading'>>({});
 
   const [selectedCanned, setSelectedCanned] = useState<CannedQueryMeta | null>(null);
   const [cannedParam, setCannedParam] = useState('');
@@ -270,6 +280,9 @@ export default function InfantryDbPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send reset');
       toast.success(`Reset email sent to ${data.email}`);
+      // Reveal/refresh the history so the admin sees the new token land
+      setOpenHistory((prev) => new Set(prev).add(account.accountId));
+      fetchHistory(account.accountId);
       return true;
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to send reset');
@@ -277,6 +290,41 @@ export default function InfantryDbPage() {
     } finally {
       setSendingResetId(null);
     }
+  };
+
+  const fetchHistory = async (accountId: number) => {
+    setResetHistory((prev) => ({ ...prev, [accountId]: 'loading' }));
+    try {
+      const res = await authedFetch(`/api/admin/infantry-db/reset-history?accountId=${accountId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load history');
+      setResetHistory((prev) => ({ ...prev, [accountId]: data.history }));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load history');
+      setResetHistory((prev) => {
+        const next = { ...prev };
+        delete next[accountId];
+        return next;
+      });
+      setOpenHistory((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+    }
+  };
+
+  const toggleHistory = (accountId: number) => {
+    if (openHistory.has(accountId)) {
+      setOpenHistory((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
+      });
+      return;
+    }
+    setOpenHistory((prev) => new Set(prev).add(accountId));
+    fetchHistory(accountId);
   };
 
   // Inline yes/no toast — resolves true if the admin clicks "Send it"
@@ -543,6 +591,17 @@ export default function InfantryDbPage() {
                           >
                             {sendingResetId === account.accountId ? '...' : '✉️ Send reset'}
                           </button>
+                          <button
+                            onClick={() => toggleHistory(account.accountId)}
+                            title="Show this account's password-reset tokens"
+                            className={`px-2 py-1 border rounded text-xs transition-colors ${
+                              openHistory.has(account.accountId)
+                                ? 'bg-gray-600/60 border-gray-500/50 text-white'
+                                : 'bg-gray-700/60 hover:bg-gray-600/60 border-gray-600/40'
+                            }`}
+                          >
+                            🕑 History
+                          </button>
                         </div>
                       )}
                     </div>
@@ -560,6 +619,48 @@ export default function InfantryDbPage() {
                           ])}
                           maxHeightClass="max-h-56"
                         />
+                      </div>
+                    )}
+
+                    {openHistory.has(account.accountId) && (
+                      <div className="mt-2 bg-black/40 rounded-lg border border-gray-700/50 p-2.5">
+                        <div className="text-xs font-semibold text-gray-400 mb-1.5">🕑 Password-reset history</div>
+                        {resetHistory[account.accountId] === 'loading' ? (
+                          <div className="text-xs text-gray-500">Loading...</div>
+                        ) : (resetHistory[account.accountId] as ResetHistoryEntry[])?.length ? (
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-gray-500 border-b border-gray-700/60">
+                                <th className="py-1 pr-4 font-medium">Token</th>
+                                <th className="py-1 pr-4 font-medium">Expires</th>
+                                <th className="py-1 pr-4 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(resetHistory[account.accountId] as ResetHistoryEntry[]).map((h) => (
+                                <tr key={h.tokenId} className="border-b border-gray-800/60 last:border-0">
+                                  <td className="py-1 pr-4 font-mono text-gray-300 text-xs">{h.token}</td>
+                                  <td className="py-1 pr-4 text-gray-400">{h.expireDate ?? '—'}</td>
+                                  <td className="py-1 pr-4">
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-xs ${
+                                        h.status === 'active'
+                                          ? 'bg-green-500/15 border border-green-400/30 text-green-300'
+                                          : h.status === 'used'
+                                            ? 'bg-gray-500/15 border border-gray-400/30 text-gray-400'
+                                            : 'bg-amber-500/15 border border-amber-400/30 text-amber-300'
+                                      }`}
+                                    >
+                                      {h.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="text-xs text-gray-500">No reset tokens for this account.</div>
+                        )}
                       </div>
                     )}
                   </div>

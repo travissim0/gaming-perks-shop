@@ -43,6 +43,7 @@ export interface InfantrySchema {
     stealth: string | null;
   };
   rt: {
+    id: string;
     accountId: string;
     name: string;
     token: string;
@@ -184,6 +185,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
     },
     rt: resetTokens
       ? {
+          id: col(rtCols, resetTokens, 'ResetTokenId', 'id'),
           accountId: col(rtCols, resetTokens, 'AccountId', 'account'),
           name: col(rtCols, resetTokens, 'Name'),
           token: col(rtCols, resetTokens, 'Token'),
@@ -495,6 +497,46 @@ export async function createResetToken(accountId: number): Promise<ResetToken> {
     );
 
   return { accountName: name, email, token, expireDate: String(ins.recordset[0].expireDate) };
+}
+
+export interface ResetHistoryEntry {
+  tokenId: number;
+  token: string;
+  expireDate: string | null;
+  used: boolean;
+  status: 'used' | 'expired' | 'active';
+}
+
+/**
+ * Recent reset tokens for an account, newest first, with status computed from
+ * the SQL server's own clock (so "expired" matches how the reset page judges it).
+ */
+export async function getResetHistory(accountId: number, limit = 10): Promise<ResetHistoryEntry[]> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, rt } = schema;
+  if (!t.resetTokens || !rt) return [];
+
+  const res = await pool
+    .request()
+    .input('account', sql.BigInt, accountId)
+    .input('limit', sql.Int, Math.min(Math.max(limit, 1), 50))
+    .query(
+      `SELECT TOP (@limit) [${rt.id}] AS tokenId, [${rt.token}] AS token,
+              CONVERT(varchar(19), [${rt.expireDate}], 120) AS expireDate,
+              [${rt.tokenUsed}] AS used,
+              CASE WHEN [${rt.tokenUsed}] = 1 THEN 'used'
+                   WHEN [${rt.expireDate}] < GETDATE() THEN 'expired'
+                   ELSE 'active' END AS status
+       FROM [${t.resetTokens}] WHERE [${rt.accountId}] = @account ORDER BY [${rt.id}] DESC`
+    );
+
+  return res.recordset.map((r: Record<string, unknown>) => ({
+    tokenId: Number(r.tokenId),
+    token: String(r.token ?? ''),
+    expireDate: (cleanValue(r.expireDate) as string) ?? null,
+    used: Boolean(r.used),
+    status: r.status as ResetHistoryEntry['status'],
+  }));
 }
 
 // ---------------------------------------------------------------------------

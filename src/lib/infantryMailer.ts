@@ -7,13 +7,12 @@ import nodemailer from 'nodemailer';
 const g = globalThis as unknown as { __infantryMailer?: nodemailer.Transporter };
 
 function getTransport(): nodemailer.Transporter {
-  const host = process.env.INFANTRY_SMTP_HOST;
+  // Host/port/from are stable and default here, so only USER + PASSWORD are required.
+  const host = process.env.INFANTRY_SMTP_HOST || 'email-smtp.us-west-2.amazonaws.com';
   const user = process.env.INFANTRY_SMTP_USER;
   const pass = process.env.INFANTRY_SMTP_PASSWORD;
-  if (!host || !user || !pass) {
-    throw new Error(
-      'SMTP is not configured. Set INFANTRY_SMTP_HOST, INFANTRY_SMTP_USER and INFANTRY_SMTP_PASSWORD in .env.local.'
-    );
+  if (!user || !pass) {
+    throw new Error('SMTP is not configured. Set INFANTRY_SMTP_USER and INFANTRY_SMTP_PASSWORD in .env.local.');
   }
   if (!g.__infantryMailer) {
     g.__infantryMailer = nodemailer.createTransport({
