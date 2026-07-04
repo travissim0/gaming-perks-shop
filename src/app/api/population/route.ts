@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
 
     const rows = data || [];
     const zones = rows
+      // Exclude test zones, matching the game directory's own /notz filter.
+      .filter((z) => !String(z.zone_title).includes('I:TZ'))
       .map((z) => ({ name: z.zone_title, players: typeof z.player_count === 'number' ? z.player_count : 0 }))
       .sort((a, b) => b.players - a.players);
     const totalPlayers = zones.reduce((sum, z) => sum + z.players, 0);
