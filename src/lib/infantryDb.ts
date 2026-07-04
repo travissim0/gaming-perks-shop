@@ -429,6 +429,7 @@ export interface CannedQuery {
   key: string;
   label: string;
   description: string;
+  category: 'Emails & Resets' | 'Accounts' | 'Alts & IPs' | 'Moderation';
   /** When present the UI shows an input; the value is bound as @p (LIKE pattern). */
   param?: { label: string; placeholder: string };
   sql: string;
@@ -441,36 +442,42 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   const queries: CannedQuery[] = [
     {
       key: 'recent-accounts',
+      category: 'Accounts',
       label: 'Newest accounts',
       description: 'Last 50 accounts created',
       sql: `SELECT TOP 50 [${acc.id}] AS accountId, [${acc.name}] AS account, [${acc.email}] AS email, [${acc.dateCreated}] AS created, [${acc.lastAccess}] AS lastAccess FROM ${A} ORDER BY [${acc.dateCreated}] DESC`,
     },
     {
       key: 'recently-active',
+      category: 'Accounts',
       label: 'Recently active accounts',
       description: 'Last 50 accounts by last access',
       sql: `SELECT TOP 50 [${acc.id}] AS accountId, [${acc.name}] AS account, [${acc.email}] AS email, [${acc.lastAccess}] AS lastAccess FROM ${A} ORDER BY [${acc.lastAccess}] DESC`,
     },
     {
       key: 'duplicate-emails',
+      category: 'Emails & Resets',
       label: 'Duplicate emails',
       description: 'Email addresses shared by more than one account',
       sql: `SELECT TOP 200 [${acc.email}] AS email, COUNT(*) AS accounts FROM ${A} WHERE [${acc.email}] <> '' GROUP BY [${acc.email}] HAVING COUNT(*) > 1 ORDER BY COUNT(*) DESC`,
     },
     {
       key: 'broken-emails',
+      category: 'Emails & Resets',
       label: 'Unusable emails',
       description: "Accounts whose email can't receive a password reset (blank, no @, or placeholder)",
       sql: `SELECT TOP 500 [${acc.id}] AS accountId, [${acc.name}] AS account, [${acc.email}] AS email, [${acc.lastAccess}] AS lastAccess FROM ${A} WHERE [${acc.email}] = '' OR [${acc.email}] NOT LIKE '%@%.%' OR [${acc.email}] LIKE 'none@%' OR [${acc.email}] LIKE '%nowhere%' ORDER BY [${acc.lastAccess}] DESC`,
     },
     {
       key: 'top-playtime',
+      category: 'Accounts',
       label: 'Top playtime aliases',
       description: 'Top 50 aliases by total time played',
       sql: `SELECT TOP 50 l.[${ali.name}] AS alias, a.[${acc.name}] AS account, l.[${ali.timePlayed}] AS minutesPlayed, l.[${ali.lastAccess}] AS lastAccess FROM ${L} l JOIN ${A} a ON a.[${acc.id}] = l.[${ali.accountId}] ORDER BY l.[${ali.timePlayed}] DESC`,
     },
     {
       key: 'alias-ips',
+      category: 'Alts & IPs',
       label: 'Alias IP lookup',
       description: 'IPs and account for aliases matching a name',
       param: { label: 'Alias name', placeholder: 'e.g. Soriddo' },
@@ -478,6 +485,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
     },
     {
       key: 'ip-aliases',
+      category: 'Alts & IPs',
       label: 'IP alias lookup',
       description: 'Aliases seen from an IP (prefix match)',
       param: { label: 'IP or prefix', placeholder: 'e.g. 24.16.' },
@@ -485,6 +493,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
     },
     {
       key: 'shared-ip-alts',
+      category: 'Alts & IPs',
       label: 'Possible alts (shared IPs)',
       description: 'Other aliases that share an IP with the named alias',
       param: { label: 'Alias name', placeholder: 'exact or partial alias' },
@@ -495,6 +504,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   if (t.resetTokens) {
     queries.push({
       key: 'recent-reset-tokens',
+      category: 'Emails & Resets',
       label: 'Recent password resets',
       description: 'Latest 50 reset tokens (forgot-password debugging)',
       sql: `SELECT TOP 50 * FROM [${t.resetTokens}] ORDER BY 1 DESC`,
@@ -503,6 +513,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   if (t.bans) {
     queries.push({
       key: 'recent-bans',
+      category: 'Moderation',
       label: 'Recent bans',
       description: 'Latest 200 ban entries',
       sql: `SELECT TOP 200 * FROM [${t.bans}] ORDER BY 1 DESC`,
@@ -511,6 +522,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   if (t.zones) {
     queries.push({
       key: 'zones-list',
+      category: 'Moderation',
       label: 'Zones',
       description: 'All zone registrations',
       sql: `SELECT TOP 100 * FROM [${t.zones}] ORDER BY 1`,
@@ -519,6 +531,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   if (t.helpcalls) {
     queries.push({
       key: 'recent-helpcalls',
+      category: 'Moderation',
       label: 'Recent help calls',
       description: 'Latest 50 ?help calls in-game',
       sql: `SELECT TOP 50 * FROM [${t.helpcalls}] ORDER BY 1 DESC`,
@@ -527,6 +540,7 @@ export function getCannedQueries(schema: InfantrySchema): CannedQuery[] {
   if (t.histories) {
     queries.push({
       key: 'mod-history',
+      category: 'Moderation',
       label: 'Mod command history',
       description: 'Latest 100 mod commands by sender',
       param: { label: 'Sender alias', placeholder: 'mod alias' },

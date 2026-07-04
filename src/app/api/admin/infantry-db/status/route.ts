@@ -23,10 +23,11 @@ export async function GET(request: NextRequest) {
       schemaFlavor: schema.flavor,
       tables: schema.t,
       counts: { accounts: Number(row.accounts), aliases: Number(row.aliases) },
-      cannedQueries: getCannedQueries(schema).map(({ key, label, description, param }) => ({
+      cannedQueries: getCannedQueries(schema).map(({ key, label, description, category, param }) => ({
         key,
         label,
         description,
+        category,
         param: param ?? null,
       })),
     });
