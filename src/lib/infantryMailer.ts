@@ -33,9 +33,12 @@ export async function verifyMailer(): Promise<void> {
 
 export function buildResetLink(token: string): string {
   const base = process.env.INFANTRY_RESET_URL || 'http://account.freeinfantry.com/reset-password.html?token=';
-  // Raw append (no URL-encoding) to match the account server — the reset page
-  // is known to accept the '+' and '/' that appear in base64 tokens.
-  return base + token;
+  // URL-encode the token: base64 can contain '+', '/', '=', and the reset page
+  // reads the token naively (raw split on '='), so a raw '+' would decode to a
+  // space and the trailing '=' padding would be dropped, mangling the token.
+  // Encoding preserves it through the page to the verify endpoint (confirmed
+  // that endpoint returns "true" for the encoded form).
+  return base + encodeURIComponent(token);
 }
 
 export async function sendResetEmail(to: string, username: string, token: string): Promise<string> {
