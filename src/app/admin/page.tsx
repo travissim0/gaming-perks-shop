@@ -692,6 +692,17 @@ export default function AdminDashboard() {
               </Link>
 
               <Link
+                href="/admin/infantry-db"
+                className="flex items-center gap-4 px-4 py-3 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 text-sky-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-sky-500/20"
+              >
+                <span className="text-3xl">🗄️</span>
+                <div>
+                  <div className="font-semibold">Game Database</div>
+                  <div className="text-xs text-sky-400">Account lookup & email fixes</div>
+                </div>
+              </Link>
+
+              <Link
                 href="/admin/launch-signups"
                 className="flex items-center gap-4 px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20"
               >
