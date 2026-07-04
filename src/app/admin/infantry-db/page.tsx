@@ -18,6 +18,19 @@ interface InfantryAlias {
   stealth: boolean;
 }
 
+interface InfantryBan {
+  banId: number;
+  type: number;
+  typeLabel: string;
+  reason: string | null;
+  name: string | null;
+  ip: string | null;
+  zone: number | null;
+  created: string | null;
+  expires: string | null;
+  active: boolean;
+}
+
 interface InfantryAccount {
   accountId: number;
   name: string;
@@ -27,6 +40,7 @@ interface InfantryAccount {
   permission: number;
   silenced: boolean;
   aliases: InfantryAlias[];
+  bans: InfantryBan[];
 }
 
 interface ResetHistoryEntry {
@@ -544,6 +558,12 @@ export default function InfantryDbPage() {
                             silenced
                           </span>
                         )}
+                        {account.bans.some((b) => b.active) && (
+                          <span className="px-1.5 py-0.5 rounded bg-red-600/25 border border-red-500/40 text-red-300 text-xs font-semibold">
+                            🚫 {account.bans.filter((b) => b.active).length} active ban
+                            {account.bans.filter((b) => b.active).length === 1 ? '' : 's'}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-400">
                           created {account.dateCreated?.slice(0, 10) ?? '?'} · last {account.lastAccess ?? '?'}
                         </span>
@@ -620,6 +640,26 @@ export default function InfantryDbPage() {
                             a.lastAccess ?? null,
                             Math.round((a.timePlayedMinutes / 60) * 10) / 10,
                             a.ip,
+                          ])}
+                          maxHeightClass="max-h-56"
+                        />
+                      </div>
+                    )}
+
+                    {account.bans.length > 0 && (
+                      <div className="mt-2">
+                        <div className="text-xs font-semibold text-red-300/90 mb-1">🚫 Bans ({account.bans.length})</div>
+                        <SortableTable
+                          columns={['Type', 'Reason', 'Banned as', 'IP', 'Zone', 'Created', 'Expires', 'Status']}
+                          rows={account.bans.map((b) => [
+                            b.typeLabel,
+                            b.reason ?? '',
+                            b.name ?? '',
+                            b.ip ?? '',
+                            b.zone ?? '',
+                            b.created ?? '',
+                            b.expires && b.expires.slice(0, 4) > '3000' ? 'permanent' : b.expires ?? '',
+                            b.active ? 'ACTIVE' : 'expired',
                           ])}
                           maxHeightClass="max-h-56"
                         />

@@ -50,6 +50,17 @@ export interface InfantrySchema {
     expireDate: string;
     tokenUsed: string;
   } | null;
+  bn: {
+    id: string;
+    accountId: string;
+    type: string;
+    reason: string;
+    name: string;
+    ip: string;
+    zone: string;
+    created: string;
+    expires: string;
+  } | null;
 }
 
 interface InfantryDb {
@@ -110,6 +121,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
   const accounts = pickTable('Accounts', 'account');
   const aliases = pickTable('Aliases', 'alias');
   const resetTokens = pickTable('ResetTokens', 'resetToken', 'resettokens');
+  const bans = pickTable('Bans', 'ban');
   if (!accounts || !aliases) {
     throw new Error(
       `Could not locate account/alias tables in this database. Tables found: ${[...tables.values()].join(', ') || '(none)'}. ` +
@@ -117,21 +129,28 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
     );
   }
 
-  const colReq = pool.request().input('a', accounts).input('b', aliases);
-  let colFilter = '@a, @b';
-  if (resetTokens) {
-    colReq.input('c', resetTokens);
-    colFilter += ', @c';
+  // Fetch columns for every table we care about in one query, routed by name.
+  const wanted: Record<string, string | null> = { acc: accounts, ali: aliases, rt: resetTokens, bn: bans };
+  const colReq = pool.request();
+  const paramNames: string[] = [];
+  let pIdx = 0;
+  for (const tbl of Object.values(wanted)) {
+    if (!tbl) continue;
+    const p = `p${pIdx++}`;
+    colReq.input(p, tbl);
+    paramNames.push(`@${p}`);
   }
   const colRes = await colReq.query(
-    `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (${colFilter})`
+    `SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME IN (${paramNames.join(', ')})`
   );
   const accCols = new Map<string, string>();
   const aliCols = new Map<string, string>();
   const rtCols = new Map<string, string>();
+  const bnCols = new Map<string, string>();
   for (const r of colRes.recordset) {
     const tn = String(r.TABLE_NAME);
-    const target = tn === accounts ? accCols : tn === aliases ? aliCols : rtCols;
+    const target =
+      tn === accounts ? accCols : tn === aliases ? aliCols : resetTokens && tn === resetTokens ? rtCols : bnCols;
     target.set(String(r.COLUMN_NAME).toLowerCase(), String(r.COLUMN_NAME));
   }
 
@@ -155,7 +174,7 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
     t: {
       accounts,
       aliases,
-      bans: pickTable('Bans', 'ban'),
+      bans,
       resetTokens,
       zones: pickTable('Zones', 'zone'),
       helpcalls: pickTable('Helpcalls', 'helps', 'helpcall'),
@@ -191,6 +210,19 @@ async function detectSchema(pool: sql.ConnectionPool): Promise<InfantrySchema> {
           token: col(rtCols, resetTokens, 'Token'),
           expireDate: col(rtCols, resetTokens, 'ExpireDate', 'expireDate'),
           tokenUsed: col(rtCols, resetTokens, 'TokenUsed', 'tokenUsed'),
+        }
+      : null,
+    bn: bans
+      ? {
+          id: col(bnCols, bans, 'BanId', 'id'),
+          accountId: col(bnCols, bans, 'AccountId', 'account'),
+          type: col(bnCols, bans, 'Type', 'type'),
+          reason: col(bnCols, bans, 'Reason', 'reason'),
+          name: col(bnCols, bans, 'Name', 'name'),
+          ip: col(bnCols, bans, 'IpAddress', 'IPAddress', 'ip'),
+          zone: col(bnCols, bans, 'ZoneId', 'zone'),
+          created: col(bnCols, bans, 'Created', 'created'),
+          expires: col(bnCols, bans, 'Expires', 'expires'),
         }
       : null,
   };
@@ -332,6 +364,19 @@ export interface InfantryAlias {
   stealth: boolean;
 }
 
+export interface InfantryBan {
+  banId: number;
+  type: number;
+  typeLabel: string;
+  reason: string | null;
+  name: string | null;
+  ip: string | null;
+  zone: number | null;
+  created: string | null;
+  expires: string | null;
+  active: boolean;
+}
+
 export interface InfantryAccount {
   accountId: number;
   name: string;
@@ -341,13 +386,23 @@ export interface InfantryAccount {
   permission: number;
   silenced: boolean;
   aliases: InfantryAlias[];
+  bans: InfantryBan[];
 }
+
+// Infantry BanType enum: None=0, ZoneBan=1, AccountBan=2, IPBan=3, GlobalBan=4
+const BAN_TYPE_LABELS: Record<number, string> = {
+  0: 'none',
+  1: 'zone',
+  2: 'account',
+  3: 'IP',
+  4: 'global',
+};
 
 export type LookupType = 'auto' | 'account' | 'alias' | 'email';
 
 export async function lookupAccounts(query: string, type: LookupType): Promise<InfantryAccount[]> {
   const { pool, schema } = await getInfantryDb();
-  const { t, acc, ali } = schema;
+  const { t, acc, ali, bn } = schema;
   const pattern = `%${escapeLike(query)}%`;
 
   const parts: string[] = [];
@@ -404,6 +459,36 @@ export async function lookupAccounts(query: string, type: LookupType): Promise<I
     aliasesByAccount.set(Number(r.accountId), list);
   }
 
+  // Bans for the matched accounts (active ones first), if the table exists
+  const bansByAccount = new Map<number, InfantryBan[]>();
+  if (bn && t.bans) {
+    const banRes = await pool.request().query(
+      `SELECT [${bn.id}] AS banId, [${bn.accountId}] AS accountId, [${bn.type}] AS type,
+              [${bn.reason}] AS reason, [${bn.name}] AS name, [${bn.ip}] AS ip, [${bn.zone}] AS zone,
+              CONVERT(varchar(19), [${bn.created}], 120) AS created,
+              CONVERT(varchar(19), [${bn.expires}], 120) AS expires,
+              CASE WHEN [${bn.expires}] > GETDATE() THEN 1 ELSE 0 END AS active
+       FROM [${t.bans}] WHERE [${bn.accountId}] IN (${idList}) ORDER BY [${bn.id}] DESC`
+    );
+    for (const r of banRes.recordset) {
+      const list = bansByAccount.get(Number(r.accountId)) ?? [];
+      const type = Number(r.type) || 0;
+      list.push({
+        banId: Number(r.banId),
+        type,
+        typeLabel: BAN_TYPE_LABELS[type] ?? `type ${type}`,
+        reason: r.reason ? String(r.reason) : null,
+        name: r.name ? String(r.name) : null,
+        ip: r.ip ? String(r.ip) : null,
+        zone: r.zone != null ? Number(r.zone) : null,
+        created: (cleanValue(r.created) as string) ?? null,
+        expires: (cleanValue(r.expires) as string) ?? null,
+        active: Boolean(r.active),
+      });
+      bansByAccount.set(Number(r.accountId), list);
+    }
+  }
+
   const accounts: InfantryAccount[] = accRes.recordset.map((r: Record<string, unknown>) => ({
     accountId: Number(r.accountId),
     name: String(r.name),
@@ -413,6 +498,7 @@ export async function lookupAccounts(query: string, type: LookupType): Promise<I
     permission: Number(r.permission) || 0,
     silenced: Number(r.silencedAt ?? 0) > 0 && Number(r.silencedDuration ?? 0) > 0,
     aliases: aliasesByAccount.get(Number(r.accountId)) ?? [],
+    bans: bansByAccount.get(Number(r.accountId)) ?? [],
   }));
 
   // Newest accounts first (matches the id ordering used for the TOP 25 cut)
