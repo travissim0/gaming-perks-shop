@@ -47,7 +47,15 @@ export async function requireZoneAdmin(request: NextRequest): Promise<AdminAuthR
  */
 export async function auditInfantryDb(
   adminId: string,
-  action: 'lookup' | 'update_email' | 'query' | 'canned' | 'send_reset' | 'transfer_alias' | 'zone_active',
+  action:
+    | 'lookup'
+    | 'update_email'
+    | 'query'
+    | 'canned'
+    | 'send_reset'
+    | 'transfer_alias'
+    | 'zone_active'
+    | 'lift_ban',
   details: Record<string, unknown>
 ): Promise<void> {
   try {

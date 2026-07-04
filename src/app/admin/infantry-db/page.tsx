@@ -199,6 +199,7 @@ export default function InfantryDbPage() {
   const [transferAliasId, setTransferAliasId] = useState<number | null>(null);
   const [transferTarget, setTransferTarget] = useState('');
   const [transferring, setTransferring] = useState(false);
+  const [liftingBanId, setLiftingBanId] = useState<number | null>(null);
   const [zones, setZones] = useState<ZoneRow[] | null>(null);
   const [zonesOpen, setZonesOpen] = useState(false);
   const [zonesLoading, setZonesLoading] = useState(false);
@@ -432,6 +433,37 @@ export default function InfantryDbPage() {
       toast.error(err instanceof Error ? err.message : 'Transfer failed');
     } finally {
       setTransferring(false);
+    }
+  };
+
+  const liftBan = async (account: InfantryAccount, ban: InfantryBan) => {
+    const ok = await confirmToast(
+      `Lift the ${ban.typeLabel} ban on "${ban.name ?? account.name}"${ban.reason ? ` (reason: ${ban.reason})` : ''}?`,
+      'Lift it'
+    );
+    if (!ok) return;
+    setLiftingBanId(ban.banId);
+    try {
+      const res = await authedFetch('/api/admin/infantry-db/lift-ban', {
+        method: 'POST',
+        body: JSON.stringify({ banId: ban.banId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lift failed');
+      setAccounts((prev) =>
+        prev
+          ? prev.map((a) =>
+              a.accountId === account.accountId
+                ? { ...a, bans: a.bans.map((b) => (b.banId === ban.banId ? { ...b, active: false } : b)) }
+                : a
+            )
+          : prev
+      );
+      toast.success(`Lifted the ${data.typeLabel} ban`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Lift failed');
+    } finally {
+      setLiftingBanId(null);
     }
   };
 
@@ -799,20 +831,60 @@ export default function InfantryDbPage() {
                     {account.bans.length > 0 && (
                       <div className="mt-2">
                         <div className="text-xs font-semibold text-red-300/90 mb-1">🚫 Bans ({account.bans.length})</div>
-                        <SortableTable
-                          columns={['Type', 'Reason', 'Banned as', 'IP', 'Zone', 'Created', 'Expires', 'Status']}
-                          rows={account.bans.map((b) => [
-                            b.typeLabel,
-                            b.reason ?? '',
-                            b.name ?? '',
-                            b.ip ?? '',
-                            b.zone ?? '',
-                            b.created ?? '',
-                            b.expires && b.expires.slice(0, 4) > '3000' ? 'permanent' : b.expires ?? '',
-                            b.active ? 'ACTIVE' : 'expired',
-                          ])}
-                          maxHeightClass="max-h-56"
-                        />
+                        <div className="overflow-x-auto max-h-56 overflow-y-auto rounded-lg border border-gray-700/60">
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-gray-950/95 backdrop-blur-sm z-10">
+                              <tr className="text-left text-gray-300">
+                                <th className="px-3 py-2 font-semibold">Type</th>
+                                <th className="px-3 py-2 font-semibold">Reason</th>
+                                <th className="px-3 py-2 font-semibold">Banned as</th>
+                                <th className="px-3 py-2 font-semibold">IP</th>
+                                <th className="px-3 py-2 font-semibold">Zone</th>
+                                <th className="px-3 py-2 font-semibold">Created</th>
+                                <th className="px-3 py-2 font-semibold">Expires</th>
+                                <th className="px-3 py-2 font-semibold">Status</th>
+                                <th className="px-3 py-2 font-semibold text-right">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {account.bans.map((b) => (
+                                <tr
+                                  key={b.banId}
+                                  className="border-b border-gray-800/60 last:border-0 odd:bg-white/[0.02]"
+                                >
+                                  <td className="px-3 py-1.5 text-gray-200">{b.typeLabel}</td>
+                                  <td className="px-3 py-1.5 text-gray-300 max-w-xs truncate">{b.reason ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-300">{b.name ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-500 font-mono text-xs">{b.ip ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-400">{b.zone ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-400">{b.created ?? '—'}</td>
+                                  <td className="px-3 py-1.5 text-gray-400">
+                                    {b.expires && b.expires.slice(0, 4) > '3000' ? 'permanent' : b.expires ?? '—'}
+                                  </td>
+                                  <td className="px-3 py-1.5">
+                                    <span className={b.active ? 'text-red-300 font-semibold' : 'text-gray-500'}>
+                                      {b.active ? 'ACTIVE' : 'expired'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right">
+                                    {b.active ? (
+                                      <button
+                                        onClick={() => liftBan(account, b)}
+                                        disabled={liftingBanId === b.banId}
+                                        title="Lift (expire) this ban now"
+                                        className="px-2 py-0.5 bg-gray-700/60 hover:bg-green-600/40 border border-gray-600/40 rounded text-xs transition-colors disabled:opacity-50 whitespace-nowrap"
+                                      >
+                                        {liftingBanId === b.banId ? '...' : '✔ Lift'}
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-600 text-xs">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
 

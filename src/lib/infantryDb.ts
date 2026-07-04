@@ -663,6 +663,44 @@ export async function transferAlias(aliasId: number, toAccountId: number): Promi
   };
 }
 
+/**
+ * Lift a ban by expiring it now (sets expires = server clock). Non-destructive:
+ * the row stays for history and simply reads as expired afterward.
+ */
+export async function liftBan(
+  banId: number
+): Promise<{ banId: number; name: string | null; reason: string | null; typeLabel: string }> {
+  const { pool, schema } = await getInfantryDb();
+  const { t, bn } = schema;
+  if (!t.bans || !bn) throw new Error('This database has no ban table');
+
+  const cur = await pool
+    .request()
+    .input('id', banId)
+    .query(
+      `SELECT [${bn.name}] AS name, [${bn.reason}] AS reason, [${bn.type}] AS type,
+              CASE WHEN [${bn.expires}] > GETDATE() THEN 1 ELSE 0 END AS active
+       FROM [${t.bans}] WHERE [${bn.id}] = @id`
+    );
+  if (cur.recordset.length === 0) throw new Error(`Ban ${banId} not found`);
+  if (Number(cur.recordset[0].active) !== 1) {
+    throw new Error('That ban is already expired');
+  }
+
+  await pool
+    .request()
+    .input('id', banId)
+    .query(`UPDATE [${t.bans}] SET [${bn.expires}] = GETDATE() WHERE [${bn.id}] = @id`);
+
+  const type = Number(cur.recordset[0].type) || 0;
+  return {
+    banId,
+    name: cur.recordset[0].name ? String(cur.recordset[0].name) : null,
+    reason: cur.recordset[0].reason ? String(cur.recordset[0].reason) : null,
+    typeLabel: BAN_TYPE_LABELS[type] ?? `type ${type}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Zone activation
 // ---------------------------------------------------------------------------
