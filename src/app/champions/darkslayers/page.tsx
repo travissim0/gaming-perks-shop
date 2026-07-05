@@ -16,7 +16,7 @@ const DarkslayersPage = () => {
   const darkslayersData = {
     name: 'Darkslayers',
     abbreviation: 'DS',
-    established: '2002',
+    established: '1998',
     motto: 'From Darkness Comes Victory',
     seasonRecord: {
       overall: { wins: 87, losses: 29, draws: 5 },
@@ -53,7 +53,7 @@ const DarkslayersPage = () => {
       { alias: 'Pinkyz-Head', seasons: [1, 2], rings: 1 },
       { alias: 'pumaking', seasons: [1, 2], rings: 1 },
       { alias: 'Rebelsim', seasons: [1, 2], rings: 1 },
-      { alias: 'SeeD Engineer', seasons: [1, 2], rings: 1 },
+      { alias: 'SeeD Engineer (Capt)', seasons: [1, 2], rings: 1 },
       { alias: 'Shugotenshi', seasons: [1, 2, 5], rings: 1 },
       { alias: 'SilentDrum', seasons: [1, 2, 3], rings: 1 },
       { alias: 'Sniper.Wolf', seasons: [1, 2], rings: 1 },
@@ -61,7 +61,7 @@ const DarkslayersPage = () => {
       { alias: 'Talmage', seasons: [1, 2], rings: 1 },
       { alias: 'Turbofrog', seasons: [1, 2], rings: 1 },
       { alias: 'Wen (Capt)', seasons: [1, 2], rings: 1 },
-      { alias: 'XXXXX (Co-Capt)', seasons: [1, 2, 3, 4], rings: 1 },
+      { alias: 'XXXXX (Capt)', seasons: [1, 2, 3, 4], rings: 1 },
       // Non-Season 1 players (no rings) - alphabetically
       { alias: 'Altema', seasons: [3, 4], rings: 0 },
       { alias: 'Anime', seasons: [3, 4, 5], rings: 0 },
@@ -74,7 +74,7 @@ const DarkslayersPage = () => {
       { alias: 'Decoy Octopus', seasons: [4], rings: 0 },
       { alias: 'DePH', seasons: [5], rings: 0 },
       { alias: 'Desert Cobra (Co-Capt)', seasons: [5], rings: 0 },
-      { alias: 'DrkCloudXX', seasons: [2], rings: 0 },
+      { alias: 'DrkCloudXX', seasons: [1, 2], rings: 0 },
       { alias: 'Eagle', seasons: [4, 5], rings: 0 },
       { alias: 'Eaglestriker', seasons: [4], rings: 0 },
       { alias: 'Emperor', seasons: [4], rings: 0 },
@@ -83,10 +83,10 @@ const DarkslayersPage = () => {
       { alias: 'hed', seasons: [3], rings: 0 },
       { alias: 'iKx-', seasons: [4], rings: 0 },
       { alias: 'ike', seasons: [3], rings: 0 },
-      { alias: 'Intertech', seasons: [5], rings: 0 },
+      { alias: 'Intertech (aka Cartman)', seasons: [5], rings: 0 },
       { alias: 'Jericho', seasons: [5], rings: 0 },
-      { alias: 'Jusdemon', seasons: [5], rings: 0 },
-      { alias: 'KindGrind', seasons: [4], rings: 0 },
+      { alias: 'JTBossHog (IFL) Capt', seasons: [], rings: 0 },
+      { alias: 'Jusdemon (aka Taylor)', seasons: [5], rings: 0 },
       { alias: 'Lamprey (aka Polo)', seasons: [3], rings: 0 },
       { alias: 'Liche_pt', seasons: [2, 4], rings: 0 },
       { alias: 'Liw', seasons: [4], rings: 0 },
@@ -108,6 +108,7 @@ const DarkslayersPage = () => {
       { alias: 'TaiMaiShu', seasons: [4], rings: 0 },
       { alias: 'Teachers', seasons: [4], rings: 0 },
       { alias: 'Tough-Luck (Capt)', seasons: [4, 5], rings: 0 },
+      { alias: 'TyraeL', seasons: [3, 4], rings: 0 },
       { alias: 'vicks minty', seasons: [4], rings: 0 },
       { alias: 'Wimp The Pimp', seasons: [3], rings: 0 }
     ]
@@ -405,9 +406,11 @@ const DarkslayersPage = () => {
                 <h3 className="text-lg font-bold text-white group-hover:text-gray-300 transition-colors mb-2">
                   {player.alias}
                 </h3>
-                <div className="text-gray-300 text-xs mb-2">
-                  ({player.seasons.map(season => `S${season}`).join(', ')})
-                </div>
+                {player.seasons.length > 0 && (
+                  <div className="text-gray-300 text-xs mb-2">
+                    ({player.seasons.map(season => `S${season}`).join(', ')})
+                  </div>
+                )}
                 <div className="flex justify-center items-center gap-1 mb-2">
                   {[...Array(player.rings)].map((_, i) => (
                     <Crown key={i} style={{color: '#ff72ef'}} size={12} />
