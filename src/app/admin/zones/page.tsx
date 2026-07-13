@@ -408,6 +408,17 @@ export default function ZoneManagementPage() {
     const lios = new Set<string>(activeMapRow.lios || []);
     return mapPresets.filter(p => lvls.has(p.lvl_file) && lios.has(p.lio_file));
   })();
+  // The shorthand name shown in the picker for a lvl/lio combo — this is what
+  // gets mirrored into server.xml's <zoneName>. Prefer a curated preset name,
+  // then a pairing label, finally the .lvl base name.
+  const resolveMapName = (lvl: string, lio: string): string => {
+    const preset = mapPresets.find(p => p.lvl_file === lvl && p.lio_file === lio);
+    if (preset?.display_name) return preset.display_name;
+    const pair = mapPairs.find(p => p.lvl === lvl && p.lio === lio);
+    if (pair?.label) return pair.label;
+    return String(lvl || '').replace(/\.lvl$/i, '');
+  };
+  const mapName = mapForm.lvl && mapForm.lio ? resolveMapName(mapForm.lvl, mapForm.lio) : '';
 
   // Open the Maps panel for a zone and load its config inventory
   const openMaps = async (zone: Zone) => {
@@ -453,7 +464,7 @@ export default function ZoneManagementPage() {
           zone: mapsZone.key,
           admin_id: session?.user?.id,
           host,
-          args: { cfg: mapForm.cfg || undefined, lvl: mapForm.lvl, lio: mapForm.lio },
+          args: { cfg: mapForm.cfg || undefined, lvl: mapForm.lvl, lio: mapForm.lio, zoneName: mapName || undefined },
         }),
       });
       const data = await res.json();
@@ -1437,6 +1448,13 @@ export default function ZoneManagementPage() {
                         ← Back to map list
                       </button>
                     )}
+                  </div>
+                )}
+
+                {mapName && (
+                  <div className="text-xs text-gray-400 bg-gray-800/60 border border-gray-700 rounded-lg p-2">
+                    Zone name will be set to <span className="text-cyan-300 font-medium">{mapName}</span>
+                    <span className="text-gray-500"> (shown in the game's zone list)</span>
                   </div>
                 )}
 

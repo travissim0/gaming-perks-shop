@@ -10,11 +10,15 @@
 #   status                       -> {cfg,lvl,lio,zoneName} for the active cfg
 #   list-cfgs                    -> [{cfg,lvl,lio}, ...] for every *.cfg
 #   list-lvls / list-lios        -> ["name.lvl", ...] / ["name.lio", ...]
-#   swap-lvl-lio <cfg> <lvl> <lio>  -> point <cfg>'s LvlFile/LioFile at <lvl>/<lio>
-#                                      (cfg defaults to the active zoneConfig)
+#   swap-lvl-lio <cfg> <lvl> <lio> [zoneName]
+#                                   -> point <cfg>'s LvlFile/LioFile at <lvl>/<lio>
+#                                      (cfg defaults to the active zoneConfig).
+#                                      If [zoneName] is given, also rewrite
+#                                      server.xml's <zoneName> to that name so the
+#                                      in-game zone list mirrors the loaded map.
 #
 # Filenames may contain spaces (e.g. "League - USL CRPL.cfg"); only path
-# traversal ("/" or "..") is rejected.
+# traversal ("/" or "..") is rejected. zoneName is free text (spaces allowed).
 
 set -uo pipefail
 
@@ -63,20 +67,36 @@ case "$CMD" in
       out="$(jq -c --arg n "$(basename "$f")" '. + [$n]' <<<"$out")"; done; echo "$out"
     ;;
   swap-lvl-lio)
-    cfg="${1:-}"; lvl="${2:-}"; lio="${3:-}"
+    cfg="${1:-}"; lvl="${2:-}"; lio="${3:-}"; zn="${4:-}"
     [ -z "$cfg" ] && cfg="$(cur_cfg)"
-    [ -n "$lvl" ] && [ -n "$lio" ] || err "usage: swap-lvl-lio <cfg> <lvl> <lio>"
+    [ -n "$lvl" ] && [ -n "$lio" ] || err "usage: swap-lvl-lio <cfg> <lvl> <lio> [zoneName]"
     safe "$cfg"; safe "$lvl"; safe "$lio"
     [ -f "$ASSETS/$cfg" ] || err "cfg not found: $cfg"
     [ -f "$ASSETS/$lvl" ] || err "lvl not found: $lvl"
     [ -f "$ASSETS/$lio" ] || err "lio not found: $lio"
     prev_lvl="$(cfg_field "$cfg" LvlFile)"; prev_lio="$(cfg_field "$cfg" LioFile)"
+    prev_zn="$(cur_zonename)"
     # Replace the LvlFile=/LioFile= lines (case-insensitive). Use a non-/ delimiter
     # so filenames with slashes can't escape (already blocked by safe()).
     sed -i "s|^LvlFile=.*|LvlFile=$lvl|I" "$ASSETS/$cfg"
     sed -i "s|^LioFile=.*|LioFile=$lio|I" "$ASSETS/$cfg"
+    # Mirror the map's shorthand name into server.xml's <zoneName> when supplied.
+    # zoneName is free text (spaces, &, |, ...). Do the substitution with awk and
+    # pass the value via ENVIRON (no regex/escape processing on the replacement
+    # side), so names can't corrupt the edit the way a sed s/// replacement would.
+    # A double-quote in the name would break the XML attribute, so strip those.
+    if [ -n "$zn" ]; then
+      ZN="${zn//\"/}" awk '
+        !done && match($0, /zoneName value="[^"]*"/) {
+          $0 = substr($0,1,RSTART-1) "zoneName value=\"" ENVIRON["ZN"] "\"" substr($0,RSTART+RLENGTH)
+          done=1
+        }
+        { print }
+      ' "$SERVER_XML" > "$SERVER_XML.tmp" && cat "$SERVER_XML.tmp" > "$SERVER_XML" && rm -f "$SERVER_XML.tmp"
+    fi
     jq -nc --arg cfg "$cfg" --arg lvl "$lvl" --arg lio "$lio" --arg pl "$prev_lvl" --arg po "$prev_lio" \
-      '{success:true,cfg:$cfg,lvl:$lvl,lio:$lio,previous_lvl:$pl,previous_lio:$po}'
+      --arg zn "${zn:-$prev_zn}" --arg pz "$prev_zn" \
+      '{success:true,cfg:$cfg,lvl:$lvl,lio:$lio,zoneName:$zn,previous_lvl:$pl,previous_lio:$po,previous_zone_name:$pz}'
     ;;
   *)
     err "unknown command: $CMD (use status|list-cfgs|list-lvls|list-lios|swap-lvl-lio)"

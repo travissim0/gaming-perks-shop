@@ -134,19 +134,19 @@ rebuild_zone() {
 # Map rotation: point a zone's cfg at a new lvl/lio (file edit) then restart so
 # the zone loads it. rotate-map.sh does the edit; the daemon owns stop/start.
 swap_map() {
-  local tag="$1" cfg="$2" lvl="$3" lio="$4"
+  local tag="$1" cfg="$2" lvl="$3" lio="$4" zn="${5:-}"
   local dir; dir="$(zone_dir "$tag")"
   [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { echo "zone dir not found for $tag ($dir)"; return 1; }
   [ -x "$ROTATE_SCRIPT" ] || { echo "ROTATE_SCRIPT not executable ($ROTATE_SCRIPT)"; return 1; }
-  log "Swapping map for $tag: cfg='$cfg' lvl='$lvl' lio='$lio'"
-  local res; res="$("$ROTATE_SCRIPT" "$dir" swap-lvl-lio "$cfg" "$lvl" "$lio" 2>&1)"
+  log "Swapping map for $tag: cfg='$cfg' lvl='$lvl' lio='$lio' zoneName='$zn'"
+  local res; res="$("$ROTATE_SCRIPT" "$dir" swap-lvl-lio "$cfg" "$lvl" "$lio" "$zn" 2>&1)"
   if ! echo "$res" | jq -e '.success==true' >/dev/null 2>&1; then
     local e; e="$(echo "$res" | jq -r '.error // empty' 2>/dev/null)"
     echo "map edit failed: ${e:-$res}"; return 1
   fi
   # reload the new map with a restart
   if restart_zone "$tag"; then
-    echo "map set on ${cfg:-active cfg}: lvl=$lvl lio=$lio (zone restarted)"
+    echo "map set on ${cfg:-active cfg}: lvl=$lvl lio=$lio${zn:+ zoneName='$zn'} (zone restarted)"
     return 0
   fi
   echo "map edited but zone failed to restart"; return 1
@@ -160,11 +160,12 @@ execute_action() {  # zone action [args_json] -> propagates exit code
     restart) restart_zone "$zone" ;;
     rebuild) rebuild_zone "$zone" ;;
     swap-lvl-lio)
-      local cfg lvl lio
+      local cfg lvl lio zn
       cfg=$(jq -r '.cfg // ""' <<<"$args" 2>/dev/null)
       lvl=$(jq -r '.lvl // ""' <<<"$args" 2>/dev/null)
       lio=$(jq -r '.lio // ""' <<<"$args" 2>/dev/null)
-      swap_map "$zone" "$cfg" "$lvl" "$lio" ;;
+      zn=$(jq -r '.zoneName // .name // ""' <<<"$args" 2>/dev/null)
+      swap_map "$zone" "$cfg" "$lvl" "$lio" "$zn" ;;
     *)       log "ERROR unknown action '$action'"; return 1 ;;
   esac
 }
