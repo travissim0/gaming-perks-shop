@@ -817,43 +817,49 @@ export default function ZoneManagementPage() {
         )}
 
         {/* Controls */}
-        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex flex-wrap gap-2">
+        <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
             <button
               onClick={handleManualRefresh}
               disabled={refreshing}
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-2 sm:px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm"
             >
               {refreshing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  Refreshing...
+                  <span className="hidden sm:inline">Refreshing...</span>
                 </>
               ) : (
                 <>
-                  🔄 Refresh Zones
+                  <span>🔄</span>
+                  <span className="sm:hidden">Refresh</span>
+                  <span className="hidden sm:inline">Refresh Zones</span>
                 </>
               )}
             </button>
             <button
               onClick={() => setShowScheduleModal(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
+              className="px-2 sm:px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm"
             >
-              📅 Schedule Operation
+              <span>📅</span>
+              <span className="sm:hidden">Schedule</span>
+              <span className="hidden sm:inline">Schedule Operation</span>
             </button>
             <button
               onClick={() => {
                 setShowHistory(!showHistory);
                 if (!showHistory) fetchCommandHistory();
               }}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"
+              className="px-2 sm:px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm"
             >
-              📊 {showHistory ? 'Hide' : 'Show'} Command History
+              <span>📊</span>
+              <span className="sm:hidden">History</span>
+              <span className="hidden sm:inline">{showHistory ? 'Hide' : 'Show'} Command History</span>
             </button>
           </div>
 
           {/* Zone Filter and Count */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:ml-auto">
+          <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-auto">
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-300">Filter:</label>
               <select
@@ -866,8 +872,8 @@ export default function ZoneManagementPage() {
                 <option value="stopped">Stopped Only</option>
               </select>
             </div>
-            <div className="text-sm text-gray-400">
-              Showing {sortedAndFilteredZones.length} of {zones.length} zones
+            <div className="text-sm text-gray-400 whitespace-nowrap">
+              {sortedAndFilteredZones.length} of {zones.length} zones
             </div>
           </div>
         </div>
@@ -1190,48 +1196,61 @@ export default function ZoneManagementPage() {
             </div>
 
             {/* Mobile Card Layout */}
-            <div className="lg:hidden space-y-4">
-              {sortedAndFilteredZones.map((zone) => (
+            <div className="lg:hidden space-y-2">
+              {sortedAndFilteredZones.map((zone) => {
+                const multiServer = (zone.availableOn?.length || 0) > 1;
+                return (
                 <div
                   key={zone.key}
-                  className={`p-4 ${panelClass}`}
+                  className={`p-3 ${panelClass}`}
                 >
-                  {/* Zone Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      {/* Status Indicator */}
-                      <div className={`w-3 h-3 rounded-full ${
-                        zone.status === 'RUNNING' ? 'bg-green-400' : zone.status === 'UNKNOWN' ? 'bg-yellow-400' : 'bg-red-400'
-                      }`}></div>
-                      <div>
-                        <h3 className="text-white font-medium truncate">{zone.name}</h3>
-                        <code className="text-cyan-300 text-xs bg-gray-900/50 px-1.5 py-0.5 rounded">
+                  {/* Compact header: status dot · name/key/server · status + players */}
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className={`w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 ${
+                      zone.status === 'RUNNING' ? 'bg-green-400' : zone.status === 'UNKNOWN' ? 'bg-yellow-400' : 'bg-red-400'
+                    }`}></div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-white font-medium text-sm truncate leading-tight">{zone.name}</h3>
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        <code className="text-cyan-300 text-[10px] bg-gray-900/50 px-1.5 py-0.5 rounded">
                           {zone.key}
                         </code>
+                        {!multiServer && zone.availableOn?.length === 1 && (
+                          <span className="text-[10px] text-gray-400 truncate">{serverLabel(zone.availableOn[0])}</span>
+                        )}
                       </div>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        zone.status === 'RUNNING'
+                          ? 'bg-green-900/30 text-green-300 border border-green-500/30'
+                          : zone.status === 'UNKNOWN'
+                          ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-500/30'
+                          : 'bg-red-900/30 text-red-300 border border-red-500/30'
+                      }`}>
+                        {zone.status}
+                      </span>
+                      {zone.status === 'RUNNING' && (
+                        <div className="text-[10px] text-gray-400 mt-0.5">{zone.playerCount || 0} players</div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Server selector (when the zone exists on more than one server) */}
-                  {(zone.availableOn?.length || 0) > 1 ? (
-                    <div className="mb-2">
-                      <label className="block text-xs text-gray-400 mb-1">Server</label>
-                      <select
-                        value={resolveHost(zone)}
-                        onChange={(e) => setSelectedHost(prev => ({ ...prev, [zone.key]: e.target.value }))}
-                        className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-2 focus:outline-none focus:border-cyan-500"
-                      >
-                        {zone.availableOn!.map(h => (
-                          <option key={h} value={h}>{serverLabel(h)}{zone.runningOn === h ? ' ●' : ''}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (zone.availableOn?.length === 1 && (
-                    <div className="mb-2 text-xs text-gray-400">Server: <span className="text-gray-200">{serverLabel(zone.availableOn[0])}</span></div>
-                  ))}
+                  {/* Server selector only when the zone exists on more than one server */}
+                  {multiServer && (
+                    <select
+                      value={resolveHost(zone)}
+                      onChange={(e) => setSelectedHost(prev => ({ ...prev, [zone.key]: e.target.value }))}
+                      className="w-full mb-2 bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500"
+                    >
+                      {zone.availableOn!.map(h => (
+                        <option key={h} value={h}>{serverLabel(h)}{zone.runningOn === h ? ' ●' : ''}</option>
+                      ))}
+                    </select>
+                  )}
 
-                  {/* Action Dropdown */}
-                  <div className="mt-1">
+                  {/* Action row: action dropdown + Maps side by side */}
+                  <div className="flex gap-2">
                     <select
                       onChange={(e) => {
                         if (e.target.value) {
@@ -1240,7 +1259,7 @@ export default function ZoneManagementPage() {
                         }
                       }}
                       disabled={actionLoading?.startsWith(zone.key)}
-                      className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded px-3 py-2 focus:outline-none focus:border-cyan-500 disabled:bg-gray-800 disabled:cursor-not-allowed"
+                      className="flex-1 min-w-0 bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500 disabled:bg-gray-800 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {actionLoading?.startsWith(zone.key) ? 'Processing...' : 'Select Action'}
@@ -1254,15 +1273,16 @@ export default function ZoneManagementPage() {
                       <option value="restart">🔄 Restart Zone</option>
                       <option value="rebuild">🛠 Rebuild Zone</option>
                     </select>
+                    <button
+                      onClick={() => openMaps(zone)}
+                      className="flex-shrink-0 bg-cyan-700 hover:bg-cyan-600 text-white text-xs rounded px-3 py-1.5 transition-colors"
+                    >
+                      🗺 Maps
+                    </button>
                   </div>
-                  <button
-                    onClick={() => openMaps(zone)}
-                    className="mt-2 w-full bg-cyan-700 hover:bg-cyan-600 text-white text-sm rounded px-3 py-2 transition-colors"
-                  >
-                    🗺 Swap Map
-                  </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         
@@ -1281,22 +1301,22 @@ export default function ZoneManagementPage() {
 
         {/* Quick Stats */}
         {!loading && zones.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className={`p-4 text-center ${panelClass}`}>
-              <div className="text-2xl font-bold text-white">{zones.length}</div>
-              <div className="text-sm text-gray-400">Total Zones</div>
+          <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-4">
+            <div className={`p-3 sm:p-4 text-center ${panelClass}`}>
+              <div className="text-xl sm:text-2xl font-bold text-white">{zones.length}</div>
+              <div className="text-xs sm:text-sm text-gray-400">Total Zones</div>
             </div>
-            <div className="bg-green-900/20 backdrop-blur-sm rounded-2xl p-4 border border-green-500/30 text-center">
-              <div className="text-2xl font-bold text-green-300">
+            <div className="bg-green-900/20 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-green-500/30 text-center">
+              <div className="text-xl sm:text-2xl font-bold text-green-300">
                 {zones.filter(z => z.status === 'RUNNING').length}
               </div>
-              <div className="text-sm text-green-400">Running</div>
+              <div className="text-xs sm:text-sm text-green-400">Running</div>
             </div>
-            <div className="bg-red-900/20 backdrop-blur-sm rounded-2xl p-4 border border-red-500/30 text-center">
-              <div className="text-2xl font-bold text-red-300">
+            <div className="bg-red-900/20 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-red-500/30 text-center">
+              <div className="text-xl sm:text-2xl font-bold text-red-300">
                 {zones.filter(z => z.status === 'STOPPED').length}
               </div>
-              <div className="text-sm text-red-400">Stopped</div>
+              <div className="text-xs sm:text-sm text-red-400">Stopped</div>
             </div>
           </div>
         )}
