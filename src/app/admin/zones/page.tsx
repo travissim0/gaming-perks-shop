@@ -1196,22 +1196,25 @@ export default function ZoneManagementPage() {
             </div>
 
             {/* Mobile Card Layout */}
-            <div className="lg:hidden space-y-2">
+            <div className="lg:hidden space-y-1.5">
               {sortedAndFilteredZones.map((zone) => {
                 const multiServer = (zone.availableOn?.length || 0) > 1;
+                const host = resolveHost(zone);
+                const busy = (a: string) => actionLoading === `${zone.key}-${a}`;
+                const spinner = <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent"></div>;
                 return (
                 <div
                   key={zone.key}
-                  className={`p-3 ${panelClass}`}
+                  className={`p-2.5 ${panelClass}`}
                 >
                   {/* Compact header: status dot · name/key/server · status + players */}
-                  <div className="flex items-start gap-2 mb-2">
-                    <div className={`w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 ${
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                       zone.status === 'RUNNING' ? 'bg-green-400' : zone.status === 'UNKNOWN' ? 'bg-yellow-400' : 'bg-red-400'
                     }`}></div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-white font-medium text-sm truncate leading-tight">{zone.name}</h3>
-                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <code className="text-cyan-300 text-[10px] bg-gray-900/50 px-1.5 py-0.5 rounded">
                           {zone.key}
                         </code>
@@ -1220,7 +1223,7 @@ export default function ZoneManagementPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex-shrink-0 text-right">
+                    <div className="flex-shrink-0 flex items-center gap-1.5">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
                         zone.status === 'RUNNING'
                           ? 'bg-green-900/30 text-green-300 border border-green-500/30'
@@ -1231,7 +1234,7 @@ export default function ZoneManagementPage() {
                         {zone.status}
                       </span>
                       {zone.status === 'RUNNING' && (
-                        <div className="text-[10px] text-gray-400 mt-0.5">{zone.playerCount || 0} players</div>
+                        <span className="text-[10px] text-gray-400">{zone.playerCount || 0}p</span>
                       )}
                     </div>
                   </div>
@@ -1239,9 +1242,9 @@ export default function ZoneManagementPage() {
                   {/* Server selector only when the zone exists on more than one server */}
                   {multiServer && (
                     <select
-                      value={resolveHost(zone)}
+                      value={host}
                       onChange={(e) => setSelectedHost(prev => ({ ...prev, [zone.key]: e.target.value }))}
-                      className="w-full mb-2 bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500"
+                      className="w-full mb-1.5 bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1 focus:outline-none focus:border-cyan-500"
                     >
                       {zone.availableOn!.map(h => (
                         <option key={h} value={h}>{serverLabel(h)}{zone.runningOn === h ? ' ●' : ''}</option>
@@ -1249,35 +1252,42 @@ export default function ZoneManagementPage() {
                     </select>
                   )}
 
-                  {/* Action row: action dropdown + Maps side by side */}
-                  <div className="flex gap-2">
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          executeZoneAction(zone.key, e.target.value as 'start' | 'stop' | 'restart' | 'rebuild', resolveHost(zone));
-                          e.target.value = ''; // Reset dropdown
-                        }
-                      }}
-                      disabled={actionLoading?.startsWith(zone.key)}
-                      className="flex-1 min-w-0 bg-gray-700 border border-gray-600 text-white text-xs rounded px-2 py-1.5 focus:outline-none focus:border-cyan-500 disabled:bg-gray-800 disabled:cursor-not-allowed"
+                  {/* Separate action buttons — compact single row */}
+                  <div className="grid grid-cols-5 gap-1">
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'start', host)}
+                      disabled={zone.status === 'RUNNING' || busy('start')}
+                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white transition-colors"
                     >
-                      <option value="">
-                        {actionLoading?.startsWith(zone.key) ? 'Processing...' : 'Select Action'}
-                      </option>
-                      {zone.status !== 'RUNNING' && (
-                        <option value="start">▶ Start Zone</option>
-                      )}
-                      {zone.status === 'RUNNING' && (
-                        <option value="stop">⏹ Stop Zone</option>
-                      )}
-                      <option value="restart">🔄 Restart Zone</option>
-                      <option value="rebuild">🛠 Rebuild Zone</option>
-                    </select>
+                      {busy('start') ? spinner : <>▶<span>Start</span></>}
+                    </button>
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'stop', host)}
+                      disabled={zone.status === 'STOPPED' || busy('stop')}
+                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white transition-colors"
+                    >
+                      {busy('stop') ? spinner : <>⏹<span>Stop</span></>}
+                    </button>
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'restart', host)}
+                      disabled={busy('restart')}
+                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white transition-colors"
+                    >
+                      {busy('restart') ? spinner : <>🔄<span>Restart</span></>}
+                    </button>
+                    <button
+                      onClick={() => executeZoneAction(zone.key, 'rebuild', host)}
+                      disabled={busy('rebuild')}
+                      title="Stop, deploy latest server build, and restart"
+                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white transition-colors"
+                    >
+                      {busy('rebuild') ? spinner : <>🛠<span>Rebuild</span></>}
+                    </button>
                     <button
                       onClick={() => openMaps(zone)}
-                      className="flex-shrink-0 bg-cyan-700 hover:bg-cyan-600 text-white text-xs rounded px-3 py-1.5 transition-colors"
+                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
                     >
-                      🗺 Maps
+                      🗺<span>Maps</span>
                     </button>
                   </div>
                 </div>
