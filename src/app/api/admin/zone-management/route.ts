@@ -12,6 +12,9 @@ const supabaseClient = createClient(
 
 const STALE_SECONDS = 60; // a server's status row older than this = offline
 const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'swap-lvl-lio'];
+// Zones that expose the Maps (map-rotation) UI. Only the USL zones actually
+// rotate maps for now; add zone keys here if others start using map rotation.
+const MAP_ENABLED_ZONES = new Set(['usl', 'usl2']);
 
 // Server key -> human label + zone base dir. The daemon stores its SERVER_KEY
 // as the zone_status row id; this map gives the UI a friendly label without
@@ -90,24 +93,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Flag which zones have a usable map inventory (>=2 selectable maps) so the
-    // UI can disable the Maps button where there's nothing to swap. Map rotation
-    // is mainly used on USL zones; single-map zones (most arcade zones) and
-    // unconfigured slots get no Maps UI. Aggregated across servers by zone_key.
-    const { data: mapRows } = await supabaseClient
-      .from('zone_maps')
-      .select('zone_key, cfgs, lvls, lios');
-    const mapOptionCount: Record<string, number> = {};
-    for (const m of mapRows || []) {
-      const n = Math.max(
-        (m.cfgs || []).length,
-        (m.lvls || []).length,
-        (m.lios || []).length
-      );
-      mapOptionCount[m.zone_key] = Math.max(mapOptionCount[m.zone_key] || 0, n);
-    }
+    // Enable the Maps (map-rotation) UI only for zones that actually rotate
+    // maps — just the USL zones for now (see MAP_ENABLED_ZONES).
     for (const tag of Object.keys(zones)) {
-      zones[tag].hasMaps = (mapOptionCount[tag] || 0) >= 2;
+      zones[tag].hasMaps = MAP_ENABLED_ZONES.has(tag);
     }
 
     return NextResponse.json({
