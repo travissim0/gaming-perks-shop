@@ -90,6 +90,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Flag which zones have a usable map inventory (>=2 selectable maps) so the
+    // UI can disable the Maps button where there's nothing to swap. Map rotation
+    // is mainly used on USL zones; single-map zones (most arcade zones) and
+    // unconfigured slots get no Maps UI. Aggregated across servers by zone_key.
+    const { data: mapRows } = await supabaseClient
+      .from('zone_maps')
+      .select('zone_key, cfgs, lvls, lios');
+    const mapOptionCount: Record<string, number> = {};
+    for (const m of mapRows || []) {
+      const n = Math.max(
+        (m.cfgs || []).length,
+        (m.lvls || []).length,
+        (m.lios || []).length
+      );
+      mapOptionCount[m.zone_key] = Math.max(mapOptionCount[m.zone_key] || 0, n);
+    }
+    for (const tag of Object.keys(zones)) {
+      zones[tag].hasMaps = (mapOptionCount[tag] || 0) >= 2;
+    }
+
     return NextResponse.json({
       success: true,
       servers: servers.sort((a, b) => a.key.localeCompare(b.key)),

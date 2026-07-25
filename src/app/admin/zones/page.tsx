@@ -23,6 +23,7 @@ interface Zone {
   runningOn?: string | null;
   availableOn?: string[];
   instances?: ZoneInstance[];
+  hasMaps?: boolean;
 }
 
 interface ServerInfo {
@@ -318,6 +319,7 @@ export default function ZoneManagementPage() {
         runningOn: zone.runningOn ?? null,
         availableOn: zone.availableOn ?? [],
         instances: zone.instances ?? [],
+        hasMaps: zone.hasMaps ?? false,
         playerCount: serverPlayerData[key] || 0
       }));
 
@@ -1135,11 +1137,16 @@ export default function ZoneManagementPage() {
                         )}
                       </button>
 
-                      {/* Maps Button */}
+                      {/* Maps Button — disabled when the zone has no swappable maps */}
                       <button
-                        onClick={() => openMaps(zone)}
-                        title="Swap this zone's map (lvl/lio) and restart"
-                        className="bg-cyan-700 hover:bg-cyan-600 text-white px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[52px] justify-center"
+                        onClick={() => zone.hasMaps && openMaps(zone)}
+                        disabled={!zone.hasMaps}
+                        title={zone.hasMaps ? "Swap this zone's map (lvl/lio) and restart" : 'No maps configured for this zone'}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1 min-w-[52px] justify-center ${
+                          zone.hasMaps
+                            ? 'bg-cyan-700 hover:bg-cyan-600 text-white'
+                            : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                        }`}
                       >
                         🗺 Maps
                       </button>
@@ -1284,8 +1291,14 @@ export default function ZoneManagementPage() {
                       {busy('rebuild') ? spinner : <>🛠<span>Rebuild</span></>}
                     </button>
                     <button
-                      onClick={() => openMaps(zone)}
-                      className="flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
+                      onClick={() => zone.hasMaps && openMaps(zone)}
+                      disabled={!zone.hasMaps}
+                      title={zone.hasMaps ? undefined : 'No maps configured for this zone'}
+                      className={`flex items-center justify-center gap-0.5 px-0.5 py-1.5 rounded text-[10px] font-medium whitespace-nowrap transition-colors ${
+                        zone.hasMaps
+                          ? 'bg-cyan-700 hover:bg-cyan-600 text-white'
+                          : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                      }`}
                     >
                       🗺<span>Maps</span>
                     </button>
