@@ -187,8 +187,8 @@ export default function ZoneManagementPage() {
       console.log('Zone Admin Check:', { hasAccess, profileData: profile });
 
       if (hasAccess) {
-        await fetchServerPlayerData();
-        await fetchZoneStatus(true); // Initial load
+        const playerData = await fetchServerPlayerData();
+        await fetchZoneStatus(true, playerData); // Initial load
       } else {
         console.log('Access denied - user is not admin or zone admin:', profile);
         toast.error('Access denied: Zone admin privileges required');
@@ -220,7 +220,7 @@ export default function ZoneManagementPage() {
   }, []);
 
   // Add function to fetch server player data
-  const fetchServerPlayerData = async () => {
+  const fetchServerPlayerData = async (): Promise<{ [key: string]: number }> => {
     try {
       const response = await fetch('/api/server-status');
       if (response.ok) {
@@ -272,10 +272,12 @@ export default function ZoneManagementPage() {
         });
         
         setServerPlayerData(playerCounts);
+        return playerCounts;
       }
     } catch (error) {
       console.error('Error fetching server player data:', error);
     }
+    return {};
   };
 
   // Save scroll position before state updates
@@ -295,9 +297,9 @@ export default function ZoneManagementPage() {
     setRefreshing(true);
     saveScrollPosition();
     try {
+      const playerData = await fetchServerPlayerData();
       await Promise.all([
-        fetchServerPlayerData(),
-        fetchZoneStatus(false),
+        fetchZoneStatus(false, playerData),
         fetchScheduledOperations()
       ]);
       toast.success('Data refreshed successfully');
@@ -310,7 +312,7 @@ export default function ZoneManagementPage() {
   };
 
   // Fetch zone status
-  const fetchZoneStatus = async (isInitialLoad = false) => {
+  const fetchZoneStatus = async (isInitialLoad = false, playerDataOverride?: { [key: string]: number }) => {
     if (isInitialLoad) {
       setLoading(true);
     } else {
@@ -325,6 +327,11 @@ export default function ZoneManagementPage() {
       
       const data = await response.json();
 
+      // Player counts from the freshest source: an explicit override (passed by a
+      // caller that just fetched it) beats the serverPlayerData state closure,
+      // which is still empty on initial load and stale inside the interval.
+      const playerData = playerDataOverride ?? serverPlayerData;
+
       // Convert to Zone array format (multi-server aware)
       const zoneArray: Zone[] = Object.entries(data.zones || {}).map(([key, zone]: [string, any]) => ({
         key,
@@ -334,7 +341,7 @@ export default function ZoneManagementPage() {
         availableOn: zone.availableOn ?? [],
         instances: zone.instances ?? [],
         hasMaps: zone.hasMaps ?? false,
-        playerCount: serverPlayerData[key] || 0
+        playerCount: playerData[key] || 0
       }));
 
       setServers(data.servers || []);
@@ -392,8 +399,9 @@ export default function ZoneManagementPage() {
       if (data.success) {
         toast.success(`${action} queued for ${zoneKey} on ${serverLabel(data.host)}`);
         // Single delayed refresh to allow action to take effect
-        setTimeout(() => {
-          fetchZoneStatus(false);
+        setTimeout(async () => {
+          const playerData = await fetchServerPlayerData();
+          fetchZoneStatus(false, playerData);
           fetchScheduledOperations();
         }, 2000);
       } else if (response.status === 409) {
@@ -487,7 +495,10 @@ export default function ZoneManagementPage() {
       if (data.success) {
         toast.success(`Map swap queued for ${mapsZone.key} on ${serverLabel(data.host)} — zone will restart`);
         setMapsZone(null);
-        setTimeout(() => fetchZoneStatus(false), 3000);
+        setTimeout(async () => {
+          const playerData = await fetchServerPlayerData();
+          fetchZoneStatus(false, playerData);
+        }, 3000);
       } else {
         throw new Error(data.error || 'swap failed');
       }
@@ -501,12 +512,16 @@ export default function ZoneManagementPage() {
   // Auto-refresh every 60 seconds (reduced from 30s)
   useEffect(() => {
     if (user && hasAdminAccess) {
-      fetchZoneStatus(false);
-      fetchScheduledOperations();
-      const interval = setInterval(() => {
-        fetchZoneStatus(false);
+      // Always refresh player counts alongside zone status and pass them as an
+      // override — otherwise this interval closes over an empty serverPlayerData
+      // and rewrites every count back to 0.
+      const refresh = async () => {
+        const playerData = await fetchServerPlayerData();
+        await fetchZoneStatus(false, playerData);
         fetchScheduledOperations();
-      }, 60000); // Changed from 30000 to 60000 (60 seconds)
+      };
+      refresh();
+      const interval = setInterval(refresh, 60000); // 60 seconds
       return () => clearInterval(interval);
     }
   }, [user, hasAdminAccess]);
