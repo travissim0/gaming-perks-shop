@@ -227,12 +227,26 @@ export default function ZoneManagementPage() {
         const data = await response.json();
         const playerCounts: {[key: string]: number} = {};
         
-        // Map server zones to our zone keys using config
+        // Live population (/api/server-status) is keyed by in-game TITLE, but our
+        // rows are keyed by the daemon zone tag. Map current titles -> tags here
+        // (checked before the stale zones-config lookup). Titles track a zone's
+        // <zoneName>/active map, so update these if a zone's map/name changes.
+        const titleToTag: { [title: string]: string } = {
+          'Sports - Soccer Brawl': 'sb',
+          "KOTH - Chambert's Tournament": 'ct',
+          'SKX - Triple Threat': 'tt',
+          'SK - Minimaps': 'minimaps',
+          'USL - KS10': 'usl',
+          'USL - Megamaps': 'usl2',
+          'Eol - Pioneer Station (Bots)': 'eol',
+        };
+
+        // Map server zones to our zone keys
         data.zones.forEach((zone: any) => {
           const title = zone.title;
-          
-          // Try to find exact match in config
-          let zoneKey = zoneConfig[title];
+
+          // Current title->tag map first, then fall back to zones-config / aliases
+          let zoneKey = titleToTag[title] || zoneConfig[title];
           
           // Handle alternate naming (legacy API names)
           if (!zoneKey) {
