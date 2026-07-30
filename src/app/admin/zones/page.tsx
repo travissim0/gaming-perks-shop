@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
 import SpaceBackground from '@/components/SpaceBackground';
 import { ZONE_TITLE_TO_TAG } from '@/lib/zoneTitles';
+import { buildMapPairs, mapNameFor, presetsForZone } from '@/lib/zoneMaps';
 
 interface ZoneInstance {
   server: string;
@@ -33,7 +34,8 @@ interface ZoneGrant {
 }
 
 // Keep in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
-const GRANTABLE_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
+// 'maps' is only offered for zones that rotate maps (zone.hasMaps).
+const GRANTABLE_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps'] as const;
 
 interface Zone {
   name: string;
@@ -103,32 +105,8 @@ const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
   };
 });
 
-type MapPair = { key: string; label: string; lvl: string; lio: string };
-
-// Build the set of lvl/lio pairings for a zone's map inventory:
-//  1. every cfg's (lvl, lio) is a curated pairing (labelled by the cfg name)
-//  2. plus lvl/lio files that share a base name (e.g. bloodcrpl.lvl/.lio)
-// Deduped by (lvl|lio). When no pairing covers a desired combo, the UI falls
-// back to selecting lvl and lio individually.
-function buildMapPairs(row: any): MapPair[] {
-  if (!row) return [];
-  const seen = new Set<string>();
-  const pairs: MapPair[] = [];
-  const add = (label: string, lvl: string, lio: string) => {
-    if (!lvl || !lio) return;
-    const key = `${lvl}|${lio}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    pairs.push({ key, label, lvl, lio });
-  };
-  for (const c of (row.cfgs || [])) add(String(c.cfg || '').replace(/\.cfg$/i, ''), c.lvl, c.lio);
-  const lios = new Set<string>(row.lios || []);
-  for (const lvl of (row.lvls || [])) {
-    const base = String(lvl).replace(/\.lvl$/i, '');
-    if (lios.has(`${base}.lio`)) add(base, lvl, `${base}.lio`);
-  }
-  return pairs.sort((a, b) => a.label.localeCompare(b.label));
-}
+// Map-picker helpers live in @/lib/zoneMaps - /test-zone renders the same
+// inventory for accounts granted the 'maps' permission.
 
 export default function ZoneManagementPage() {
   const { user, loading: authLoading } = useAuth();
@@ -503,6 +481,18 @@ export default function ZoneManagementPage() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [userQuery, showPermsModal]);
 
+  // Map rotation is only meaningful on zones that rotate maps (the USL zones).
+  const grantFormZoneHasMaps = zones.find(z => z.key === grantForm.zone_key)?.hasMaps ?? false;
+
+  const setGrantZone = (zone_key: string) => {
+    const hasMaps = zones.find(z => z.key === zone_key)?.hasMaps ?? false;
+    setGrantForm(prev => ({
+      ...prev,
+      zone_key,
+      permissions: hasMaps ? prev.permissions : prev.permissions.filter(p => p !== 'maps'),
+    }));
+  };
+
   const togglePermission = (perm: string) => {
     setGrantForm(prev => ({
       ...prev,
@@ -580,23 +570,9 @@ export default function ZoneManagementPage() {
   const mapPairs = buildMapPairs(activeMapRow);
   const currentPairKey = `${mapForm.lvl}|${mapForm.lio}`;
   const showManualMap = mapMode === 'manual' || mapPairs.length === 0;
-  // Presets (name + thumbnail) whose lvl/lio actually exist for this zone.
-  const zonePresets = (() => {
-    if (!activeMapRow) return [];
-    const lvls = new Set<string>(activeMapRow.lvls || []);
-    const lios = new Set<string>(activeMapRow.lios || []);
-    return mapPresets.filter(p => lvls.has(p.lvl_file) && lios.has(p.lio_file));
-  })();
-  // The shorthand name shown in the picker for a lvl/lio combo — this is what
-  // gets mirrored into server.xml's <zoneName>. Prefer a curated preset name,
-  // then a pairing label, finally the .lvl base name.
-  const resolveMapName = (lvl: string, lio: string): string => {
-    const preset = mapPresets.find(p => p.lvl_file === lvl && p.lio_file === lio);
-    if (preset?.display_name) return preset.display_name;
-    const pair = mapPairs.find(p => p.lvl === lvl && p.lio === lio);
-    if (pair?.label) return pair.label;
-    return String(lvl || '').replace(/\.lvl$/i, '');
-  };
+  const zonePresets = presetsForZone(activeMapRow, mapPresets);
+  const resolveMapName = (lvl: string, lio: string): string =>
+    mapNameFor(lvl, lio, mapPresets, mapPairs);
   const mapName = mapForm.lvl && mapForm.lio ? resolveMapName(mapForm.lvl, mapForm.lio) : '';
 
   // Open the Maps panel for a zone and load its config inventory
@@ -1794,7 +1770,7 @@ export default function ZoneManagementPage() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">Zone</label>
                   <select
                     value={grantForm.zone_key}
-                    onChange={(e) => setGrantForm(prev => ({ ...prev, zone_key: e.target.value }))}
+                    onChange={(e) => setGrantZone(e.target.value)}
                     className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
                   >
                     <option value="">Select a zone...</option>
@@ -1808,23 +1784,36 @@ export default function ZoneManagementPage() {
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-300 mb-2">Permissions</label>
                 <div className="flex flex-wrap gap-2">
-                  {GRANTABLE_ACTIONS.map((perm) => (
-                    <button
-                      key={perm}
-                      onClick={() => togglePermission(perm)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                        grantForm.permissions.includes(perm)
-                          ? 'bg-amber-600/80 border-amber-400 text-white'
-                          : 'bg-gray-700/60 border-gray-600 text-gray-300 hover:border-gray-500'
-                      }`}
-                    >
-                      {perm}
-                    </button>
-                  ))}
+                  {GRANTABLE_ACTIONS.map((perm) => {
+                    // Map rotation only exists on the USL zones (hasMaps).
+                    const disabled = perm === 'maps' && !!grantForm.zone_key && !grantFormZoneHasMaps;
+                    return (
+                      <button
+                        key={perm}
+                        onClick={() => !disabled && togglePermission(perm)}
+                        disabled={disabled}
+                        title={disabled ? 'This zone does not use map rotation' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                          disabled
+                            ? 'bg-gray-800 border-gray-700 text-gray-600 cursor-not-allowed'
+                            : grantForm.permissions.includes(perm)
+                            ? 'bg-amber-600/80 border-amber-400 text-white'
+                            : 'bg-gray-700/60 border-gray-600 text-gray-300 hover:border-gray-500'
+                        }`}
+                      >
+                        {perm}
+                      </button>
+                    );
+                  })}
                 </div>
                 {grantForm.permissions.includes('rebuild') && (
                   <p className="text-xs text-amber-300/80 mt-2">
                     Rebuild deploys the latest server build and restarts the zone, disconnecting players.
+                  </p>
+                )}
+                {grantForm.permissions.includes('maps') && grantFormZoneHasMaps && (
+                  <p className="text-xs text-amber-300/80 mt-2">
+                    Maps lets them pick a map and restart the zone to load it — the same picker this console uses.
                   </p>
                 )}
               </div>

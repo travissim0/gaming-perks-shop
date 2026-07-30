@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { requireZoneAdmin } from '@/lib/adminApiAuth';
-import { GRANTABLE_USER_ACTIONS, getZoneOverview } from '@/lib/zoneControl';
+import { GRANTABLE_USER_ACTIONS, getZoneOverview, zoneRotatesMaps } from '@/lib/zoneControl';
 
 // Admin CRUD for per-account zone grants (user_zone_permissions), the table
 // behind /test-zone. Before this route the only way to grant someone control of
@@ -113,6 +113,13 @@ export async function POST(request: NextRequest) {
     if (!zone) {
       return NextResponse.json(
         { success: false, error: `Unknown zone '${zone_key}'. Known: ${Object.keys(zones).sort().join(', ')}` },
+        { status: 400 }
+      );
+    }
+    // 'maps' only means something on a zone that rotates maps (MAP_ENABLED_ZONES).
+    if (permissions.includes('maps') && !zoneRotatesMaps(zone_key)) {
+      return NextResponse.json(
+        { success: false, error: `${zone.name} does not use map rotation, so 'maps' cannot be granted on it` },
         { status: 400 }
       );
     }

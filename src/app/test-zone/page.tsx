@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import { buildMapPairs, mapNameFor, presetsForZone, type MapPreset } from '@/lib/zoneMaps';
 
-// Must stay in sync with USER_ZONE_ACTIONS in /api/user-zone-control.
-type ZoneAction = 'start' | 'stop' | 'restart' | 'rebuild';
+// Must stay in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
+// 'maps' is the grant name for map rotation; the daemon action it queues is
+// swap-lvl-lio.
+type ZoneAction = 'start' | 'stop' | 'restart' | 'rebuild' | 'maps';
 
 interface UserZone {
   zone_key: string;
@@ -16,6 +19,7 @@ interface UserZone {
   permissions: string[];
   status: 'RUNNING' | 'STOPPED' | 'UNKNOWN';
   playerCount: number;
+  runningOn?: string | null;
 }
 
 export default function TestZoneManagementPage() {
@@ -25,6 +29,24 @@ export default function TestZoneManagementPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Map picker (only for zones granted 'maps') - same inventory the admin
+  // console shows: the daemon-reported zone_maps row + curated presets.
+  const [mapsZone, setMapsZone] = useState<UserZone | null>(null);
+  const [mapsLoading, setMapsLoading] = useState(false);
+  const [mapsRows, setMapsRows] = useState<any[]>([]);
+  const [mapPresets, setMapPresets] = useState<MapPreset[]>([]);
+  const [mapForm, setMapForm] = useState<{ cfg: string; lvl: string; lio: string }>({ cfg: '', lvl: '', lio: '' });
+  const [showManualMap, setShowManualMap] = useState(false);
+
+  const activeMapRow = mapsZone
+    ? (mapsRows.find(r => r.server_key === mapsZone.runningOn) || mapsRows[0])
+    : null;
+  const mapPairs = buildMapPairs(activeMapRow);
+  const zonePresets = presetsForZone(activeMapRow, mapPresets);
+  const mapName = mapForm.lvl && mapForm.lio
+    ? mapNameFor(mapForm.lvl, mapForm.lio, mapPresets, mapPairs)
+    : '';
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -64,6 +86,73 @@ export default function TestZoneManagementPage() {
       toast.error('Failed to load zone information');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Open the map picker for a zone and load its inventory
+  const openMaps = async (zone: UserZone) => {
+    setMapsZone(zone);
+    setMapsLoading(true);
+    setMapsRows([]);
+    setMapPresets([]);
+    setMapForm({ cfg: '', lvl: '', lio: '' });
+    setShowManualMap(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/user-zone-control?maps=${encodeURIComponent(zone.zone_key)}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to load maps');
+      const rows: any[] = data.maps || [];
+      setMapsRows(rows);
+      setMapPresets(data.presets || []);
+      const row = rows.find(r => r.server_key === zone.runningOn) || rows[0];
+      if (row) setMapForm({ cfg: row.current_cfg || '', lvl: row.current_lvl || '', lio: row.current_lio || '' });
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load maps');
+    } finally {
+      setMapsLoading(false);
+    }
+  };
+
+  // Queue a map swap: points the zone's cfg at the new lvl/lio and restarts it
+  const submitMapSwap = async () => {
+    if (!mapsZone || !mapForm.lvl || !mapForm.lio) return;
+    if (!window.confirm(
+      `Load ${mapName || mapForm.lvl} on ${mapsZone.zone_name}?\n\nThe zone restarts to load the map, so anyone playing will be disconnected.`
+    )) {
+      return;
+    }
+    setActionLoading(`${mapsZone.zone_key}-maps`);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/user-zone-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action: 'maps',
+          zone_key: mapsZone.zone_key,
+          args: {
+            cfg: mapForm.cfg || undefined,
+            lvl: mapForm.lvl,
+            lio: mapForm.lio,
+            zoneName: mapName || undefined,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Map swap failed');
+      toast.success(`${mapName || mapForm.lvl} queued for ${mapsZone.zone_key} — the zone will restart`);
+      setMapsZone(null);
+      setTimeout(() => fetchUserZones(false), 3000);
+    } catch (e: any) {
+      toast.error(e.message || 'Map swap failed');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -292,6 +381,26 @@ export default function TestZoneManagementPage() {
                       </button>
                     )}
 
+                    {zone.permissions.includes('maps') && (
+                      <button
+                        onClick={() => openMaps(zone)}
+                        disabled={actionLoading === `${zone.zone_key}-maps`}
+                        title="Pick a map for this zone (the zone restarts to load it)"
+                        className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-cyan-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      >
+                        {actionLoading === `${zone.zone_key}-maps` ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Swapping...
+                          </>
+                        ) : (
+                          <>
+                            🗺 Maps
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     {zone.permissions.includes('rebuild') && (
                       <button
                         onClick={() => executeZoneAction(zone.zone_key, 'rebuild')}
@@ -326,6 +435,155 @@ export default function TestZoneManagementPage() {
           </div>
         </div>
       </div>
+
+      {/* Map picker - mirrors the admin console's Maps modal */}
+      {mapsZone && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900/95 border border-cyan-500/20 rounded-2xl shadow-xl shadow-cyan-500/10 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-1">
+              <h3 className="text-xl font-semibold text-white">🗺 Swap Map — {mapsZone.zone_name}</h3>
+              <button
+                onClick={() => setMapsZone(null)}
+                className="text-gray-400 hover:text-white text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-5">
+              Points the zone's config at a new map and restarts the zone to load it.
+            </p>
+
+            {mapsLoading ? (
+              <div className="text-gray-400 py-8 text-center">Loading maps...</div>
+            ) : !activeMapRow ? (
+              <div className="text-gray-400 py-8 text-center">
+                No map configs have been reported for this zone yet.
+              </div>
+            ) : (
+              <>
+                <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 mb-4 text-sm">
+                  <div className="text-gray-400 mb-1">Currently loaded</div>
+                  <div className="text-gray-300">
+                    lvl: <span className="text-white">{activeMapRow.current_lvl || '—'}</span> ·
+                    lio: <span className="text-white">{activeMapRow.current_lio || '—'}</span>
+                  </div>
+                </div>
+
+                {/* Curated maps with thumbnails */}
+                {zonePresets.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                    {zonePresets.map((p) => {
+                      const selected = mapForm.lvl === p.lvl_file && mapForm.lio === p.lio_file;
+                      return (
+                        <button
+                          key={p.id || `${p.lvl_file}|${p.lio_file}`}
+                          onClick={() => setMapForm(prev => ({ ...prev, lvl: p.lvl_file!, lio: p.lio_file! }))}
+                          className={`rounded-lg overflow-hidden border text-left transition-colors ${
+                            selected ? 'border-cyan-400 ring-2 ring-cyan-500/40' : 'border-gray-700 hover:border-gray-500'
+                          }`}
+                        >
+                          {p.preview_image_url ? (
+                            <img src={p.preview_image_url} alt={p.display_name || ''} className="w-full h-24 object-cover" />
+                          ) : (
+                            <div className="w-full h-24 bg-gray-800 flex items-center justify-center text-gray-600 text-2xl">🗺</div>
+                          )}
+                          <div className="px-2 py-1.5 text-sm text-white truncate bg-gray-800/80">
+                            {p.display_name || p.lvl_file}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Everything else the zone has on disk */}
+                {mapPairs.length > 0 && (
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {zonePresets.length > 0 ? 'Other maps' : 'Map'}
+                    </label>
+                    <select
+                      value={`${mapForm.lvl}|${mapForm.lio}`}
+                      onChange={(e) => {
+                        const [lvl, lio] = e.target.value.split('|');
+                        setMapForm(prev => ({ ...prev, lvl, lio }));
+                      }}
+                      className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                    >
+                      <option value="|">Select a map...</option>
+                      {mapPairs.map((pair) => (
+                        <option key={pair.key} value={pair.key}>{pair.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setShowManualMap(v => !v)}
+                  className="text-xs text-gray-400 hover:text-gray-200 mb-3"
+                >
+                  {showManualMap ? 'Hide' : 'Pick lvl / lio files individually'}
+                </button>
+
+                {showManualMap && (
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">.lvl</label>
+                      <select
+                        value={mapForm.lvl}
+                        onChange={(e) => setMapForm(prev => ({ ...prev, lvl: e.target.value }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      >
+                        <option value="">Select...</option>
+                        {(activeMapRow.lvls || []).map((f: string) => (<option key={f} value={f}>{f}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">.lio</label>
+                      <select
+                        value={mapForm.lio}
+                        onChange={(e) => setMapForm(prev => ({ ...prev, lio: e.target.value }))}
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                      >
+                        <option value="">Select...</option>
+                        {(activeMapRow.lios || []).map((f: string) => (<option key={f} value={f}>{f}</option>))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {mapForm.lvl && mapForm.lio && (
+                  <div className="text-sm text-gray-400 mb-4">
+                    Selected: <span className="text-white">{mapForm.lvl}</span> · <span className="text-white">{mapForm.lio}</span>
+                    {mapName && (
+                      <div className="mt-1">
+                        Zone name will be set to <span className="text-cyan-300 font-medium">{mapName}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setMapsZone(null)}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitMapSwap}
+                    disabled={!mapForm.lvl || !mapForm.lio || actionLoading === `${mapsZone.zone_key}-maps`}
+                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-lg font-medium"
+                  >
+                    {actionLoading === `${mapsZone.zone_key}-maps` ? 'Swapping…' : 'Swap & Restart'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -19,12 +19,28 @@ export const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'swap-lvl-l
 export type ZoneAction = (typeof VALID_ACTIONS)[number];
 
 // Actions a per-user grant (user_zone_permissions.permissions) can carry, i.e.
-// what a non-admin can be handed on /test-zone. Map swaps are deliberately not
-// grantable yet - that needs the map picker, which only the admin console has.
-// 'rebuild' pulls the latest server build and restarts the zone, so it is a
-// strictly bigger hammer than restart; the column default stays start/stop/
-// restart, so it has to be granted deliberately.
-export const GRANTABLE_USER_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
+// what a non-admin can be handed on /test-zone. 'rebuild' pulls the latest
+// server build and restarts the zone, so it is a strictly bigger hammer than
+// restart; the column default stays start/stop/restart, so it has to be
+// granted deliberately.
+//
+// 'maps' is the grant name for map rotation. The daemon action is
+// 'swap-lvl-lio' (see USER_ACTION_TO_COMMAND) - the grant is named for what the
+// person can do, not for the wire format. It is only grantable on zones that
+// actually rotate maps (zoneRotatesMaps below).
+export const GRANTABLE_USER_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps'] as const;
+
+/** Grant name -> the action the daemon actually executes. */
+export const USER_ACTION_TO_COMMAND: Record<string, ZoneAction> = {
+  start: 'start',
+  stop: 'stop',
+  restart: 'restart',
+  rebuild: 'rebuild',
+  maps: 'swap-lvl-lio',
+};
+
+/** Whether a zone exposes map rotation (the USL zones, see MAP_ENABLED_ZONES). */
+export const zoneRotatesMaps = (zoneKey: string) => MAP_ENABLED_ZONES.has(zoneKey);
 
 // Zones that expose the Maps (map-rotation) UI. Only the USL zones actually
 // rotate maps for now; add zone keys here if others start using map rotation.

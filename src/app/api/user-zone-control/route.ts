@@ -2,12 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import {
   GRANTABLE_USER_ACTIONS as USER_ZONE_ACTIONS,
+  USER_ACTION_TO_COMMAND,
+  getZoneMaps,
   getZoneOverview,
   getZonePlayerCounts,
   queueZoneCommand,
 } from '@/lib/zoneControl';
 
-// GET - Get user's zone permissions and current zone status
+/** Verify the caller's grant covers this zone + action. */
+async function assertGrant(userId: string, zoneKey: string, permission: string) {
+  const { data: hasPermission, error } = await supabase.rpc('user_has_zone_permission', {
+    p_user_id: userId,
+    p_zone_key: zoneKey,
+    p_permission: permission,
+  });
+  if (error) {
+    console.error('Error checking zone permission:', error);
+    return { ok: false as const, status: 500, error: 'Failed to verify permissions' };
+  }
+  if (!hasPermission) {
+    return {
+      ok: false as const,
+      status: 403,
+      error: `You do not have permission to ${permission} zone ${zoneKey}`,
+    };
+  }
+  return { ok: true as const };
+}
+
+// GET               - the caller's granted zones with live status
+// GET ?maps=<zone>  - map inventory for a zone the caller has 'maps' on
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
@@ -18,9 +42,21 @@ export async function GET(request: NextRequest) {
 
     const token = authHeader.split(' ')[1];
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Map inventory for the picker - same data the admin console's Maps modal
+    // renders, but only for a zone this account has been granted 'maps' on.
+    const mapsZone = new URL(request.url).searchParams.get('maps');
+    if (mapsZone) {
+      const grant = await assertGrant(user.id, mapsZone, 'maps');
+      if (!grant.ok) {
+        return NextResponse.json({ success: false, error: grant.error }, { status: grant.status });
+      }
+      const { maps, presets } = await getZoneMaps(mapsZone);
+      return NextResponse.json({ success: true, maps, presets });
     }
 
     // Get user's zone permissions
@@ -58,7 +94,10 @@ export async function GET(request: NextRequest) {
       zone_name: perm.zone_name,
       permissions: perm.permissions,
       status: zoneStatuses[perm.zone_key]?.status || 'UNKNOWN',
-      playerCount: playerCounts[perm.zone_key] || 0
+      playerCount: playerCounts[perm.zone_key] || 0,
+      // Which server it runs on - the map picker needs it to choose the right
+      // per-server zone_maps row.
+      runningOn: zoneStatuses[perm.zone_key]?.runningOn || null
     }));
 
     return NextResponse.json({ zones: userZones });
@@ -85,12 +124,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { action, zone_key } = await request.json();
+    const { action, zone_key, args } = await request.json();
 
     if (!action || !zone_key) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Action and zone_key are required' 
+      return NextResponse.json({
+        success: false,
+        error: 'Action and zone_key are required'
       }, { status: 400 });
     }
 
@@ -101,27 +140,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check if user has permission for this zone and action
-    const { data: hasPermission, error: permError } = await supabase
-      .rpc('user_has_zone_permission', {
-        p_user_id: user.id,
-        p_zone_key: zone_key,
-        p_permission: action
-      });
-
-    if (permError) {
-      console.error('Error checking zone permission:', permError);
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to verify permissions' 
-      }, { status: 500 });
+    // The grant is named for what the person can do ('maps'); the daemon runs
+    // the wire action ('swap-lvl-lio'). Permission is always checked against
+    // the grant name.
+    const command = USER_ACTION_TO_COMMAND[action];
+    if (action === 'maps' && (!args?.lvl || !args?.lio)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Pick a map first (lvl and lio are required)'
+      }, { status: 400 });
     }
 
-    if (!hasPermission) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `You do not have permission to ${action} zone ${zone_key}` 
-      }, { status: 403 });
+    const grant = await assertGrant(user.id, zone_key, action);
+    if (!grant.ok) {
+      return NextResponse.json({ success: false, error: grant.error }, { status: grant.status });
     }
 
     // User has permission - queue the command directly. This used to POST to
@@ -129,9 +161,12 @@ export async function POST(request: NextRequest) {
     // admin token; both now share @/lib/zoneControl instead.
     try {
       const zoneActionData = await queueZoneCommand({
-        action,
+        action: command,
         zone: zone_key,
         adminId: user.id,
+        args: action === 'maps'
+          ? { cfg: args.cfg || undefined, lvl: args.lvl, lio: args.lio, zoneName: args.zoneName || undefined }
+          : undefined,
       });
 
       if (zoneActionData.ok) {
