@@ -239,6 +239,7 @@ export default function ZoneManagementPage() {
           'USL - KS10': 'usl',
           'USL - Megamaps': 'usl2',
           'Eol - Pioneer Station (Bots)': 'eol',
+          'Cosmic Rift - Rogue Trader': 'cr-rt',
         };
 
         // Map server zones to our zone keys
