@@ -383,8 +383,10 @@ export default function ZoneManagementPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ action, zone: zoneKey, admin_id: session?.user?.id, host: host || undefined }),
+        // The acting admin comes from the token server-side; no admin_id here.
+        body: JSON.stringify({ action, zone: zoneKey, host: host || undefined }),
       });
 
       const data = await response.json();
@@ -473,13 +475,17 @@ export default function ZoneManagementPage() {
     setActionLoading(`${mapsZone.key}-swap`);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('No auth token');
       const res = await fetch('/api/admin/zone-management', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           action: 'swap-lvl-lio',
           zone: mapsZone.key,
-          admin_id: session?.user?.id,
           host,
           args: { cfg: mapForm.cfg || undefined, lvl: mapForm.lvl, lio: mapForm.lio, zoneName: mapName || undefined },
         }),

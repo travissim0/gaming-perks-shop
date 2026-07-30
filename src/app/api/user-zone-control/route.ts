@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { playerCountsByTag } from '@/lib/zoneTitles';
+import { getZoneOverview, getZonePlayerCounts, queueZoneCommand } from '@/lib/zoneControl';
 
 // Actions a per-user grant can carry. 'rebuild' pulls the latest server build
 // and restarts the zone, so it is a strictly bigger hammer than restart - grant
@@ -37,22 +37,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ zones: [] });
     }
 
-    // Fetch current zone status for user's zones. Status comes from the
-    // daemon-backed endpoint (zone_status in Supabase, keyed by zone tag);
-    // player counts come from the population reporter, keyed by in-game title.
-    // (The old /api/admin/zone-status read a JSON file off the web host's own
-    // disk - dead since the site moved to Vercel and the zones to their own
-    // servers - so every zone here always showed UNKNOWN / 0 players.)
-    const origin = new URL(request.url).origin;
+    // Fetch current zone status for the user's zones. Status is the same
+    // daemon-backed view the admin console shows (zone_status, keyed by zone
+    // tag); player counts come from the population reporter, keyed by in-game
+    // title. (The old /api/admin/zone-status read a JSON file off the web
+    // host's own disk - dead since the site moved to Vercel and the zones to
+    // their own servers - so every zone here always showed UNKNOWN / 0.)
     let zoneStatuses: Record<string, any> = {};
     let playerCounts: Record<string, number> = {};
     try {
-      const [statusRes, popRes] = await Promise.all([
-        fetch(`${origin}/api/admin/zone-management`, { cache: 'no-store' }),
-        fetch(`${origin}/api/server-status`, { cache: 'no-store' }),
-      ]);
-      if (statusRes.ok) zoneStatuses = (await statusRes.json()).zones || {};
-      if (popRes.ok) playerCounts = playerCountsByTag((await popRes.json()).zones);
+      const [overview, counts] = await Promise.all([getZoneOverview(), getZonePlayerCounts()]);
+      zoneStatuses = overview.zones || {};
+      playerCounts = counts;
     } catch (error) {
       console.warn('Could not fetch zone status:', error);
     }
@@ -129,23 +125,17 @@ export async function POST(request: NextRequest) {
       }, { status: 403 });
     }
 
-    // User has permission, execute the zone action using the existing admin endpoint
+    // User has permission - queue the command directly. This used to POST to
+    // /api/admin/zone-management, which is why that route could not require an
+    // admin token; both now share @/lib/zoneControl instead.
     try {
-      const zoneActionResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/admin/zone-management`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          action, 
-          zone: zone_key, 
-          admin_id: user.id 
-        }),
+      const zoneActionData = await queueZoneCommand({
+        action,
+        zone: zone_key,
+        adminId: user.id,
       });
 
-      const zoneActionData = await zoneActionResponse.json();
-      
-      if (zoneActionData.success) {
+      if (zoneActionData.ok) {
         // Log the user action
         try {
           await supabase
@@ -172,7 +162,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: zoneActionData.error || `Failed to ${action} zone`
-        }, { status: 500 });
+        }, { status: zoneActionData.status || 500 });
       }
 
     } catch (error) {
