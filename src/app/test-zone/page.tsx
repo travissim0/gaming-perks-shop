@@ -150,13 +150,13 @@ export default function TestZoneManagementPage() {
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto">
-            <h1 className="text-3xl font-bold text-white mb-8">Test Zone Management</h1>
+            <h1 className="text-3xl font-bold text-white mb-8">Zone Management</h1>
             
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
               <div className="text-6xl mb-4">🚫</div>
               <h2 className="text-xl font-semibold text-gray-300 mb-2">No Zone Access</h2>
               <p className="text-gray-400">
-                You don't have permission to manage any test zones at this time.
+                You don't have permission to manage any zones at this time.
               </p>
               <div className="mt-6">
                 <button
@@ -183,8 +183,8 @@ export default function TestZoneManagementPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Test Zone Management</h1>
-              <p className="text-gray-400">Manage your authorized test zones</p>
+              <h1 className="text-3xl font-bold text-white mb-2">Zone Management</h1>
+              <p className="text-gray-400">Manage the zones you have been granted control of</p>
             </div>
             
             <div className="flex items-center gap-4">
@@ -320,7 +320,7 @@ export default function TestZoneManagementPage() {
           {/* Footer Info */}
           <div className="mt-8 p-4 bg-gray-800/50 border border-gray-700/50 rounded-lg">
             <p className="text-sm text-gray-400">
-              ℹ️ You have been granted specific permissions to manage these test zones. 
+              ℹ️ You have been granted specific permissions to manage these zones.
               Changes will take effect within a few seconds. If you encounter any issues, please contact an administrator.
             </p>
           </div>

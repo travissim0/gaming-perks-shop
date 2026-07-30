@@ -1525,8 +1525,8 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           className="flex items-center px-4 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 transition-colors"
                           onClick={() => setShowUserDropdown(false)}
                         >
-                          <span className="text-lg mr-3">🧪</span>
-                          <span className="font-medium">Test Zone</span>
+                          <span className="text-lg mr-3">🛠️</span>
+                          <span className="font-medium">Zone Management</span>
                         </Link>
                       )}
                       <Link 

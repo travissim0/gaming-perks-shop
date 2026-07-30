@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Bell, Menu, X, User, LogOut, Settings } from 'lucide-react';
+import { Bell, Menu, X, User, LogOut, Settings, Server } from 'lucide-react';
+import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
 
 export default function NeutralNavbar() {
   const router = useRouter();
@@ -26,6 +27,9 @@ export default function NeutralNavbar() {
   const [isSiteAdmin, setIsSiteAdmin] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // Per-account zone grants (user_zone_permissions) - shows the same entry the
+  // legacy Navbar has, so a grantee who only ever sees this header can find it.
+  const { hasTestZoneAccess: hasZoneGrants } = useTestZoneAccess(user?.id);
 
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const adminDropdownRef = useRef<HTMLDivElement>(null);
@@ -383,6 +387,16 @@ export default function NeutralNavbar() {
                           <Settings className="w-4 h-4" />
                           Dashboard
                         </Link>
+                        {hasZoneGrants && (
+                          <Link
+                            href="/test-zone"
+                            className="flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-gray-700/50 transition-colors"
+                            onClick={() => setShowUserDropdown(false)}
+                          >
+                            <Server className="w-4 h-4" />
+                            Zone Management
+                          </Link>
+                        )}
                         <button
                           onClick={handleSignOut}
                           className="flex items-center gap-2 w-full px-4 py-3 text-red-400 hover:bg-gray-700/50 transition-colors"
