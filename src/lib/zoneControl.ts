@@ -18,6 +18,14 @@ const STALE_SECONDS = 60; // a server's status row older than this = offline
 export const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'swap-lvl-lio'] as const;
 export type ZoneAction = (typeof VALID_ACTIONS)[number];
 
+// Actions a per-user grant (user_zone_permissions.permissions) can carry, i.e.
+// what a non-admin can be handed on /test-zone. Map swaps are deliberately not
+// grantable yet - that needs the map picker, which only the admin console has.
+// 'rebuild' pulls the latest server build and restarts the zone, so it is a
+// strictly bigger hammer than restart; the column default stays start/stop/
+// restart, so it has to be granted deliberately.
+export const GRANTABLE_USER_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
+
 // Zones that expose the Maps (map-rotation) UI. Only the USL zones actually
 // rotate maps for now; add zone keys here if others start using map rotation.
 const MAP_ENABLED_ZONES = new Set(['usl', 'usl2']);

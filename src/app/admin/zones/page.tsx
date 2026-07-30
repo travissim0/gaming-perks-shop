@@ -16,6 +16,25 @@ interface ZoneInstance {
   online: boolean;
 }
 
+interface GrantUser {
+  id: string;
+  in_game_alias: string | null;
+  email: string | null;
+}
+
+interface ZoneGrant {
+  user_id: string;
+  zone_key: string;
+  zone_name: string;
+  permissions: string[];
+  in_game_alias: string | null;
+  email: string | null;
+  updated_at?: string;
+}
+
+// Keep in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
+const GRANTABLE_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
+
 interface Zone {
   name: string;
   status: 'RUNNING' | 'STOPPED' | 'UNKNOWN';
@@ -150,6 +169,21 @@ export default function ZoneManagementPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showExpiredOperations, setShowExpiredOperations] = useState(false);
   const [serverPlayerData, setServerPlayerData] = useState<{[key: string]: number}>({});
+
+  // Per-account zone grants (user_zone_permissions) - what non-admins get on
+  // /test-zone. These used to be hand-written SQL inserts.
+  const [showPermsModal, setShowPermsModal] = useState(false);
+  const [grants, setGrants] = useState<ZoneGrant[]>([]);
+  const [grantsLoading, setGrantsLoading] = useState(false);
+  const [grantSaving, setGrantSaving] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [userResults, setUserResults] = useState<GrantUser[]>([]);
+  const [userSearching, setUserSearching] = useState(false);
+  const [grantForm, setGrantForm] = useState<{ user: GrantUser | null; zone_key: string; permissions: string[] }>({
+    user: null,
+    zone_key: '',
+    permissions: ['start', 'stop', 'restart'],
+  });
   
   // Scroll position preservation
   const scrollPositionRef = useRef<number>(0);
@@ -411,6 +445,132 @@ export default function ZoneManagementPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // ---- per-account zone grants (user_zone_permissions) --------------------
+  const authHeader = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('No auth token');
+    return { Authorization: `Bearer ${token}` };
+  };
+
+  const fetchGrants = async () => {
+    setGrantsLoading(true);
+    try {
+      const res = await fetch('/api/admin/zone-permissions', { headers: await authHeader() });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to load permissions');
+      setGrants(data.grants || []);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load permissions');
+    } finally {
+      setGrantsLoading(false);
+    }
+  };
+
+  const openPermsModal = () => {
+    setShowPermsModal(true);
+    setUserQuery('');
+    setUserResults([]);
+    setGrantForm({ user: null, zone_key: '', permissions: ['start', 'stop', 'restart'] });
+    fetchGrants();
+  };
+
+  // Debounced alias search for the "grant access to" picker
+  useEffect(() => {
+    if (!showPermsModal) return;
+    const term = userQuery.trim();
+    if (term.length < 2) {
+      setUserResults([]);
+      return;
+    }
+    let cancelled = false;
+    setUserSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/zone-permissions?users=${encodeURIComponent(term)}`, {
+          headers: await authHeader(),
+        });
+        const data = await res.json();
+        if (!cancelled) setUserResults(data.users || []);
+      } catch {
+        if (!cancelled) setUserResults([]);
+      } finally {
+        if (!cancelled) setUserSearching(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [userQuery, showPermsModal]);
+
+  const togglePermission = (perm: string) => {
+    setGrantForm(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(perm)
+        ? prev.permissions.filter(p => p !== perm)
+        : [...prev.permissions, perm],
+    }));
+  };
+
+  const saveGrant = async () => {
+    if (!grantForm.user || !grantForm.zone_key) {
+      toast.error('Pick an account and a zone first');
+      return;
+    }
+    if (grantForm.permissions.length === 0) {
+      toast.error('Pick at least one permission (use Revoke to remove access)');
+      return;
+    }
+    setGrantSaving(true);
+    try {
+      const res = await fetch('/api/admin/zone-permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+        body: JSON.stringify({
+          user_id: grantForm.user.id,
+          zone_key: grantForm.zone_key,
+          permissions: grantForm.permissions,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to save grant');
+      toast.success(`${grantForm.user.in_game_alias || 'Account'} can now ${grantForm.permissions.join(' / ')} ${grantForm.zone_key}`);
+      setGrantForm({ user: null, zone_key: '', permissions: ['start', 'stop', 'restart'] });
+      setUserQuery('');
+      setUserResults([]);
+      fetchGrants();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save grant');
+    } finally {
+      setGrantSaving(false);
+    }
+  };
+
+  const revokeGrant = async (grant: ZoneGrant) => {
+    if (!window.confirm(`Revoke ${grant.in_game_alias || grant.user_id}'s access to ${grant.zone_key}?`)) return;
+    try {
+      const res = await fetch(
+        `/api/admin/zone-permissions?user_id=${encodeURIComponent(grant.user_id)}&zone_key=${encodeURIComponent(grant.zone_key)}`,
+        { method: 'DELETE', headers: await authHeader() }
+      );
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to revoke');
+      toast.success(`Revoked ${grant.zone_key} access`);
+      fetchGrants();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to revoke');
+    }
+  };
+
+  // Load an existing grant into the form so it can be edited in place
+  const editGrant = (grant: ZoneGrant) => {
+    setGrantForm({
+      user: { id: grant.user_id, in_game_alias: grant.in_game_alias, email: grant.email },
+      zone_key: grant.zone_key,
+      permissions: [...grant.permissions],
+    });
+    setUserQuery('');
+    setUserResults([]);
   };
 
   // Map row for the server we're currently targeting for this zone
@@ -885,6 +1045,15 @@ export default function ZoneManagementPage() {
               <span>📊</span>
               <span className="sm:hidden">History</span>
               <span className="hidden sm:inline">{showHistory ? 'Hide' : 'Show'} Command History</span>
+            </button>
+            <button
+              onClick={openPermsModal}
+              className="px-2 sm:px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm"
+              title="Let specific accounts control specific zones from /test-zone"
+            >
+              <span>🔑</span>
+              <span className="sm:hidden">Access</span>
+              <span className="hidden sm:inline">Zone Access</span>
             </button>
           </div>
 
@@ -1546,6 +1715,199 @@ export default function ZoneManagementPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Zone Access Modal - per-account grants (user_zone_permissions) */}
+      {showPermsModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900/95 border border-amber-500/20 rounded-2xl shadow-xl shadow-amber-500/10 p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-1">
+              <h3 className="text-xl font-semibold text-white">Zone Access</h3>
+              <button
+                onClick={() => setShowPermsModal(false)}
+                className="text-gray-400 hover:text-white text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-5">
+              Give a non-admin account control of specific zones. They manage them at{' '}
+              <code className="text-amber-400">/test-zone</code> (Zone Management in their avatar menu)
+              — they never see this console.
+            </p>
+
+            {/* Grant / edit form */}
+            <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Account</label>
+                  {grantForm.user ? (
+                    <div className="flex items-center justify-between gap-2 p-2 bg-gray-700 border border-gray-600 rounded">
+                      <span className="text-white truncate">
+                        {grantForm.user.in_game_alias || '(no alias)'}
+                        {grantForm.user.email && (
+                          <span className="text-gray-400 text-xs ml-2">{grantForm.user.email}</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => setGrantForm(prev => ({ ...prev, user: null }))}
+                        className="text-gray-400 hover:text-white text-sm shrink-0"
+                      >
+                        change
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={userQuery}
+                        onChange={(e) => setUserQuery(e.target.value)}
+                        placeholder="Search by in-game alias..."
+                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500"
+                      />
+                      {userQuery.trim().length >= 2 && (
+                        <div className="mt-1 max-h-40 overflow-y-auto border border-gray-700 rounded bg-gray-800">
+                          {userSearching && <div className="px-3 py-2 text-sm text-gray-400">Searching...</div>}
+                          {!userSearching && userResults.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-gray-400">No accounts found</div>
+                          )}
+                          {userResults.map((u) => (
+                            <button
+                              key={u.id}
+                              onClick={() => setGrantForm(prev => ({ ...prev, user: u }))}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm text-white"
+                            >
+                              {u.in_game_alias || '(no alias)'}
+                              {u.email && <span className="text-gray-400 text-xs ml-2">{u.email}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Zone</label>
+                  <select
+                    value={grantForm.zone_key}
+                    onChange={(e) => setGrantForm(prev => ({ ...prev, zone_key: e.target.value }))}
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                  >
+                    <option value="">Select a zone...</option>
+                    {zones.map((zone) => (
+                      <option key={zone.key} value={zone.key}>{zone.name} ({zone.key})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Permissions</label>
+                <div className="flex flex-wrap gap-2">
+                  {GRANTABLE_ACTIONS.map((perm) => (
+                    <button
+                      key={perm}
+                      onClick={() => togglePermission(perm)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        grantForm.permissions.includes(perm)
+                          ? 'bg-amber-600/80 border-amber-400 text-white'
+                          : 'bg-gray-700/60 border-gray-600 text-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      {perm}
+                    </button>
+                  ))}
+                </div>
+                {grantForm.permissions.includes('rebuild') && (
+                  <p className="text-xs text-amber-300/80 mt-2">
+                    Rebuild deploys the latest server build and restarts the zone, disconnecting players.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={saveGrant}
+                  disabled={grantSaving || !grantForm.user || !grantForm.zone_key}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-lg font-medium transition-colors"
+                >
+                  {grantSaving ? 'Saving...' : 'Save access'}
+                </button>
+              </div>
+            </div>
+
+            {/* Existing grants */}
+            <h4 className="text-sm font-semibold text-gray-300 mb-2">
+              Current access {grants.length > 0 && <span className="text-gray-500">({grants.length})</span>}
+            </h4>
+            {grantsLoading ? (
+              <div className="text-gray-400 text-sm py-4">Loading...</div>
+            ) : grants.length === 0 ? (
+              <div className="text-gray-400 text-sm py-4">Nobody has per-account zone access yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {grants.map((grant) => {
+                  const known = zones.some(z => z.key === grant.zone_key);
+                  return (
+                    <div
+                      key={`${grant.user_id}-${grant.zone_key}`}
+                      className="flex flex-wrap items-center justify-between gap-2 bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-white text-sm font-medium truncate">
+                          {grant.in_game_alias || grant.email || grant.user_id}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {grant.zone_name} <code className="text-cyan-400">{grant.zone_key}</code>
+                          {!known && (
+                            <span className="ml-2 text-red-400" title="No daemon reports this zone tag - the buttons will fail">
+                              ⚠ unknown zone
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap gap-1">
+                          {grant.permissions.map((perm) => (
+                            <span
+                              key={perm}
+                              className="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-200 border border-gray-600"
+                            >
+                              {perm}
+                            </span>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => editGrant(grant)}
+                          className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => revokeGrant(grant)}
+                          className="px-2 py-1 text-xs bg-red-600/80 hover:bg-red-500 text-white rounded"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowPermsModal(false)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getZoneOverview, getZonePlayerCounts, queueZoneCommand } from '@/lib/zoneControl';
-
-// Actions a per-user grant can carry. 'rebuild' pulls the latest server build
-// and restarts the zone, so it is a strictly bigger hammer than restart - grant
-// it deliberately (user_zone_permissions.permissions still defaults to
-// start/stop/restart only).
-const USER_ZONE_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
+import {
+  GRANTABLE_USER_ACTIONS as USER_ZONE_ACTIONS,
+  getZoneOverview,
+  getZonePlayerCounts,
+  queueZoneCommand,
+} from '@/lib/zoneControl';
 
 // GET - Get user's zone permissions and current zone status
 export async function GET(request: NextRequest) {
