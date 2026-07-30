@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { playerCountsByTag } from '@/lib/zoneTitles';
+
+// Actions a per-user grant can carry. 'rebuild' pulls the latest server build
+// and restarts the zone, so it is a strictly bigger hammer than restart - grant
+// it deliberately (user_zone_permissions.permissions still defaults to
+// start/stop/restart only).
+const USER_ZONE_ACTIONS = ['start', 'stop', 'restart', 'rebuild'] as const;
 
 // GET - Get user's zone permissions and current zone status
 export async function GET(request: NextRequest) {
@@ -30,19 +37,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ zones: [] });
     }
 
-    // Fetch current zone status for user's zones
-    let zoneStatuses = {};
+    // Fetch current zone status for user's zones. Status comes from the
+    // daemon-backed endpoint (zone_status in Supabase, keyed by zone tag);
+    // player counts come from the population reporter, keyed by in-game title.
+    // (The old /api/admin/zone-status read a JSON file off the web host's own
+    // disk - dead since the site moved to Vercel and the zones to their own
+    // servers - so every zone here always showed UNKNOWN / 0 players.)
+    const origin = new URL(request.url).origin;
+    let zoneStatuses: Record<string, any> = {};
+    let playerCounts: Record<string, number> = {};
     try {
-      const zoneStatusResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/admin/zone-status`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (zoneStatusResponse.ok) {
-        const statusData = await zoneStatusResponse.json();
-        zoneStatuses = statusData.zones || {};
-      }
+      const [statusRes, popRes] = await Promise.all([
+        fetch(`${origin}/api/admin/zone-management`, { cache: 'no-store' }),
+        fetch(`${origin}/api/server-status`, { cache: 'no-store' }),
+      ]);
+      if (statusRes.ok) zoneStatuses = (await statusRes.json()).zones || {};
+      if (popRes.ok) playerCounts = playerCountsByTag((await popRes.json()).zones);
     } catch (error) {
       console.warn('Could not fetch zone status:', error);
     }
@@ -53,7 +63,7 @@ export async function GET(request: NextRequest) {
       zone_name: perm.zone_name,
       permissions: perm.permissions,
       status: zoneStatuses[perm.zone_key]?.status || 'UNKNOWN',
-      playerCount: zoneStatuses[perm.zone_key]?.playerCount || 0
+      playerCount: playerCounts[perm.zone_key] || 0
     }));
 
     return NextResponse.json({ zones: userZones });
@@ -89,10 +99,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    if (!['start', 'stop', 'restart'].includes(action)) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid action. Must be start, stop, or restart' 
+    if (!USER_ZONE_ACTIONS.includes(action)) {
+      return NextResponse.json({
+        success: false,
+        error: `Invalid action. Must be one of: ${USER_ZONE_ACTIONS.join(', ')}`
       }, { status: 400 });
     }
 

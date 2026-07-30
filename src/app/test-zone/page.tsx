@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
 
+// Must stay in sync with USER_ZONE_ACTIONS in /api/user-zone-control.
+type ZoneAction = 'start' | 'stop' | 'restart' | 'rebuild';
+
 interface UserZone {
   zone_key: string;
   zone_name: string;
@@ -65,7 +68,15 @@ export default function TestZoneManagementPage() {
   };
 
   // Execute zone action
-  const executeZoneAction = async (zoneKey: string, action: 'start' | 'stop' | 'restart') => {
+  const executeZoneAction = async (zoneKey: string, action: ZoneAction) => {
+    // Rebuild downloads the latest server build and restarts the zone, so it
+    // kicks everyone in it - make it a deliberate click.
+    if (action === 'rebuild' && !window.confirm(
+      `Rebuild ${zoneKey}?\n\nThis downloads the latest server build, deploys it to the zone and restarts it. Anyone currently playing will be disconnected.`
+    )) {
+      return;
+    }
+
     try {
       setActionLoading(`${zoneKey}-${action}`);
 
@@ -276,6 +287,26 @@ export default function TestZoneManagementPage() {
                         ) : (
                           <>
                             🔄 Restart
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {zone.permissions.includes('rebuild') && (
+                      <button
+                        onClick={() => executeZoneAction(zone.zone_key, 'rebuild')}
+                        disabled={actionLoading === `${zone.zone_key}-rebuild`}
+                        title="Download the latest server build, deploy it to this zone and restart it"
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      >
+                        {actionLoading === `${zone.zone_key}-rebuild` ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Rebuilding...
+                          </>
+                        ) : (
+                          <>
+                            🛠️ Rebuild
                           </>
                         )}
                       </button>

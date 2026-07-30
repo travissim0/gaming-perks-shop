@@ -7,20 +7,42 @@
 # /home/freeinfantry/zones/scripts/ makes BASE=/home/freeinfantry/zones,
 # which is where the zone folders live.
 #
-#   ./rebuild-zones.sh            # all zones in the map
 #   ./rebuild-zones.sh usl        # only the named tags
+#   ./rebuild-zones.sh all        # every zone in the map (restarts them all!)
 
 set -uo pipefail
 
 BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="InfantryOnline/Infantry-Online-Server"
 
-# tag -> zone directory name (relative to $BASE). Keep in sync with zone-daemon.conf.
-declare -A ZONES=(
-  [usl]="League - USL Matches"
-)
+# tag -> zone directory name (relative to $BASE). Taken straight from
+# zone-daemon.conf's ZONE_DIRS so this script can never drift from the tags the
+# admin console offers a Rebuild button for (it used to list only [usl], so a
+# rebuild of any other zone died with "unknown tag"). The static map is just a
+# fallback for a missing/unreadable conf.
+CONF="${ZONE_DAEMON_CONF:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/zone-daemon.conf}"
+declare -A ZONE_DIRS=()
+declare -A ZONES=()
+if [ -r "$CONF" ]; then
+  # shellcheck disable=SC1090
+  source "$CONF"
+  for tag in "${!ZONE_DIRS[@]}"; do ZONES["$tag"]="${ZONE_DIRS[$tag]}"; done
+  unset SUPABASE_SERVICE_KEY   # sourced only for the zone map; don't leak it to children
+fi
+if [ "${#ZONES[@]}" -eq 0 ]; then
+  echo "WARN: no zones from $CONF - falling back to the built-in map"
+  ZONES=( [usl]="League - USL Matches" )
+fi
 
-if [ "$#" -gt 0 ]; then TAGS=("$@"); else TAGS=("${!ZONES[@]}"); fi
+# Targets must be explicit. The map used to hold a single zone, so a bare run
+# meaning "all of them" was harmless; now it holds every registered zone and a
+# stray no-arg run would stop+restart the whole server.
+if [ "$#" -eq 0 ]; then
+  echo "Usage: $0 <tag> [tag...]   |   $0 all"
+  echo "Known tags: ${!ZONES[*]}"
+  exit 1
+fi
+if [ "$#" -eq 1 ] && [ "$1" = "all" ]; then TAGS=("${!ZONES[@]}"); else TAGS=("$@"); fi
 for tag in "${TAGS[@]}"; do
   [ -n "${ZONES[$tag]:-}" ] || { echo "ERROR: unknown tag '$tag'. Known: ${!ZONES[*]}"; exit 1; }
 done

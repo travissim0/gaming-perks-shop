@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
 import SpaceBackground from '@/components/SpaceBackground';
+import { ZONE_TITLE_TO_TAG } from '@/lib/zoneTitles';
 
 interface ZoneInstance {
   server: string;
@@ -228,19 +229,10 @@ export default function ZoneManagementPage() {
         const playerCounts: {[key: string]: number} = {};
         
         // Live population (/api/server-status) is keyed by in-game TITLE, but our
-        // rows are keyed by the daemon zone tag. Map current titles -> tags here
-        // (checked before the stale zones-config lookup). Titles track a zone's
-        // <zoneName>/active map, so update these if a zone's map/name changes.
-        const titleToTag: { [title: string]: string } = {
-          'Sports - Soccer Brawl': 'sb',
-          "KOTH - Chambert's Tournament": 'ct',
-          'SKX - Triple Threat': 'tt',
-          'SK - Minimaps': 'minimaps',
-          'USL - KS10': 'usl',
-          'USL - Megamaps': 'usl2',
-          'Eol - Pioneer Station (Bots)': 'eol',
-          'Cosmic Rift - Rogue Trader': 'cr-rt',
-        };
+        // rows are keyed by the daemon zone tag. The title -> tag map lives in
+        // src/lib/zoneTitles.ts (shared with /api/user-zone-control) and is
+        // checked before the stale zones-config lookup.
+        const titleToTag = ZONE_TITLE_TO_TAG;
 
         // Map server zones to our zone keys
         data.zones.forEach((zone: any) => {
