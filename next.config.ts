@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Infantry zone editors — static SPA in public/editors/ (built by infantry-cfs-studio
+  // `vite build --config vite.config.web.ts --base=/editors/`). public/ has no
+  // directory-index behavior, so map the bare path to the SPA's index.html.
+  async rewrites() {
+    return [
+      { source: '/editors', destination: '/editors/index.html' },
+    ];
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -170,6 +178,24 @@ const nextConfig: NextConfig = {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
           },
+        ],
+      },
+      {
+        // Infantry web client CDN — content-addressed BLOs are immutable (the filename IS the
+        // content hash), so cache forever. Served from public/cdn/ (built by infantry-cfs-studio
+        // `npm run build-cdn`).
+        source: '/cdn/assets/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+        ],
+      },
+      {
+        // Zone manifests + data files change when a zone is rebuilt → short cache + revalidate.
+        source: '/cdn/zones/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=60, stale-while-revalidate=300' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
         ],
       },
     ];
