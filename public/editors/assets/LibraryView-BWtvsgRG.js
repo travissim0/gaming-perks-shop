@@ -1,4 +1,4 @@
-import{j as e,r as o}from"./index-R1Q_d2Kw.js";import{c as We,f as ke,u as Ye}from"./WebApp-DpyKZbfH.js";import{a as me,r as Xe,b as qe,c as Ke,e as Qe,d as Je}from"./WebEditorsShell-BAumhyqa.js";import{e as je,C as ne}from"./itemEditorStore-BAjdA0Ee.js";import{A as Ae,m as Se}from"./proxy-Dgol2l0d.js";import{u as Ze,S as et}from"./SpriteRenderer-BYM_L_Q-.js";const tt=`You are an expert at upscaling retro game assets to modern ray-traced 3D quality for Infantry Online, a top-down 2.5D shooter being modernized with dynamic lighting.
+import{j as e,r as o}from"./index-aBP2p8Xv.js";import{c as We,f as ke,u as Ye}from"./WebApp-Dy67id3X.js";import{a as me,r as Xe,b as qe,c as Ke,e as Qe,d as Je}from"./WebEditorsShell-BAqlf-bW.js";import{e as je,C as ne}from"./itemEditorStore-yD4cOOjf.js";import{A as Ae,m as Se}from"./proxy-DjOyyxUX.js";import{u as Ze,S as et}from"./SpriteRenderer-3jiWrj0r.js";const tt=`You are an expert at upscaling retro game assets to modern ray-traced 3D quality for Infantry Online, a top-down 2.5D shooter being modernized with dynamic lighting.
 
 CRITICAL CONTEXT:
 - These are 1999-era sprites originally rendered from low-poly 3D models
