@@ -45,7 +45,16 @@ export default function TestZoneManagementPage() {
   const [filesBusy, setFilesBusy] = useState(false);
   const [filesOutput, setFilesOutput] = useState<string>('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadPath, setUploadPath] = useState('');
+  const [uploadFolder, setUploadFolder] = useState<'assets' | 'scripts'>('assets');
+  // Gametype scripts live in a subfolder of scripts/ (e.g. GameTypes/CTF).
+  const [scriptsSubdir, setScriptsSubdir] = useState('GameTypes/CTF');
+
+  // Destination derived from the folder choice + the picked file's name.
+  const uploadDest = uploadFile
+    ? uploadFolder === 'assets'
+      ? `assets/${uploadFile.name}`
+      : `scripts/${scriptsSubdir.replace(/^\/+|\/+$/g, '')}/${uploadFile.name}`.replace(/\/{2,}/g, '/')
+    : '';
 
   const activeMapRow = mapsZone
     ? (mapsRows.find(r => r.server_key === mapsZone.runningOn) || mapsRows[0])
@@ -213,15 +222,15 @@ export default function TestZoneManagementPage() {
   };
 
   const submitFileUpload = async () => {
-    if (!filesZone || !uploadFile || !uploadPath) return;
+    if (!filesZone || !uploadFile || !uploadDest) return;
     setFilesBusy(true);
-    setFilesOutput(`Uploading ${uploadPath}…`);
+    setFilesOutput(`Uploading ${uploadDest}…`);
     try {
       // 1) signed upload URL, 2) PUT the file to storage, 3) daemon deploys it
       const staged = await filesPost({
         action: 'files-upload-url',
         zone_key: filesZone.zone_key,
-        args: { path: uploadPath },
+        args: { path: uploadDest },
       });
       const put = await fetch(staged.uploadUrl, {
         method: 'PUT',
@@ -229,11 +238,11 @@ export default function TestZoneManagementPage() {
         body: uploadFile,
       });
       if (!put.ok) throw new Error(`Upload failed (HTTP ${put.status})`);
-      setFilesOutput(`Deploying ${uploadPath} to the zone…`);
+      setFilesOutput(`Deploying ${uploadDest} to the zone…`);
       const deploy = await filesPost({
         action: 'files-deploy',
         zone_key: filesZone.zone_key,
-        args: { files: [{ path: uploadPath, object: staged.object }] },
+        args: { files: [{ path: uploadDest, object: staged.object }] },
       });
       setFilesOutput(await pollCommand(deploy.commandId));
       setUploadFile(null);
@@ -244,11 +253,6 @@ export default function TestZoneManagementPage() {
       setFilesBusy(false);
     }
   };
-
-  // Sensible default destination for a picked file: gametype scripts for .cs,
-  // assets/ for everything else. Editable before deploying.
-  const defaultPathFor = (name: string) =>
-    name.toLowerCase().endsWith('.cs') ? `scripts/GameTypes/CTF/${name}` : `assets/${name}`;
 
   // Execute zone action
   const executeZoneAction = async (zoneKey: string, action: ZoneAction) => {
@@ -497,7 +501,7 @@ export default function TestZoneManagementPage() {
 
                     {zone.permissions.includes('files') && (
                       <button
-                        onClick={() => { setFilesZone(zone); setFilesOutput(''); setUploadFile(null); setUploadPath(''); }}
+                        onClick={() => { setFilesZone(zone); setFilesOutput(''); setUploadFile(null); setUploadFolder('assets'); }}
                         title="Upload files into this zone's scripts/ and assets/ folders, list files, view the zone log"
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                       >
@@ -567,25 +571,40 @@ export default function TestZoneManagementPage() {
                   onChange={(e) => {
                     const f = e.target.files?.[0] || null;
                     setUploadFile(f);
-                    if (f) setUploadPath(defaultPathFor(f.name));
+                    // .cs files are gametype scripts; everything else is an asset
+                    if (f) setUploadFolder(f.name.toLowerCase().endsWith('.cs') ? 'scripts' : 'assets');
                   }}
                   className="text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer"
                 />
                 <div className="flex-1 w-full">
-                  <input
-                    type="text"
-                    value={uploadPath}
-                    onChange={(e) => setUploadPath(e.target.value)}
-                    placeholder="Destination, e.g. scripts/GameTypes/CTF/CTF.cs or assets/mymap.lvl"
-                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Must start with <code>scripts/</code> or <code>assets/</code>. Existing files are overwritten.
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={uploadFolder}
+                      onChange={(e) => setUploadFolder(e.target.value as 'assets' | 'scripts')}
+                      className="p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
+                    >
+                      <option value="assets">assets/ — maps, cfgs, blobs</option>
+                      <option value="scripts">scripts/ — gametype code</option>
+                    </select>
+                    {uploadFolder === 'scripts' && (
+                      <input
+                        type="text"
+                        value={scriptsSubdir}
+                        onChange={(e) => setScriptsSubdir(e.target.value)}
+                        title="Subfolder inside scripts/"
+                        className="flex-1 p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 font-mono">
+                    {uploadDest
+                      ? <>Will deploy to <span className="text-cyan-400">{uploadDest}</span> (overwrites if it exists)</>
+                      : 'Pick a file to upload'}
                   </p>
                 </div>
                 <button
                   onClick={submitFileUpload}
-                  disabled={filesBusy || !uploadFile || !uploadPath}
+                  disabled={filesBusy || !uploadFile || !uploadDest}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-lg font-medium whitespace-nowrap"
                 >
                   {filesBusy ? 'Working…' : '⬆ Upload & Deploy'}
