@@ -14,6 +14,7 @@ export const ZONE_TITLE_TO_TAG: Readonly<Record<string, string>> = {
   'USL - Megamaps': 'usl2',
   'Eol - Pioneer Station (Bots)': 'eol',
   'Cosmic Rift - Rogue Trader': 'cr-rt',
+  'CTF - Mini': 'ctfmini',
 };
 
 /** Zone tag for a live population title, or undefined if unmapped. */
