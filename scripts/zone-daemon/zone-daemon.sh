@@ -152,6 +152,83 @@ swap_map() {
   echo "map edited but zone failed to restart"; return 1
 }
 
+# ---- zone file management (the website's 'files' grant) ---------------------
+# The web app stages uploads in the Supabase Storage bucket 'zone-files' and
+# queues a sync-files command whose args list {path, object} pairs. The daemon
+# downloads each object into the zone folder. Writes are restricted to the
+# scripts/ and assets/ subfolders - server.xml (port/zoneid/db password) is
+# untouchable by construction. The API validates paths too; this re-validation
+# is the trust boundary that matters, so keep both in sync.
+
+valid_rel_path() {  # zone-relative destination path -> 0 if safe to write
+  local p="$1"
+  case "$p" in
+    scripts/*|assets/*) ;;
+    *) return 1 ;;
+  esac
+  case "/$p/" in
+    */../*|*/./*|*//*) return 1 ;;
+  esac
+  [[ "$p" =~ ^[A-Za-z0-9\ _()./-]+$ ]] || return 1
+  return 0
+}
+
+storage_url() { echo "${SUPABASE_URL}/storage/v1/object/zone-files/${1// /%20}"; }
+
+sync_files() {  # tag args_json -> deploys staged storage objects into the zone
+  local tag="$1" args="$2" dir; dir="$(zone_dir "$tag")"
+  [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { echo "zone dir not found for $tag"; return 1; }
+  local n; n=$(jq '.files | length' <<<"$args" 2>/dev/null)
+  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] || { echo "args.files missing or empty"; return 1; }
+  local i ok=0 fail=0 out=""
+  for ((i = 0; i < n; i++)); do
+    local rel obj tmp code
+    rel=$(jq -r ".files[$i].path // \"\"" <<<"$args")
+    obj=$(jq -r ".files[$i].object // \"\"" <<<"$args")
+    if ! valid_rel_path "$rel"; then out+="REJECT $rel (bad path); "; fail=$((fail + 1)); continue; fi
+    case "$obj" in
+      "$tag"/*) ;;
+      *) out+="REJECT $rel (object not under $tag/); "; fail=$((fail + 1)); continue ;;
+    esac
+    tmp="$(mktemp)"
+    code=$(curl -s -w '%{http_code}' -o "$tmp" \
+           -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")")
+    if [ "$code" != "200" ]; then
+      out+="FAIL $rel (download HTTP $code); "; fail=$((fail + 1)); rm -f "$tmp"; continue
+    fi
+    mkdir -p "$dir/$(dirname "$rel")"
+    mv "$tmp" "$dir/$rel"
+    chmod 644 "$dir/$rel"
+    out+="OK $rel ($(stat -c%s "$dir/$rel") bytes); "; ok=$((ok + 1))
+    # staged object is consumed - delete it so the bucket doesn't grow forever
+    curl -s -X DELETE -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")" >/dev/null
+  done
+  echo "$ok deployed, $fail failed. $out(restart the zone to load script/cfg changes)"
+  [ "$fail" -eq 0 ]
+}
+
+list_files() {  # tag -> file inventory of scripts/ + assets/ (into result_message)
+  local tag="$1" dir; dir="$(zone_dir "$tag")"
+  [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { echo "zone dir not found for $tag"; return 1; }
+  ( cd "$dir" && find scripts assets -type f -printf '%10s  %TY-%Tm-%Td %TH:%TM  %p\n' 2>/dev/null \
+      | sort -k4 | head -500 )
+}
+
+tail_log() {  # tag -> recent zone log lines (compile errors etc.)
+  local tag="$1" dir; dir="$(zone_dir "$tag")"
+  [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { echo "zone dir not found for $tag"; return 1; }
+  [ -d "$dir/logs" ] || { echo "no logs directory"; return 1; }
+  local f found=0
+  for f in ZoneServerHandler1.txt errors.txt warnings.txt; do
+    if [ -f "$dir/logs/$f" ]; then
+      echo "=== logs/$f (last 40 lines) ==="
+      tail -n 40 "$dir/logs/$f"
+      found=1
+    fi
+  done
+  [ "$found" -eq 1 ] || echo "no log files found"
+}
+
 execute_action() {  # zone action [args_json] -> propagates exit code
   local zone="$1" action="$2" args="${3:-}"
   case "$action" in
@@ -159,6 +236,9 @@ execute_action() {  # zone action [args_json] -> propagates exit code
     stop)    stop_zone    "$zone" ;;
     restart) restart_zone "$zone" ;;
     rebuild) rebuild_zone "$zone" ;;
+    sync-files) sync_files "$zone" "$args" ;;
+    list-files) list_files "$zone" ;;
+    tail-log)   tail_log   "$zone" ;;
     swap-lvl-lio)
       local cfg lvl lio zn
       cfg=$(jq -r '.cfg // ""' <<<"$args" 2>/dev/null)

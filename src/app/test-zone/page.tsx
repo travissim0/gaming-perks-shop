@@ -10,7 +10,7 @@ import { buildMapPairs, mapNameFor, presetsForZone, type MapPreset } from '@/lib
 
 // Must stay in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
 // 'maps' is the grant name for map rotation; the daemon action it queues is
-// swap-lvl-lio.
+// swap-lvl-lio. 'files' opens the file manager modal (upload/list/log).
 type ZoneAction = 'start' | 'stop' | 'restart' | 'rebuild' | 'maps';
 
 interface UserZone {
@@ -38,6 +38,14 @@ export default function TestZoneManagementPage() {
   const [mapPresets, setMapPresets] = useState<MapPreset[]>([]);
   const [mapForm, setMapForm] = useState<{ cfg: string; lvl: string; lio: string }>({ cfg: '', lvl: '', lio: '' });
   const [showManualMap, setShowManualMap] = useState(false);
+
+  // File manager (only for zones granted 'files') - upload into scripts/ +
+  // assets/, list what's on disk, read the recent zone log (compile errors).
+  const [filesZone, setFilesZone] = useState<UserZone | null>(null);
+  const [filesBusy, setFilesBusy] = useState(false);
+  const [filesOutput, setFilesOutput] = useState<string>('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPath, setUploadPath] = useState('');
 
   const activeMapRow = mapsZone
     ? (mapsRows.find(r => r.server_key === mapsZone.runningOn) || mapsRows[0])
@@ -155,6 +163,92 @@ export default function TestZoneManagementPage() {
       setActionLoading(null);
     }
   };
+
+  // ---- File manager (the 'files' grant) ----------------------------------
+
+  // Poll a queued command until the daemon reports its result (~5s poll cycle).
+  const pollCommand = async (commandId: string): Promise<string> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    for (let i = 0; i < 45; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const res = await fetch(`/api/user-zone-control?command=${encodeURIComponent(commandId)}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const data = await res.json();
+      if (data.success && ['completed', 'failed'].includes(data.command?.status)) {
+        return data.command.result_message || `(${data.command.status}, no output)`;
+      }
+    }
+    return 'Timed out waiting for the zone server to respond — try List Files to check the result.';
+  };
+
+  const filesPost = async (body: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/user-zone-control', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Request failed');
+    return data;
+  };
+
+  const runFilesCommand = async (action: 'files-list' | 'files-log') => {
+    if (!filesZone) return;
+    setFilesBusy(true);
+    setFilesOutput(action === 'files-list' ? 'Listing files…' : 'Fetching log…');
+    try {
+      const data = await filesPost({ action, zone_key: filesZone.zone_key });
+      setFilesOutput(await pollCommand(data.commandId));
+    } catch (e: any) {
+      setFilesOutput('');
+      toast.error(e.message || 'Request failed');
+    } finally {
+      setFilesBusy(false);
+    }
+  };
+
+  const submitFileUpload = async () => {
+    if (!filesZone || !uploadFile || !uploadPath) return;
+    setFilesBusy(true);
+    setFilesOutput(`Uploading ${uploadPath}…`);
+    try {
+      // 1) signed upload URL, 2) PUT the file to storage, 3) daemon deploys it
+      const staged = await filesPost({
+        action: 'files-upload-url',
+        zone_key: filesZone.zone_key,
+        args: { path: uploadPath },
+      });
+      const put = await fetch(staged.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: uploadFile,
+      });
+      if (!put.ok) throw new Error(`Upload failed (HTTP ${put.status})`);
+      setFilesOutput(`Deploying ${uploadPath} to the zone…`);
+      const deploy = await filesPost({
+        action: 'files-deploy',
+        zone_key: filesZone.zone_key,
+        args: { files: [{ path: uploadPath, object: staged.object }] },
+      });
+      setFilesOutput(await pollCommand(deploy.commandId));
+      setUploadFile(null);
+    } catch (e: any) {
+      setFilesOutput('');
+      toast.error(e.message || 'Upload failed');
+    } finally {
+      setFilesBusy(false);
+    }
+  };
+
+  // Sensible default destination for a picked file: gametype scripts for .cs,
+  // assets/ for everything else. Editable before deploying.
+  const defaultPathFor = (name: string) =>
+    name.toLowerCase().endsWith('.cs') ? `scripts/GameTypes/CTF/${name}` : `assets/${name}`;
 
   // Execute zone action
   const executeZoneAction = async (zoneKey: string, action: ZoneAction) => {
@@ -401,6 +495,16 @@ export default function TestZoneManagementPage() {
                       </button>
                     )}
 
+                    {zone.permissions.includes('files') && (
+                      <button
+                        onClick={() => { setFilesZone(zone); setFilesOutput(''); setUploadFile(null); setUploadPath(''); }}
+                        title="Upload files into this zone's scripts/ and assets/ folders, list files, view the zone log"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      >
+                        📁 Files
+                      </button>
+                    )}
+
                     {zone.permissions.includes('rebuild') && (
                       <button
                         onClick={() => executeZoneAction(zone.zone_key, 'rebuild')}
@@ -435,6 +539,85 @@ export default function TestZoneManagementPage() {
           </div>
         </div>
       </div>
+
+      {/* File manager - upload into scripts/ + assets/, list files, view log */}
+      {filesZone && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-900/95 border border-blue-500/20 rounded-2xl shadow-xl shadow-blue-500/10 p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-1">
+              <h3 className="text-xl font-semibold text-white">📁 Zone Files — {filesZone.zone_name}</h3>
+              <button
+                onClick={() => setFilesZone(null)}
+                className="text-gray-400 hover:text-white text-2xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-5">
+              Upload files into this zone's <code className="text-cyan-400">scripts/</code> and{' '}
+              <code className="text-cyan-400">assets/</code> folders. Script and config changes load on the
+              next restart — use the Restart button after deploying, then View Log to check for compile errors.
+            </p>
+
+            <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 mb-4">
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setUploadFile(f);
+                    if (f) setUploadPath(defaultPathFor(f.name));
+                  }}
+                  className="text-sm text-gray-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer"
+                />
+                <div className="flex-1 w-full">
+                  <input
+                    type="text"
+                    value={uploadPath}
+                    onChange={(e) => setUploadPath(e.target.value)}
+                    placeholder="Destination, e.g. scripts/GameTypes/CTF/CTF.cs or assets/mymap.lvl"
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm font-mono"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Must start with <code>scripts/</code> or <code>assets/</code>. Existing files are overwritten.
+                  </p>
+                </div>
+                <button
+                  onClick={submitFileUpload}
+                  disabled={filesBusy || !uploadFile || !uploadPath}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 text-white rounded-lg font-medium whitespace-nowrap"
+                >
+                  {filesBusy ? 'Working…' : '⬆ Upload & Deploy'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => runFilesCommand('files-list')}
+                disabled={filesBusy}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white rounded-lg text-sm"
+              >
+                📄 List Files
+              </button>
+              <button
+                onClick={() => runFilesCommand('files-log')}
+                disabled={filesBusy}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white rounded-lg text-sm"
+              >
+                📜 View Log
+              </button>
+            </div>
+
+            {filesOutput && (
+              <pre className="bg-black/50 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 whitespace-pre-wrap max-h-80 overflow-y-auto">
+                {filesOutput}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Map picker - mirrors the admin console's Maps modal */}
       {mapsZone && (

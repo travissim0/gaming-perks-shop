@@ -15,7 +15,16 @@ import { playerCountsByTag } from '@/lib/zoneTitles';
 
 const STALE_SECONDS = 60; // a server's status row older than this = offline
 
-export const VALID_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'swap-lvl-lio'] as const;
+export const VALID_ACTIONS = [
+  'start',
+  'stop',
+  'restart',
+  'rebuild',
+  'swap-lvl-lio',
+  'sync-files',
+  'list-files',
+  'tail-log',
+] as const;
 export type ZoneAction = (typeof VALID_ACTIONS)[number];
 
 // Actions a per-user grant (user_zone_permissions.permissions) can carry, i.e.
@@ -28,7 +37,11 @@ export type ZoneAction = (typeof VALID_ACTIONS)[number];
 // 'swap-lvl-lio' (see USER_ACTION_TO_COMMAND) - the grant is named for what the
 // person can do, not for the wire format. It is only grantable on zones that
 // actually rotate maps (zoneRotatesMaps below).
-export const GRANTABLE_USER_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps'] as const;
+// 'files' is the grant name for zone file management: uploading files into the
+// zone's scripts/ + assets/ subfolders (daemon actions sync-files / list-files /
+// tail-log). Like 'maps', the grant is named for the capability, not the wire
+// format; the file endpoints in /api/user-zone-control check this grant.
+export const GRANTABLE_USER_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps', 'files'] as const;
 
 /** Grant name -> the action the daemon actually executes. */
 export const USER_ACTION_TO_COMMAND: Record<string, ZoneAction> = {
@@ -38,6 +51,41 @@ export const USER_ACTION_TO_COMMAND: Record<string, ZoneAction> = {
   rebuild: 'rebuild',
   maps: 'swap-lvl-lio',
 };
+
+// ---------------------------------------------------------------------------
+// Zone file management (the 'files' grant)
+// ---------------------------------------------------------------------------
+
+/** Supabase Storage bucket that staged zone-file uploads live in. */
+export const ZONE_FILES_BUCKET = 'zone-files';
+
+// What a 'files' grant may write. scripts/ + assets/ only - server.xml (port,
+// zoneid, db password) stays out of reach by construction.
+const ZONE_FILE_EXTENSIONS = new Set([
+  'cs', 'cfg', 'lvl', 'lio', 'rpg', 'itm', 'veh', 'nws', 'txt', 'json', 'wav', 'blo',
+]);
+
+/**
+ * Validate a zone-relative destination path for a file upload.
+ * Returns an error string, or null if the path is acceptable.
+ * The daemon re-validates with the same rules before writing.
+ */
+export function validateZoneFilePath(p: string): string | null {
+  if (!p || typeof p !== 'string') return 'Path required';
+  if (p.length > 200) return 'Path too long';
+  if (!/^(scripts|assets)\//.test(p)) return 'Path must start with scripts/ or assets/';
+  if (p.endsWith('/')) return 'Path must name a file, not a folder';
+  if (!/^[A-Za-z0-9 _().\/-]+$/.test(p)) return 'Path contains unsupported characters';
+  const segments = p.split('/');
+  if (segments.some((s) => s === '' || s === '.' || s === '..' || s.startsWith('.'))) {
+    return 'Path contains invalid segments';
+  }
+  const ext = p.split('.').pop()?.toLowerCase() || '';
+  if (!ZONE_FILE_EXTENSIONS.has(ext)) {
+    return `File type .${ext} not allowed (allowed: ${[...ZONE_FILE_EXTENSIONS].join(', ')})`;
+  }
+  return null;
+}
 
 /** Whether a zone exposes map rotation (the USL zones, see MAP_ENABLED_ZONES). */
 export const zoneRotatesMaps = (zoneKey: string) => MAP_ENABLED_ZONES.has(zoneKey);

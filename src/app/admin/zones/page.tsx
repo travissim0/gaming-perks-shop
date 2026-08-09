@@ -35,7 +35,8 @@ interface ZoneGrant {
 
 // Keep in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
 // 'maps' is only offered for zones that rotate maps (zone.hasMaps).
-const GRANTABLE_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps'] as const;
+// 'files' = upload into the zone's scripts/ + assets/ via /test-zone.
+const GRANTABLE_ACTIONS = ['start', 'stop', 'restart', 'rebuild', 'maps', 'files'] as const;
 
 interface Zone {
   name: string;

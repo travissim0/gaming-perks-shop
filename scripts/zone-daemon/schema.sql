@@ -39,7 +39,17 @@ ALTER TABLE zone_commands ADD COLUMN IF NOT EXISTS args jsonb;
 --      WHERE conrelid='zone_commands'::regclass AND contype='c';)
 ALTER TABLE zone_commands DROP CONSTRAINT IF EXISTS zone_commands_action_check;
 ALTER TABLE zone_commands ADD CONSTRAINT zone_commands_action_check
-  CHECK (action IN ('start','stop','restart','rebuild','swap-lvl-lio'));
+  CHECK (action IN ('start','stop','restart','rebuild','swap-lvl-lio',
+                    'sync-files','list-files','tail-log'));
+
+-- =====================================================================
+-- Zone file management (the 'files' grant on /test-zone) - lets a granted
+-- user upload files into a zone's scripts/ + assets/ subfolders.
+-- =====================================================================
+-- 1. Run the widened action CHECK above (adds sync-files/list-files/tail-log).
+-- 2. Create a PRIVATE Storage bucket named 'zone-files' (Dashboard -> Storage,
+--    or the API). Uploads are staged there via signed URLs and consumed
+--    (deleted) by the daemon after deployment.
 
 -- 3. Per-zone map inventory the daemon upserts (one row per "<server>:<zone>").
 --    Read by the API with the service-role client, so no RLS policy is needed.

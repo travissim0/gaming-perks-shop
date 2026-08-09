@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, getServiceSupabase } from '@/lib/supabase';
 import {
   GRANTABLE_USER_ACTIONS as USER_ZONE_ACTIONS,
   USER_ACTION_TO_COMMAND,
+  ZONE_FILES_BUCKET,
   getZoneMaps,
   getZoneOverview,
   getZonePlayerCounts,
   queueZoneCommand,
+  validateZoneFilePath,
 } from '@/lib/zoneControl';
 
 /** Verify the caller's grant covers this zone + action. */
@@ -30,8 +32,9 @@ async function assertGrant(userId: string, zoneKey: string, permission: string) 
   return { ok: true as const };
 }
 
-// GET               - the caller's granted zones with live status
-// GET ?maps=<zone>  - map inventory for a zone the caller has 'maps' on
+// GET                 - the caller's granted zones with live status
+// GET ?maps=<zone>    - map inventory for a zone the caller has 'maps' on
+// GET ?command=<id>   - status/result of a command this caller queued (polling)
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
@@ -45,6 +48,26 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
+
+    // Command polling: lets the files UI (and headless API users) read the
+    // daemon's result_message for a command THEY queued. Scoped by admin_id so
+    // one user can't read another's command results.
+    const commandId = new URL(request.url).searchParams.get('command');
+    if (commandId) {
+      const { data: cmd, error: cmdError } = await getServiceSupabase()
+        .from('zone_commands')
+        .select('id, action, zone, status, result_message, created_at, completed_at')
+        .eq('id', commandId)
+        .eq('admin_id', user.id)
+        .maybeSingle();
+      if (cmdError) {
+        return NextResponse.json({ success: false, error: 'Failed to read command' }, { status: 500 });
+      }
+      if (!cmd) {
+        return NextResponse.json({ success: false, error: 'Command not found' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, command: cmd });
     }
 
     // Map inventory for the picker - same data the admin console's Maps modal
@@ -131,6 +154,83 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'Action and zone_key are required'
       }, { status: 400 });
+    }
+
+    // ---- Zone file management (the 'files' grant) -------------------------
+    // files-upload-url: stage an upload -> returns a signed Storage URL
+    // files-deploy:     queue sync-files so the daemon pulls staged files in
+    // files-list:       queue list-files (inventory of scripts/ + assets/)
+    // files-log:        queue tail-log   (recent zone log, e.g. compile errors)
+    // All results land in zone_commands.result_message; poll GET ?command=<id>.
+    if (['files-upload-url', 'files-deploy', 'files-list', 'files-log'].includes(action)) {
+      const grant = await assertGrant(user.id, zone_key, 'files');
+      if (!grant.ok) {
+        return NextResponse.json({ success: false, error: grant.error }, { status: grant.status });
+      }
+
+      if (action === 'files-upload-url') {
+        const path = args?.path;
+        const pathError = validateZoneFilePath(path);
+        if (pathError) {
+          return NextResponse.json({ success: false, error: pathError }, { status: 400 });
+        }
+        // Object key: zone-scoped prefix + uuid so uploads never collide; the
+        // real destination path travels separately in the deploy args.
+        const baseName = path.split('/').pop()!.replace(/[^A-Za-z0-9._-]/g, '_');
+        const object = `${zone_key}/incoming/${crypto.randomUUID()}/${baseName}`;
+        const { data: signed, error: signError } = await getServiceSupabase()
+          .storage.from(ZONE_FILES_BUCKET)
+          .createSignedUploadUrl(object);
+        if (signError || !signed) {
+          console.error('createSignedUploadUrl failed:', signError);
+          return NextResponse.json({ success: false, error: 'Failed to create upload URL' }, { status: 500 });
+        }
+        return NextResponse.json({
+          success: true,
+          object,
+          path,
+          uploadUrl: signed.signedUrl,
+          token: signed.token,
+        });
+      }
+
+      let command: 'sync-files' | 'list-files' | 'tail-log';
+      let commandArgs: any = undefined;
+
+      if (action === 'files-deploy') {
+        const files = args?.files;
+        if (!Array.isArray(files) || files.length === 0 || files.length > 20) {
+          return NextResponse.json({ success: false, error: 'args.files must list 1-20 files' }, { status: 400 });
+        }
+        for (const f of files) {
+          const pathError = validateZoneFilePath(f?.path);
+          if (pathError) {
+            return NextResponse.json({ success: false, error: `${f?.path}: ${pathError}` }, { status: 400 });
+          }
+          if (typeof f?.object !== 'string' || !f.object.startsWith(`${zone_key}/`)) {
+            return NextResponse.json({ success: false, error: 'Staged object does not belong to this zone' }, { status: 400 });
+          }
+        }
+        command = 'sync-files';
+        commandArgs = { files: files.map((f: any) => ({ path: f.path, object: f.object })) };
+      } else {
+        command = action === 'files-list' ? 'list-files' : 'tail-log';
+      }
+
+      const queued = await queueZoneCommand({
+        action: command,
+        zone: zone_key,
+        adminId: user.id,
+        args: commandArgs,
+      });
+      if (!queued.ok) {
+        return NextResponse.json({ success: false, error: queued.error }, { status: queued.status });
+      }
+      return NextResponse.json({
+        success: true,
+        commandId: queued.commandId,
+        message: queued.message,
+      });
     }
 
     if (!USER_ZONE_ACTIONS.includes(action)) {
