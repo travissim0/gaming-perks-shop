@@ -191,7 +191,9 @@ sync_files() {  # tag args_json -> deploys staged storage objects into the zone
       *) out+="REJECT $rel (object not under $tag/); "; fail=$((fail + 1)); continue ;;
     esac
     tmp="$(mktemp)"
+    # sb_secret_* keys need the apikey header too - Authorization alone is HTTP 400
     code=$(curl -s -w '%{http_code}' -o "$tmp" \
+           -H "apikey: $SUPABASE_SERVICE_KEY" \
            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")")
     if [ "$code" != "200" ]; then
       out+="FAIL $rel (download HTTP $code); "; fail=$((fail + 1)); rm -f "$tmp"; continue
@@ -201,7 +203,8 @@ sync_files() {  # tag args_json -> deploys staged storage objects into the zone
     chmod 644 "$dir/$rel"
     out+="OK $rel ($(stat -c%s "$dir/$rel") bytes); "; ok=$((ok + 1))
     # staged object is consumed - delete it so the bucket doesn't grow forever
-    curl -s -X DELETE -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")" >/dev/null
+    curl -s -X DELETE -H "apikey: $SUPABASE_SERVICE_KEY" \
+         -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")" >/dev/null
   done
   echo "$ok deployed, $fail failed. $out(restart the zone to load script/cfg changes)"
   [ "$fail" -eq 0 ]

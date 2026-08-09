@@ -244,8 +244,9 @@ export default function TestZoneManagementPage() {
         zone_key: filesZone.zone_key,
         args: { files: [{ path: uploadDest, object: staged.object }] },
       });
+      // Keep the file selected so a retry (e.g. after a transient failure) is
+      // one click - the native input still shows its name either way.
       setFilesOutput(await pollCommand(deploy.commandId));
-      setUploadFile(null);
     } catch (e: any) {
       setFilesOutput('');
       toast.error(e.message || 'Upload failed');
