@@ -15,6 +15,7 @@ export const ZONE_TITLE_TO_TAG: Readonly<Record<string, string>> = {
   'Eol - Pioneer Station (Bots)': 'eol',
   'Cosmic Rift - Rogue Trader': 'cr-rt',
   'CTF - Mini': 'ctfmini',
+  'CTF - Twin Peaks 2.0': 'ctf',
 };
 
 /** Zone tag for a live population title, or undefined if unmapped. */
