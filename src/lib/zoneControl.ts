@@ -61,9 +61,15 @@ export const ZONE_FILES_BUCKET = 'zone-files';
 
 // What a 'files' grant may write. scripts/ + assets/ only - server.xml (port,
 // zoneid, db password) stays out of reach by construction.
-const ZONE_FILE_EXTENSIONS = new Set([
-  'cs', 'cfg', 'lvl', 'lio', 'rpg', 'itm', 'veh', 'nws', 'txt', 'json', 'wav', 'blo',
-]);
+//
+// There is deliberately NO file-extension allowlist. Zones carry a long tail of
+// asset types (.tip, .rpg, .nws, per-gametype data files) and an allowlist just
+// blocks a zone dev from updating a file that is already in their own zone -
+// which is exactly what happened with .tip. It also bought no safety: '.cs' has
+// to be allowed, and a .cs is compiled and executed by the zone at boot, so the
+// grant confers code execution no matter what the list says. The real
+// containment is the path check below (scripts/ or assets/ only, no traversal,
+// server.xml unreachable), the size cap, and who gets granted 'files' at all.
 
 /**
  * Validate a zone-relative destination path for a file upload.
@@ -79,10 +85,6 @@ export function validateZoneFilePath(p: string): string | null {
   const segments = p.split('/');
   if (segments.some((s) => s === '' || s === '.' || s === '..' || s.startsWith('.'))) {
     return 'Path contains invalid segments';
-  }
-  const ext = p.split('.').pop()?.toLowerCase() || '';
-  if (!ZONE_FILE_EXTENSIONS.has(ext)) {
-    return `File type .${ext} not allowed (allowed: ${[...ZONE_FILE_EXTENSIONS].join(', ')})`;
   }
   return null;
 }

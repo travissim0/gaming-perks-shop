@@ -238,6 +238,15 @@ sync_files() {  # tag args_json -> deploys staged storage objects into the zone
     curl -s -X DELETE -H "apikey: $SUPABASE_SERVICE_KEY" \
          -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" "$(storage_url "$obj")" >/dev/null
   done
+  # A .cs reachable from two paths under scripts/ is compiled TWICE, so every
+  # type in it collides with itself (CS0121/CS0229 -> BadImageFormatException)
+  # and the whole gametype silently fails to load. Easy to cause by uploading to
+  # a mistyped folder, and miserable to diagnose from the compile output.
+  local dupes
+  dupes=$(find "$dir/scripts" -name '*.cs' | sed 's|.*/||' | sort | uniq -d | xargs)
+  if [ -n "$dupes" ]; then
+    out+="WARNING duplicate .cs filenames under scripts/: $dupes - the zone will NOT compile until the extra copy is deleted; "
+  fi
   echo "$ok deployed, $fail failed. $out(restart the zone to load script/cfg changes)"
   [ "$fail" -eq 0 ]
 }

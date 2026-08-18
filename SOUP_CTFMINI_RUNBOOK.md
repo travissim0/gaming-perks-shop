@@ -94,7 +94,12 @@ sleep 8; curl -s "$BASE/api/user-zone-control?command=$CMD" \
 ## Rules & limits
 
 - Destinations must start with `scripts/` or `assets/`; existing files are overwritten.
-- Allowed file types: `cs cfg lvl lio rpg itm veh nws txt json wav blo`. Max 50 MB.
+- Any file type is allowed (`.tip`, `.rpg`, per-gametype data files, whatever your zone needs). Max 50 MB.
+- **Check the destination folder spelling.** Uploading a script to a mistyped path
+  (e.g. `scripts/GameTypes/Quarantine/` instead of `.../QuarantineCA/`) does not replace the
+  original - it adds a SECOND copy, and the zone compiles both. Every class then collides
+  with itself (`CS0121`/`CS0229` -> `Bad IL format`) and the gametype silently fails to load.
+  The deploy result now warns you when duplicate `.cs` filenames appear.
 - Deploys don't restart the zone — restart deliberately (it disconnects players).
 - Your map is `assets/ctfmini.lvl` / `.lio`, config `assets/ctfmini.cfg`, script
   `scripts/GameTypes/CTF/CTF.cs` (self-contained; the zone compiles it at boot).
