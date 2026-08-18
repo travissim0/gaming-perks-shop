@@ -25,6 +25,12 @@
 #   SUPABASE_SERVICE_KEY="eyJ..."
 #   declare -A ZONE_DIRS=( [usl]="League - USL Matches" ... )   # tag -> folder
 #   declare -A ZONE_NAMES=( [usl]="League - USL Matches" ... )  # tag -> display name (optional)
+#   declare -A ZONE_SLOTS=( [ctfmini]="zid175" [qca]="zid175" )  # tag -> slot (optional)
+#
+# ZONE_SLOTS groups tags that SHARE a game-DB zoneid. Only one member of a slot
+# may run at a time: two zones logging in under one zoneid kick each other off
+# the database in a loop. Starting a zone auto-stops any running sibling in its
+# slot, so a slot behaves like one swappable zone "seat".
 #
 # Usage:
 #   ./zone-daemon.sh daemon   # run forever (systemd ExecStart)
@@ -58,6 +64,8 @@ done
 SERVER_LABEL="${SERVER_LABEL:-$SERVER_KEY}"
 REBUILD_SCRIPT="${REBUILD_SCRIPT:-}"
 ROTATE_SCRIPT="${ROTATE_SCRIPT:-$SCRIPT_DIR/rotate-map.sh}"
+# default only if the conf did not define it - re-declaring would wipe the conf value
+declare -p ZONE_SLOTS >/dev/null 2>&1 || declare -A ZONE_SLOTS=()
 MAPS_REFRESH_CYCLES="${MAPS_REFRESH_CYCLES:-12}"  # refresh zone_maps every N poll cycles (~60s at 5s)
 declare -A ZONE_DIRS  2>/dev/null || true
 declare -A ZONE_NAMES 2>/dev/null || true
@@ -90,10 +98,26 @@ is_running() {  # tag -> 0 if a detached screen session named tag exists
   screen -ls 2>/dev/null | grep -E "[0-9]+\.${1}[[:space:]]" >/dev/null 2>&1
 }
 
+slot_siblings() {  # tag -> other tags sharing its zoneid slot (blank if unslotted)
+  local tag="$1" slot="${ZONE_SLOTS[$tag]:-}" t
+  [ -n "$slot" ] || return 0
+  for t in "${!ZONE_SLOTS[@]}"; do
+    [ "$t" = "$tag" ] && continue
+    [ "${ZONE_SLOTS[$t]}" = "$slot" ] && echo "$t"
+  done
+}
+
 start_zone() {
-  local tag="$1" dir; dir="$(zone_dir "$tag")"
+  local tag="$1" dir sib; dir="$(zone_dir "$tag")"
   [ -n "${ZONE_DIRS[$tag]:-}" ] && [ -d "$dir" ] || { log "ERROR start $tag: dir not found ($dir)"; return 1; }
   if is_running "$tag"; then log "WARN start $tag: already running"; return 0; fi
+  # one zoneid = one running zone; hand the slot over instead of fighting for it
+  for sib in $(slot_siblings "$tag"); do
+    if is_running "$sib"; then
+      log "SLOT ${ZONE_SLOTS[$tag]}: stopping $sib to free the zoneid for $tag"
+      stop_zone "$sib"
+    fi
+  done
   log "Starting $tag in $dir"
   ( cd "$dir" && screen -dmS "$tag" dotnet ZoneServer.dll )
   sleep 3
@@ -104,8 +128,16 @@ stop_zone() {
   local tag="$1"
   if ! is_running "$tag"; then log "WARN stop $tag: not running"; return 0; fi
   log "Stopping $tag"
-  screen -S "$tag" -X quit
-  sleep 2
+  # Ctrl+C first: only SIGINT makes a zone deregister from the client directory.
+  # A bare "screen quit" leaves a ghost entry sitting on its zoneid.
+  local waited=0
+  screen -S "$tag" -X stuff $'\003'
+  while [ $waited -lt 12 ] && is_running "$tag"; do sleep 1; waited=$((waited + 1)); done
+  if is_running "$tag"; then
+    log "WARN $tag ignored SIGINT after ${waited}s, forcing"
+    screen -S "$tag" -X quit
+    sleep 2
+  fi
   if ! is_running "$tag"; then log "OK $tag stopped"; return 0; else log "ERROR $tag failed to stop"; return 1; fi
 }
 

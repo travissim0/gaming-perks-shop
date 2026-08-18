@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { slotSiblings } from '@/lib/zoneSlots';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -419,6 +420,19 @@ export default function TestZoneManagementPage() {
                       <span>Players: <span className="text-white">{zone.playerCount}</span></span>
                       <span>Permissions: <span className="text-cyan-400">{zone.permissions.join(', ')}</span></span>
                     </div>
+
+                    {/* Zones sharing a game-DB zoneid can only run one at a time */}
+                    {slotSiblings(zone.zone_key).length > 0 && (
+                      <p className="mt-2 text-xs text-amber-300/90">
+                        ⇄ Shares one game-DB slot with{' '}
+                        <span className="font-medium">
+                          {slotSiblings(zone.zone_key)
+                            .map((t) => zones.find((z) => z.zone_key === t)?.zone_name || t)
+                            .join(', ')}
+                        </span>
+                        . Only one can run at a time — starting this one stops the other.
+                      </p>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
