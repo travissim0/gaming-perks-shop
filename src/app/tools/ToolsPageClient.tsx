@@ -1233,9 +1233,10 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
                   </span>
                 </div>
                 <p className="text-sm text-gray-400 leading-relaxed mb-3">
-                  The full CFS Studio editor suite, running in your browser. Open a zone folder to edit
-                  items, vehicles, and skills, explore maps with the GPU-powered viewer, browse the asset
-                  library, and convert sprites &mdash; no install required.
+                  The classic zone editors in your browser &mdash; open a zone folder to edit items,
+                  vehicles, and skills, explore maps with the GPU-powered viewer, browse the asset
+                  library, and convert sprites. No install required. The Infantry v2 desktop client
+                  above bundles the full editor suite with even more capabilities.
                 </p>
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {['Items', 'Vehicles', 'Skills', 'Map Editor', 'Library', 'Converter'].map((t) => (

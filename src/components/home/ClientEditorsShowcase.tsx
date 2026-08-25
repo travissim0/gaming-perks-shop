@@ -13,7 +13,7 @@ const orbitron = Orbitron({
 const MANIFEST_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/latest.json';
 const DOWNLOAD_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/infantry-cfs-studio_latest_x64-setup.nsis.zip';
 
-const CLIENT_CHIPS = ['Dynamic Zoom', 'Modern UI', 'RTS Move Commands', 'Spectator Camera', 'Colorblind Modes'];
+const CLIENT_CHIPS = ['Dynamic Zoom', 'Modern UI', 'RTS Move Commands', 'Spectator Camera', 'Full Editor Suite'];
 const EDITOR_CHIPS = ['Items', 'Vehicles', 'Skills', 'Map Editor', 'Library', 'Converter'];
 
 /**
@@ -62,7 +62,9 @@ export default function ClientEditorsShowcase() {
 
           <p className="text-gray-300 text-sm md:text-base leading-relaxed mb-4">
             Infantry rebuilt for modern systems &mdash; smooth dynamic zoom, a redesigned HUD,
-            right-click move commands, an enhanced spectator camera, and much more.
+            right-click move commands, an enhanced spectator camera, and much more. The full
+            editor suite comes bundled with the desktop app, with the most complete set of
+            zone-building tools.
           </p>
 
           <div className="flex flex-wrap gap-1.5 mb-6">
@@ -124,9 +126,10 @@ export default function ClientEditorsShowcase() {
           </h2>
 
           <p className="text-gray-300 text-sm md:text-base leading-relaxed mb-4">
-            The full editing suite, no install required. Edit items, vehicles, and skills,
-            build maps on a GPU-powered viewer, browse assets, and convert sprites &mdash;
-            straight from your browser.
+            The classic zone editors, reborn in your browser &mdash; no install required.
+            Edit items, vehicles, and skills, build maps on a GPU-powered viewer, browse
+            assets, and convert sprites. For the most capable editing tools, grab the
+            Infantry v2 desktop app &mdash; the editors ship inside it.
           </p>
 
           <div className="flex flex-wrap gap-1.5 mb-6">
