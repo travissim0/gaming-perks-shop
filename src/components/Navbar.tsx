@@ -501,12 +501,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   ];
 
   const toolsNavItems = [
+    { href: '/tools', label: 'Infantry v2 Client', icon: '🖥️' },
+    { href: '/editors', label: 'Web Editors', icon: '🎨' },
     { href: '/perks', label: 'Perks Shop', icon: '🛍️' },
     { href: '/triple-threat', label: 'Triple Threat', icon: '⚡' },
     { href: '/league/ctfml', label: 'CTFML', icon: '🚩' },
     { href: '/logs', label: 'Chat Log Viewer', icon: '📜' },
     { href: '/tools/blob-viewer/index.html', label: 'Blob Viewer', icon: '🖼️' },
-    { href: '/tools', label: 'All Tools', icon: '🔧' },
   ];
 
   if (!user) {

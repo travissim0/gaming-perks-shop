@@ -11,6 +11,7 @@ import TopSupportersWidget from '@/components/TopSupportersWidget';
 import UserAvatar from '@/components/UserAvatar';
 import AveragePopulationWidget from '@/components/zone-activity/AveragePopulationWidget';
 import LaunchSignupBanner from '@/components/home/LaunchSignupBanner';
+import ClientEditorsShowcase from '@/components/home/ClientEditorsShowcase';
 
 interface ServerStats {
   totalPlayers: number;
@@ -551,6 +552,11 @@ export default function HomeNew() {
               {serverData.stats.totalPlayers} Players
             </span>
           </div>
+        </div>
+
+        {/* New Client + Web Editors - flagship showcase, top billing */}
+        <div className="max-w-[1600px] mx-auto px-4 pt-8">
+          <ClientEditorsShowcase />
         </div>
 
         {/* Zone Activity - Mobile Only (appears first, outside the grid) */}

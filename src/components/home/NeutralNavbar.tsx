@@ -223,7 +223,15 @@ export default function NeutralNavbar() {
                         onClick={() => setShowToolsDropdown(false)}
                       >
                         <span>🖥️</span>
-                        <span className="font-semibold">Infantry v2</span>
+                        <span className="font-semibold">Infantry v2 Client</span>
+                      </Link>
+                      <Link
+                        href="/editors"
+                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-pink-300 hover:bg-pink-600/10 transition-all"
+                        onClick={() => setShowToolsDropdown(false)}
+                      >
+                        <span>🎨</span>
+                        <span className="font-semibold">Web Editors</span>
                       </Link>
                     </div>
                   </div>
@@ -527,7 +535,15 @@ export default function NeutralNavbar() {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <span>🖥️</span>
-                    <span className="font-semibold">Infantry v2</span>
+                    <span className="font-semibold">Infantry v2 Client</span>
+                  </Link>
+                  <Link
+                    href="/editors"
+                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-pink-300 hover:bg-pink-600/10 rounded-lg transition-all"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span>🎨</span>
+                    <span className="font-semibold">Web Editors</span>
                   </Link>
                 </div>
               )}
