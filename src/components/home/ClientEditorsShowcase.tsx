@@ -56,7 +56,7 @@ export default function ClientEditorsShowcase() {
               className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
               style={{ filter: 'drop-shadow(0 0 14px rgba(34,211,238,0.4))' }}
             >
-              INFANTRY V2
+              INFANTRY V2 CLIENT + EDITORS
             </span>
           </h2>
 
