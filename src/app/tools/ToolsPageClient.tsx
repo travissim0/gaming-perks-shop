@@ -39,7 +39,7 @@ const GITHUB_REPO = 'travissim0/infantry-cfs-studio';
 const MANIFEST_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/latest.json';
 const DOWNLOAD_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/public/app-updates/infantry-cfs-studio_latest_x64-setup.nsis.zip';
 const RELEASE_NOTES_URL = 'https://nkinpmqnbcjaftqduujf.supabase.co/rest/v1/release_notes?select=version,notes_html,published_at&order=published_at.desc&limit=50';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5raW5wbXFuYmNqYWZ0cWR1dWpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgxMjA0NzYsImV4cCI6MjA2MzY5NjQ3Nn0.83gXbk6MVOI341RBW7h_SXeSZcIIgI9BOBUX5e0ivv8';
+const SUPABASE_ANON_KEY = 'sb_publishable_aJ5KPVBdEbkZMNYM8K9MZA_BGhQNA-E';
 
 interface AppManifest {
   version: string;
@@ -1207,6 +1207,53 @@ export default function ToolsPageClient({ releases }: { releases: Release[] }) {
           <h2 className={`text-lg font-black tracking-wide text-gray-300 mb-4 ${orbitron.className}`}>
             Web Tools
           </h2>
+
+          {/* Featured: Web Editors suite */}
+          <Link
+            href="/editors"
+            className="group relative block rounded-xl border border-cyan-500/30 hover:border-cyan-400/60 bg-gray-900/60 p-6 mb-4 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 overflow-hidden"
+          >
+            <div
+              className="absolute inset-0 opacity-25 pointer-events-none transition-opacity duration-300 group-hover:opacity-40"
+              style={{
+                background: 'radial-gradient(ellipse at 10% 0%, rgba(34,211,238,0.25) 0%, transparent 55%)',
+              }}
+            />
+            <div className="relative flex items-start gap-4">
+              <div className="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                <Palette className="w-6 h-6 text-cyan-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h3 className="text-lg font-bold text-gray-100 group-hover:text-cyan-300 transition-colors">
+                    Infantry Web Editors
+                  </h3>
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-full">
+                    New
+                  </span>
+                </div>
+                <p className="text-sm text-gray-400 leading-relaxed mb-3">
+                  The full CFS Studio editor suite, running in your browser. Open a zone folder to edit
+                  items, vehicles, and skills, explore maps with the GPU-powered viewer, browse the asset
+                  library, and convert sprites &mdash; no install required.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {['Items', 'Vehicles', 'Skills', 'Map Editor', 'Library', 'Converter'].map((t) => (
+                    <span
+                      key={t}
+                      className="px-2 py-0.5 text-[10px] font-mono text-cyan-300/80 bg-cyan-500/10 border border-cyan-500/20 rounded"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-xs text-cyan-400/80 group-hover:text-cyan-300 font-mono uppercase tracking-wider transition-colors">
+                  Open Editors
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </div>
+          </Link>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
