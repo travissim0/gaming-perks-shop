@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerProfile {
   alias: string;
+  test_only?: boolean;
   rating: { rating: number; peak_rating: number; games: number; wins: number; losses: number; draws: number; win_rate: number | null; last_game_at: string } | null;
   career: { games: number; wins: number; losses: number; mix_games: number; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; heal_amount: number; bio_dart_hits: number; play_seconds: number } | null;
   classes: Array<{ class_name: string; games: number; wins: number; kills: number; deaths: number; seconds: number }>;
@@ -33,7 +34,7 @@ export default function UslMixPlayerPage() {
   if (error) {
     return (
       <UslMixShell title="Player">
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>
       </UslMixShell>
     );
   }
@@ -50,7 +51,7 @@ export default function UslMixPlayerPage() {
   const r = data.rating;
 
   return (
-    <UslMixShell title={data.alias} subtitle="Mix rating and career totals recorded from USL Megamaps games.">
+    <UslMixShell title={data.alias} subtitle={data.test_only ? 'Only seen in test snapshots so far (*mixstats sendnow). Real mix and pub games will replace this view.' : 'Mix rating and career totals recorded from USL Megamaps games.'}>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <StatTile label="Rating" value={r ? Math.round(r.rating) : 'unrated'} hint={r ? `peak ${Math.round(r.peak_rating)} · ${r.games} rated` : 'no mix games yet'} />
         <StatTile label="Mix record" value={r ? `${r.wins}–${r.losses}${r.draws ? `–${r.draws}` : ''}` : '—'} hint={r?.win_rate !== null && r ? `${r.win_rate}% wins` : undefined} />
@@ -79,13 +80,13 @@ export default function UslMixPlayerPage() {
           )}
         </Panel>
 
-        <Panel title="Classes">
+        <Panel title="Classes" accent="green">
           {data.classes.length === 0 ? (
             <p className="text-sm text-gray-500">No games.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-gray-400">
-                <tr className="border-b border-gray-700">
+            <table className={tableCls.table}>
+              <thead className={tableCls.thead}>
+                <tr className={tableCls.headRow}>
                   <th className="text-left py-1.5">Class</th>
                   <th className="text-right py-1.5">Games</th>
                   <th className="text-right py-1.5">Win %</th>
@@ -94,7 +95,7 @@ export default function UslMixPlayerPage() {
               </thead>
               <tbody>
                 {data.classes.map((k) => (
-                  <tr key={k.class_name} className="border-b border-gray-800">
+                  <tr key={k.class_name} className={tableCls.rowStatic}>
                     <td className="py-1.5 text-white">{k.class_name}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.games}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.games ? Math.round((k.wins / k.games) * 100) : '—'}</td>
@@ -108,7 +109,7 @@ export default function UslMixPlayerPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
-        <Panel title="Kills by weapon">
+        <Panel title="Kills by weapon" accent="amber">
           {data.weapons.length === 0 ? (
             <p className="text-sm text-gray-500">No kills yet.</p>
           ) : (
@@ -122,14 +123,14 @@ export default function UslMixPlayerPage() {
             </ul>
           )}
         </Panel>
-        <Panel title="Maps">
+        <Panel title="Maps" accent="purple">
           {data.maps.length === 0 ? (
             <p className="text-sm text-gray-500">No games.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className={tableCls.table}>
               <tbody>
                 {data.maps.map((m) => (
-                  <tr key={m.map_key} className="border-b border-gray-800">
+                  <tr key={m.map_key} className={tableCls.rowStatic}>
                     <td className="py-1.5 text-white">{m.map_key}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{m.games} games</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{m.games ? Math.round((m.wins / m.games) * 100) : 0}% won</td>
@@ -139,7 +140,7 @@ export default function UslMixPlayerPage() {
             </table>
           )}
         </Panel>
-        <Panel title="Support">
+        <Panel title="Support" accent="green">
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-400">Heal output</dt><dd className="text-white tabular-nums">{c?.heal_amount?.toLocaleString() ?? 0} hp</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Bio dart hits</dt><dd className="text-white tabular-nums">{c?.bio_dart_hits ?? 0}</dd></div>
@@ -153,9 +154,9 @@ export default function UslMixPlayerPage() {
           <p className="text-sm text-gray-500">No games.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-gray-400">
-                <tr className="border-b border-gray-700">
+            <table className={tableCls.table}>
+              <thead className={tableCls.thead}>
+                <tr className={tableCls.headRow}>
                   <th className="text-left py-2 pr-2">When</th>
                   <th className="text-left py-2 px-2">Map</th>
                   <th className="text-left py-2 px-2">Game</th>
@@ -170,7 +171,7 @@ export default function UslMixPlayerPage() {
               </thead>
               <tbody>
                 {data.recent_games.map((g) => (
-                  <tr key={g.game_id} className="border-b border-gray-800 hover:bg-gray-700/30">
+                  <tr key={g.game_id} className={tableCls.row}>
                     <td className="py-2 pr-2 text-gray-500 text-xs">{fmtDate(g.ended_at)}</td>
                     <td className="py-2 px-2 text-gray-300">{g.map_key ?? '—'}</td>
                     <td className="py-2 px-2">

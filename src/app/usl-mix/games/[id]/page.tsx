@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerRow {
   alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; primary_class: string; classes: Record<string, number>;
@@ -59,7 +59,7 @@ export default function UslMixGamePage() {
   if (error) {
     return (
       <UslMixShell title="Game">
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>
       </UslMixShell>
     );
   }
@@ -85,6 +85,7 @@ export default function UslMixGamePage() {
           <Panel
             key={t.name}
             title={t.name}
+            accent={t.side === 'C' ? 'amber' : 'cyan'}
             right={
               <div className="flex items-center gap-2">
                 <SideBadge side={t.side} />
@@ -95,9 +96,9 @@ export default function UslMixGamePage() {
           >
             {t.captain && <p className="text-xs text-gray-500 mb-2">Captain: {t.captain}</p>}
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-gray-400">
-                  <tr className="border-b border-gray-700">
+              <table className={tableCls.table}>
+                <thead className={tableCls.thead}>
+                  <tr className={tableCls.headRow}>
                     <th className="text-left py-2 pr-2">Player</th>
                     <th className="text-left py-2 px-2">Class</th>
                     <th className="text-right py-2 px-2">K</th>
@@ -114,7 +115,7 @@ export default function UslMixGamePage() {
                     const kMis = p.kills_scoreboard !== null && p.kills_scoreboard !== p.kills;
                     const dMis = p.deaths_scoreboard !== null && p.deaths_scoreboard !== p.deaths;
                     return (
-                      <tr key={p.alias} className="border-b border-gray-800">
+                      <tr key={p.alias} className={tableCls.rowStatic}>
                         <td className="py-2 pr-2">
                           <Link href={`/usl-mix/players/${encodeURIComponent(p.alias)}`} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link>
                           {p.is_captain && <span className="ml-1 text-xs text-amber-300" title="captain">★</span>}
@@ -140,7 +141,7 @@ export default function UslMixGamePage() {
 
       {/* Data quality */}
       <div className="grid md:grid-cols-3 gap-6 mb-6">
-        <Panel title="Weapon summary">
+        <Panel title="Weapon summary" accent="amber">
           {data.weapon_summary.length === 0 ? (
             <p className="text-sm text-gray-500">No attributed kills.</p>
           ) : (
@@ -162,7 +163,7 @@ export default function UslMixGamePage() {
             </ul>
           )}
         </Panel>
-        <Panel title="Recording quality">
+        <Panel title="Recording quality" accent="green">
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-400">Deaths recorded</dt><dd className="text-white tabular-nums">{data.kill_events.length}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Weapon matched (time + distance)</dt><dd className="text-white tabular-nums">{attribution.matched}</dd></div>
@@ -174,7 +175,7 @@ export default function UslMixGamePage() {
           </dl>
           <p className="text-xs text-gray-500 mt-3">Amber K/D cells differ from the server scoreboard; compare with the in-game breakdown when testing.</p>
         </Panel>
-        <Panel title="Details">
+        <Panel title="Details" accent="purple">
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-400">Match id</dt><dd className="text-gray-300 font-mono text-xs">{g.match_id}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Level file</dt><dd className="text-gray-300">{g.level_file ?? '—'}</dd></div>
@@ -191,9 +192,9 @@ export default function UslMixGamePage() {
           <p className="text-sm text-gray-500">No events.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-gray-400">
-                <tr className="border-b border-gray-700">
+            <table className={tableCls.table}>
+              <thead className={tableCls.thead}>
+                <tr className={tableCls.headRow}>
                   <th className="text-left py-1.5 pr-2">Time</th>
                   <th className="text-left py-1.5 px-2">Killer</th>
                   <th className="text-left py-1.5 px-2">Weapon</th>
@@ -203,7 +204,7 @@ export default function UslMixGamePage() {
               </thead>
               <tbody>
                 {events.map((e, i) => (
-                  <tr key={i} className={`border-b border-gray-800 ${e.team_kill ? 'bg-rose-500/5' : ''}`}>
+                  <tr key={i} className={`${tableCls.rowStatic} ${e.team_kill ? 'bg-rose-500/5' : ''}`}>
                     <td className="py-1.5 pr-2 text-gray-500 tabular-nums">{fmtDuration(Math.floor(e.t_ms / 1000))}</td>
                     <td className="py-1.5 px-2">
                       {e.killer ? (

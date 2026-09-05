@@ -2,10 +2,10 @@
 
 import UslMixShell, { Panel } from '@/components/usl-mix/UslMixShell';
 
-const BASE = 'https://freeinf.org';
+const BASE = 'https://www.freeinf.org';
 
 function Code({ children }: { children: string }) {
-  return <pre className="bg-gray-900/80 border border-gray-700 rounded-lg p-3 text-xs text-gray-200 overflow-x-auto whitespace-pre">{children}</pre>;
+  return <pre className="bg-gray-950/70 border border-cyan-500/15 rounded-xl p-3 text-xs text-gray-200 overflow-x-auto whitespace-pre">{children}</pre>;
 }
 
 function Endpoint({ method, path, desc, params, example }: { method: string; path: string; desc: string; params?: Array<[string, string]>; example?: string }) {

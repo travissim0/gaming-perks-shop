@@ -31,7 +31,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
             'usl_mix_games!inner(id, ended_at, map_key, level_file, game_kind, duration_seconds, end_reason, team_a_name, team_a_kills, team_b_name, team_b_kills, winner_team)'
         )
         .eq('alias_key', key)
-        .in('usl_mix_games.game_kind', ['mix', 'pub'])
         .order('ended_at', { referencedTable: 'usl_mix_games', ascending: false })
         .limit(500),
       supabase
@@ -44,7 +43,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
 
     if (!rating && !career && (!rows || rows.length === 0)) return corsError('Player not found', 404);
 
-    const all = (rows ?? []) as any[];
+    // Real games (mix + pub) drive everything. A player seen only in *mixstats sendnow test
+    // snapshots still gets a profile, flagged test_only, so testers can click through.
+    const realRows = ((rows ?? []) as any[]).filter((r) => r.usl_mix_games?.game_kind !== 'test');
+    const testOnly = realRows.length === 0 && (rows ?? []).length > 0;
+    const all = testOnly ? ((rows ?? []) as any[]) : realRows;
     // recent games sorted by end time (the join order is best-effort)
     const recent = all
       .slice()
@@ -105,6 +108,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         success: true,
         alias: rating?.alias ?? career?.alias ?? all[0]?.alias ?? alias,
         alias_key: key,
+        test_only: testOnly,
         rating: rating
           ? { ...rating, rating: Number(rating.rating), peak_rating: Number(rating.peak_rating), win_rate: rating.games ? Math.round((rating.wins / rating.games) * 1000) / 10 : null }
           : null,

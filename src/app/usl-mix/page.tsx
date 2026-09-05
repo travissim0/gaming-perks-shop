@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, LabelList } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl } from '@/components/usl-mix/UslMixShell';
 
 interface Insights {
   totals: { games: number; games_selected: number; players_rated: number; kills: number; avg_duration_seconds: number; maps: string[] };
@@ -89,34 +89,36 @@ export default function UslMixOverviewPage() {
       title="USL Mix Stats"
       subtitle="Every mix and pub game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy, and a team-aware rating."
     >
-      {error && <div className="mb-6 rounded-lg border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>}
+      {error && <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <label className="text-sm text-gray-400">Map</label>
-        <select value={map} onChange={(e) => setMap(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-100">
+        <select value={map} onChange={(e) => setMap(e.target.value)} className={controlCls}>
           <option value="">All maps</option>
           {(insights?.totals.maps ?? []).map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
         <label className="text-sm text-gray-400 ml-2">Games</label>
-        <div className="inline-flex rounded-md overflow-hidden border border-gray-700">
-          {(['all', 'mix', 'pub'] as const).map((k) => (
-            <button key={k} onClick={() => setKind(k)} className={`px-3 py-1.5 text-sm ${kind === k ? 'bg-cyan-500/20 text-cyan-200' : 'bg-gray-800 text-gray-300 hover:text-white'}`}>
-              {k === 'all' ? 'Mix + Pub' : k === 'mix' ? 'Mix only' : 'Pub only'}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'all', label: 'Mix + Pub' },
+            { value: 'mix', label: 'Mix only' },
+            { value: 'pub', label: 'Pub only' },
+          ]}
+        />
         {loading && <span className="text-sm text-gray-500 animate-pulse">Loading…</span>}
       </div>
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatTile label="Games recorded" value={insights?.totals.games_selected ?? '—'} hint={map ? `on ${map}` : 'all maps'} />
-        <StatTile label="Rated players" value={insights?.totals.players_rated ?? '—'} hint="played at least one mix" />
-        <StatTile label="Kills recorded" value={insights?.totals.kills?.toLocaleString() ?? '—'} hint="enemy kills with a weapon attributed" />
-        <StatTile label="Avg game length" value={insights ? fmtDuration(insights.totals.avg_duration_seconds) : '—'} hint="mercy rule ends games early" />
+        <StatTile accent="purple" label="Rated players" value={insights?.totals.players_rated ?? '—'} hint="played at least one mix" />
+        <StatTile accent="amber" label="Kills recorded" value={insights?.totals.kills?.toLocaleString() ?? '—'} hint="enemy kills with a weapon attributed" />
+        <StatTile accent="green" label="Avg game length" value={insights ? fmtDuration(insights.totals.avg_duration_seconds) : '—'} hint="mercy rule ends games early" />
       </div>
 
       {empty && (
@@ -136,9 +138,9 @@ export default function UslMixOverviewPage() {
             <p className="text-sm text-gray-500">No rated players yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-gray-400">
-                  <tr className="border-b border-gray-700">
+              <table className={tableCls.table}>
+                <thead className={tableCls.thead}>
+                  <tr className={tableCls.headRow}>
                     <th className="text-left py-2 pr-2">#</th>
                     <th className="text-left py-2 pr-2">Player</th>
                     <th className="text-right py-2 px-2">Rating</th>
@@ -151,7 +153,7 @@ export default function UslMixOverviewPage() {
                 </thead>
                 <tbody>
                   {leaders.map((p) => (
-                    <tr key={p.alias} className="border-b border-gray-800 hover:bg-gray-700/30">
+                    <tr key={p.alias} className={tableCls.row}>
                       <td className="py-2 pr-2 text-gray-500 tabular-nums">{p.rank}</td>
                       <td className="py-2 pr-2">
                         <Link href={p.url} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link>
@@ -171,7 +173,7 @@ export default function UslMixOverviewPage() {
         </Panel>
 
         {/* Side win rate overall */}
-        <Panel title="Titan vs Collective">
+        <Panel title="Titan vs Collective" accent="purple">
           {insights && insights.side_win_rates.overall.games > 0 ? (
             <div>
               <div className="flex items-baseline justify-between mb-2">
@@ -216,7 +218,7 @@ export default function UslMixOverviewPage() {
           )}
         </Panel>
 
-        <Panel title="Class win rate" right={<span className="text-xs text-gray-500">% of player-games won · dashed line = 50%</span>}>
+        <Panel title="Class win rate" accent="green" right={<span className="text-xs text-gray-500">% of player-games won · dashed line = 50%</span>}>
           {classChart.length === 0 ? (
             <p className="text-sm text-gray-500">No games yet.</p>
           ) : (
@@ -239,7 +241,7 @@ export default function UslMixOverviewPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
-        <Panel title="Kills by weapon" right={<span className="text-xs text-gray-500">shrapnel rolled up to its launcher</span>}>
+        <Panel title="Kills by weapon" accent="amber" right={<span className="text-xs text-gray-500">shrapnel rolled up to its launcher</span>}>
           {weaponChart.length === 0 ? (
             <p className="text-sm text-gray-500">No kills yet.</p>
           ) : (
@@ -258,14 +260,14 @@ export default function UslMixOverviewPage() {
           )}
         </Panel>
 
-        <Panel title="Class table" className="lg:col-span-2">
+        <Panel title="Class table" className="lg:col-span-2" accent="green">
           {(insights?.class_stats.length ?? 0) === 0 ? (
             <p className="text-sm text-gray-500">No games yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs uppercase text-gray-400">
-                  <tr className="border-b border-gray-700">
+              <table className={tableCls.table}>
+                <thead className={tableCls.thead}>
+                  <tr className={tableCls.headRow}>
                     <th className="text-left py-2 pr-2">Class</th>
                     <th className="text-right py-2 px-2">Played</th>
                     <th className="text-right py-2 px-2">Win %</th>
@@ -278,7 +280,7 @@ export default function UslMixOverviewPage() {
                 </thead>
                 <tbody>
                   {insights!.class_stats.map((c) => (
-                    <tr key={c.class_name} className="border-b border-gray-800">
+                    <tr key={c.class_name} className={tableCls.rowStatic}>
                       <td className="py-2 pr-2 text-white font-medium">{c.class_name}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.appearances}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.win_rate ?? '—'}</td>
@@ -300,12 +302,12 @@ export default function UslMixOverviewPage() {
         {games.length === 0 ? (
           <p className="text-sm text-gray-500">No games yet.</p>
         ) : (
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-gray-700/30">
             {games.map((g) => (
               <li key={g.id}>
-                <Link href={`/usl-mix/games/${g.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 hover:bg-gray-700/30 rounded px-2 -mx-2">
+                <Link href={`/usl-mix/games/${g.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
                   <span className="text-xs text-gray-500 w-28">{fmtDate(g.ended_at)}</span>
-                  <span className="text-xs uppercase px-1.5 py-0.5 rounded border border-gray-600 text-gray-300">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
                   <span className="text-sm text-gray-300 w-24">{g.map_key ?? '—'}</span>
                   <span className="flex items-center gap-2 text-sm">
                     <SideBadge side={g.team_a_side} />
