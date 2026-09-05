@@ -129,16 +129,16 @@ export function Panel({
     <section className={`relative overflow-hidden rounded-2xl border ${a.border} bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl ${a.shadow} ${className}`}>
       <div className={`h-1.5 bg-gradient-to-r ${a.bar}`} />
       {(title || right) && (
-        <div className={`px-4 py-3 border-b ${a.divider} flex items-center justify-between gap-3`}>
+        <div className={`px-4 py-3 border-b ${a.divider} flex flex-wrap items-center justify-between gap-x-3 gap-y-1`}>
           <div className="flex items-center gap-2.5 min-w-0">
             {title && (
               <>
                 <div className={`w-1 h-6 bg-gradient-to-b ${a.text} rounded-full shrink-0`} />
-                <h2 className={`text-base md:text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r ${a.text} uppercase tracking-wider truncate`}>{title}</h2>
+                <h2 className={`text-base md:text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r ${a.text} uppercase tracking-wider`}>{title}</h2>
               </>
             )}
           </div>
-          {right && <div className="text-right shrink-0">{right}</div>}
+          {right && <div className="text-right ml-auto">{right}</div>}
         </div>
       )}
       <div className="p-4 md:p-5">{children}</div>
