@@ -171,7 +171,7 @@ export default function UslMixGamePage() {
             <div className="flex justify-between"><dt className="text-gray-400">Unknown weapon</dt><dd className="text-white tabular-nums">{attribution.unknown}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Non-player deaths</dt><dd className="text-white tabular-nums">{attribution.none}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Scoreboard mismatches</dt><dd className={`tabular-nums ${mismatches ? 'text-amber-300' : 'text-emerald-300'}`}>{mismatches}</dd></div>
-            <div className="flex justify-between"><dt className="text-gray-400">ELO rated</dt><dd className={g.rated ? 'text-emerald-300' : 'text-gray-300'}>{g.game_kind !== 'mix' ? 'never (not a mix)' : g.rated ? 'yes (*mix rated on)' : 'no (host did not opt in)'}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-400">ELO rated</dt><dd className={g.rated ? 'text-emerald-300' : 'text-gray-300'}>{g.game_kind !== 'mix' ? 'never (not a mix)' : g.rated ? 'yes (both captains agreed)' : 'no (captains did not both ?rated)'}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Rating pass ran</dt><dd className="text-white">{g.elo_applied && g.rated ? 'yes' : 'no'}</dd></div>
           </dl>
           <p className="text-xs text-gray-500 mt-3">Amber K/D cells differ from the server scoreboard; compare with the in-game breakdown when testing.</p>

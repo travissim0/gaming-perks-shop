@@ -81,7 +81,7 @@ export interface GameResultPayload {
   map_key?: string;
   game_kind: GameKind;
   team_size?: number;
-  /** ELO opt-in set by the mix host (*mix rated on). Ratings move only when true AND game_kind is mix. */
+  /** ELO opt-in: both captains typed ?rated (or a ref forced it). Ratings move only when true AND game_kind is mix. */
   rated?: boolean;
   started_at?: string;
   ended_at?: string;

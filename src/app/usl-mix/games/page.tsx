@@ -40,7 +40,7 @@ export default function UslMixGamesPage() {
   }, [kind, alias, offset]);
 
   return (
-    <UslMixShell title="Recorded games" subtitle="Every game the zone posted, newest first. Only mixes the host opted in with *mix rated on move ratings; everything else is recorded as casual play. Test snapshots (*mixstats sendnow) show under All or Test.">
+    <UslMixShell title="Recorded games" subtitle="Every game the zone posted, newest first. Only mixes where both captains agreed with ?rated move ratings; everything else is recorded as casual play. Test snapshots (*mixstats sendnow) show under All or Test.">
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <SegmentedControl
           value={kind}

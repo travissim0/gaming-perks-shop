@@ -1,3 +1,3 @@
--- USL Mix: per-game ELO opt-in flag. The mix host runs *mix rated on in the zone; only
--- mix games with rated = true move ratings. Every game is still recorded either way.
+-- USL Mix: per-game ELO opt-in flag. Both captains type ?rated in the zone (ref override:
+-- *mix rated on|off); only mix games with rated = true move ratings. Every game is still recorded.
 ALTER TABLE usl_mix_games ADD COLUMN IF NOT EXISTS rated BOOLEAN NOT NULL DEFAULT FALSE;

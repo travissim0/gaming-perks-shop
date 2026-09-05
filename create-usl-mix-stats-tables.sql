@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS usl_mix_games (
     winner_team         TEXT,
     loser_team          TEXT,
     unattributed_deaths INT DEFAULT 0,
-    rated               BOOLEAN NOT NULL DEFAULT FALSE,     -- host opted this mix into ELO (*mix rated on); only rated mixes move ratings
+    rated               BOOLEAN NOT NULL DEFAULT FALSE,     -- both captains ?rated (or ref override); only rated mixes move ratings
     elo_applied         BOOLEAN NOT NULL DEFAULT FALSE,
     raw                 JSONB,                             -- the full payload as received
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()

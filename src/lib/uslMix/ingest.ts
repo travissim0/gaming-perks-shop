@@ -320,7 +320,7 @@ export async function applyRatingsForGame(supabase: SupabaseClient, gameId: stri
     .single();
   if (gErr || !game) return { applied: false, reason: 'game not found', changes: 0 };
   if (game.game_kind !== 'mix') return { applied: false, reason: `game_kind ${game.game_kind} is never rated`, changes: 0 };
-  if (!game.rated) return { applied: false, reason: 'unrated mix (host did not run *mix rated on)', changes: 0 };
+  if (!game.rated) return { applied: false, reason: 'unrated mix (captains did not both ?rated)', changes: 0 };
   if (game.elo_applied) return { applied: false, reason: 'already applied', changes: 0 };
 
   const { data: players, error: pErr } = await supabase

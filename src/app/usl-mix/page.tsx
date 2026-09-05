@@ -87,7 +87,7 @@ export default function UslMixOverviewPage() {
   return (
     <UslMixShell
       title="USL Mix Stats"
-      subtitle="Every game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy. Ratings only move for mixes the host opts in with *mix rated on."
+      subtitle="Every game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy. Ratings only move for mixes where both captains agreed with ?rated."
     >
       {error && <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>}
 
@@ -133,7 +133,7 @@ export default function UslMixOverviewPage() {
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
-        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">rated mixes only (*mix rated on) · 1200 start</span>}>
+        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">rated mixes only (both captains ?rated) · 1200 start</span>}>
           {leaders.length === 0 ? (
             <p className="text-sm text-gray-500">No rated players yet.</p>
           ) : (
