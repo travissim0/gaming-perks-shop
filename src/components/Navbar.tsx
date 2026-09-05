@@ -489,6 +489,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
+    { href: '/usl-mix', label: 'USL Mix Stats', icon: '🎖️' },
     { href: '/dueling', label: 'Dueling', icon: '🗡️' },
   ];
 

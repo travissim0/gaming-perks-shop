@@ -55,6 +55,7 @@ export default function ImprovedNavbar({ user }: { user: any }) {
 
   const statsNavItems = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
+    { href: '/usl-mix', label: 'USL Mix Stats', icon: '🎖️' },
     { href: '/logs', label: 'Game Logs', icon: '📜' },
   ];
 
