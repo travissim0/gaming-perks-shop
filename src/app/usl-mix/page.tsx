@@ -20,7 +20,7 @@ interface LeaderRow {
 }
 
 interface GameRow {
-  id: string; ended_at: string; map_key: string | null; game_kind: string; duration_seconds: number; end_reason: string | null;
+  id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; duration_seconds: number; end_reason: string | null;
   team_a_name: string; team_a_side: string | null; team_a_kills: number; team_b_name: string; team_b_side: string | null; team_b_kills: number; winner_team: string | null; team_size: number;
   players: Array<{ alias: string }>;
 }
@@ -87,7 +87,7 @@ export default function UslMixOverviewPage() {
   return (
     <UslMixShell
       title="USL Mix Stats"
-      subtitle="Every mix and pub game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy, and a team-aware rating."
+      subtitle="Every game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy. Ratings only move for mixes the host opts in with *mix rated on."
     >
       {error && <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>}
 
@@ -133,7 +133,7 @@ export default function UslMixOverviewPage() {
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
-        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">mix games only · 1200 start</span>}>
+        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">rated mixes only (*mix rated on) · 1200 start</span>}>
           {leaders.length === 0 ? (
             <p className="text-sm text-gray-500">No rated players yet.</p>
           ) : (
@@ -308,6 +308,7 @@ export default function UslMixOverviewPage() {
                 <Link href={`/usl-mix/games/${g.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
                   <span className="text-xs text-gray-500 w-28">{fmtDate(g.ended_at)}</span>
                   <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
+                  {g.game_kind === 'mix' && g.rated && <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title="counted for ELO">rated</span>}
                   <span className="text-sm text-gray-300 w-24">{g.map_key ?? '—'}</span>
                   <span className="flex items-center gap-2 text-sm">
                     <SideBadge side={g.team_a_side} />

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         .from('usl_mix_game_players')
         .select(
           'game_id, alias, side, team_name, result, is_captain, primary_class, classes, kills, deaths, team_kills, shots_fired, shots_landed, accuracy, bio_dart_hits, heal_amount, play_seconds, weapon_kills, weapon_deaths, rating_before, rating_after, rating_delta, performance, ' +
-            'usl_mix_games!inner(id, ended_at, map_key, level_file, game_kind, duration_seconds, end_reason, team_a_name, team_a_kills, team_b_name, team_b_kills, winner_team)'
+            'usl_mix_games!inner(id, ended_at, map_key, level_file, game_kind, rated, duration_seconds, end_reason, team_a_name, team_a_kills, team_b_name, team_b_kills, winner_team)'
         )
         .eq('alias_key', key)
         .order('ended_at', { referencedTable: 'usl_mix_games', ascending: false })
@@ -58,6 +58,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         ended_at: r.usl_mix_games?.ended_at,
         map_key: r.usl_mix_games?.map_key,
         game_kind: r.usl_mix_games?.game_kind,
+        rated: r.usl_mix_games?.rated === true,
         duration_seconds: r.usl_mix_games?.duration_seconds,
         end_reason: r.usl_mix_games?.end_reason,
         team_a_name: r.usl_mix_games?.team_a_name,

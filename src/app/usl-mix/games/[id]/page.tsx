@@ -77,7 +77,7 @@ export default function UslMixGamePage() {
   return (
     <UslMixShell
       title={`${g.team_a_name} ${g.team_a_kills} – ${g.team_b_kills} ${g.team_b_name}`}
-      subtitle={`${g.game_kind.toUpperCase()}${g.team_size ? ` ${g.team_size}v${g.team_size}` : ''} on ${g.map_key ?? g.level_file ?? 'unknown map'} · ${fmtDate(g.ended_at)} · ${fmtDuration(g.duration_seconds)} · ended by ${g.end_reason ?? '—'}${g.zone_name ? ` · ${g.zone_name}` : ''}${g.arena_name ? ` / ${g.arena_name}` : ''}`}
+      subtitle={`${g.game_kind.toUpperCase()}${g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}${g.game_kind === 'mix' ? (g.rated ? ' · ELO RATED' : ' · unrated') : ''} on ${g.map_key ?? g.level_file ?? 'unknown map'} · ${fmtDate(g.ended_at)} · ${fmtDuration(g.duration_seconds)} · ended by ${g.end_reason ?? '—'}${g.zone_name ? ` · ${g.zone_name}` : ''}${g.arena_name ? ` / ${g.arena_name}` : ''}`}
     >
       {/* Scoreboards */}
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
@@ -171,7 +171,8 @@ export default function UslMixGamePage() {
             <div className="flex justify-between"><dt className="text-gray-400">Unknown weapon</dt><dd className="text-white tabular-nums">{attribution.unknown}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Non-player deaths</dt><dd className="text-white tabular-nums">{attribution.none}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Scoreboard mismatches</dt><dd className={`tabular-nums ${mismatches ? 'text-amber-300' : 'text-emerald-300'}`}>{mismatches}</dd></div>
-            <div className="flex justify-between"><dt className="text-gray-400">Rating applied</dt><dd className="text-white">{g.elo_applied ? (g.game_kind === 'mix' ? 'yes' : 'not rated (not a mix)') : 'no'}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-400">ELO rated</dt><dd className={g.rated ? 'text-emerald-300' : 'text-gray-300'}>{g.game_kind !== 'mix' ? 'never (not a mix)' : g.rated ? 'yes (*mix rated on)' : 'no (host did not opt in)'}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-400">Rating pass ran</dt><dd className="text-white">{g.elo_applied && g.rated ? 'yes' : 'no'}</dd></div>
           </dl>
           <p className="text-xs text-gray-500 mt-3">Amber K/D cells differ from the server scoreboard; compare with the in-game breakdown when testing.</p>
         </Panel>

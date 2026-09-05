@@ -15,7 +15,7 @@ interface PlayerProfile {
   weapons: Array<{ weapon: string; kills: number }>;
   maps: Array<{ map_key: string; games: number; wins: number }>;
   rating_history: Array<{ game_id: string; rating_after: number; delta: number; created_at: string }>;
-  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; url: string }>;
+  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; url: string }>;
 }
 
 export default function UslMixPlayerPage() {
@@ -178,7 +178,7 @@ export default function UslMixPlayerPage() {
                       <Link href={g.url} className="text-cyan-300 hover:text-cyan-200">
                         {g.team_a_name} {g.team_a_kills}–{g.team_b_kills} {g.team_b_name}
                       </Link>
-                      <span className="ml-1 text-xs text-gray-500 uppercase">{g.game_kind}</span>
+                      <span className="ml-1 text-xs text-gray-500 uppercase">{g.game_kind}{g.game_kind === 'mix' && g.rated ? ' · rated' : ''}</span>
                     </td>
                     <td className="py-2 px-2"><SideBadge side={g.side} /></td>
                     <td className="py-2 px-2"><ResultBadge result={g.result} /></td>

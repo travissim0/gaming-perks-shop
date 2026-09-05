@@ -5,7 +5,7 @@ import Link from 'next/link';
 import UslMixShell, { Panel, SideBadge, fmtDate, fmtDuration, controlCls, SegmentedControl } from '@/components/usl-mix/UslMixShell';
 
 interface GameRow {
-  id: string; ended_at: string; map_key: string | null; game_kind: string; duration_seconds: number; end_reason: string | null; team_size: number;
+  id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; duration_seconds: number; end_reason: string | null; team_size: number;
   team_a_name: string; team_a_side: string | null; team_a_kills: number; team_b_name: string; team_b_side: string | null; team_b_kills: number; winner_team: string | null;
   players: Array<{ alias: string; kills: number; deaths: number; primary_class: string }>;
 }
@@ -40,7 +40,7 @@ export default function UslMixGamesPage() {
   }, [kind, alias, offset]);
 
   return (
-    <UslMixShell title="Recorded games" subtitle="Every game the zone posted, newest first. Test snapshots (from *mixstats sendnow) are included when the filter is set to All.">
+    <UslMixShell title="Recorded games" subtitle="Every game the zone posted, newest first. Only mixes the host opted in with *mix rated on move ratings; everything else is recorded as casual play. Test snapshots (*mixstats sendnow) show under All or Test.">
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <SegmentedControl
           value={kind}
@@ -70,9 +70,12 @@ export default function UslMixGamesPage() {
               const top = g.players?.[0];
               return (
                 <li key={g.id}>
-                  <Link href={`/usl-mix/games/${g.id}`} className="grid md:grid-cols-[7rem_5rem_6rem_1fr_auto] gap-x-4 gap-y-1 items-center py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
+                  <Link href={`/usl-mix/games/${g.id}`} className="grid md:grid-cols-[7rem_8rem_6rem_1fr_auto] gap-x-4 gap-y-1 items-center py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
                     <span className="text-xs text-gray-500">{fmtDate(g.ended_at)}</span>
-                    <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40 w-fit">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
+                    <span className="flex items-center gap-1 w-fit">
+                      <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
+                      {g.game_kind === 'mix' && g.rated && <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title="counted for ELO">rated</span>}
+                    </span>
                     <span className="text-sm text-gray-300">{g.map_key ?? '—'}</span>
                     <span className="flex flex-wrap items-center gap-2 text-sm">
                       <SideBadge side={g.team_a_side} />

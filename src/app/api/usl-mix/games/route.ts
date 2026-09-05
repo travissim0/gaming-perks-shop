@@ -10,6 +10,7 @@ import { aliasKey } from '@/lib/uslMix/types';
  *   ?map=els                 (map_key)
  *   ?alias=Name              only games this player was in
  *   ?since=2026-09-01        ISO date lower bound on ended_at
+ *   ?rated=true|false        only ELO-rated (or only unrated) games
  * Each game carries a compact player list (alias, side, class, K/D, result).
  */
 export const runtime = 'nodejs';
@@ -22,7 +23,7 @@ const GAME_COLUMNS =
   'id, match_id, zone_name, arena_name, level_file, map_key, game_kind, team_size, started_at, ended_at, duration_seconds, end_reason, ' +
   'team_a_name, team_a_side, team_a_kills, team_a_deaths, team_a_result, team_a_captain, team_a_players, ' +
   'team_b_name, team_b_side, team_b_kills, team_b_deaths, team_b_result, team_b_captain, team_b_players, ' +
-  'winner_side, winner_team, loser_team, unattributed_deaths, elo_applied';
+  'winner_side, winner_team, loser_team, unattributed_deaths, elo_applied, rated';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
     const map = (sp.get('map') || '').toLowerCase();
     const alias = sp.get('alias');
     const since = sp.get('since');
+    const rated = sp.get('rated');
 
     const supabase = getServiceSupabase();
     let gameIds: string[] | null = null;
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
     else if (kind !== 'all') q = q.in('game_kind', ['mix', 'pub']);
     if (map) q = q.eq('map_key', map);
     if (since) q = q.gte('ended_at', since);
+    if (rated === 'true' || rated === 'false') q = q.eq('rated', rated === 'true');
     if (gameIds) q = q.in('id', gameIds);
     q = q.order('ended_at', { ascending: false }).range(offset, offset + limit - 1);
 

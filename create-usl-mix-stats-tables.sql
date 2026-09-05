@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS usl_mix_games (
     winner_team         TEXT,
     loser_team          TEXT,
     unattributed_deaths INT DEFAULT 0,
+    rated               BOOLEAN NOT NULL DEFAULT FALSE,     -- host opted this mix into ELO (*mix rated on); only rated mixes move ratings
     elo_applied         BOOLEAN NOT NULL DEFAULT FALSE,
     raw                 JSONB,                             -- the full payload as received
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -37,6 +38,8 @@ CREATE TABLE IF NOT EXISTS usl_mix_games (
 CREATE INDEX IF NOT EXISTS usl_mix_games_ended_at_idx ON usl_mix_games (ended_at DESC);
 CREATE INDEX IF NOT EXISTS usl_mix_games_map_key_idx  ON usl_mix_games (map_key);
 CREATE INDEX IF NOT EXISTS usl_mix_games_kind_idx     ON usl_mix_games (game_kind);
+-- migration for databases created before the rated flag existed
+ALTER TABLE usl_mix_games ADD COLUMN IF NOT EXISTS rated BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- One row per player per game
 CREATE TABLE IF NOT EXISTS usl_mix_game_players (

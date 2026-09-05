@@ -131,6 +131,7 @@ export function validatePayload(body: any): GameResultPayload {
     map_key: strOrNull(body.map_key)?.toLowerCase() ?? undefined,
     game_kind: body.game_kind,
     team_size: numOr(body.team_size, 0),
+    rated: body.game_kind === 'mix' && body.rated === true,
     started_at: parseDate(body.started_at) ?? undefined,
     ended_at: parseDate(body.ended_at) ?? new Date().toISOString(),
     duration_seconds: duration,
@@ -199,6 +200,7 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     map_key: payload.map_key ?? null,
     game_kind: payload.game_kind,
     team_size: payload.team_size ?? 0,
+    rated: payload.rated === true,
     started_at: payload.started_at ?? null,
     ended_at: payload.ended_at,
     duration_seconds: payload.duration_seconds,
@@ -213,7 +215,13 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     raw: stripAuth(raw),
   };
 
-  const { data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(gameRow).select('id').single();
+  let { data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(gameRow).select('id').single();
+  if (gameErr && /column .*rated.* does not exist/i.test(gameErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-rated.sql) - store without the flag rather than lose the game
+    console.warn('[usl-mix] usl_mix_games.rated column missing; inserting without it');
+    const { rated: _r, ...legacyRow } = gameRow;
+    ({ data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(legacyRow).select('id').single());
+  }
   if (gameErr || !game) {
     // unique violation = a concurrent duplicate; report it as such instead of failing
     if ((gameErr as any)?.code === '23505') {
@@ -307,11 +315,12 @@ export interface ApplyResult {
 export async function applyRatingsForGame(supabase: SupabaseClient, gameId: string): Promise<ApplyResult> {
   const { data: game, error: gErr } = await supabase
     .from('usl_mix_games')
-    .select('id, game_kind, elo_applied, ended_at, team_a_name, team_a_kills, team_a_result, team_b_name, team_b_kills, team_b_result')
+    .select('id, game_kind, rated, elo_applied, ended_at, team_a_name, team_a_kills, team_a_result, team_b_name, team_b_kills, team_b_result')
     .eq('id', gameId)
     .single();
   if (gErr || !game) return { applied: false, reason: 'game not found', changes: 0 };
-  if (game.game_kind !== 'mix') return { applied: false, reason: `game_kind ${game.game_kind} is not rated`, changes: 0 };
+  if (game.game_kind !== 'mix') return { applied: false, reason: `game_kind ${game.game_kind} is never rated`, changes: 0 };
+  if (!game.rated) return { applied: false, reason: 'unrated mix (host did not run *mix rated on)', changes: 0 };
   if (game.elo_applied) return { applied: false, reason: 'already applied', changes: 0 };
 
   const { data: players, error: pErr } = await supabase
@@ -410,6 +419,7 @@ export async function recomputeAllRatings(supabase: SupabaseClient): Promise<{ g
     .from('usl_mix_games')
     .select('id')
     .eq('game_kind', 'mix')
+    .eq('rated', true)
     .order('ended_at', { ascending: true });
   let rated = 0;
   for (const g of games ?? []) {

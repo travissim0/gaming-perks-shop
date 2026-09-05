@@ -53,8 +53,9 @@ export default function UslMixApiDocsPage() {
                 ['map', 'map key, e.g. els, kp, apollo'],
                 ['alias', 'only games this player was in'],
                 ['since', 'ISO date lower bound'],
+                ['rated', 'true | false - only ELO-rated (or only unrated) games'],
               ]}
-              example={`curl "${BASE}/api/usl-mix/games?kind=mix&limit=5"`}
+              example={`curl "${BASE}/api/usl-mix/games?kind=mix&rated=true&limit=5"`}
             />
             <Endpoint
               method="GET"
@@ -103,7 +104,7 @@ export default function UslMixApiDocsPage() {
   "action": "game_result", "schema_version": 1, "script_version": "1.0.0",
   "match_id": "9d1f...", "zone_name": "USL - Megamaps", "arena_name": "Arena 1",
   "level_file": "uslMegamap2.lvl", "map_key": "els",
-  "game_kind": "mix", "team_size": 8,
+  "game_kind": "mix", "team_size": 8, "rated": true,
   "started_at": "2026-09-05T20:00:00Z", "ended_at": "2026-09-05T20:18:12Z",
   "duration_seconds": 1092, "end_reason": "mercy",
   "teams": [
@@ -133,7 +134,7 @@ export default function UslMixApiDocsPage() {
         <div className="space-y-6">
           <Panel title="How the rating works">
             <ol className="text-sm text-gray-300 space-y-2 list-decimal list-inside">
-              <li>Everyone starts at <b>1200</b>. Only <b>mix</b> games are rated; pubs and test snapshots are stored but leave ratings alone.</li>
+              <li>Everyone starts at <b>1200</b>. Only <b>mix</b> games where the host ran <code>*mix rated on</code> (<code>rated: true</code>) move ratings. Unrated mixes, casual games and test snapshots are stored for stats but leave ratings alone.</li>
               <li>Team strength = mean rating of its players. Expected score E = 1 / (1 + 10^((R<sub>opp</sub> − R<sub>team</sub>) / 400)).</li>
               <li>Base change = K × (S − E) × margin, K = 48 for a player&apos;s first 10 games, 32 after. The margin multiplier grows to 1.5× at a 40-kill blowout.</li>
               <li>
@@ -147,6 +148,7 @@ export default function UslMixApiDocsPage() {
 
           <Panel title="Field notes">
             <ul className="text-sm text-gray-300 space-y-2">
+              <li><b>rated</b> is the host&apos;s per-mix ELO opt-in (off by default, <code>*mix rated on</code> in the zone). Zone admins can flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings.</li>
               <li><b>Side</b> is read from the team name: &quot;- T&quot; / Titan vs &quot;- C&quot; / Collective.</li>
               <li><b>map_key</b> is the megamap sub-map the zone had active (<code>*setmap</code>), else the level file name.</li>
               <li><b>kills</b> come from death events (enemy kills only, team kills separate); <b>kills_scoreboard</b> is the server&apos;s own counter for cross-checking.</li>
