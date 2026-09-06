@@ -263,7 +263,19 @@ export default function UslMixOverviewPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weaponChart} layout="vertical" margin={{ top: 4, right: 48, bottom: 4, left: 8 }} barCategoryGap={6}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#d1d5db', fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
+                  {/* raw <text> never wraps, so "Light Machinegun" stays on one line; the bars give up the room */}
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    width={150}
+                    tick={(props: any) => (
+                      <text x={props.x} y={props.y} dy={4} textAnchor="end" fontSize={12} fill="#d1d5db">
+                        {props.payload?.value}
+                      </text>
+                    )}
+                  />
                   <Tooltip {...tooltipStyle} formatter={(v: any, _n: any, item: any) => [`${v} kills (${item?.payload?.share}%)`, 'Kills']} />
                   <Bar dataKey="kills" fill={SERIES_NEUTRAL} radius={[0, 4, 4, 0]}>
                     <LabelList dataKey="share" position="right" formatter={(v: any) => `${v}%`} style={{ fill: '#9ca3af', fontSize: 11 }} />
