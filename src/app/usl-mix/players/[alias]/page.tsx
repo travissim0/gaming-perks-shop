@@ -117,7 +117,7 @@ export default function UslMixPlayerPage() {
               {data.weapons.slice(0, 10).map((w) => (
                 <li key={w.weapon} className="text-sm">
                   <div className="flex justify-between text-gray-300"><span>{w.weapon}</span><span className="tabular-nums">{w.kills}</span></div>
-                  <div className="h-1.5 bg-gray-700 rounded mt-1"><div className="h-1.5 rounded" style={{ width: `${(w.kills / data.weapons[0].kills) * 100}%`, background: '#199e70' }} /></div>
+                  <div className="h-1.5 bg-gray-700 rounded mt-1"><div className="h-1.5 rounded" style={{ width: `${(w.kills / data.weapons[0].kills) * 100}%`, background: '#3987e5' }} /></div>
                 </li>
               ))}
             </ul>

@@ -117,7 +117,7 @@ export default function UslMixGamePage() {
           <Panel
             key={t.name}
             title={t.name}
-            accent={t.side === 'C' ? 'amber' : 'cyan'}
+            accent={t.side === 'C' ? 'amber' : 'green'}
             right={
               <div className="flex items-center gap-2">
                 <SideBadge side={t.side} />
@@ -258,7 +258,7 @@ export default function UslMixGamePage() {
                         <span className="tabular-nums">{w.kills}</span>
                       </div>
                       <div className="h-1.5 bg-gray-700 rounded mt-1">
-                        <div className="h-1.5 rounded" style={{ width: `${(w.kills / max) * 100}%`, background: '#199e70' }} />
+                        <div className="h-1.5 rounded" style={{ width: `${(w.kills / max) * 100}%`, background: '#3987e5' }} />
                       </div>
                     </li>
                   );

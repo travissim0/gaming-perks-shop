@@ -6,9 +6,9 @@ import { usePathname } from 'next/navigation';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
 
 /** Titan / Collective series colors - validated for the dark surface, keep in fixed order. */
-export const SIDE_COLORS = { T: '#3987e5', C: '#d95926' } as const;
+export const SIDE_COLORS = { T: '#2fa866', C: '#d95926' } as const;   // Titan green, Collective orange-red
 /** Single-series chart hue (class / weapon bars) so it never reads as a side. */
-export const SERIES_NEUTRAL = '#199e70';
+export const SERIES_NEUTRAL = '#3987e5';
 
 const TABS = [
   { href: '/usl-mix', label: 'Overview' },
