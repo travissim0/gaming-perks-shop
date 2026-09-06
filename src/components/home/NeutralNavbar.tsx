@@ -97,7 +97,7 @@ export default function NeutralNavbar() {
   return (
     <nav className="relative z-50">
       {/* Main Navbar */}
-      <div className="bg-gray-900/80 backdrop-blur-md border-b border-cyan-500/20">
+      <div className="bg-gray-900/90 border-b border-cyan-500/20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
 

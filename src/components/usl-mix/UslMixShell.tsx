@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
@@ -35,40 +34,42 @@ function seededStars(count: number, seed: number) {
     return s / 4294967296;
   };
   const colors = ['#ffffff', '#ffffff', '#cce0ff', '#ffe8d6', '#b4dcff', '#c8ffff'];
-  return Array.from({ length: count }, (_, i) => ({
-    id: i,
-    left: `${(rand() * 100).toFixed(2)}%`,
-    top: `${(rand() * 100).toFixed(2)}%`,
-    size: +(rand() * 1.6 + 0.4).toFixed(2),
+  return Array.from({ length: count }, () => ({
+    x: rand(),
+    y: rand(),
+    r: +(rand() * 0.9 + 0.4).toFixed(2),
     opacity: +(rand() * 0.45 + 0.1).toFixed(2),
     color: colors[Math.floor(rand() * colors.length)],
-    duration: `${(rand() * 5 + 3).toFixed(1)}s`,
-    delay: `${(rand() * 5).toFixed(1)}s`,
-    twinkle: rand() > 0.9,
   }));
 }
 
 /**
- * Perf notes (Firefox scroll jank report, 2026-09-06): only ~10% of stars twinkle, and only on
- * md+ screens with motion allowed. Nothing above this layer may use backdrop-filter: a blurred
- * surface over an animating fixed backdrop is re-sampled every frame and every scroll step.
+ * Perf notes (Firefox scroll-lag report, 2026-09-06, measured in headless Firefox over WebDriver BiDi):
+ * the sky is ONE element with a multi-layer CSS background. 140 absolutely positioned star divs
+ * cost 2-3x the scroll frame time, and any animated opacity in this layer (per-star twinkle or a
+ * single full-screen overlay) was worse still, so nothing here animates. Nothing above this layer
+ * may use backdrop-filter either: a blurred surface over a fixed backdrop is re-sampled on every
+ * scroll step, and even the navbar's blur, scrolled out of view, cost a third of the frame budget.
  */
+const STAR_W = 1920;
+const STAR_H = 1080;
+const STAR_FIELD = (() => {
+  const circles = seededStars(140, 20260905)
+    .map((st) => `<circle cx='${Math.round(st.x * STAR_W)}' cy='${Math.round(st.y * STAR_H)}' r='${st.r}' fill='${st.color}' fill-opacity='${st.opacity}'/>`)
+    .join('');
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${STAR_W}' height='${STAR_H}'>${circles}</svg>`)}")`;
+})();
+const SKY_BACKGROUND = [
+  `${STAR_FIELD} center / cover no-repeat`,
+  'radial-gradient(ellipse at 75% 25%, rgba(139, 92, 246, 0.06) 0%, transparent 45%)',
+  'radial-gradient(ellipse at 15% 75%, rgba(139, 92, 246, 0.04) 0%, transparent 40%)',
+  'radial-gradient(ellipse at 25% 15%, rgba(34, 211, 238, 0.07) 0%, transparent 50%)',
+  'radial-gradient(ellipse at 80% 80%, rgba(34, 211, 238, 0.04) 0%, transparent 40%)',
+  'linear-gradient(180deg, #060610 0%, #0a0e1a 30%, #0d1020 50%, #0a0e1a 70%, #060610 100%)',
+].join(', ');
+
 function SpaceBackdrop() {
-  const stars = useMemo(() => seededStars(140, 20260905), []);
-  return (
-    <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #060610 0%, #0a0e1a 30%, #0d1020 50%, #0a0e1a 70%, #060610 100%)' }} />
-      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 25% 15%, rgba(34, 211, 238, 0.07) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(34, 211, 238, 0.04) 0%, transparent 40%)' }} />
-      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 75% 25%, rgba(139, 92, 246, 0.06) 0%, transparent 45%), radial-gradient(ellipse at 15% 75%, rgba(139, 92, 246, 0.04) 0%, transparent 40%)' }} />
-      {stars.map((st) => (
-        <div
-          key={st.id}
-          className={`absolute rounded-full ${st.twinkle ? 'md:motion-safe:animate-pulse' : ''}`}
-          style={{ left: st.left, top: st.top, width: st.size, height: st.size, backgroundColor: st.color, opacity: st.opacity, animationDuration: st.duration, animationDelay: st.delay }}
-        />
-      ))}
-    </div>
-  );
+  return <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden style={{ background: SKY_BACKGROUND }} />;
 }
 
 export default function UslMixShell({ children, title, subtitle }: { children: React.ReactNode; title?: string; subtitle?: string }) {
