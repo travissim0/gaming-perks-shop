@@ -15,18 +15,37 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_DESCRIPTION =
+  "FREEINF - the Free Infantry community hub: zone hosting and live status, CTF league, Triple Threat, USL Mix stats and ELO, " +
+  "the Infantry v2 client and web editors, guides, forums and community tools. Built by Axidus with Soup and Beso.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.freeinf.org"),
   title: "FREEINF",
-  description: "FREEINF - Community site for development tools, community features, and hub for linux hosted zones. Authored by Axidus.",
+  description: SITE_DESCRIPTION,
+  authors: [{ name: "Axidus" }, { name: "Soup" }, { name: "Beso" }],
+  openGraph: {
+    title: "FREEINF",
+    description: SITE_DESCRIPTION,
+    siteName: "FREEINF",
+    type: "website",
+    url: "https://www.freeinf.org",
+    images: [{ url: "/images/FreeInfantry.png" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "FREEINF",
+    description: SITE_DESCRIPTION,
+  },
   icons: {
     icon: [
-      { url: '/images/freeinfantry.png', sizes: '32x32', type: 'image/png' },
-      { url: '/images/freeinfantry.png', sizes: '16x16', type: 'image/png' },
+      { url: '/images/FreeInfantry.png', sizes: '32x32', type: 'image/png' },
+      { url: '/images/FreeInfantry.png', sizes: '16x16', type: 'image/png' },
     ],
     apple: [
-      { url: '/images/freeinfantry.png', sizes: '180x180', type: 'image/png' },
+      { url: '/images/FreeInfantry.png', sizes: '180x180', type: 'image/png' },
     ],
-    shortcut: '/images/freeinfantry.png',
+    shortcut: '/images/FreeInfantry.png',
   },
   other: {
     'format-detection': 'telephone=no',
