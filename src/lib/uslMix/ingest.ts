@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GameResultPayload, PlayerPayload, KillEventPayload, TeamPayload, Result, Side } from './types';
-import { aliasKey } from './types';
+import { aliasKey, normalizeWeaponName } from './types';
 import { computeGameRatings, ELO, type RatingState, type TeamInput } from './elo';
 
 /** Sanity limits so a buggy script cannot flood the tables. */
@@ -106,9 +106,9 @@ export function validatePayload(body: any): GameResultPayload {
       killer_class: strOrNull(e?.killer_class),
       victim_class: strOrNull(e?.victim_class),
       weapon_id: numOr(e?.weapon_id, 0),
-      weapon_name: strOrNull(e?.weapon_name),
+      weapon_name: normalizeWeaponName(strOrNull(e?.weapon_name)),
       root_weapon_id: numOr(e?.root_weapon_id, 0),
-      root_weapon_name: strOrNull(e?.root_weapon_name),
+      root_weapon_name: normalizeWeaponName(strOrNull(e?.root_weapon_name)),
       team_kill: e?.team_kill === true,
       kill_type: strOrNull(e?.kill_type) ?? 'Unknown',
       attribution: ['matched', 'fallback', 'unknown', 'none'].includes(e?.attribution) ? e.attribution : 'unknown',
@@ -163,7 +163,7 @@ function sanitizeWeaponMap(v: unknown): Record<string, { name: string | null; co
   if (!v || typeof v !== 'object') return out;
   for (const [k, val] of Object.entries(v as Record<string, any>)) {
     if (!/^\d+$/.test(k)) continue;
-    out[k] = { name: strOrNull(val?.name), count: numOr(val?.count, 0) };
+    out[k] = { name: normalizeWeaponName(strOrNull(val?.name)), count: numOr(val?.count, 0) };
   }
   return out;
 }

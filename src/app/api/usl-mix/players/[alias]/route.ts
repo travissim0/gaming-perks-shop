@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { clampInt, corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
-import { aliasKey } from '@/lib/uslMix/types';
+import { aliasKey, normalizeWeaponName } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/players/{alias} - one player: rating, career totals, class breakdown,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
       c.seconds += Number((r.classes ?? {})[cls] ?? 0);
       classes.set(cls, c);
       for (const [id, wc] of Object.entries((r.weapon_kills ?? {}) as Record<string, any>)) {
-        const name = wc?.name || `Item ${id}`;
+        const name = normalizeWeaponName(wc?.name) || `Item ${id}`;
         const w = weapons.get(name) ?? { weapon: name, weapon_id: Number(id), kills: 0 };
         w.kills += Number(wc?.count ?? 0);
         weapons.set(name, w);

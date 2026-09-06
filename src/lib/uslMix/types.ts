@@ -20,6 +20,19 @@ export interface TeamPayload {
   player_count: number;
 }
 
+/**
+ * Items that exist twice in the zone, once per side, but are the same weapon:
+ * "RPG Launcher T" / "RPG Launcher C" -> "RPG Launcher", "Ripper Gun T" / "Ripper Gun C" -> "Ripper Gun".
+ * Applied at ingest and again when reading, so rows stored before 2026-09-06 roll up too.
+ */
+const SIDE_SUFFIXED_WEAPONS = /^(RPG Launcher|Ripper Gun)\s+[TC]$/i;
+
+export function normalizeWeaponName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const m = name.trim().match(SIDE_SUFFIXED_WEAPONS);
+  return m ? m[1] : name;
+}
+
 export interface WeaponCount {
   name: string | null;
   count: number;

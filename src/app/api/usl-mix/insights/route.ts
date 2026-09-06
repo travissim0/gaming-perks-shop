@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
+import { normalizeWeaponName } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/insights - aggregate insights for charts.
@@ -106,9 +107,10 @@ export async function GET(request: NextRequest) {
     // weapons
     const byWeapon = new Map<string, { weapon: string; weapon_id: number | null; kills: number; kills_matched: number }>();
     for (const r of weapons) {
-      const w = byWeapon.get(r.weapon) ?? { weapon: r.weapon, weapon_id: r.weapon_id, kills: 0, kills_matched: 0 };
+      const name = normalizeWeaponName(r.weapon) ?? 'Unknown';
+      const w = byWeapon.get(name) ?? { weapon: name, weapon_id: r.weapon_id, kills: 0, kills_matched: 0 };
       w.kills += n(r.kills); w.kills_matched += n(r.kills_matched);
-      byWeapon.set(r.weapon, w);
+      byWeapon.set(name, w);
     }
     const totalWeaponKills = Array.from(byWeapon.values()).reduce((s, w) => s + w.kills, 0);
     const weaponStats = Array.from(byWeapon.values())

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
+import { normalizeWeaponName } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/games/{id} - one game in full: teams, every player row, every kill event.
@@ -55,7 +56,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     const weapons = new Map<string, { weapon: string; weapon_id: number | null; kills: number; matched: number }>();
     for (const e of events ?? []) {
       if (!e.killer || e.team_kill) continue;
-      const name = e.root_weapon_name || 'Unknown';
+      const name = normalizeWeaponName(e.root_weapon_name) || 'Unknown';
       const w = weapons.get(name) ?? { weapon: name, weapon_id: e.root_weapon_id, kills: 0, matched: 0 };
       w.kills++;
       if (e.attribution === 'matched') w.matched++;
@@ -67,7 +68,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
         success: true,
         game,
         players: players ?? [],
-        kill_events: events ?? [],
+        kill_events: (events ?? []).map((e) => ({ ...e, weapon_name: normalizeWeaponName(e.weapon_name), root_weapon_name: normalizeWeaponName(e.root_weapon_name) })),
         rating_changes: history ?? [],
         weapon_summary: Array.from(weapons.values()).sort((a, b) => b.kills - a.kills),
       },
