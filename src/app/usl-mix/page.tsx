@@ -89,7 +89,7 @@ export default function UslMixOverviewPage() {
       title="USL Mix Stats"
       subtitle="Every game on USL Megamaps, recorded straight from the zone: kills by weapon (LAW shrapnel credited to the LAW), class time, heals, accuracy. Ratings only move for mixes where both captains agreed with ?rated."
     >
-      {error && <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>}
+      {error && <div className="mb-6 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">

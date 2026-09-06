@@ -44,10 +44,15 @@ function seededStars(count: number, seed: number) {
     color: colors[Math.floor(rand() * colors.length)],
     duration: `${(rand() * 5 + 3).toFixed(1)}s`,
     delay: `${(rand() * 5).toFixed(1)}s`,
-    twinkle: rand() > 0.6,
+    twinkle: rand() > 0.9,
   }));
 }
 
+/**
+ * Perf notes (Firefox scroll jank report, 2026-09-06): only ~10% of stars twinkle, and only on
+ * md+ screens with motion allowed. Nothing above this layer may use backdrop-filter: a blurred
+ * surface over an animating fixed backdrop is re-sampled every frame and every scroll step.
+ */
 function SpaceBackdrop() {
   const stars = useMemo(() => seededStars(140, 20260905), []);
   return (
@@ -58,7 +63,7 @@ function SpaceBackdrop() {
       {stars.map((st) => (
         <div
           key={st.id}
-          className={`absolute rounded-full ${st.twinkle ? 'animate-pulse' : ''}`}
+          className={`absolute rounded-full ${st.twinkle ? 'md:motion-safe:animate-pulse' : ''}`}
           style={{ left: st.left, top: st.top, width: st.size, height: st.size, backgroundColor: st.color, opacity: st.opacity, animationDuration: st.duration, animationDelay: st.delay }}
         />
       ))}
@@ -92,7 +97,7 @@ export default function UslMixShell({ children, title, subtitle }: { children: R
                   <Link
                     key={t.href}
                     href={t.href}
-                    className={`px-4 py-2 rounded-xl text-sm font-semibold border backdrop-blur-sm transition-all duration-200 ${
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all duration-200 ${
                       active
                         ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border-cyan-400/40 text-cyan-100 shadow-lg shadow-cyan-500/10'
                         : 'bg-gray-900/50 border-gray-700/40 text-gray-300 hover:border-cyan-500/30 hover:text-white hover:bg-cyan-500/5'
@@ -126,7 +131,7 @@ export function Panel({
 }) {
   const a = ACCENTS[accent];
   return (
-    <section className={`relative overflow-hidden rounded-2xl border ${a.border} bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl ${a.shadow} ${className}`}>
+    <section className={`relative overflow-hidden rounded-2xl border ${a.border} bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 shadow-xl ${a.shadow} ${className}`}>
       <div className={`h-1.5 bg-gradient-to-r ${a.bar}`} />
       {(title || right) && (
         <div className={`px-4 py-3 border-b ${a.divider} flex flex-wrap items-center justify-between gap-x-3 gap-y-1`}>
@@ -149,7 +154,7 @@ export function Panel({
 export function StatTile({ label, value, hint, accent = 'cyan' }: { label: string; value: string | number; hint?: string; accent?: Accent }) {
   const a = ACCENTS[accent];
   return (
-    <div className={`relative overflow-hidden rounded-2xl border ${a.border} bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-lg ${a.shadow} p-4`}>
+    <div className={`relative overflow-hidden rounded-2xl border ${a.border} bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 shadow-lg ${a.shadow} p-4`}>
       <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-gray-400">{label}</div>
       <div className={`mt-1.5 text-3xl md:text-4xl font-black tabular-nums text-transparent bg-clip-text bg-gradient-to-r ${a.text}`}>{value}</div>
       {hint && <div className="text-xs text-gray-500 mt-1.5">{hint}</div>}
@@ -188,11 +193,11 @@ export const tableCls = {
   rowStatic: 'border-b border-gray-700/30',
 };
 
-export const controlCls = 'bg-gray-900/60 border border-gray-700/50 rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-cyan-500/50 backdrop-blur-sm';
+export const controlCls = 'bg-gray-900/60 border border-gray-700/50 rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-cyan-500/50';
 
 export function SegmentedControl<T extends string>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void }) {
   return (
-    <div className="inline-flex rounded-xl overflow-hidden border border-gray-700/50 bg-gray-900/60 backdrop-blur-sm">
+    <div className="inline-flex rounded-xl overflow-hidden border border-gray-700/50 bg-gray-900/60">
       {options.map((o) => (
         <button
           key={o.value}
@@ -262,7 +267,7 @@ export function fmtDelta(v: number | null | undefined) {
 }
 
 export const tooltipStyle = {
-  contentStyle: { background: 'rgba(10, 14, 26, 0.95)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: 12, color: '#e5e7eb', fontSize: 12, backdropFilter: 'blur(6px)' },
+  contentStyle: { background: 'rgba(10, 14, 26, 0.95)', border: '1px solid rgba(34, 211, 238, 0.25)', borderRadius: 12, color: '#e5e7eb', fontSize: 12 },
   labelStyle: { color: '#9ca3af' },
   cursor: { fill: 'rgba(34, 211, 238, 0.05)' },
 };

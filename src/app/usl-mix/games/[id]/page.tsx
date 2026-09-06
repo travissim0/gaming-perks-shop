@@ -91,7 +91,7 @@ export default function UslMixGamePage() {
   if (error) {
     return (
       <UslMixShell title="Game">
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>
       </UslMixShell>
     );
   }
@@ -206,7 +206,7 @@ export default function UslMixGamePage() {
           ) : (
             <div className="overflow-auto pr-1" style={{ maxHeight: 340 }}>
               <table className={tableCls.table}>
-                <thead className={`${tableCls.thead} sticky top-0 bg-gray-900/90 backdrop-blur-sm`}>
+                <thead className={`${tableCls.thead} sticky top-0 bg-gray-900/90`}>
                   <tr className={tableCls.headRow}>
                     <th className="text-left py-1.5 pr-2">Time</th>
                     <th className="text-left py-1.5 px-2">Killer</th>

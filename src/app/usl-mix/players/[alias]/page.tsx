@@ -34,7 +34,7 @@ export default function UslMixPlayerPage() {
   if (error) {
     return (
       <UslMixShell title="Player">
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200 backdrop-blur-sm">{error}</div>
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>
       </UslMixShell>
     );
   }
