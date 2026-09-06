@@ -11,16 +11,24 @@ interface PlayerRow {
   kills: number; deaths: number; team_kills: number; kills_scoreboard: number | null; deaths_scoreboard: number | null;
   shots_fired: number; shots_landed: number; accuracy: number | null; bio_dart_hits: number; heal_amount: number; heal_uses: number; play_seconds: number;
   weapon_kills: Record<string, { name: string | null; count: number }>; rating_before: number | null; rating_after: number | null; rating_delta: number | null; performance: number | null;
+  opening_kills: number; opening_deaths: number; opening_fights_won: number;
 }
 interface KillEvent {
   t_ms: number; killer: string | null; victim: string; killer_side: string | null; victim_side: string | null; killer_class: string | null; victim_class: string | null;
   weapon_id: number | null; weapon_name: string | null; root_weapon_id: number | null; root_weapon_name: string | null; team_kill: boolean; kill_type: string; attribution: string;
+  fight_no: number | null; is_opening: boolean;
+}
+interface Fight {
+  no: number; start_ms: number; end_ms: number; kills: number; kills_t: number; kills_c: number;
+  opener: string | null; opener_side: string | null; opener_class: string | null; opened_on: string; opened_on_side: string | null; opened_on_class: string | null; winner_side: 'T' | 'C' | null;
 }
 interface GameDetail {
   game: any;
   players: PlayerRow[];
   kill_events: KillEvent[];
   weapon_summary: Array<{ weapon: string; kills: number; matched: number }>;
+  fights: Fight[];
+  opening_lull_seconds: number;
 }
 
 const sideColor = (side: string | null | undefined) => (side === 'T' || side === 'C' ? SIDE_COLORS[side] : undefined);
@@ -135,6 +143,7 @@ export default function UslMixGamePage() {
                     <th className="text-left py-2 px-2">Class</th>
                     <th className="text-right py-2 px-2">K</th>
                     <th className="text-right py-2 px-2">D</th>
+                    <th className="text-right py-2 px-2" title="opening kills (fights won after)">Open</th>
                     <th className="text-right py-2 px-2">Acc</th>
                     <th className="text-right py-2 px-2">Heal</th>
                     <th className="text-right py-2 pl-2">Δ</th>
@@ -152,6 +161,10 @@ export default function UslMixGamePage() {
                         {p.kills}{p.team_kills ? <span className="text-xs text-rose-400" title="team kills"> ({p.team_kills}tk)</span> : null}
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.deaths}</td>
+                      <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap" title={`${p.opening_kills} opening kills · ${p.opening_fights_won} fights won after · ${p.opening_deaths} opening deaths`}>
+                        {p.opening_kills ? <span className="text-amber-300 font-semibold">{p.opening_kills}</span> : <span className="text-gray-600">—</span>}
+                        {p.opening_fights_won ? <span className="text-xs text-emerald-300"> ({p.opening_fights_won}w)</span> : null}
+                      </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.accuracy !== null ? `${p.accuracy}%` : '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.heal_amount || (p.bio_dart_hits ? `${p.bio_dart_hits} darts` : '—')}</td>
                       <td className={`py-2 pl-2 text-right tabular-nums ${p.rating_delta === null ? 'text-gray-500' : Number(p.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(p.rating_delta)}</td>
@@ -162,6 +175,58 @@ export default function UslMixGamePage() {
             </div>
           </Panel>
         ))}
+      </div>
+
+      {/* Fights and opening kills */}
+      <div className="mb-6">
+        <Panel
+          title="Fights and opening kills"
+          accent="amber"
+          right={<span className="text-xs text-gray-500">{data.fights.length} fights · a new fight starts after {data.opening_lull_seconds}s without a kill</span>}
+        >
+          {data.fights.length === 0 ? (
+            <p className="text-sm text-gray-500">No kills.</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 mb-3">
+                Opened by <span style={{ color: sideColor('T') }}>Titan {data.fights.filter((f) => f.opener_side === 'T').length}</span>
+                {' · '}
+                <span style={{ color: sideColor('C') }}>Collective {data.fights.filter((f) => f.opener_side === 'C').length}</span>
+                {' · '}the opening side went on to win {data.fights.filter((f) => f.winner_side && f.winner_side === f.opener_side).length} of {data.fights.length} fights on kills
+              </p>
+              <div className="overflow-x-auto">
+                <table className={tableCls.table}>
+                  <thead className={tableCls.thead}>
+                    <tr className={tableCls.headRow}>
+                      <th className="text-left py-2 pr-2">#</th>
+                      <th className="text-left py-2 px-2">When</th>
+                      <th className="text-left py-2 px-2">Opening kill</th>
+                      <th className="text-left py-2 px-2">On</th>
+                      <th className="text-right py-2 px-2" title="Titan – Collective">Kills</th>
+                      <th className="text-left py-2 pl-2">Won by</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.fights.map((f) => (
+                      <tr key={f.no} className={tableCls.rowStatic}>
+                        <td className="py-2 pr-2 text-gray-500 tabular-nums">{f.no}</td>
+                        <td className="py-2 px-2 text-gray-400 tabular-nums text-xs whitespace-nowrap">{fmtDuration(Math.floor(f.start_ms / 1000))}{f.end_ms > f.start_ms ? ` – ${fmtDuration(Math.floor(f.end_ms / 1000))}` : ''}</td>
+                        <td className="py-2 px-2">{f.opener ? <Actor alias={f.opener} cls={f.opener_class} side={f.opener_side} /> : '—'}</td>
+                        <td className="py-2 px-2"><Actor alias={f.opened_on} cls={f.opened_on_class} side={f.opened_on_side} /></td>
+                        <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">
+                          <span style={{ color: sideColor('T') }}>{f.kills_t}</span>
+                          <span className="text-gray-500"> – </span>
+                          <span style={{ color: sideColor('C') }}>{f.kills_c}</span>
+                        </td>
+                        <td className="py-2 pl-2">{f.winner_side ? <SideBadge side={f.winner_side} /> : <span className="text-xs text-gray-500">even</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Panel>
       </div>
 
       {/* Kills over time + kill feed side by side */}
@@ -216,8 +281,11 @@ export default function UslMixGamePage() {
                 </thead>
                 <tbody>
                   {data.kill_events.map((e, i) => (
-                    <tr key={i} className={`${tableCls.rowStatic} ${e.team_kill ? 'bg-rose-500/5' : ''}`}>
-                      <td className="py-1.5 pr-2 text-gray-500 tabular-nums text-xs">{fmtDuration(Math.floor(e.t_ms / 1000))}</td>
+                    <tr key={i} className={`${tableCls.rowStatic} ${e.team_kill ? 'bg-rose-500/5' : e.is_opening ? 'bg-amber-500/5' : ''}`}>
+                      <td className="py-1.5 pr-2 text-gray-500 tabular-nums text-xs whitespace-nowrap">
+                        {fmtDuration(Math.floor(e.t_ms / 1000))}
+                        {e.is_opening && <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-300" title={`opening kill of fight ${e.fight_no}`}>open</span>}
+                      </td>
                       <td className="py-1.5 px-2">{e.killer ? <Actor alias={e.killer} cls={e.killer_class} side={e.killer_side} /> : <span className="text-gray-500">{e.kill_type}</span>}</td>
                       <td className="py-1.5 px-2 text-gray-300">
                         {e.root_weapon_name ?? '—'}

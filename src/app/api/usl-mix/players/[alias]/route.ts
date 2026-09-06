@@ -27,8 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
       supabase
         .from('usl_mix_game_players')
         .select(
-          'game_id, alias, side, team_name, result, is_captain, primary_class, classes, kills, deaths, team_kills, shots_fired, shots_landed, accuracy, bio_dart_hits, heal_amount, play_seconds, weapon_kills, weapon_deaths, rating_before, rating_after, rating_delta, performance, ' +
-            'usl_mix_games!inner(id, ended_at, map_key, level_file, game_kind, rated, duration_seconds, end_reason, team_a_name, team_a_kills, team_b_name, team_b_kills, winner_team)'
+          '*, usl_mix_games!inner(id, ended_at, map_key, level_file, game_kind, rated, duration_seconds, end_reason, team_a_name, team_a_kills, team_b_name, team_b_kills, winner_team)'
         )
         .eq('alias_key', key)
         .order('ended_at', { referencedTable: 'usl_mix_games', ascending: false })
@@ -75,6 +74,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         accuracy: r.accuracy,
         heal_amount: r.heal_amount,
         rating_delta: r.rating_delta,
+        opening_kills: r.opening_kills ?? 0,
+        opening_deaths: r.opening_deaths ?? 0,
+        opening_fights_won: r.opening_fights_won ?? 0,
         url: `/usl-mix/games/${r.game_id}`,
       }));
 

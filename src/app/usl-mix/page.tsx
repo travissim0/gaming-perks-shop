@@ -17,6 +17,7 @@ interface Insights {
 
 interface LeaderRow {
   rank: number; alias: string; rating: number; peak_rating: number; rated_games: number; wins: number; losses: number; win_rate: number | null; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; url: string;
+  opening_kills: number; opening_deaths: number; opening_fights_won: number;
 }
 
 interface GameRow {
@@ -45,7 +46,7 @@ export default function UslMixOverviewPage() {
         qs.set('kind', kind);
         const [i, l, g] = await Promise.all([
           fetch(`/api/usl-mix/insights?${qs}`).then((r) => r.json()),
-          fetch('/api/usl-mix/players?limit=25&minGames=1').then((r) => r.json()),
+          fetch('/api/usl-mix/players?limit=100&minGames=1').then((r) => r.json()),
           fetch(`/api/usl-mix/games?limit=10${map ? `&map=${encodeURIComponent(map)}` : ''}${kind !== 'all' ? `&kind=${kind}` : ''}`).then((r) => r.json()),
         ]);
         if (cancelled) return;
@@ -79,6 +80,10 @@ export default function UslMixOverviewPage() {
   const classChart = useMemo(
     () => (insights?.class_stats ?? []).filter((c) => c.wins + c.losses > 0).map((c) => ({ name: c.class_name, winRate: c.win_rate ?? 0, n: c.appearances })),
     [insights]
+  );
+  const openers = useMemo(
+    () => leaders.filter((p) => p.opening_kills > 0).sort((a, b) => b.opening_kills - a.opening_kills || b.opening_fights_won - a.opening_fights_won).slice(0, 10),
+    [leaders]
   );
   const weaponChart = useMemo(() => (insights?.weapon_stats ?? []).slice(0, 10).map((w) => ({ name: w.weapon, kills: w.kills, share: w.share })), [insights]);
 
@@ -152,7 +157,7 @@ export default function UslMixOverviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaders.map((p) => (
+                  {leaders.slice(0, 25).map((p) => (
                     <tr key={p.alias} className={tableCls.row}>
                       <td className="py-2 pr-2 text-gray-500 tabular-nums">{p.rank}</td>
                       <td className="py-2 pr-2">
@@ -172,6 +177,7 @@ export default function UslMixOverviewPage() {
           )}
         </Panel>
 
+        <div className="flex flex-col gap-6">
         {/* Side win rate overall */}
         <Panel title="Titan vs Collective" accent="purple">
           {insights && insights.side_win_rates.overall.games > 0 ? (
@@ -194,6 +200,33 @@ export default function UslMixOverviewPage() {
             <p className="text-sm text-gray-500">No games yet.</p>
           )}
         </Panel>
+
+        {/* Opening kills */}
+        <Panel title="Opening kills" accent="amber" right={<span className="text-xs text-gray-500">first kill of each fight · 60s lull = new fight</span>}>
+          {openers.length === 0 ? (
+            <p className="text-sm text-gray-500">No opening kills recorded yet.</p>
+          ) : (
+            <table className={tableCls.table}>
+              <thead className={tableCls.thead}>
+                <tr className={tableCls.headRow}>
+                  <th className="text-left py-1.5 pr-2">Player</th>
+                  <th className="text-right py-1.5 px-2">Opens</th>
+                  <th className="text-right py-1.5 pl-2" title="share of those fights their side won on kills">Won after</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openers.map((p) => (
+                  <tr key={p.alias} className={tableCls.rowStatic}>
+                    <td className="py-1.5 pr-2"><Link href={p.url} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link></td>
+                    <td className="py-1.5 px-2 text-right tabular-nums text-amber-300 font-semibold">{p.opening_kills}</td>
+                    <td className="py-1.5 pl-2 text-right tabular-nums text-gray-300">{Math.round((p.opening_fights_won / p.opening_kills) * 100)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Panel>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6 mb-8">

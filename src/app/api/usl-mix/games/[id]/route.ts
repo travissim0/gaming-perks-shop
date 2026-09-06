@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
-import { normalizeWeaponName } from '@/lib/uslMix/types';
+import { aliasKey, normalizeWeaponName } from '@/lib/uslMix/types';
+import { splitFights, openingStatsByPlayer, OPENING_LULL_MS } from '@/lib/uslMix/fights';
 
 /**
  * GET /api/usl-mix/games/{id} - one game in full: teams, every player row, every kill event.
@@ -63,12 +64,19 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       weapons.set(name, w);
     }
 
+    // fights + opening kills, recomputed from the timeline so it never depends on the backfill
+    const { fights, tagged } = splitFights((events ?? []) as any[]);
+    const openingByKey = openingStatsByPlayer(fights);
+    const NO_OPENING = { opening_kills: 0, opening_deaths: 0, opening_fights_won: 0 };
+
     return corsJson(
       {
         success: true,
         game,
-        players: players ?? [],
-        kill_events: (events ?? []).map((e) => ({ ...e, weapon_name: normalizeWeaponName(e.weapon_name), root_weapon_name: normalizeWeaponName(e.root_weapon_name) })),
+        players: (players ?? []).map((p: any) => ({ ...p, ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING) })),
+        kill_events: tagged.map((e: any) => ({ ...e, weapon_name: normalizeWeaponName(e.weapon_name), root_weapon_name: normalizeWeaponName(e.root_weapon_name) })),
+        fights,
+        opening_lull_seconds: OPENING_LULL_MS / 1000,
         rating_changes: history ?? [],
         weapon_summary: Array.from(weapons.values()).sort((a, b) => b.kills - a.kills),
       },

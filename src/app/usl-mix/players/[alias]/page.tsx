@@ -10,12 +10,12 @@ interface PlayerProfile {
   alias: string;
   test_only?: boolean;
   rating: { rating: number; peak_rating: number; games: number; wins: number; losses: number; draws: number; win_rate: number | null; last_game_at: string } | null;
-  career: { games: number; wins: number; losses: number; mix_games: number; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; heal_amount: number; bio_dart_hits: number; play_seconds: number } | null;
+  career: { games: number; wins: number; losses: number; mix_games: number; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; heal_amount: number; bio_dart_hits: number; play_seconds: number; opening_kills?: number; opening_deaths?: number; opening_fights_won?: number } | null;
   classes: Array<{ class_name: string; games: number; wins: number; kills: number; deaths: number; seconds: number }>;
   weapons: Array<{ weapon: string; kills: number }>;
   maps: Array<{ map_key: string; games: number; wins: number }>;
   rating_history: Array<{ game_id: string; rating_after: number; delta: number; created_at: string }>;
-  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; url: string }>;
+  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; opening_kills?: number; url: string }>;
 }
 
 export default function UslMixPlayerPage() {
@@ -52,12 +52,18 @@ export default function UslMixPlayerPage() {
 
   return (
     <UslMixShell title={data.alias} subtitle={data.test_only ? 'Only seen in test snapshots so far (*mixstats sendnow). Real mix and pub games will replace this view.' : 'Mix rating and career totals recorded from USL Megamaps games.'}>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         <StatTile label="Rating" value={r ? Math.round(r.rating) : 'unrated'} hint={r ? `peak ${Math.round(r.peak_rating)} · ${r.games} rated` : 'no mix games yet'} />
         <StatTile label="Mix record" value={r ? `${r.wins}–${r.losses}${r.draws ? `–${r.draws}` : ''}` : '—'} hint={r?.win_rate !== null && r ? `${r.win_rate}% wins` : undefined} />
         <StatTile label="K/D" value={c ? Number(c.kd_ratio).toFixed(2) : '—'} hint={c ? `${c.kills} kills · ${c.deaths} deaths` : undefined} />
         <StatTile label="Accuracy" value={c?.accuracy !== null && c ? `${c.accuracy}%` : '—'} hint="bio darts excluded" />
         <StatTile label="Games played" value={c?.games ?? 0} hint={c ? `${c.mix_games} mix · ${fmtDuration(c.play_seconds)} in game` : undefined} />
+        <StatTile
+          accent="amber"
+          label="Opening kills"
+          value={Number(c?.opening_kills ?? 0)}
+          hint={c ? `${Number(c.opening_fights_won ?? 0)} fights won after${Number(c.opening_kills) ? ` (${Math.round((Number(c.opening_fights_won ?? 0) / Number(c.opening_kills)) * 100)}%)` : ''} · ${Number(c.opening_deaths ?? 0)} opening deaths` : 'first kill of each fight'}
+        />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
@@ -165,6 +171,7 @@ export default function UslMixPlayerPage() {
                   <th className="text-left py-2 px-2">Class</th>
                   <th className="text-right py-2 px-2">K</th>
                   <th className="text-right py-2 px-2">D</th>
+                  <th className="text-right py-2 px-2" title="opening kills">Open</th>
                   <th className="text-right py-2 px-2">Acc</th>
                   <th className="text-right py-2 pl-2">Δ</th>
                 </tr>
@@ -185,6 +192,7 @@ export default function UslMixPlayerPage() {
                     <td className="py-2 px-2"><ClassName name={g.primary_class} /></td>
                     <td className="py-2 px-2 text-right tabular-nums text-white">{g.kills}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.deaths}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{g.opening_kills ? <span className="text-amber-300">{g.opening_kills}</span> : <span className="text-gray-600">—</span>}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.accuracy !== null ? `${g.accuracy}%` : '—'}</td>
                     <td className={`py-2 pl-2 text-right tabular-nums ${g.rating_delta === null ? 'text-gray-500' : Number(g.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(g.rating_delta)}</td>
                   </tr>

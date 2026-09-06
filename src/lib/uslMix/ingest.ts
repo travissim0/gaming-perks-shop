@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GameResultPayload, PlayerPayload, KillEventPayload, TeamPayload, Result, Side } from './types';
 import { aliasKey, normalizeWeaponName } from './types';
 import { computeGameRatings, ELO, type RatingState, type TeamInput } from './elo';
+import { splitFights, openingStatsByPlayer } from './fights';
 
 /** Sanity limits so a buggy script cannot flood the tables. */
 const LIMITS = {
@@ -231,6 +232,11 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     throw new IngestError(`Failed to insert game: ${gameErr?.message ?? 'unknown'}`, 500);
   }
 
+  // opening kills: derived from the kill timeline, see fights.ts
+  const { fights, tagged: taggedEvents } = splitFights(payload.kill_events.map((e) => ({ ...e, t_ms: e.t })));
+  const openingByKey = openingStatsByPlayer(fights);
+  const NO_OPENING = { opening_kills: 0, opening_deaths: 0, opening_fights_won: 0 };
+
   const playerRows = payload.players.map((p) => ({
     game_id: game.id,
     alias: p.alias,
@@ -255,14 +261,20 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     play_seconds: p.play_seconds,
     weapon_kills: p.weapon_kills,
     weapon_deaths: p.weapon_deaths,
+    ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING),
   }));
-  const { error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows);
+  let { error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows);
+  if (playersErr && /column .*opening_.* does not exist/i.test(playersErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-opening-kills.sql) - store without the counters rather than lose the game
+    console.warn('[usl-mix] usl_mix_game_players opening_* columns missing; inserting without them');
+    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ opening_kills: _a, opening_deaths: _b, opening_fights_won: _c, ...rest }) => rest)));
+  }
   if (playersErr) {
     await supabase.from('usl_mix_games').delete().eq('id', game.id);
     throw new IngestError(`Failed to insert players: ${playersErr.message}`, 500);
   }
 
-  const eventRows = payload.kill_events.map((e) => ({
+  let eventRows: Record<string, unknown>[] = taggedEvents.map((e) => ({
     game_id: game.id,
     t_ms: e.t,
     killer: e.killer,
@@ -282,9 +294,16 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     attribution: e.attribution,
     x: e.x,
     y: e.y,
+    fight_no: e.fight_no,
+    is_opening: e.is_opening,
   }));
   for (let i = 0; i < eventRows.length; i += LIMITS.INSERT_CHUNK) {
-    const { error: evErr } = await supabase.from('usl_mix_kill_events').insert(eventRows.slice(i, i + LIMITS.INSERT_CHUNK));
+    let { error: evErr } = await supabase.from('usl_mix_kill_events').insert(eventRows.slice(i, i + LIMITS.INSERT_CHUNK));
+    if (evErr && /column .*(fight_no|is_opening).* does not exist/i.test(evErr.message || '')) {
+      console.warn('[usl-mix] usl_mix_kill_events fight columns missing; inserting without them');
+      eventRows = eventRows.map(({ fight_no: _f, is_opening: _o, ...rest }) => rest);
+      ({ error: evErr } = await supabase.from('usl_mix_kill_events').insert(eventRows.slice(i, i + LIMITS.INSERT_CHUNK)));
+    }
     if (evErr) {
       // players are the important part; keep the game and report the partial failure
       console.error('[usl-mix] kill_events insert failed:', evErr.message);
