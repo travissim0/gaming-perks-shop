@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, LabelList } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl } from '@/components/usl-mix/UslMixShell';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, LabelList, Cell } from 'recharts';
+import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
 
 interface Insights {
   totals: { games: number; games_selected: number; players_rated: number; kills: number; avg_duration_seconds: number; maps: string[] };
@@ -227,10 +227,24 @@ export default function UslMixOverviewPage() {
                 <BarChart data={classChart} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 8 }} barCategoryGap={8}>
                   <CartesianGrid horizontal={false} stroke="#374151" strokeDasharray="2 4" />
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#d1d5db', fontSize: 12 }} axisLine={false} tickLine={false} width={110} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    width={130}
+                    tick={(props: any) => (
+                      <text x={props.x} y={props.y} dy={4} textAnchor="end" fontSize={12} fill={classColor(props.payload?.value) ?? '#d1d5db'}>
+                        {props.payload?.value}
+                      </text>
+                    )}
+                  />
                   <Tooltip {...tooltipStyle} formatter={(v: any) => [`${v}%`, 'Win rate']} labelFormatter={(l) => `${l} · ${classChart.find((r) => r.name === l)?.n ?? 0} player-games`} />
                   <ReferenceLine x={50} stroke="#9ca3af" strokeDasharray="4 4" />
                   <Bar dataKey="winRate" fill={SERIES_NEUTRAL} radius={[0, 4, 4, 0]}>
+                    {classChart.map((c) => (
+                      <Cell key={c.name} fill={classColor(c.name) ?? SERIES_NEUTRAL} />
+                    ))}
                     <LabelList dataKey="n" position="right" formatter={(v: any) => `n=${v}`} style={{ fill: '#9ca3af', fontSize: 11 }} />
                   </Bar>
                 </BarChart>
@@ -281,7 +295,7 @@ export default function UslMixOverviewPage() {
                 <tbody>
                   {insights!.class_stats.map((c) => (
                     <tr key={c.class_name} className={tableCls.rowStatic}>
-                      <td className="py-2 pr-2 text-white font-medium">{c.class_name}</td>
+                      <td className="py-2 pr-2"><ClassName name={c.class_name} /></td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.appearances}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.win_rate ?? '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.kills_per_game}</td>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerProfile {
   alias: string;
@@ -96,7 +96,7 @@ export default function UslMixPlayerPage() {
               <tbody>
                 {data.classes.map((k) => (
                   <tr key={k.class_name} className={tableCls.rowStatic}>
-                    <td className="py-1.5 text-white">{k.class_name}</td>
+                    <td className="py-1.5"><ClassName name={k.class_name} /></td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.games}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.games ? Math.round((k.wins / k.games) * 100) : '—'}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.deaths ? (k.kills / k.deaths).toFixed(2) : k.kills}</td>
@@ -182,7 +182,7 @@ export default function UslMixPlayerPage() {
                     </td>
                     <td className="py-2 px-2"><SideBadge side={g.side} /></td>
                     <td className="py-2 px-2"><ResultBadge result={g.result} /></td>
-                    <td className="py-2 px-2 text-gray-300">{g.primary_class}</td>
+                    <td className="py-2 px-2"><ClassName name={g.primary_class} /></td>
                     <td className="py-2 px-2 text-right tabular-nums text-white">{g.kills}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.deaths}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.accuracy !== null ? `${g.accuracy}%` : '—'}</td>

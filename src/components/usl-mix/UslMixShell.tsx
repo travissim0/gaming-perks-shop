@@ -206,6 +206,42 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
   );
 }
 
+
+/**
+ * Class colors = the in-game backpack hues (Travis, 2026-09-06). Desaturated so they read as
+ * labels, lifted just enough for the dark surface. Grenadier, Ripper Gunner and Sniper were not
+ * specified and are placeholders.
+ */
+export const CLASS_COLORS: Array<{ match: RegExp; color: string; label: string }> = [
+  { match: /heavy\s*ripper/i, color: '#b85c5c', label: 'Heavy Ripper' },
+  { match: /ripper/i, color: '#d07e7e', label: 'Ripper Gunner (placeholder)' },
+  { match: /machine\s*gun|lmg/i, color: '#f3f4f6', label: 'LMG' },
+  { match: /marine/i, color: '#5fa8a3', label: 'Marine' },
+  { match: /demo/i, color: '#7fb07f', label: 'Demolitions' },
+  { match: /medic/i, color: '#c9b35a', label: 'Medic' },
+  { match: /assault/i, color: '#9d7cb8', label: 'Assault Trooper' },
+  { match: /ranger/i, color: '#c97fb4', label: 'Ranger' },
+  { match: /grenad/i, color: '#c9945c', label: 'Grenadier (placeholder)' },
+  { match: /sniper/i, color: '#8c9db8', label: 'Sniper (placeholder)' },
+];
+
+export function classColor(name: string | null | undefined): string | undefined {
+  if (!name) return undefined;
+  const n = name.replace(/^(Titan|Collective)\s+/i, '');
+  return CLASS_COLORS.find((c) => c.match.test(n))?.color;
+}
+
+/** A class name in its backpack color; falls back to plain text for unknown classes. */
+export function ClassName({ name, className = '' }: { name: string | null | undefined; className?: string }) {
+  if (!name) return <span className={className}>—</span>;
+  const color = classColor(name);
+  return (
+    <span className={`font-medium ${className}`} style={color ? { color } : undefined}>
+      {name}
+    </span>
+  );
+}
+
 export function fmtDuration(s: number | null | undefined) {
   if (!s && s !== 0) return '—';
   const m = Math.floor(s / 60);
