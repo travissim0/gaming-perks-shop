@@ -554,11 +554,6 @@ export default function HomeNew() {
           </div>
         </div>
 
-        {/* New Client + Web Editors - flagship showcase, top billing */}
-        <div className="max-w-[1600px] mx-auto px-4 pt-8">
-          <ClientEditorsShowcase />
-        </div>
-
         {/* Zone Activity - Mobile Only (appears first, outside the grid) */}
         <div className="lg:hidden max-w-[1600px] mx-auto px-4 pt-8 space-y-4">
           {renderZoneActivity()}
@@ -571,6 +566,9 @@ export default function HomeNew() {
 
             {/* Left Sidebar: Carousel + Donations + Supporters */}
             <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
+              {/* Infantry v2 Client + Web Editors - compact side panels */}
+              <ClientEditorsShowcase />
+
               {/* Infantry 2 Launch Signup */}
               <LaunchSignupBanner />
 

@@ -288,6 +288,14 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Merge a freshly written profile row into local state so the table reflects
+  // the change immediately instead of waiting on a full refetch. last_session is
+  // kept as-is so the row doesn't jump under the "Last Activity" sort.
+  const applyProfileRow = (row: any) => {
+    if (!row?.id) return;
+    setUsers(prev => prev.map(u => (u.id === row.id ? { ...u, ...row, last_session: u.last_session } : u)));
+  };
+
   const updateUserRole = async (userId: string, newRole: string) => {
     try {
       const isAdmin = newRole === 'admin';
@@ -310,10 +318,16 @@ export default function AdminUsersPage() {
         throw new Error('No rows were updated. This might be a permissions issue.');
       }
 
+      const row = data[0];
+      applyProfileRow(row);
+
+      if (!!row.is_admin !== isAdmin || !!row.is_media_manager !== isMediaManager) {
+        toast.error('The database did not apply the role change (a trigger or policy may have overridden it).');
+        return;
+      }
+
       const roleLabel = newRole === 'admin' ? 'Admin' : newRole === 'media_manager' ? 'Media Manager' : 'User';
       toast.success(`User role updated to ${roleLabel} successfully`);
-      
-      fetchUsers();
     } catch (error: any) {
       console.error('❌ Error updating user role:', error);
       toast.error('Error updating user role: ' + error.message);
@@ -336,8 +350,15 @@ export default function AdminUsersPage() {
         throw new Error('No rows were updated. This might be a permissions issue.');
       }
 
+      const row = data[0];
+      applyProfileRow(row);
+
+      if (row.ctf_role !== newCTFRole) {
+        toast.error('The database did not apply the CTF role change (a trigger or policy may have overridden it).');
+        return;
+      }
+
       toast.success(`CTF role updated to ${CTF_ROLE_INFO[newCTFRole].display_name} successfully`);
-      fetchUsers();
     } catch (error: any) {
       console.error('❌ Error updating CTF role:', error);
       toast.error('Error updating CTF role: ' + error.message);
@@ -346,17 +367,22 @@ export default function AdminUsersPage() {
 
   const updateRegistrationStatus = async (userId: string, newStatus: string) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ registration_status: newStatus })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select();
 
       if (error) {
         throw error;
       }
 
+      if (!data || data.length === 0) {
+        throw new Error('No rows were updated. This might be a permissions issue.');
+      }
+
+      applyProfileRow(data[0]);
       toast.success('Registration status updated successfully');
-      fetchUsers();
     } catch (error: any) {
       toast.error('Error updating registration status: ' + error.message);
     }
