@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerRow {
   alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; primary_class: string; classes: Record<string, number>;
@@ -25,11 +25,20 @@ interface GameDetail {
 
 const sideColor = (side: string | null | undefined) => (side === 'T' || side === 'C' ? SIDE_COLORS[side] : undefined);
 
+/** A player in the kill feed: alias in their class color, a small dot for their side. */
+function Actor({ alias, cls, side }: { alias: string; cls: string | null; side: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`${cls ?? 'unknown class'} · ${side === 'T' ? 'Titan' : side === 'C' ? 'Collective' : 'side unknown'}`}>
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sideColor(side) ?? '#6b7280' }} />
+      <span className="font-medium" style={{ color: classColor(cls) ?? '#e5e7eb' }}>{alias}</span>
+    </span>
+  );
+}
+
 export default function UslMixGamePage() {
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<GameDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showAllEvents, setShowAllEvents] = useState(false);
   const [showExtras, setShowExtras] = useState(false);
 
   useEffect(() => {
@@ -95,7 +104,6 @@ export default function UslMixGamePage() {
   }
 
   const g = data.game;
-  const events = showAllEvents ? data.kill_events : data.kill_events.slice(0, 60);
   const [ta, tb] = teams;
 
   return (
@@ -156,94 +164,74 @@ export default function UslMixGamePage() {
         ))}
       </div>
 
-      {/* Kills over time */}
-      <Panel title="Kills over time" className="mb-6" accent="purple" right={<span className="text-xs text-gray-500">cumulative enemy kills · minutes since start</span>}>
-        {killTimeline.length < 2 ? (
-          <p className="text-sm text-gray-500">No kill events.</p>
-        ) : (
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={killTimeline} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-                <CartesianGrid vertical={false} stroke="#374151" strokeDasharray="2 4" />
-                <XAxis dataKey="t" type="number" domain={[0, 'dataMax']} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v)}m`} />
-                <YAxis allowDecimals={false} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
-                <Tooltip
-                  {...tooltipStyle}
-                  labelFormatter={(l) => `${Number(l).toFixed(1)} min`}
-                  formatter={(v: any, name: any, item: any) => {
-                    if (name === 'a') return [v, ta.name];
-                    if (name === 'b') return [v, tb.name];
-                    return [v, name];
-                  }}
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null;
-                    const p: any = payload[0].payload;
-                    return (
-                      <div style={tooltipStyle.contentStyle as any} className="px-3 py-2">
-                        <div style={{ color: '#9ca3af' }}>{Number(label).toFixed(1)} min</div>
-                        <div style={{ color: sideColor(ta.side) ?? '#e5e7eb' }}>{ta.name}: {p.a}</div>
-                        <div style={{ color: sideColor(tb.side) ?? '#e5e7eb' }}>{tb.name}: {p.b}</div>
-                        <div className="text-gray-300">lead: {p.diff > 0 ? `${ta.name} +${p.diff}` : p.diff < 0 ? `${tb.name} +${-p.diff}` : 'even'}</div>
-                      </div>
-                    );
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12, color: '#d1d5db' }} formatter={(v) => (v === 'a' ? ta.name : tb.name)} />
-                <Line type="stepAfter" dataKey="a" stroke={sideColor(ta.side) ?? '#3987e5'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
-                <Line type="stepAfter" dataKey="b" stroke={sideColor(tb.side) ?? '#d95926'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </Panel>
+      {/* Kills over time + kill feed side by side */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-6">
+        <Panel title="Kills over time" accent="purple" right={<span className="text-xs text-gray-500">cumulative enemy kills · minutes</span>}>
+          {killTimeline.length < 2 ? (
+            <p className="text-sm text-gray-500">No kill events.</p>
+          ) : (
+            <div style={{ height: 300 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={killTimeline} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                  <CartesianGrid vertical={false} stroke="#374151" strokeDasharray="2 4" />
+                  <XAxis dataKey="t" type="number" domain={[0, 'dataMax']} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v)}m`} />
+                  <YAxis allowDecimals={false} tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={36} />
+                  <Tooltip
+                    {...tooltipStyle}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const pt: any = payload[0].payload;
+                      return (
+                        <div style={tooltipStyle.contentStyle as any} className="px-3 py-2">
+                          <div style={{ color: '#9ca3af' }}>{Number(label).toFixed(1)} min</div>
+                          <div style={{ color: sideColor(ta.side) ?? '#e5e7eb' }}>{ta.name}: {pt.a}</div>
+                          <div style={{ color: sideColor(tb.side) ?? '#e5e7eb' }}>{tb.name}: {pt.b}</div>
+                          <div className="text-gray-300">lead: {pt.diff > 0 ? `${ta.name} +${pt.diff}` : pt.diff < 0 ? `${tb.name} +${-pt.diff}` : 'even'}</div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12, color: '#d1d5db' }} formatter={(v) => (v === 'a' ? ta.name : tb.name)} />
+                  <Line type="stepAfter" dataKey="a" stroke={sideColor(ta.side) ?? '#3987e5'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+                  <Line type="stepAfter" dataKey="b" stroke={sideColor(tb.side) ?? '#d95926'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Panel>
 
-      {/* Kill feed */}
-      <Panel title="Kill feed" className="mb-6" right={<span className="text-xs text-gray-500">{data.kill_events.length} deaths</span>}>
-        {events.length === 0 ? (
-          <p className="text-sm text-gray-500">No events.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className={tableCls.table}>
-              <thead className={tableCls.thead}>
-                <tr className={tableCls.headRow}>
-                  <th className="text-left py-1.5 pr-2">Time</th>
-                  <th className="text-left py-1.5 px-2">Killer</th>
-                  <th className="text-left py-1.5 px-2">Weapon</th>
-                  <th className="text-left py-1.5 pl-2">Victim</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((e, i) => (
-                  <tr key={i} className={`${tableCls.rowStatic} ${e.team_kill ? 'bg-rose-500/5' : ''}`}>
-                    <td className="py-1.5 pr-2 text-gray-500 tabular-nums">{fmtDuration(Math.floor(e.t_ms / 1000))}</td>
-                    <td className="py-1.5 px-2">
-                      {e.killer ? (
-                        <span style={{ color: sideColor(e.killer_side) }}>
-                          {e.killer} <ClassName name={e.killer_class} className="text-xs" />
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">{e.kill_type}</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 px-2 text-gray-300">
-                      {e.root_weapon_name ?? '—'}
-                      {e.team_kill && <span className="ml-1 text-xs text-rose-400">TK</span>}
-                    </td>
-                    <td className="py-1.5 pl-2">
-                      <span style={{ color: sideColor(e.victim_side) }}>
-                        {e.victim} <ClassName name={e.victim_class} className="text-xs" />
-                      </span>
-                    </td>
+        <Panel title="Kill feed" right={<span className="text-xs text-gray-500">{data.kill_events.length} deaths · names in class color, dot = side</span>}>
+          {data.kill_events.length === 0 ? (
+            <p className="text-sm text-gray-500">No events.</p>
+          ) : (
+            <div className="overflow-auto pr-1" style={{ maxHeight: 340 }}>
+              <table className={tableCls.table}>
+                <thead className={`${tableCls.thead} sticky top-0 bg-gray-900/90 backdrop-blur-sm`}>
+                  <tr className={tableCls.headRow}>
+                    <th className="text-left py-1.5 pr-2">Time</th>
+                    <th className="text-left py-1.5 px-2">Killer</th>
+                    <th className="text-left py-1.5 px-2">Weapon</th>
+                    <th className="text-left py-1.5 pl-2">Victim</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {!showAllEvents && data.kill_events.length > events.length && (
-              <button onClick={() => setShowAllEvents(true)} className="mt-3 text-sm text-cyan-300 hover:text-cyan-200">Show all {data.kill_events.length} deaths</button>
-            )}
-          </div>
-        )}
-      </Panel>
+                </thead>
+                <tbody>
+                  {data.kill_events.map((e, i) => (
+                    <tr key={i} className={`${tableCls.rowStatic} ${e.team_kill ? 'bg-rose-500/5' : ''}`}>
+                      <td className="py-1.5 pr-2 text-gray-500 tabular-nums text-xs">{fmtDuration(Math.floor(e.t_ms / 1000))}</td>
+                      <td className="py-1.5 px-2">{e.killer ? <Actor alias={e.killer} cls={e.killer_class} side={e.killer_side} /> : <span className="text-gray-500">{e.kill_type}</span>}</td>
+                      <td className="py-1.5 px-2 text-gray-300">
+                        {e.root_weapon_name ?? '—'}
+                        {e.team_kill && <span className="ml-1 text-xs text-rose-400">TK</span>}
+                      </td>
+                      <td className="py-1.5 pl-2"><Actor alias={e.victim} cls={e.victim_class} side={e.victim_side} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
 
       {/* Extras, collapsed by default */}
       <button
