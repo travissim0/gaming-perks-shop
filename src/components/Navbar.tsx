@@ -513,7 +513,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             <div className="container mx-auto px-4 py-3">
               <div className="flex justify-center">
                 <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-                  <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-14 w-auto" />
+                  <span className="flex items-baseline gap-2 leading-none"><span className="font-display text-2xl font-bold tracking-wide text-white">FREE INFANTRY</span><span className="text-[10px] tracking-[0.3em] uppercase text-cyan-400/80">CTF</span></span>
                 </Link>
               </div>
             </div>
@@ -523,7 +523,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             <div className="flex items-center justify-between">
               {/* Logo - Hidden on mobile, shown on desktop */}
               <Link href="/" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
-                <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-10 w-auto" />
+                <span className="flex items-baseline gap-2 leading-none"><span className="font-display text-xl font-bold tracking-wide text-white">FREE INFANTRY</span><span className="text-[10px] tracking-[0.3em] uppercase text-cyan-400/80">CTF</span></span>
               </Link>
               
               <div className="flex items-center space-x-4">
@@ -622,13 +622,27 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         <span className="mr-3">⚔️</span>
                         Standings
                       </Link>
-                      {/* <Link
-                        href="/"
+                      <Link
+                        href="/league/standings?league=ctfpl"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">🏆</span>
+                        CTFPL
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ctfdl"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
                         <span className="mr-3">🛡️</span>
                         CTFDL
-                      </Link> */}
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ovdl"
+                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
+                      >
+                        <span className="mr-3">⚔️</span>
+                        OVDL
+                      </Link>
                       <Link
                         href="/league/ratings"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
@@ -894,8 +908,19 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         <span className="mr-3">⚔️</span>
                         Standings
                       </Link>
-                      {/* <Link
-                        href="/"
+                      <Link
+                        href="/league/standings?league=ctfpl"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">🏆</span>
+                        CTFPL
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ctfdl"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
                         onClick={() => {
                           setActiveMobileDropdown(null);
@@ -904,7 +929,18 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       >
                         <span className="mr-3">🛡️</span>
                         CTFDL
-                      </Link> */}
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ovdl"
+                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mr-3">⚔️</span>
+                        OVDL
+                      </Link>
                       <Link
                         href="/league/ratings"
                         className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
@@ -1179,7 +1215,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
           <div className="container mx-auto px-4 py-3">
             <div className="flex justify-center">
               <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
-                <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-14 w-auto" />
+                <span className="flex items-baseline gap-2 leading-none"><span className="font-display text-2xl font-bold tracking-wide text-white">FREE INFANTRY</span><span className="text-[10px] tracking-[0.3em] uppercase text-cyan-400/80">CTF</span></span>
               </Link>
             </div>
           </div>
@@ -1191,7 +1227,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             <div className="flex items-center justify-between">
                           {/* Left - Logo (hidden on mobile, shown on desktop) */}
             <Link href="/" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
-              <img src="https://nkinpmqnbcjaftqduujf.supabase.co/storage/v1/object/sign/logos/CTFPLLogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNTg4NTc2Ny1kZGJlLTQ1ODQtYjIwZS05YmJkYTMzMTMzMWYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJsb2dvcy9DVEZQTExvZ28ucG5nIiwiaWF0IjoxNzUzMDczNjQ4LCJleHAiOjIzODM3OTM2NDh9.MujhBviIAsu6A4U274jkP-IgUhtD0uZxaBpCUQBnPCI" alt="CTFPL" className="h-16 w-auto" />
+              <span className="flex items-baseline gap-2 leading-none"><span className="font-display text-3xl font-bold tracking-wide text-white">FREE INFANTRY</span><span className="text-[11px] tracking-[0.3em] uppercase text-cyan-400/80">CTF</span></span>
             </Link>
 
             {/* Right - Utilities */}
@@ -1720,13 +1756,27 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     <span className="mr-3 text-lg">⚔️</span>
                     <span className="font-medium">Standings</span>
                   </Link>
-                  {/* <Link
-                    href="/"
+                  <Link
+                    href="/league/standings?league=ctfpl"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">🏆</span>
+                    <span className="font-medium">CTFPL</span>
+                  </Link>
+                  <Link
+                    href="/league/standings?league=ctfdl"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
                     <span className="mr-3 text-lg">🛡️</span>
                     <span className="font-medium">CTFDL</span>
-                  </Link> */}
+                  </Link>
+                  <Link
+                    href="/league/standings?league=ovdl"
+                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
+                  >
+                    <span className="mr-3 text-lg">⚔️</span>
+                    <span className="font-medium">OVDL</span>
+                  </Link>
                   <Link
                     href="/league/ratings"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
@@ -1940,14 +1990,30 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       <span className="mr-3">⚔️</span>
                       Standings
                     </Link>
-                    {/* <Link
-                      href="/"
+                    <Link
+                      href="/league/standings?league=ctfpl"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">🏆</span>
+                      CTFPL
+                    </Link>
+                    <Link
+                      href="/league/standings?league=ctfdl"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <span className="mr-3">🛡️</span>
                       CTFDL
-                    </Link> */}
+                    </Link>
+                    <Link
+                      href="/league/standings?league=ovdl"
+                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <span className="mr-3">⚔️</span>
+                      OVDL
+                    </Link>
                     <Link
                       href="/league/ratings"
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"

@@ -12,6 +12,10 @@ import { supabase } from '@/lib/supabase';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
 import { getClassColor } from '@/utils/classColors';
 import { getEloTier } from '@/utils/eloTiers';
+import { getLeagues, pickFeatured, getSeasonStatus, getStandings, type StandingRow } from '@/lib/leagues';
+import LeagueStatusSection, { type LeagueStatusData, type LeagueStatusEntry } from '@/components/ctf/LeagueStatusSection';
+import { displayFont, bodyFont } from '@/lib/fonts';
+import './ctf-theme.css';
 
 interface ServerStats {
   totalPlayers: number;
@@ -251,6 +255,7 @@ export default function Home() {
   const [userSquad, setUserSquad] = useState<Squad | null>(null);
   const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [leagueStatus, setLeagueStatus] = useState<LeagueStatusData | null>(null);
 
   // Recorded games state
   const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
@@ -275,11 +280,31 @@ export default function Home() {
   const [activeSeason, setActiveSeason] = useState<ActiveSeason | null>(null);
 
   // Filter slides based on user authentication
-  const bannerSlides = ALL_BANNER_SLIDES.filter(slide =>
+  const baseSlides = ALL_BANNER_SLIDES.filter(slide =>
     slide.showWhen === "always" ||
     (slide.showWhen === "guest" && !user) ||
     (slide.showWhen === "user" && user)
   );
+
+  // Data-driven first slide for the FEATURED league (from the league registry).
+  const featuredEntry = leagueStatus?.featured;
+  const featuredSlide = featuredEntry
+    ? [{
+        title: `${featuredEntry.league.name} ${
+          featuredEntry.status === 'active' ? 'IS LIVE' : featuredEntry.status === 'upcoming' ? 'IS COMING' : 'LEAGUE'
+        }`,
+        subtitle: featuredEntry.league.description || featuredEntry.league.name,
+        description: featuredEntry.season
+          ? (featuredEntry.season.season_name || `Season ${featuredEntry.season.season_number}`)
+          : 'Season details coming soon',
+        highlight: 'View Standings',
+        color: 'cyan',
+        href: `/league/standings?league=${featuredEntry.league.slug}`,
+        showWhen: 'always' as const,
+      }]
+    : [];
+
+  const bannerSlides = [...featuredSlide, ...baseSlides];
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -684,67 +709,44 @@ export default function Home() {
       }
     };
 
+    // League status via the league adapters: every league's season status,
+    // plus the FEATURED league's standings (drives the League Status section,
+    // the sidebar standings widget, and the featured carousel slide).
     const fetchActiveSeasonStandings = async () => {
       try {
-        // Check for active CTFPL season first
-        const { data: ctfplSeason, error: ctfplError } = await supabase
-          .from('ctfpl_seasons')
-          .select('*')
-          .eq('status', 'active')
-          .maybeSingle();
+        const leagues = await getLeagues();
+        if (leagues.length === 0) return;
 
-        if (!ctfplError && ctfplSeason) {
-          setActiveSeason({
-            id: ctfplSeason.id,
-            season_number: ctfplSeason.season_number,
-            season_name: ctfplSeason.season_name,
-            status: ctfplSeason.status,
-            league_name: 'CTFPL'
-          });
+        const entries: LeagueStatusEntry[] = await Promise.all(
+          leagues.map(async (league) => {
+            const { season, status } = await getSeasonStatus(league);
+            return { league, status, season };
+          })
+        );
 
-          const { data: standings, error: standingsError } = await supabase
-            .from('ctfpl_standings_with_rankings')
-            .select('squad_name, squad_tag, squad_id, rank, wins, losses, points, win_percentage')
-            .eq('season_number', ctfplSeason.season_number)
-            .order('rank', { ascending: true })
-            .limit(8);
+        const featuredLeague = pickFeatured(leagues);
+        const featured =
+          entries.find((e) => e.league.id === featuredLeague?.id) || entries[0] || null;
 
-          if (!standingsError && standings) {
-            setSeasonStandings(standings);
-          }
-          return;
+        let standings: StandingRow[] = [];
+        if (featured?.season) {
+          standings = await getStandings(featured.league, featured.season, 8);
         }
 
-        // Fallback: check for any active league season
-        const { data: leagueSeason, error: leagueError } = await supabase
-          .from('league_seasons')
-          .select('*, leagues(name, slug)')
-          .eq('status', 'active')
-          .limit(1)
-          .maybeSingle();
+        setLeagueStatus({ entries, featured, standings: standings.slice(0, 3) });
 
-        if (!leagueError && leagueSeason) {
+        if (featured?.season) {
           setActiveSeason({
-            id: leagueSeason.id,
-            season_number: leagueSeason.season_number,
-            season_name: leagueSeason.season_name,
-            status: leagueSeason.status,
-            league_name: (leagueSeason.leagues as any)?.name || 'League'
+            id: featured.season.id,
+            season_number: featured.season.season_number,
+            season_name: featured.season.season_name,
+            status: featured.season.status,
+            league_name: featured.league.name,
           });
-
-          const { data: standings, error: standingsError } = await supabase
-            .from('league_standings_with_rankings')
-            .select('squad_name, squad_tag, squad_id, rank, wins, losses, points, win_percentage')
-            .eq('league_season_id', leagueSeason.id)
-            .order('rank', { ascending: true })
-            .limit(8);
-
-          if (!standingsError && standings) {
-            setSeasonStandings(standings);
-          }
+          setSeasonStandings(standings);
         }
       } catch (error) {
-        console.error('Error fetching season standings:', error);
+        console.error('Error fetching league status:', error);
       }
     };
 
@@ -996,7 +998,7 @@ export default function Home() {
   const hasLiveGame = gameData.arenaName && activePlayers.length > 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-900 to-black relative overflow-hidden">
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen relative overflow-hidden`}>
       <Navbar user={user} />
 
       <main className="container mx-auto px-4 py-8 relative z-10">
@@ -1010,18 +1012,28 @@ export default function Home() {
             opacity: Math.max(0.3, 1 - scrollY / 600)
           }}
         >
-          {/* Video Background */}
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-          >
-            <source src="/CTFPL-Website-Header-1.webm" type="video/webm" />
-            <source src="/CTFPL-Website-Header-1.mp4" type="video/mp4" />
-            Your browser does not support the video tag.
-          </video>
+          {/* Free Infantry banner background (replaces the CTFPL-only video header) */}
+          <div className="absolute inset-0 bg-[#0B0F1A]">
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 18% 30%, rgba(34,211,238,0.16), transparent 42%), radial-gradient(circle at 82% 72%, rgba(245,158,11,0.10), transparent 48%)',
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+              <span
+                className="font-display leading-none tracking-tight text-white/[0.035] whitespace-nowrap"
+                style={{ fontSize: 'min(20vw, 220px)' }}
+              >
+                FREE INFANTRY
+              </span>
+            </div>
+            <div className="absolute top-5 left-6 flex items-baseline gap-2">
+              <span className="font-display text-2xl tracking-wide text-white">FREE INFANTRY</span>
+              <span className="text-[10px] tracking-[0.3em] uppercase text-[#22D3EE]/80">CTF leagues</span>
+            </div>
+          </div>
 
           {/* Dynamic Overlay Gradient */}
           <div className={`absolute inset-0 transition-all duration-1000 ${slideColor.overlay}`}></div>
@@ -1332,6 +1344,9 @@ export default function Home() {
           {/* CENTER CONTENT (6 columns) */}
           <div className="xl:col-span-6">
             <div className="space-y-3">
+
+              {/* League Status — featured league + every league's season state */}
+              <LeagueStatusSection data={leagueStatus} />
 
               {/* News Section */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">

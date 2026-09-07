@@ -5,39 +5,35 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
-import { supabase } from '@/lib/supabase';
+import { getLeagues, pickFeatured, type LeagueInfo } from '@/lib/leagues';
 import { CTFPLStandingsContent } from '@/components/league/CTFPLStandingsContent';
-
-interface League {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-}
 
 function LeagueStandingsHubContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
-  const leagueSlugParam = searchParams.get('league') || 'ctfpl';
+  // No ?league= param → default to the FEATURED league (the one running now),
+  // rather than a hardcoded CTFPL.
+  const leagueSlugParam = searchParams.get('league');
 
-  const [leagues, setLeagues] = useState<League[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState<string>(leagueSlugParam);
+  const [leagues, setLeagues] = useState<LeagueInfo[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState<string>(leagueSlugParam || '');
   const [loadingLeagues, setLoadingLeagues] = useState(true);
 
   useEffect(() => {
-    setSelectedSlug(leagueSlugParam);
+    if (leagueSlugParam) setSelectedSlug(leagueSlugParam);
   }, [leagueSlugParam]);
 
   useEffect(() => {
     (async () => {
       setLoadingLeagues(true);
-      const { data, error } = await supabase
-        .from('leagues')
-        .select('id, slug, name, description')
-        .order('slug');
-      if (!error && data) setLeagues(data);
+      const list = await getLeagues();
+      setLeagues(list);
+      if (!leagueSlugParam) {
+        setSelectedSlug(pickFeatured(list)?.slug || 'ctfpl');
+      }
       setLoadingLeagues(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

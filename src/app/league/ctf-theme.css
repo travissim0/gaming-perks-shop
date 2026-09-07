@@ -1,0 +1,107 @@
+/*
+ * CTF section reskin — scoped to `.ctf-theme`.
+ *
+ * "Esports broadcast, restrained": one dark base, one accent, flat cards
+ * without borders, a condensed display face for headings. This layer is
+ * deliberately UNLAYERED so it wins over Tailwind's @layer utilities, which
+ * lets it reskin the existing markup without moving any layout.
+ */
+
+.ctf-theme {
+  --ctf-page: #0B0F1A;
+  --ctf-card: #131A2B;
+  --ctf-card-2: #1B2438;
+  --ctf-accent: #22D3EE;
+  --ctf-highlight: #F59E0B;
+  --ctf-win: #34D399;
+  --ctf-loss: #F87171;
+  --ctf-text: #E6EDF7;
+  --ctf-muted: #8B98B0;
+
+  background: var(--ctf-page);
+  color: var(--ctf-text);
+  font-family: var(--font-body), Inter, system-ui, sans-serif;
+}
+
+.ctf-theme .font-display,
+.ctf-theme h1,
+.ctf-theme h2 {
+  font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
+}
+
+/* ---- Card shells: flat surface, no gradient, no colored border --------- */
+.ctf-theme main section {
+  background: var(--ctf-card);
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 12px;
+}
+
+/* ---- Section header bars ----------------------------------------------- */
+.ctf-theme main section > div:first-child {
+  background: transparent;
+  background-image: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ctf-theme main section > div:first-child h3 {
+  font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
+  font-weight: 500;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: var(--ctf-text);
+}
+
+/* Inner panels inside cards */
+.ctf-theme main section .bg-gray-900,
+.ctf-theme main section .bg-gray-900\/50 {
+  background: transparent;
+}
+
+/* ---- Collapse the per-section rainbow into accent + semantic ----------- */
+.ctf-theme .text-cyan-400,
+.ctf-theme .text-blue-400,
+.ctf-theme .text-purple-400,
+.ctf-theme .text-pink-400,
+.ctf-theme .text-indigo-400,
+.ctf-theme .text-teal-400,
+.ctf-theme .text-orange-400,
+.ctf-theme .text-cyan-300,
+.ctf-theme .text-purple-300 {
+  color: var(--ctf-accent);
+}
+
+.ctf-theme .text-green-400,
+.ctf-theme .text-green-300 {
+  color: var(--ctf-win);
+}
+
+.ctf-theme .text-red-400 {
+  color: var(--ctf-loss);
+}
+
+.ctf-theme .text-yellow-400 {
+  color: var(--ctf-highlight);
+}
+
+.ctf-theme .text-gray-300 {
+  color: var(--ctf-text);
+}
+
+.ctf-theme .text-gray-400,
+.ctf-theme .text-gray-500 {
+  color: var(--ctf-muted);
+}
+
+/* Row chips inside widgets */
+.ctf-theme main section .bg-gray-700\/30,
+.ctf-theme main section .bg-gray-800\/30 {
+  background: var(--ctf-card-2);
+  border-color: transparent;
+}
+
+/* Table dividers */
+.ctf-theme main section table tr {
+  border-color: rgba(255, 255, 255, 0.06);
+}

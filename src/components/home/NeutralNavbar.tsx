@@ -157,7 +157,7 @@ export default function NeutralNavbar() {
                         onClick={() => setShowZonesDropdown(false)}
                       >
                         <span>🏆</span>
-                        <span className="font-semibold">CTFPL</span>
+                        <span className="font-semibold">CTF Leagues</span>
                       </Link>
                       <Link
                         href="/map-vote"
@@ -183,13 +183,30 @@ export default function NeutralNavbar() {
                         <span>⚡</span>
                         <span className="font-semibold">Triple Threat</span>
                       </Link>
+                      <div className="border-t border-gray-700/60 my-1" />
                       <Link
-                        href="/league/ctfml"
-                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
+                        href="/league/standings?league=ctfpl"
+                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
                         onClick={() => setShowZonesDropdown(false)}
                       >
-                        <span>🚩</span>
-                        <span className="font-semibold">CTFML</span>
+                        <span className="w-4 text-center">·</span>
+                        <span>CTFPL</span>
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ctfdl"
+                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span className="w-4 text-center">·</span>
+                        <span>CTFDL</span>
+                      </Link>
+                      <Link
+                        href="/league/standings?league=ovdl"
+                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
+                        onClick={() => setShowZonesDropdown(false)}
+                      >
+                        <span className="w-4 text-center">·</span>
+                        <span>OVDL</span>
                       </Link>
                     </div>
                   </div>
@@ -473,7 +490,7 @@ export default function NeutralNavbar() {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <span>🏆</span>
-                    <span className="font-semibold">CTFPL</span>
+                    <span className="font-semibold">CTF Leagues</span>
                   </Link>
                   <Link
                     href="/map-vote"
@@ -500,12 +517,28 @@ export default function NeutralNavbar() {
                     <span className="font-semibold">Triple Threat</span>
                   </Link>
                   <Link
-                    href="/league/ctfml"
-                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
+                    href="/league/standings?league=ctfpl"
+                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <span>🚩</span>
-                    <span className="font-semibold">CTFML</span>
+                    <span className="w-4 text-center">·</span>
+                    <span>CTFPL</span>
+                  </Link>
+                  <Link
+                    href="/league/standings?league=ctfdl"
+                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span className="w-4 text-center">·</span>
+                    <span>CTFDL</span>
+                  </Link>
+                  <Link
+                    href="/league/standings?league=ovdl"
+                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span className="w-4 text-center">·</span>
+                    <span>OVDL</span>
                   </Link>
                 </div>
               )}
