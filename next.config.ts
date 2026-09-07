@@ -4,9 +4,12 @@ const nextConfig: NextConfig = {
   // Infantry zone editors — static SPA in public/editors/ (built by infantry-cfs-studio
   // `vite build --config vite.config.web.ts --base=/editors/`). public/ has no
   // directory-index behavior, so map the bare path to the SPA's index.html.
+  // /spec = FreeInfantry Mobile (spectate + chat), same recipe with --base=/spec/ plus
+  // VITE_PROXY_URL / VITE_ASSETS_URL pointing at the zone VPS (Vercel can't host either).
   async rewrites() {
     return [
       { source: '/editors', destination: '/editors/index.html' },
+      { source: '/spec', destination: '/spec/index.html' },
     ];
   },
   typescript: {
@@ -110,6 +113,22 @@ const nextConfig: NextConfig = {
   // Headers for caching, security, and CORS
   async headers() {
     return [
+      {
+        // /spec's index.html is the only stable-named file in the SPA and it names the hashed
+        // chunks — a cached copy after a redeploy loads a mismatched chunk graph and the app dies
+        // with React #321 ("invalid hook call"), which looks nothing like a caching bug. Never
+        // cache it; the hashed assets under /spec/assets/ are immutable and cache themselves.
+        source: '/spec/index.html',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
+      {
+        source: '/spec',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, must-revalidate' },
+        ],
+      },
       {
         // Apply to all API routes
         source: '/api/:path*',
