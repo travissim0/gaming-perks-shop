@@ -204,7 +204,7 @@ export default function CreateMatchReportPage() {
 
   if (permissionLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
@@ -218,7 +218,7 @@ export default function CreateMatchReportPage() {
 
   if (!hasPermission) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
@@ -238,7 +238,7 @@ export default function CreateMatchReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">

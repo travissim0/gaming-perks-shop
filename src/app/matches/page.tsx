@@ -709,7 +709,7 @@ export default function MatchesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-xl">Loading...</div>
       </div>
     );
@@ -717,7 +717,7 @@ export default function MatchesPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Please log in to view matches</h1>
           <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">
@@ -729,7 +729,7 @@ export default function MatchesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
       <Navbar user={user} />
       <div className="max-w-7xl mx-auto p-6">
         <div className="flex justify-between items-center mb-8">

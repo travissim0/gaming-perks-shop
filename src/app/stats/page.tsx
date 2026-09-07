@@ -503,7 +503,7 @@ export default function PlayerStatsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       <Navbar user={user} />
       
       {/* Mobile Filters Button */}
@@ -534,7 +534,7 @@ export default function PlayerStatsPage() {
             <div className="p-4 space-y-6">
               {/* Filters */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
+                <h3 className="text-sm font-semibold text-cyan-400 tracking-wide">Filters</h3>
                 
                 {/* Sort By */}
                 <div>
@@ -615,7 +615,7 @@ export default function PlayerStatsPage() {
 
               {/* Quick Access */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
+                <h3 className="text-sm font-semibold text-indigo-400 tracking-wide">Quick access</h3>
                 
                 <button 
                   onClick={() => {
@@ -692,7 +692,7 @@ export default function PlayerStatsPage() {
             className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-xl shadow-2xl overflow-hidden"
           >
             <div className="bg-gray-700/50 px-4 py-3 border-b border-cyan-500/30">
-              <h3 className="text-cyan-400 font-bold text-sm tracking-wide">🎮 Recent Games</h3>
+              <h3 className="text-cyan-400 font-bold text-sm tracking-wide">Recent games</h3>
             </div>
             
             <div className="p-4 bg-gray-900 max-h-[800px] overflow-y-auto">
@@ -953,13 +953,13 @@ export default function PlayerStatsPage() {
             className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-xl shadow-2xl overflow-hidden sticky top-6"
           >
             <div className="bg-gray-700/50 px-4 py-3 border-b border-cyan-500/30">
-              <h3 className="text-cyan-400 font-bold text-sm tracking-wide">⚙️ Filters & Quick Access</h3>
+              <h3 className="text-cyan-400 font-bold text-sm tracking-wide">Filters & quick access</h3>
             </div>
             
             <div className="p-4 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Filters */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">📊 Filters</h3>
+                <h3 className="text-sm font-semibold text-cyan-400 tracking-wide">Filters</h3>
                 
                 {/* Sort By */}
                 <div>
@@ -1040,7 +1040,7 @@ export default function PlayerStatsPage() {
 
               {/* Quick Access */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">⚡ Quick Access</h3>
+                <h3 className="text-sm font-semibold text-indigo-400 tracking-wide">Quick access</h3>
                 
                 <button 
                   onClick={() => {

@@ -330,7 +330,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
 
   if ((selectedSeason === null && seasonsLoading) || (dataLoading && standings.length === 0 && selectedSeason !== null)) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -344,7 +344,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
       {!sidebarOpen && !navbarMobileMenuOpen && (
         <div className="lg:hidden fixed top-44 left-4 z-50">
           <button
@@ -868,7 +868,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
         <div className="mt-8 text-center text-gray-400 text-sm space-y-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
             <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-white font-medium mb-2">📊 Column Legend</h4>
+              <h4 className="text-white font-medium mb-2">Column legend</h4>
               <div className="text-xs space-y-1">
                 <p>
                   <span className="text-cyan-400">MP:</span> Matches Played
@@ -887,7 +887,7 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
               </div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-white font-medium mb-2">🏆 Scoring System</h4>
+              <h4 className="text-white font-medium mb-2">Scoring system</h4>
               <div className="text-xs space-y-1">
                 <p>
                   <span className="text-green-400">3 points</span> for a win (regulation or overtime)

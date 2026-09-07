@@ -206,7 +206,7 @@ export default function SquadsPlayersPage() {
   const profileUrl = (alias: string) => `/stats/player/${encodeURIComponent(alias)}`;
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="ctf-theme min-h-screen bg-gray-900">
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">

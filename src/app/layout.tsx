@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+// CTF-section reskin. Scoped entirely to `.ctf-theme` wrappers, so importing it
+// globally is inert everywhere else (homepage, USL, Triple Threat untouched).
+import "./league/ctf-theme.css";
+import { displayFont, bodyFont } from "@/lib/fonts";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AuthErrorBoundary } from "@/components/AuthErrorBoundary";
 import { Toaster } from "react-hot-toast";
@@ -73,7 +77,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${displayFont.variable} ${bodyFont.variable} antialiased`}
       >
         <AuthErrorBoundary>
           <AuthProvider>

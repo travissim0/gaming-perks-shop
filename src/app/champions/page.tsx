@@ -120,7 +120,7 @@ const ChampionArchives = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-black relative overflow-hidden">
+    <div className="ctf-theme min-h-screen bg-gradient-to-b from-gray-900 via-blue-900 to-black relative overflow-hidden">
       <div className="relative z-50">
         <Navbar user={user} />
       </div>

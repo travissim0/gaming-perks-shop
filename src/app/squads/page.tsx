@@ -1705,7 +1705,7 @@ export default function SquadsPage() {
   // Enhanced loading screen
   if (loading || dataLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar user={user} />
         <div className="container mx-auto py-8 px-4 flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
@@ -1721,7 +1721,7 @@ export default function SquadsPage() {
   // Allow anonymous users to view squads, but redirect on loading for auth check
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
       
       <main className="container mx-auto py-8 px-4">
@@ -2402,7 +2402,7 @@ export default function SquadsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
               <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-xl font-bold">📤 Invite Player</h3>
+                <h3 className="text-xl font-bold">Invite player</h3>
                 {userSquad?.is_legacy && (
                   <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
                     🏛️ LEGACY
@@ -2614,7 +2614,7 @@ export default function SquadsPage() {
                 )}
 
                 <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-4">
-                  <h4 className="text-blue-400 font-medium text-sm mb-2">📋 Image Guidelines:</h4>
+                  <h4 className="text-blue-400 font-medium text-sm mb-2">Image guidelines:</h4>
                   <ul className="text-xs text-gray-300 space-y-1">
                     <li>• <strong>Size:</strong> Square (1:1) or portrait (3:4) ratios work best</li>
                     <li>• <strong>Content:</strong> Squad logos, team photos, or artwork</li>

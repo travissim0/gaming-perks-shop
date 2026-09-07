@@ -53,7 +53,7 @@ function RulesContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center pt-20">
           <div className="text-xl">Loading...</div>
@@ -63,7 +63,7 @@ function RulesContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
       <Navbar user={user} />
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
@@ -197,7 +197,7 @@ function RulesContent() {
 export default function RulesPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <div className="flex items-center justify-center pt-20">
           <div className="text-xl">Loading...</div>
         </div>

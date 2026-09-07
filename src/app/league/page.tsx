@@ -1115,7 +1115,7 @@ export default function Home() {
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
                   <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
                     <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      👥 ONLINE USERS
+                      Online users
                       <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
                         {onlineUsers.length}
                       </span>
@@ -1214,7 +1214,7 @@ export default function Home() {
               {/* Server Status */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
-                  <h3 className="text-blue-400 font-bold text-sm tracking-wider">📡 SERVER STATUS</h3>
+                  <h3 className="text-blue-400 font-bold text-sm tracking-wider">Server status</h3>
                 </div>
                 <div className="p-4">
                   <div className="text-center mb-4">
@@ -1246,7 +1246,7 @@ export default function Home() {
               {/* Recent Games */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-3 py-2 border-b border-green-500/30">
-                  <h3 className="text-green-400 font-bold text-sm tracking-wider">🎮 RECENT GAMES</h3>
+                  <h3 className="text-green-400 font-bold text-sm tracking-wider">Recent games</h3>
                 </div>
                 <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
                   {recentGames.length > 0 ? (
@@ -1311,7 +1311,7 @@ export default function Home() {
               {/* Active Squads */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
-                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">🛡️ SQUADS</h3>
+                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">Squads</h3>
                 </div>
                 <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
                   {topSquads.length > 0 ? (
@@ -1362,7 +1362,7 @@ export default function Home() {
               {showRecordedGamesTheater && recordedGames.length > 0 && (
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden mb-6">
                   <div className="bg-gray-700/50 px-4 py-2 border-b border-cyan-500/30">
-                    <h3 className="text-lg font-bold text-cyan-400 tracking-wider">🎬 Most Recent Recorded Games</h3>
+                    <h3 className="text-lg font-bold text-cyan-400 tracking-wider">Most recent recorded games</h3>
                     <p className="text-gray-300 text-sm">Latest competitive gameplay recordings</p>
                   </div>
                   <div className="p-4">
@@ -1717,7 +1717,7 @@ export default function Home() {
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
                   <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
                     <h3 className="text-cyan-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      🏅 TOP PLAYERS
+                      Top players
                       <Link href="/stats/elo" className="text-xs text-gray-400 hover:text-cyan-300 transition-colors">
                         View All →
                       </Link>
@@ -1760,7 +1760,7 @@ export default function Home() {
                 <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
                   <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
                     <h3 className="text-purple-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      🏆 {activeSeason.league_name} S{activeSeason.season_number}
+                      {activeSeason.league_name} Season {activeSeason.season_number}
                       <Link href="/league/standings" className="text-xs text-gray-400 hover:text-purple-300 transition-colors">
                         Full Standings →
                       </Link>
@@ -1801,7 +1801,7 @@ export default function Home() {
               {/* Recent Donations */}
               <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
                 <div className="bg-gray-700/50 px-3 py-1.5 border-b border-yellow-500/30">
-                  <h3 className="text-sm font-bold text-yellow-400 tracking-wider">💝 Recent Donations</h3>
+                  <h3 className="text-sm font-bold text-yellow-400 tracking-wider">Recent donations</h3>
                 </div>
                 <div className="p-2">
                   {recentDonations.length > 0 ? (

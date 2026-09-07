@@ -37,7 +37,7 @@ function LeagueStandingsHubContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="ctf-theme min-h-screen bg-gray-950 text-gray-100">
       <Navbar />
       {/* League selector — shown for all leagues */}
       {loadingLeagues ? (
@@ -79,7 +79,7 @@ function LeagueStandingsHubContent() {
 export default function LeagueStandingsHubPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-950 text-gray-100">
+      <div className="ctf-theme min-h-screen bg-gray-950 text-gray-100">
         <Navbar />
         <div className="border-b border-gray-800 px-4 py-8 text-center text-gray-400">Loading standings…</div>
       </div>

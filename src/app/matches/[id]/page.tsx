@@ -621,7 +621,7 @@ export default function MatchDetailPage() {
 
   if (loading || pageLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center pt-20">
           <div className="text-xl">Loading...</div>
@@ -632,7 +632,7 @@ export default function MatchDetailPage() {
 
   if (!match) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <Navbar user={user} />
         <div className="max-w-7xl mx-auto p-6">
           <div className="text-center py-12">
@@ -653,7 +653,7 @@ export default function MatchDetailPage() {
   const userRoles = allUserParticipations.map(p => p.role);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
       <Navbar user={user} />
       <div className="max-w-7xl mx-auto p-6">
         {/* Back Button */}

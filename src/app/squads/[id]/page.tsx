@@ -1190,7 +1190,7 @@ export default function SquadDetailPage() {
   // Enhanced loading screen with timeout indicator
   if (loading || pageLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar user={user} />
         <div className="container mx-auto py-8 px-4 flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
@@ -1205,7 +1205,7 @@ export default function SquadDetailPage() {
 
   if (!squad) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
         <Navbar user={user} />
         <div className="container mx-auto py-8 px-4 flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
@@ -1225,7 +1225,7 @@ export default function SquadDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
       
       <main className="container mx-auto py-8 px-4">
@@ -1967,7 +1967,7 @@ export default function SquadDetailPage() {
               )}
 
               <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-4">
-                <h4 className="text-blue-400 font-medium text-sm mb-2">📋 Image Guidelines:</h4>
+                <h4 className="text-blue-400 font-medium text-sm mb-2">Image guidelines:</h4>
                 <ul className="text-xs text-gray-300 space-y-1">
                   <li>• <strong>Size:</strong> Square (1:1) or portrait (3:4) ratios work best</li>
                   <li>• <strong>Content:</strong> Squad logos, team photos, or artwork</li>

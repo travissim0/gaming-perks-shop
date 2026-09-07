@@ -251,7 +251,7 @@ export default function EloLeaderboardPage() {
 
   if (loading && players.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -265,7 +265,7 @@ export default function EloLeaderboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -284,7 +284,7 @@ export default function EloLeaderboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       <Navbar user={user} />
       
       <div className="container mx-auto px-4 py-8">

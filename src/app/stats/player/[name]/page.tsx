@@ -221,7 +221,7 @@ export default function PlayerPage() {
 
   if (error && !playerData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <motion.div
@@ -244,7 +244,7 @@ export default function PlayerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
       <Navbar user={user} />
       <div className="container mx-auto px-4 py-6">
         {/* Breadcrumb */}

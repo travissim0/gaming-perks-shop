@@ -55,7 +55,7 @@ export default function IndividualSquadRatingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
             <div className="h-20 bg-gray-700 rounded mb-8"></div>
@@ -73,7 +73,7 @@ export default function IndividualSquadRatingPage() {
 
   if (error || !squadRating) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <div className="container mx-auto px-4 py-8">
           <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6">
             <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Rating</h2>
@@ -91,7 +91,7 @@ export default function IndividualSquadRatingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         {/* Navigation Buttons */}

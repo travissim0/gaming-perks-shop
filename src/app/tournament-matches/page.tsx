@@ -272,7 +272,7 @@ export default function TournamentMatchesPage() {
 
   if (loading || pageLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <Navbar user={user} />
         <div className="flex items-center justify-center pt-20">
           <div className="text-xl">Loading tournament matches...</div>
@@ -285,7 +285,7 @@ export default function TournamentMatchesPage() {
   const hasMatches = Object.keys(groupedMatches).length > 0;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
       <Navbar user={user} />
       <div className="max-w-6xl mx-auto p-6">
         {/* Quick Navigation Links */}

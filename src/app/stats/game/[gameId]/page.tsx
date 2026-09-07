@@ -356,7 +356,7 @@ export default function GameStatsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
           <p className="text-blue-200">Loading game statistics...</p>
@@ -367,7 +367,7 @@ export default function GameStatsPage() {
 
   if (error || !gameData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading Game</h1>
           <p className="text-blue-200 mb-4">{error || 'Game not found'}</p>
@@ -380,7 +380,7 @@ export default function GameStatsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
       <div className="container mx-auto px-2 py-4">
         {/* Header */}
         <motion.div
@@ -484,7 +484,7 @@ export default function GameStatsPage() {
                 {/* Video Header */}
                 <div className="p-4 bg-white/20 border-b border-white/20 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <h2 className="text-2xl font-bold text-blue-200">🎬 Match Recording</h2>
+                    <h2 className="text-2xl font-bold text-blue-200">Match recording</h2>
                     {gameData.videoInfo.video_title && (
                       <span className="text-lg text-gray-300">• {gameData.videoInfo.video_title}</span>
                     )}

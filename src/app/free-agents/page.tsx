@@ -503,7 +503,7 @@ export default function FreeAgentsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
       <Navbar user={user} />
 
       <main className="container mx-auto px-4 py-6">

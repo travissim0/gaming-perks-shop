@@ -40,7 +40,7 @@ export default function LeagueRegisterPage() {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-gray-900">
+      <div className="ctf-theme min-h-screen bg-gray-900">
         <Navbar />
         <main className="max-w-xl mx-auto px-4 py-16 text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-400 mx-auto mb-4" />
@@ -51,7 +51,7 @@ export default function LeagueRegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="ctf-theme min-h-screen bg-gray-900">
       <Navbar />
       <main className="max-w-xl mx-auto px-4 py-16">
         <div className="bg-gray-800 border border-gray-600 rounded-xl p-8 text-center">

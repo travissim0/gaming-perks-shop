@@ -125,7 +125,7 @@ export default function SquadRatingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse">
@@ -143,7 +143,7 @@ export default function SquadRatingsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Navbar user={user} />
         <div className="container mx-auto px-4 py-8">
           <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6">
@@ -162,7 +162,7 @@ export default function SquadRatingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <Navbar user={user} />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}

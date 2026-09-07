@@ -29,7 +29,16 @@
   font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
 }
 
+/* Pages that nest their own full-height gradient wrapper (e.g. the standings
+   content component) would paint over the theme background — make nested
+   full-height wrappers transparent so the root's background shows through. */
+.ctf-theme .min-h-screen {
+  background: transparent;
+  background-image: none;
+}
+
 /* ---- Card shells: flat surface, no gradient, no colored border --------- */
+.ctf-theme section,
 .ctf-theme main section {
   background: var(--ctf-card);
   background-image: none;
@@ -39,12 +48,14 @@
 }
 
 /* ---- Section header bars ----------------------------------------------- */
+.ctf-theme section > div:first-child,
 .ctf-theme main section > div:first-child {
   background: transparent;
   background-image: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.ctf-theme section > div:first-child h3,
 .ctf-theme main section > div:first-child h3 {
   font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
   font-weight: 500;
