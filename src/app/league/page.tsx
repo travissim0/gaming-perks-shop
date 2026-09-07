@@ -221,7 +221,7 @@ const getSlideColor = (color: string) => SLIDE_COLORS[color] || SLIDE_COLORS.cya
 
 // ── Banner slides data ──────────────────────────────────────────────────
 const ALL_BANNER_SLIDES = [
-  { title: "FREE INFANTRY", subtitle: "Capture the Flag: Player's League", description: "🎮 Competitive Gaming Platform", highlight: "Join the Battle", color: "cyan", href: "/dashboard", showWhen: "guest" as const },
+  { title: "FREE INFANTRY", subtitle: "Capture the Flag leagues", description: "🎮 Competitive Gaming Platform", highlight: "Join the Battle", color: "cyan", href: "/dashboard", showWhen: "guest" as const },
   { title: "ACTIVE SQUADS", subtitle: "Form Elite Teams", description: "🛡️ Create or Join Competitive Squads", highlight: "Build Your Team", color: "purple", href: "/squads", showWhen: "always" as const },
   { title: "FREE AGENTS", subtitle: "Find Your Perfect Squad", description: "🎯 Connect Players with Teams", highlight: "Join the Pool", color: "pink", href: "/free-agents", showWhen: "always" as const },
   { title: "LIVE MATCHES", subtitle: "Compete in Real-Time", description: "⚔️ Schedule and Play Competitive Matches", highlight: "Enter the Arena", color: "green", href: "/matches", showWhen: "always" as const },
