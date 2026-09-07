@@ -1,63 +1,83 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { BookOpen, Download, List, Pencil, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import Link from 'next/link';
+import RulesBody from '@/components/ctf/RulesBody';
+import { getLeagues, pickFeatured, type LeagueInfo } from '@/lib/leagues';
+import { getLeagueRules, type RuleSection } from '@/lib/rules';
 
-interface League {
-  id: string;
-  slug: string;
-  name: string;
-}
-
-interface RulesEntry {
-  title: string;
-  pdf: string;
-}
-
-const LEAGUE_RULES: Record<string, RulesEntry[]> = {
-  ctfpl: [],
-  ctfdl: [{ title: 'CTFDL Season 3 Rules', pdf: '/CTFDL-S3-Rules.pdf' }],
-  ovdl: [{ title: 'OVD League 2024/2025 Season 1 Rules', pdf: '/OVD-League-2024_2025-Season-1.pdf' }],
-};
+const ALL = '__all__';
 
 function RulesContent() {
   const { user, loading } = useAuth();
   const searchParams = useSearchParams();
-  const leagueParam = searchParams.get('league') || 'ctfdl';
+  const leagueParam = searchParams.get('league');
 
-  const [leagues, setLeagues] = useState<League[]>([]);
-  const [selectedLeague, setSelectedLeague] = useState(leagueParam);
+  const [leagues, setLeagues] = useState<LeagueInfo[]>([]);
+  const [selectedLeague, setSelectedLeague] = useState<string>(leagueParam || '');
   const [loadingLeagues, setLoadingLeagues] = useState(true);
+  const [sections, setSections] = useState<RuleSection[]>([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+  const [active, setActive] = useState<string>(ALL);
+  const [isAdmin, setIsAdmin] = useState(false);
 
+  // Leagues from the registry; default to the featured league.
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from('leagues')
-        .select('id, slug, name')
-        .order('slug');
-      if (data) setLeagues(data);
+      const list = await getLeagues();
+      setLeagues(list);
+      if (!leagueParam) setSelectedLeague(pickFeatured(list)?.slug || 'ctfpl');
       setLoadingLeagues(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setSelectedLeague(leagueParam);
+    if (leagueParam) setSelectedLeague(leagueParam);
   }, [leagueParam]);
 
-  const rules = LEAGUE_RULES[selectedLeague] || [];
-  const leagueName = leagues.find(l => l.slug === selectedLeague)?.name || selectedLeague.toUpperCase();
+  // Rules for the selected league.
+  useEffect(() => {
+    if (!selectedLeague) return;
+    setLoadingRules(true);
+    (async () => {
+      const rows = await getLeagueRules(selectedLeague);
+      setSections(rows);
+      setActive(rows.length ? rows[0].id : ALL);
+      setLoadingRules(false);
+    })();
+  }, [selectedLeague]);
+
+  // Admin flag → "Edit rules" link.
+  useEffect(() => {
+    if (!user) { setIsAdmin(false); return; }
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_admin, ctf_role')
+        .eq('id', user.id)
+        .maybeSingle();
+      setIsAdmin(!!data && (data.is_admin === true || data.ctf_role === 'ctf_admin'));
+    })();
+  }, [user]);
+
+  const league = leagues.find((l) => l.slug === selectedLeague);
+  const leagueName = league?.name || selectedLeague.toUpperCase();
+  const visible = useMemo(
+    () => (active === ALL ? sections : sections.filter((s) => s.id === active)),
+    [sections, active],
+  );
 
   if (loading) {
     return (
       <div className="ctf-theme min-h-screen bg-gray-900 text-white">
         <Navbar user={user} />
-        <div className="flex items-center justify-center pt-20">
-          <div className="text-xl">Loading...</div>
-        </div>
+        <div className="flex items-center justify-center pt-20 text-[#8B98B0]">Loading…</div>
       </div>
     );
   }
@@ -67,127 +87,117 @@ function RulesContent() {
       <Navbar user={user} />
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-4">
-            League Rules
-          </h1>
-          <p className="text-gray-400 text-lg">
-            Official tournament rules and regulations
-          </p>
+        <div className="flex items-end justify-between gap-4 flex-wrap mb-6">
+          <div>
+            <h1 className="font-display text-4xl md:text-5xl text-[#E6EDF7] leading-none">League rules</h1>
+            <p className="text-[#8B98B0] mt-2">Official rules and procedures for each CTF league.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {league?.rules_pdf_url && (
+              <a
+                href={league.rules_pdf_url}
+                download
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-[#E6EDF7] transition-colors"
+              >
+                <Download className="w-4 h-4" aria-hidden="true" /> PDF
+              </a>
+            )}
+            {isAdmin && (
+              <Link
+                href={`/admin/rules?league=${selectedLeague}`}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 text-sm transition-colors"
+              >
+                <Pencil className="w-4 h-4" aria-hidden="true" /> Edit rules
+              </Link>
+            )}
+          </div>
         </div>
 
-        {/* League Selector */}
+        {/* League switcher */}
         {!loadingLeagues && (
-          <div className="mb-8">
-            <div className="flex flex-wrap justify-center gap-2">
-              {leagues.map(league => (
-                <Link
-                  key={league.slug}
-                  href={`/rules?league=${league.slug}`}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    selectedLeague === league.slug
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+          <div className="flex flex-wrap gap-2 mb-8">
+            {leagues.map((l) => (
+              <Link
+                key={l.slug}
+                href={`/rules?league=${l.slug}`}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedLeague === l.slug
+                    ? 'bg-[#22D3EE] text-[#0B0F1A]'
+                    : 'bg-[#131A2B] text-[#E6EDF7] hover:bg-[#1B2438]'
+                }`}
+              >
+                {l.name}
+                {l.is_featured && <span className="ml-2 text-[10px] uppercase tracking-wide opacity-70">featured</span>}
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        {loadingRules ? (
+          <div className="text-[#8B98B0] py-16 text-center">Loading rules…</div>
+        ) : sections.length === 0 ? (
+          <div className="rounded-xl bg-[#131A2B] p-12 text-center">
+            <BookOpen className="w-10 h-10 mx-auto text-[#8B98B0] mb-3" aria-hidden="true" />
+            <h2 className="font-display text-2xl text-[#E6EDF7] mb-1">Rules coming soon</h2>
+            <p className="text-[#8B98B0]">The {leagueName} rulebook hasn&apos;t been published yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
+            {/* Category nav */}
+            <nav className="lg:sticky lg:top-24 self-start rounded-xl bg-[#131A2B] p-2">
+              <button
+                onClick={() => setActive(ALL)}
+                className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  active === ALL ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#E6EDF7] hover:bg-white/5'
+                }`}
+              >
+                <List className="w-4 h-4 shrink-0" aria-hidden="true" /> Read all
+              </button>
+              <div className="my-2 border-t border-white/5" />
+              {sections.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setActive(s.id)}
+                  className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    active === s.id ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#E6EDF7] hover:bg-white/5'
                   }`}
                 >
-                  {league.name}
-                </Link>
+                  <span className="truncate">{s.category}</span>
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-50" aria-hidden="true" />
+                </button>
+              ))}
+            </nav>
+
+            {/* Content */}
+            <div className="space-y-6 min-w-0">
+              {visible.map((s) => (
+                <section key={s.id} className="rounded-xl bg-[#131A2B] p-6">
+                  <div className="mb-4">
+                    <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">{s.category}</div>
+                    <h2 className="font-display text-2xl text-[#E6EDF7]">{s.title}</h2>
+                  </div>
+                  <RulesBody body={s.body} />
+                </section>
               ))}
             </div>
           </div>
         )}
 
-        {/* Rules Content */}
-        {rules.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">📋</div>
-            <h2 className="text-2xl font-bold text-gray-300 mb-2">No Rules Published</h2>
-            <p className="text-gray-400">
-              No rules have been published for {leagueName} yet.
-            </p>
-          </div>
-        ) : (
-          rules.map((rule, index) => (
-            <div key={index} className="mb-8">
-              {/* PDF Viewer Container */}
-              <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden shadow-2xl">
-                <div className="p-4 bg-gray-800 border-b border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-white">
-                      {rule.title}
-                    </h2>
-                    <a
-                      href={rule.pdf}
-                      download
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Download PDF
-                    </a>
-                  </div>
-                </div>
-
-                {/* PDF Embed */}
-                <div className="relative" style={{ height: '80vh' }}>
-                  <iframe
-                    src={rule.pdf}
-                    className="w-full h-full"
-                    title={rule.title}
-                    style={{ border: 'none' }}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                      <h3 className="text-xl font-bold text-white mb-2">PDF Viewer Not Supported</h3>
-                      <p className="text-gray-400 mb-6">
-                        Your browser doesn&apos;t support embedded PDF viewing. Please download the file to view the rules.
-                      </p>
-                      <a
-                        href={rule.pdf}
-                        download
-                        className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg transition-colors font-semibold"
-                      >
-                        Download {rule.title} PDF
-                      </a>
-                    </div>
-                  </iframe>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-
-        {/* Quick Links */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-cyan-400 mb-3">Tournament Schedule</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              View upcoming tournament matches and important dates
-            </p>
-            <a href="/tournament-matches" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              View Tournament Matches →
-            </a>
-          </div>
-
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-purple-400 mb-3">League Standings</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Check current league standings and rankings
-            </p>
-            <a href={`/league/standings?league=${selectedLeague}`} className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              View {leagueName} Standings →
-            </a>
-          </div>
-
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-green-400 mb-3">Squad Management</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Manage your squad roster and participate in the league
-            </p>
-            <a href="/squads" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              View Squads →
-            </a>
-          </div>
+        {/* Quick links */}
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Link href={`/league/standings?league=${selectedLeague}`} className="rounded-xl bg-[#131A2B] p-5 hover:bg-[#1B2438] transition-colors">
+            <div className="font-display text-lg text-[#E6EDF7]">Standings</div>
+            <div className="text-sm text-[#8B98B0]">Current {leagueName} standings and rankings</div>
+          </Link>
+          <Link href="/tournament-matches" className="rounded-xl bg-[#131A2B] p-5 hover:bg-[#1B2438] transition-colors">
+            <div className="font-display text-lg text-[#E6EDF7]">Schedule</div>
+            <div className="text-sm text-[#8B98B0]">Upcoming matches and important dates</div>
+          </Link>
+          <Link href="/squads" className="rounded-xl bg-[#131A2B] p-5 hover:bg-[#1B2438] transition-colors">
+            <div className="font-display text-lg text-[#E6EDF7]">Squads</div>
+            <div className="text-sm text-[#8B98B0]">Manage your roster and join the league</div>
+          </Link>
         </div>
       </div>
     </div>
@@ -196,13 +206,13 @@ function RulesContent() {
 
 export default function RulesPage() {
   return (
-    <Suspense fallback={
-      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
-        <div className="flex items-center justify-center pt-20">
-          <div className="text-xl">Loading...</div>
+    <Suspense
+      fallback={
+        <div className="ctf-theme min-h-screen bg-gray-900 text-white">
+          <div className="flex items-center justify-center pt-20 text-[#8B98B0]">Loading…</div>
         </div>
-      </div>
-    }>
+      }
+    >
       <RulesContent />
     </Suspense>
   );

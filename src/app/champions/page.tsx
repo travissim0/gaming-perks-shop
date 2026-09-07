@@ -6,6 +6,7 @@ import { Trophy, Crown, Star, Sword, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import SeasonWinnersModal from '@/components/SeasonWinnersModal';
+import RecentChampions from '@/components/ctf/RecentChampions';
 
 const ChampionArchives = () => {
   const { user } = useAuth();
@@ -159,6 +160,9 @@ const ChampionArchives = () => {
       </div>
 
 
+
+      {/* Recent champions from the current leagues (live data) — the historical hall below is untouched */}
+      <RecentChampions />
 
       {/* Champions Grid */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 pb-20">

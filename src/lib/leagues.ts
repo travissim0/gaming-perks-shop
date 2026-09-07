@@ -173,5 +173,73 @@ export async function getStandings(
   return (data as StandingRow[]) || [];
 }
 
+// ---- Champions ------------------------------------------------------------
+
+export interface SquadRef {
+  id: string;
+  name: string;
+  tag: string | null;
+}
+
+export interface SeasonChampions {
+  season_id: string;
+  season_number: number;
+  season_name: string | null;
+  end_date: string | null;
+  champions: SquadRef[];
+  runners_up: SquadRef[];
+  third: SquadRef[];
+}
+
+const CHAMPION_COLS =
+  'id, season_number, season_name, end_date, champion_squad_ids, runner_up_squad_ids, third_place_squad_ids';
+
+/** Completed seasons (newest first) with their placing squads resolved to names. */
+export async function getRecentChampions(league: LeagueInfo, limit = 5): Promise<SeasonChampions[]> {
+  let rows: any[] = [];
+  if (league.data_source === 'ctfpl') {
+    const { data } = await supabase
+      .from('ctfpl_seasons')
+      .select(CHAMPION_COLS)
+      .eq('status', 'completed')
+      .order('season_number', { ascending: false })
+      .limit(limit);
+    rows = data || [];
+  } else {
+    const { data } = await supabase
+      .from('league_seasons')
+      .select(CHAMPION_COLS)
+      .eq('league_id', league.id)
+      .eq('status', 'completed')
+      .order('season_number', { ascending: false })
+      .limit(limit);
+    rows = data || [];
+  }
+
+  const ids = new Set<string>();
+  for (const r of rows) {
+    for (const k of ['champion_squad_ids', 'runner_up_squad_ids', 'third_place_squad_ids']) {
+      (r[k] || []).forEach((id: string) => ids.add(id));
+    }
+  }
+  const squadMap = new Map<string, SquadRef>();
+  if (ids.size) {
+    const { data: squads } = await supabase.from('squads').select('id, name, tag').in('id', Array.from(ids));
+    (squads || []).forEach((s: any) => squadMap.set(s.id, { id: s.id, name: s.name, tag: s.tag ?? null }));
+  }
+  const resolve = (arr: string[] | null) =>
+    (arr || []).map((id) => squadMap.get(id) || { id, name: 'Unknown squad', tag: null });
+
+  return rows.map((r) => ({
+    season_id: r.id,
+    season_number: r.season_number,
+    season_name: r.season_name ?? null,
+    end_date: r.end_date ?? null,
+    champions: resolve(r.champion_squad_ids),
+    runners_up: resolve(r.runner_up_squad_ids),
+    third: resolve(r.third_place_squad_ids),
+  }));
+}
+
 export const leagueStandingsHref = (l: LeagueInfo) => `/league/standings?league=${l.slug}`;
 export const leagueRulesHref = (l: LeagueInfo) => `/rules?league=${l.slug}`;

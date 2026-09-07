@@ -65,6 +65,15 @@ function LeagueStandingsHubContent() {
         </div>
       )}
 
+      {/* Head-to-head squad comparison (was orphaned — now reachable from here) */}
+      <div className="px-4 py-2 border-b border-gray-800">
+        <div className="max-w-4xl mx-auto text-sm">
+          <Link href="/league/compare" className="text-[#22D3EE] hover:underline">
+            Compare two squads head-to-head →
+          </Link>
+        </div>
+      </div>
+
       {/* Show standings for all leagues using the generic component */}
       {selectedSlug && (
         <CTFPLStandingsContent

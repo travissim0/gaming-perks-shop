@@ -116,3 +116,46 @@
 .ctf-theme main section table tr {
   border-color: rgba(255, 255, 255, 0.06);
 }
+
+/* ---- Rulebook prose (rendered TipTap documents) ------------------------ */
+.ctf-theme .rules-prose {
+  color: var(--ctf-text);
+  line-height: 1.65;
+  font-size: 0.95rem;
+}
+.ctf-theme .rules-prose p {
+  margin: 0 0 0.75rem;
+}
+.ctf-theme .rules-prose strong {
+  color: var(--ctf-text);
+  font-weight: 600;
+}
+.ctf-theme .rules-prose h1,
+.ctf-theme .rules-prose h2,
+.ctf-theme .rules-prose h3 {
+  font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
+  color: var(--ctf-text);
+  margin: 1.25rem 0 0.5rem;
+  line-height: 1.15;
+}
+.ctf-theme .rules-prose h1 { font-size: 1.6rem; }
+.ctf-theme .rules-prose h2 { font-size: 1.35rem; }
+.ctf-theme .rules-prose h3 { font-size: 1.15rem; }
+.ctf-theme .rules-prose ol,
+.ctf-theme .rules-prose ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+}
+.ctf-theme .rules-prose ol { list-style: decimal; }
+.ctf-theme .rules-prose ul { list-style: disc; }
+.ctf-theme .rules-prose ol ol { list-style: lower-alpha; margin-top: 0.35rem; }
+.ctf-theme .rules-prose ul ul { list-style: circle; margin-top: 0.35rem; }
+.ctf-theme .rules-prose li { margin: 0 0 0.4rem; }
+.ctf-theme .rules-prose li > p { margin: 0 0 0.25rem; }
+.ctf-theme .rules-prose a { color: var(--ctf-accent); text-decoration: underline; }
+.ctf-theme .rules-prose blockquote {
+  border-left: 3px solid var(--ctf-accent);
+  padding-left: 0.85rem;
+  color: var(--ctf-muted);
+  margin: 0 0 0.75rem;
+}
