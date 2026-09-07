@@ -238,13 +238,32 @@ export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFP
           averagePointsPerSquad: Math.round(averagePoints * 10) / 10,
         });
 
-        // Fetch playoff/finals matches for bracket display (all leagues use ctfpl_matches)
-        const { data: playoffData } = await supabase
-          .from('ctfpl_matches')
-          .select('id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date')
-          .eq('season_number', seasonNumber)
-          .in('match_type', ['Playoffs', 'Finals'])
-          .order('match_date', { ascending: true });
+        // Fetch playoff/finals matches for bracket display. CTFPL reads its own
+        // table; generic leagues read league_matches by league_season_id — so a
+        // CTFDL season never shows CTFPL's bracket.
+        const bracketCols =
+          'id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date';
+        let playoffData: any[] | null = null;
+        if (isCTFPL) {
+          const res = await supabase
+            .from('ctfpl_matches')
+            .select(bracketCols)
+            .eq('season_number', seasonNumber)
+            .in('match_type', ['Playoffs', 'Finals'])
+            .order('match_date', { ascending: true });
+          playoffData = res.data;
+        } else {
+          const genericSeason = allSeasons.find((s: any) => s.season_number === seasonNumber);
+          if (genericSeason) {
+            const res = await supabase
+              .from('league_matches')
+              .select(bracketCols)
+              .eq('league_season_id', (genericSeason as any).id)
+              .in('match_type', ['Playoffs', 'Finals'])
+              .order('match_date', { ascending: true });
+            playoffData = res.data;
+          }
+        }
         setPlayoffMatches(playoffData || []);
       } catch (error) {
         console.error('Error loading standings data:', error);

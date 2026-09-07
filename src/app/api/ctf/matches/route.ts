@@ -40,15 +40,29 @@ export async function GET(request: NextRequest) {
 
     const seasonNum = parseInt(seasonNumber);
 
-    // Fetch matches for this season
-    const { data: rawMatches, error: matchesError } = await supabaseAdmin
-      .from('ctfpl_matches')
-      .select('*')
-      .eq('season_number', seasonNum)
-      .order('match_date', { ascending: false });
-
-    if (matchesError) {
-      console.error('Error fetching matches:', matchesError);
+    // Fetch matches for this season. CTFPL keeps its own table; generic leagues
+    // (CTFDL, OVDL, ...) read league_matches keyed by league_season_id, so one
+    // league's matches never bleed into another's.
+    let rawMatches: Record<string, unknown>[] | null = null;
+    if (league === 'ctfpl') {
+      const { data, error } = await supabaseAdmin
+        .from('ctfpl_matches')
+        .select('*')
+        .eq('season_number', seasonNum)
+        .order('match_date', { ascending: false });
+      if (error) console.error('Error fetching matches:', error);
+      rawMatches = data;
+    } else {
+      const leagueSeasonId = await resolveLeagueSeasonId(league, seasonNum);
+      if (leagueSeasonId) {
+        const { data, error } = await supabaseAdmin
+          .from('league_matches')
+          .select('*')
+          .eq('league_season_id', leagueSeasonId)
+          .order('match_date', { ascending: false });
+        if (error) console.error('Error fetching league matches:', error);
+        rawMatches = data;
+      }
     }
 
     // Transform DB columns to frontend format
@@ -228,11 +242,30 @@ export async function POST(request: NextRequest) {
     if (gameLengthMinutes !== null) matchInsert.game_length_minutes = gameLengthMinutes;
     if (mvp) matchInsert.mvp_player_name = mvp;
 
-    const { data: match, error: matchError } = await supabaseAdmin
-      .from('ctfpl_matches')
-      .insert(matchInsert)
-      .select()
-      .single();
+    // CTFPL writes its own table; generic leagues write league_matches keyed by
+    // league_season_id so CTFDL/OVDL history never lands in CTFPL's table.
+    let match: Record<string, unknown> | null = null;
+    let matchError: { message: string } | null = null;
+    if (leagueSlug === 'ctfpl') {
+      const res = await supabaseAdmin.from('ctfpl_matches').insert(matchInsert).select().single();
+      match = res.data;
+      matchError = res.error;
+    } else {
+      const leagueSeasonId = await resolveLeagueSeasonId(leagueSlug, parseInt(season_number));
+      if (!leagueSeasonId) {
+        return NextResponse.json(
+          { error: `No season ${season_number} found for league '${leagueSlug}'` },
+          { status: 400 },
+        );
+      }
+      const res = await supabaseAdmin
+        .from('league_matches')
+        .insert({ ...matchInsert, league_season_id: leagueSeasonId })
+        .select()
+        .single();
+      match = res.data;
+      matchError = res.error;
+    }
 
     if (matchError) {
       console.error('Error inserting match:', matchError);
@@ -350,6 +383,23 @@ export async function POST(request: NextRequest) {
     console.error('Error in POST /api/ctf/matches:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+/** league slug + season number → league_seasons.id (generic leagues only). */
+async function resolveLeagueSeasonId(slug: string, seasonNumber: number): Promise<string | null> {
+  const { data: league } = await supabaseAdmin
+    .from('leagues')
+    .select('id')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!league) return null;
+  const { data: season } = await supabaseAdmin
+    .from('league_seasons')
+    .select('id')
+    .eq('league_id', league.id)
+    .eq('season_number', seasonNumber)
+    .maybeSingle();
+  return season?.id ?? null;
 }
 
 async function resolveSquadId(name: string): Promise<string | null> {
