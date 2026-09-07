@@ -402,6 +402,28 @@ async function resolveLeagueSeasonId(slug: string, seasonNumber: number): Promis
   return season?.id ?? null;
 }
 
+/**
+ * Derive a tag for an auto-created historical squad.
+ * Multi-word names use word initials ("Big Raccoons Under Hats" -> BRUH,
+ * "Take Yer Beatin" -> TYB); single words use the first four letters
+ * ("Goliath" -> GOLI). Spaces and punctuation never leak into the tag
+ * (the old first-four-characters rule produced tags like "BIG ").
+ */
+function makeSquadTag(name: string): string {
+  const words = name
+    .split(/\s+/)
+    .map((w) => w.replace(/[^A-Za-z0-9]/g, ''))
+    .filter(Boolean);
+  let tag = '';
+  if (words.length >= 2) {
+    tag = words.map((w) => w[0]).join('').toUpperCase().slice(0, 5);
+  }
+  if (tag.length < 2) {
+    tag = words.join('').toUpperCase().slice(0, 4);
+  }
+  return tag || 'SQD';
+}
+
 async function resolveSquadId(name: string): Promise<string | null> {
   // Try exact name match
   const { data: byName } = await supabaseAdmin
@@ -424,7 +446,7 @@ async function resolveSquadId(name: string): Promise<string | null> {
   if (byTag) return byTag.id;
 
   // Create historical squad
-  const tag = name.slice(0, 4).toUpperCase();
+  const tag = makeSquadTag(name);
   const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
 
   const { data: newSquad, error } = await supabaseAdmin
