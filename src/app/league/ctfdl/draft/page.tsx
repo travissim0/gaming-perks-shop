@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { CLASS_OPTIONS } from '@/lib/constants';
 import { useDraft } from '@/components/ctfdl/useDraft';
 import DraftPlayerCard from '@/components/ctfdl/DraftPlayerCard';
+import DraftChat from '@/components/ctfdl/DraftChat';
 import {
   teamOnClock,
   roundOf,
@@ -269,6 +270,11 @@ export default function CtfdlDraftLobbyPage() {
           {draft.status === 'live' && onClock && <span className="text-xs text-[#8B98B0]">Pick buttons below pick for {onClock.squad_name}.</span>}
           <Link href="/admin/ctfdl-draft" className="ml-auto text-xs text-[#F59E0B] hover:underline">Draft settings</Link>
         </div>
+      )}
+
+      {/* Private draft-room chat (captains + staff) */}
+      {(isStaff || myTeamId) && (
+        <DraftChat draftId={draft.id} meId={viewer?.user_id || null} authHeaders={authHeaders} />
       )}
 
       {/* Captain queue */}

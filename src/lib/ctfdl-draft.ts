@@ -77,6 +77,17 @@ export interface DraftBundle {
   my_queue?: string[];
 }
 
+export interface DraftChatMessage {
+  id: string;
+  sender_id: string | null;
+  sender_alias: string | null;
+  sender_is_staff: boolean;
+  sender_tag: string | null;
+  kind: 'chat' | 'system';
+  body: string;
+  created_at: string;
+}
+
 /** Which team (0-based index into pick-order-sorted teams) makes overall pick k. */
 export function teamIndexForPick(k: number, teamCount: number, orderType: OrderType): number {
   if (teamCount <= 0) return -1;

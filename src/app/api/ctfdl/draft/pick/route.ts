@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userFromRequest, isStaff, resolveDraft, loadTeams, loadBundle, makePick } from '@/lib/ctfdl-draft-server';
+import { userFromRequest, isStaff, resolveDraft, loadTeams, loadBundle, makePick, postSystemMessage } from '@/lib/ctfdl-draft-server';
 import { teamOnClock } from '@/lib/ctfdl-draft';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +34,12 @@ export async function POST(request: NextRequest) {
   try {
     const result = await makePick(draft.id, body.player_id, isCaptain ? 'captain' : 'staff', user.id);
     const bundle = await loadBundle(await resolveDraft(draft.id), user.id);
+    const who = bundle.players.find((p) => p.player_id === body.player_id)?.alias || 'a player';
+    const next = teamOnClock(bundle.draft, bundle.teams);
+    await postSystemMessage(
+      draft.id,
+      `#${result?.overall ?? '?'} ${onClock.squad_name} picked ${who}${isCaptain ? '' : ' (staff)'}.${result?.complete ? ' Draft complete.' : next ? ` ${next.squad_name} is on the clock.` : ''}`,
+    );
     return NextResponse.json({ ok: true, result, bundle });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Pick failed' }, { status: 409 });

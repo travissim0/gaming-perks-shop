@@ -8,8 +8,9 @@ import {
   loadTeams,
   makePick,
   undoPick,
+  postSystemMessage,
 } from '@/lib/ctfdl-draft-server';
-import { secondsLeft } from '@/lib/ctfdl-draft';
+import { secondsLeft, teamOnClock } from '@/lib/ctfdl-draft';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +115,8 @@ export async function POST(request: NextRequest) {
           .update({ status: 'live', started_at: draft.started_at || new Date().toISOString(), turn_started_at: new Date().toISOString(), paused_remaining: null, updated_at: new Date().toISOString() })
           .eq('id', draftId);
         if (error) throw new Error(error.message);
+        const first = teamOnClock({ ...draft, status: 'live' }, teams);
+        await postSystemMessage(draftId, `Draft started. ${first ? `${first.squad_name} is on the clock.` : ''}`);
         break;
       }
       case 'pause': {
@@ -124,6 +127,7 @@ export async function POST(request: NextRequest) {
           .update({ status: 'paused', paused_remaining: remaining, updated_at: new Date().toISOString() })
           .eq('id', draftId);
         if (error) throw new Error(error.message);
+        await postSystemMessage(draftId, 'Staff paused the draft.');
         break;
       }
       case 'resume': {
@@ -136,15 +140,23 @@ export async function POST(request: NextRequest) {
           .update({ status: 'live', turn_started_at: new Date(Date.now() - elapsed * 1000).toISOString(), paused_remaining: null, updated_at: new Date().toISOString() })
           .eq('id', draftId);
         if (error) throw new Error(error.message);
+        await postSystemMessage(draftId, 'Staff resumed the draft.');
         break;
       }
       case 'undo': {
-        await undoPick(draftId);
+        const undone = await undoPick(draftId);
+        const after = await loadBundle(await resolveDraft(draftId), null);
+        const who = undone?.player_id ? after.players.find((p) => p.player_id === undone.player_id)?.alias : null;
+        const team = after.teams.find((t) => t.id === undone?.team_id);
+        await postSystemMessage(draftId, `Staff undid pick #${undone?.undone_overall ?? '?'}${who ? ` (${who} is back in the pool)` : ''}. ${team ? `${team.squad_name} is back on the clock.` : ''}`);
         break;
       }
       case 'skip': {
         if (draft.status !== 'live') return NextResponse.json({ error: 'Draft is not live' }, { status: 409 });
+        const teams = await loadTeams(draftId);
+        const skipped = teamOnClock(draft, teams);
         await makePick(draftId, null, 'skip', user.id);
+        await postSystemMessage(draftId, `Staff skipped ${skipped?.squad_name || 'the current'} turn.`);
         break;
       }
       case 'end': {
@@ -153,6 +165,7 @@ export async function POST(request: NextRequest) {
           .update({ status: 'complete', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq('id', draftId);
         if (error) throw new Error(error.message);
+        await postSystemMessage(draftId, 'Staff ended the draft.');
         break;
       }
       case 'delete': {

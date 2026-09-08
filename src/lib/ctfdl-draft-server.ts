@@ -172,6 +172,22 @@ export async function loadBundle(draft: DraftRow | null, viewerId: string | null
   return bundle;
 }
 
+/** Can this user see the private draft chat? Staff, or captain of a team in the draft. */
+export async function canUseChat(draftId: string, userId: string): Promise<boolean> {
+  if (await isStaff(userId)) return true;
+  const teams = await loadTeams(draftId);
+  return teams.some((t) => t.captain_id === userId);
+}
+
+/** Drop a system line into the draft chat (picks, pauses, undo…). Never throws. */
+export async function postSystemMessage(draftId: string, body: string) {
+  try {
+    await supabaseAdmin.from('ctfdl_draft_messages').insert({ draft_id: draftId, sender_id: null, kind: 'system', body: body.slice(0, 1000) });
+  } catch (e) {
+    console.warn('draft chat system message failed:', e);
+  }
+}
+
 export async function makePick(draftId: string, playerId: string | null, pickType: string, actorId: string | null) {
   const { data, error } = await supabaseAdmin.rpc('ctfdl_draft_make_pick', {
     p_draft_id: draftId,

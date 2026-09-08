@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveDraft, loadBundle, loadQueue, makePick } from '@/lib/ctfdl-draft-server';
+import { resolveDraft, loadBundle, loadQueue, makePick, postSystemMessage } from '@/lib/ctfdl-draft-server';
 import { autoPickCandidate, secondsLeft, teamOnClock } from '@/lib/ctfdl-draft';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await makePick(draft.id, candidate.player_id, 'auto', null);
+    const after = await loadBundle(await resolveDraft(draft.id), null);
+    const next = teamOnClock(after.draft, after.teams);
+    await postSystemMessage(
+      draft.id,
+      `#${result?.overall ?? '?'} Clock expired — auto-picked ${candidate.alias} for ${team.squad_name}${queue.includes(candidate.player_id) ? ' (from their queue)' : candidate.staff_rank != null ? ' (staff ranking)' : ' (best self-rating)'}.${result?.complete ? ' Draft complete.' : next ? ` ${next.squad_name} is on the clock.` : ''}`,
+    );
     return NextResponse.json({ ok: true, acted: true, result });
   } catch (e: any) {
     // Most likely another lobby ticked first and the turn already advanced.
