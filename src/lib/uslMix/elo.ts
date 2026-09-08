@@ -17,13 +17,20 @@
  *      win or lose. Deliberately tiny - a nudge for stepping up when nobody wants to, not a
  *      reason to captain. Shotcaller tags are NOT an input here by design.
  *   6. Fairness for the "the team with the worst player loses" problem: each player's
- *      delta is scaled by their performance relative to their OWN team:
- *        impact_i = kills_i - deaths_i + heal_amount_i / HEAL_PER_KILL
- *        perf_i   = clamp(1 + PERF_WEIGHT * (impact_i - teamMean) / scale, PERF_MIN, PERF_MAX)
+ *      delta is scaled by their performance relative to their OWN team, judged against what
+ *      their CLASS MIX normally produces (KI, 2026-09-08: a medic/marine switcher must not be
+ *      read as a marine who only got 2 kills):
+ *        impact_i   = kills_i - deaths_i + heal_amount_i / HEAL_PER_KILL
+ *        expected_i = sum over classes c of minutes_ic * norm_c, where norm_c is the league's
+ *                     impact per minute for class c (usl_mix_v_class_stats; a class with under
+ *                     CLASS_NORM_MIN_MINUTES of recorded play falls back to the all-class norm)
+ *        residual_i = impact_i - expected_i
+ *        perf_i     = clamp(1 + PERF_WEIGHT * (residual_i - teamMeanResidual) / scale, PERF_MIN, PERF_MAX)
  *      On a gain (S > E) delta is multiplied by perf_i (the carry gains more, the
  *      passenger gains less); on a loss it is multiplied by (2 - perf_i) (the carry
- *      loses less, the player who fed loses more). PERF_WEIGHT = 0 turns this off and
- *      you are back to plain team Elo.
+ *      loses less, the player who fed loses more). Without class norms or class time the
+ *      residual is the plain impact (the pre-2026-09-08 behaviour); PERF_WEIGHT = 0 turns the
+ *      whole thing off and you are back to plain team Elo.
  *
  * Every constant lives in ELO below. Changing one and calling POST /api/usl-mix/admin/recompute
  * replays every recorded mix game from scratch, so the formula can evolve as data comes in.
@@ -42,6 +49,8 @@ export const ELO = {
   PERF_MAX: 1.4,
   /** HP of heal output that counts like one kill in the impact score (medics) */
   HEAL_PER_KILL: 150,
+  /** a class needs this much recorded play before its own impact-per-minute norm is trusted */
+  CLASS_NORM_MIN_MINUTES: 120,
   MOV_MAX_BONUS: 0.5,
   MOV_FULL_AT: 40,
   /**
@@ -91,16 +100,64 @@ function impactOf(p: RatingInputPlayer): number {
   return p.kills - p.deaths + (p.heal_amount || 0) / ELO.HEAL_PER_KILL;
 }
 
-/** Performance multipliers for one team, centred on 1.0. */
-export function performanceMultipliers(team: RatingInputPlayer[]): Map<string, number> {
+/** League impact per minute by class (see classNormsFromRows); `overall` covers classes without enough data. */
+export interface ClassNorms {
+  byClass: Map<string, number>;
+  overall: number;
+}
+
+/** Builds class norms from usl_mix_v_class_stats rows (any map / kind split is summed away). */
+export function classNormsFromRows(
+  rows: Array<{ class_name: string; kills: number | string; deaths: number | string; heal_amount: number | string; play_seconds: number | string }>
+): ClassNorms {
+  const agg = new Map<string, { impact: number; minutes: number }>();
+  let totalImpact = 0;
+  let totalMinutes = 0;
+  for (const r of rows) {
+    const impact = Number(r.kills ?? 0) - Number(r.deaths ?? 0) + Number(r.heal_amount ?? 0) / ELO.HEAL_PER_KILL;
+    const minutes = Number(r.play_seconds ?? 0) / 60;
+    const a = agg.get(r.class_name) ?? { impact: 0, minutes: 0 };
+    a.impact += impact;
+    a.minutes += minutes;
+    agg.set(r.class_name, a);
+    totalImpact += impact;
+    totalMinutes += minutes;
+  }
+  const byClass = new Map<string, number>();
+  for (const [c, a] of agg) if (a.minutes >= ELO.CLASS_NORM_MIN_MINUTES) byClass.set(c, a.impact / a.minutes);
+  return { byClass, overall: totalMinutes > 0 ? totalImpact / totalMinutes : 0 };
+}
+
+/** What this player's class time should have produced; null when nothing about their classes is known. */
+function expectedImpact(p: RatingInputPlayer, norms: ClassNorms): number | null {
+  const entries = Object.entries(p.classes ?? {})
+    .map(([c, s]) => [c, Number(s)] as [string, number])
+    .filter(([, s]) => s > 0);
+  const total = entries.reduce((a, [, s]) => a + s, 0);
+  if (total > 0) return entries.reduce((a, [c, s]) => a + (s / 60) * (norms.byClass.get(c) ?? norms.overall), 0);
+  if (p.play_seconds && p.play_seconds > 0) return (p.play_seconds / 60) * norms.overall;
+  return null;
+}
+
+/**
+ * Performance multipliers for one team, centred on 1.0. With class norms, a player is judged on
+ * how far above or below their own class mix's usual output they were; without them, on how far
+ * above or below the team mean.
+ */
+export function performanceMultipliers(team: RatingInputPlayer[], norms?: ClassNorms): Map<string, number> {
   const out = new Map<string, number>();
   if (team.length === 0) return out;
   const impacts = team.map(impactOf);
-  const mean = impacts.reduce((a, b) => a + b, 0) / impacts.length;
-  const mad = impacts.reduce((a, b) => a + Math.abs(b - mean), 0) / impacts.length;
+  const meanImpact = impacts.reduce((a, b) => a + b, 0) / impacts.length;
+  const residuals = team.map((p, i) => {
+    const expected = norms ? expectedImpact(p, norms) : null;
+    return expected === null ? impacts[i] - meanImpact : impacts[i] - expected;
+  });
+  const mean = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+  const mad = residuals.reduce((a, b) => a + Math.abs(b - mean), 0) / residuals.length;
   const scale = Math.max(3, mad * 2);
   team.forEach((p, i) => {
-    const raw = 1 + ELO.PERF_WEIGHT * ((impacts[i] - mean) / scale);
+    const raw = 1 + ELO.PERF_WEIGHT * ((residuals[i] - mean) / scale);
     out.set(p.alias_key, clamp(raw, ELO.PERF_MIN, ELO.PERF_MAX));
   });
   return out;
@@ -127,7 +184,8 @@ export interface TeamInput {
  */
 export function computeGameRatings(
   teams: [TeamInput, TeamInput],
-  ratings: Map<string, RatingState>
+  ratings: Map<string, RatingState>,
+  norms?: ClassNorms
 ): PlayerRatingChange[] {
   const [a, b] = teams;
   if (a.players.length < ELO.MIN_PLAYERS_PER_TEAM || b.players.length < ELO.MIN_PLAYERS_PER_TEAM) {
@@ -149,7 +207,7 @@ export function computeGameRatings(
   ];
   for (const [team, expected] of sides) {
     const actual = team.result === 'win' ? 1 : team.result === 'loss' ? 0 : 0.5;
-    const perf = performanceMultipliers(team.players);
+    const perf = performanceMultipliers(team.players, norms);
     const gain = actual - expected >= 0;
     for (const p of team.players) {
       const st = stateOf(p.alias_key);

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GameResultPayload, PlayerPayload, KillEventPayload, TeamPayload, Result, Side } from './types';
 import { aliasKey, normalizeWeaponName } from './types';
-import { computeGameRatings, ELO, type RatingState, type TeamInput } from './elo';
+import { classNormsFromRows, computeGameRatings, ELO, type ClassNorms, type RatingState, type TeamInput } from './elo';
 import { splitFights, openingStatsByPlayer } from './fights';
 
 /** Sanity limits so a buggy script cannot flood the tables. */
@@ -362,11 +362,22 @@ export interface ApplyResult {
   changes: number;
 }
 
+/** League impact-per-minute by class, from every recorded mix + pub game; the performance score's yardstick. */
+export async function loadClassNorms(supabase: SupabaseClient): Promise<ClassNorms> {
+  const { data, error } = await supabase.from('usl_mix_v_class_stats').select('class_name, kills, deaths, heal_amount, play_seconds');
+  if (error) {
+    console.warn('[usl-mix] class norms unavailable, rating on team-relative impact only:', error.message);
+    return classNormsFromRows([]);
+  }
+  return classNormsFromRows((data ?? []) as any[]);
+}
+
 /**
  * Runs the ELO pass for one stored game (mix games only, once). Updates the player rows,
- * the ratings table and the history table.
+ * the ratings table and the history table. `norms` can be passed in by a replay so the
+ * class view is read once, not per game.
  */
-export async function applyRatingsForGame(supabase: SupabaseClient, gameId: string): Promise<ApplyResult> {
+export async function applyRatingsForGame(supabase: SupabaseClient, gameId: string, norms?: ClassNorms): Promise<ApplyResult> {
   const { data: game, error: gErr } = await supabase
     .from('usl_mix_games')
     .select('id, game_kind, rated, elo_applied, ended_at, team_a_name, team_a_kills, team_a_result, team_b_name, team_b_kills, team_b_result')
@@ -383,7 +394,7 @@ export async function applyRatingsForGame(supabase: SupabaseClient, gameId: stri
 
   const { data: players, error: pErr } = await supabase
     .from('usl_mix_game_players')
-    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount, is_captain')
+    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount, is_captain, classes, play_seconds')
     .eq('game_id', gameId);
   if (pErr || !players) return { applied: false, reason: 'players not found', changes: 0 };
 
@@ -411,7 +422,7 @@ export async function applyRatingsForGame(supabase: SupabaseClient, gameId: stri
     full.set(r.alias_key, r);
   }
 
-  const changes = computeGameRatings(teams, current);
+  const changes = computeGameRatings(teams, current, norms ?? (await loadClassNorms(supabase)));
   if (changes.length === 0) {
     await supabase.from('usl_mix_games').update({ elo_applied: true }).eq('id', gameId);
     return { applied: false, reason: 'no rateable players', changes: 0 };
@@ -479,9 +490,10 @@ export async function recomputeAllRatings(supabase: SupabaseClient): Promise<{ g
     .eq('game_kind', 'mix')
     .eq('rated', true)
     .order('ended_at', { ascending: true });
+  const norms = await loadClassNorms(supabase);
   let rated = 0;
   for (const g of games ?? []) {
-    const r = await applyRatingsForGame(supabase, g.id);
+    const r = await applyRatingsForGame(supabase, g.id, norms);
     if (r.applied) rated++;
   }
   return { games: games?.length ?? 0, rated };

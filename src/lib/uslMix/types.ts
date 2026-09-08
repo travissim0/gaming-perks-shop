@@ -131,6 +131,9 @@ export interface RatingInputPlayer {
   kills: number;
   deaths: number;
   heal_amount: number;
+  /** class name -> seconds played as that class; lets the performance score judge a medic as a medic */
+  classes?: Record<string, number>;
+  play_seconds?: number;
 }
 
 export function aliasKey(alias: string): string {

@@ -109,6 +109,17 @@ export default function UslMixApiDocsPage() {
 curl "${BASE}/api/usl-mix/leaders?board=kills&period=week&limit=10"
 curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
             />
+            <Endpoint
+              method="GET"
+              path="/api/usl-mix/ratings"
+              desc="Current rating, games and provisional flag for a batch of aliases, in the order asked. Unknown players come back at the base rating with 0 games. The zone calls this during the draft to show captains the team averages."
+              params={[
+                ['a', 'alias, repeatable: ?a=G&a=THE (max 64)'],
+                ['aliases', 'comma list alternative'],
+                ['format', 'text - one line per alias: alias, rating, games (tab separated)'],
+              ]}
+              example={`curl "${BASE}/api/usl-mix/ratings?a=G&a=THE%20MOUNTAIN"`}
+            />
           </Panel>
 
           <Panel title="Ingest (game server → site)">
@@ -154,8 +165,10 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
               <li>Team strength = mean rating of its players. Expected score E = 1 / (1 + 10^((R<sub>opp</sub> − R<sub>team</sub>) / 400)).</li>
               <li>Base change = K × (S − E) × margin, K = 48 for a player&apos;s first 10 games, 32 after. The margin multiplier grows to 1.5× at a 40-kill blowout.</li>
               <li>
-                <b>Fairness adjustment.</b> In 8v8 the weakest player often decides the game, so each player&apos;s change is scaled by their impact relative to their own team
-                (kills − deaths + heals/150). A carry gains more on a win and loses less on a loss; a passenger gains less and loses more. Clamped to 0.6×–1.4×.
+                <b>Fairness adjustment.</b> In 8v8 the weakest player often decides the game, so each player&apos;s change is scaled by their impact
+                (kills − deaths + heals/150) measured against what their class time normally produces: a medic is judged as a medic, a marine as a marine, and a
+                player who switched mid-game against the blend of their minutes in each. The residual is compared within their own team, so a carry gains more on a
+                win and loses less on a loss; a passenger gains less and loses more. Clamped to 0.6×–1.4×.
               </li>
               <li>Every change is logged with E, K and the performance multiplier, and the whole history can be replayed after the constants are tuned.</li>
             </ol>
