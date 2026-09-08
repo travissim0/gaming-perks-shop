@@ -7,7 +7,7 @@ import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getLeagues, pickFeatured, getOpenSeason } from '@/lib/leagues';
+import { getLeagues, pickFeatured, getOpenSeason, getLatestSeason, type LeagueInfo, type LeagueSeason } from '@/lib/leagues';
 
 interface Squad {
   id: string;
@@ -78,6 +78,10 @@ export default function CTFManagementPage() {
   const [showDeleteSquadConfirm, setShowDeleteSquadConfirm] = useState<string | null>(null);
   const [deletingSquad, setDeletingSquad] = useState(false);
   const [showChangeCaptain, setShowChangeCaptain] = useState<Squad | null>(null);
+  // Season rollover (draft/OvD leagues only): archive the squads that played the latest season.
+  const [rollover, setRollover] = useState<{ league: LeagueInfo; season: LeagueSeason; squadIds: string[] } | null>(null);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [squadMembersForCaptain, setSquadMembersForCaptain] = useState<{ id: string; player_id: string; in_game_alias: string; role: string }[]>([]);
   const [loadingMembersForCaptain, setLoadingMembersForCaptain] = useState(false);
   const [transferringCaptain, setTransferringCaptain] = useState(false);
@@ -381,6 +385,51 @@ export default function CTFManagementPage() {
     } catch (error) {
       console.error('Error unbanning player:', error);
       toast.error('Failed to unban player');
+    }
+  };
+
+  // Which squads played the featured league's latest season? Draft/OvD teams are
+  // rebuilt every season, so they should be archived (is_active=false) at rollover.
+  // CTFPL squads persist across seasons and are never touched here.
+  const loadRolloverContext = async () => {
+    try {
+      const league = pickFeatured(await getLeagues());
+      if (!league || league.format === 'squad' || league.data_source === 'ctfpl') { setRollover(null); return; }
+      const season = await getLatestSeason(league);
+      if (!season) { setRollover(null); return; }
+      const { data, error } = await supabase
+        .from('league_standings')
+        .select('squad_id')
+        .eq('league_season_id', season.id);
+      if (error) throw error;
+      const squadIds = Array.from(new Set((data || []).map((r: any) => r.squad_id).filter(Boolean)));
+      setRollover({ league, season, squadIds });
+    } catch (e) {
+      console.error('Error loading rollover context:', e);
+      setRollover(null);
+    }
+  };
+
+  useEffect(() => {
+    if (hasAccess) loadRolloverContext();
+  }, [hasAccess]);
+
+  const archiveSeasonSquads = async () => {
+    if (!rollover) return;
+    const ids = rollover.squadIds.filter((id) => squads.some((s) => s.id === id && s.is_active));
+    if (ids.length === 0) { setShowArchiveConfirm(false); return; }
+    setArchiving(true);
+    try {
+      const { error } = await supabase.from('squads').update({ is_active: false }).in('id', ids);
+      if (error) throw error;
+      setSquads((prev) => prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: false } : s)));
+      toast.success(`Archived ${ids.length} squad${ids.length === 1 ? '' : 's'} from ${rollover.league.name} Season ${rollover.season.season_number}`);
+      setShowArchiveConfirm(false);
+    } catch (e) {
+      console.error('Error archiving squads:', e);
+      toast.error('Failed to archive squads');
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -751,6 +800,50 @@ export default function CTFManagementPage() {
                 </select>
               </div>
             </div>
+
+            {/* Season rollover: archive draft-league squads */}
+            {rollover && (() => {
+              const pending = rollover.squadIds.filter((id) => squads.some((s) => s.id === id && s.is_active));
+              const label = `${rollover.league.name} Season ${rollover.season.season_number}`;
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+                  <div className="text-sm">
+                    <div className="font-medium text-amber-200">Season rollover · {label}</div>
+                    <div className="text-gray-400">
+                      {pending.length > 0
+                        ? `${pending.length} squad${pending.length === 1 ? '' : 's'} from this season ${pending.length === 1 ? 'is' : 'are'} still active. Archiving marks them inactive so their players read as "last season" in the free-agent pool. Memberships and history are kept.`
+                        : 'All squads from this season are already archived.'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowArchiveConfirm(true)}
+                    disabled={pending.length === 0 || archiving}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium"
+                  >
+                    Archive {label} squads
+                  </button>
+                </div>
+              );
+            })()}
+
+            {showArchiveConfirm && rollover && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-md w-full">
+                  <h3 className="text-lg font-bold text-white mb-2">Archive {rollover.league.name} Season {rollover.season.season_number} squads?</h3>
+                  <p className="text-gray-300 text-sm mb-3">These squads will be marked inactive. Nothing is deleted; squad pages and match history stay intact.</p>
+                  <ul className="mb-4 max-h-48 overflow-y-auto space-y-1 text-sm text-gray-200">
+                    {rollover.squadIds
+                      .map((id) => squads.find((s) => s.id === id))
+                      .filter((s): s is Squad => !!s && s.is_active)
+                      .map((s) => <li key={s.id}>{s.tag ? `[${s.tag}] ` : ''}{s.name}</li>)}
+                  </ul>
+                  <div className="flex gap-3 justify-end">
+                    <button onClick={() => setShowArchiveConfirm(false)} disabled={archiving} className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50">Cancel</button>
+                    <button onClick={archiveSeasonSquads} disabled={archiving} className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50">{archiving ? 'Archiving…' : 'Archive'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Squads Table */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">

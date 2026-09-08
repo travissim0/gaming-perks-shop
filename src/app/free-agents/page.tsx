@@ -47,7 +47,7 @@ interface UserProfile {
   ctf_role?: string | null;
 }
 
-type SquadRef = { id: string; name: string; tag?: string | null; is_legacy?: boolean };
+type SquadRef = { id: string; name: string; tag?: string | null; is_legacy?: boolean; is_active?: boolean };
 
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -322,7 +322,11 @@ export default function FreeAgentsPage() {
       (data || []).forEach((m: any) => {
         if (!m.player_id || !m.squads) return;
         const squad = m.squads;
-        displayMap[m.player_id] = { id: squad.id, name: squad.name, tag: squad.tag, is_legacy: squad.is_legacy };
+        // Prefer an active squad if the player is in several; an archived one is only "last season".
+        const prev = displayMap[m.player_id];
+        if (!prev || (!prev.is_active && squad.is_active)) {
+          displayMap[m.player_id] = { id: squad.id, name: squad.name, tag: squad.tag, is_legacy: squad.is_legacy, is_active: !!squad.is_active };
+        }
         if (squad.is_active) activeIds.push(m.player_id);
       });
       setActiveSquadMemberIds(new Set(activeIds));
@@ -618,11 +622,15 @@ export default function FreeAgentsPage() {
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#8B98B0]">
                         {agent.contact_info && <span title="Discord">@{agent.contact_info.replace(/^@/, '')}</span>}
-                        {squad && (
-                          <span className={squad.is_legacy ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'}>
+                        {squad && squad.is_active ? (
+                          <span className="rounded bg-[#22D3EE]/10 px-1.5 py-0.5 text-[#E6EDF7]" title="Currently on this squad">
                             {squad.tag ? `[${squad.tag}] ` : ''}{squad.name}
                           </span>
-                        )}
+                        ) : squad ? (
+                          <span className="text-[#8B98B0]/80" title="Archived squad from a previous season">
+                            Last season · {squad.tag ? `[${squad.tag}] ` : ''}{squad.name}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
