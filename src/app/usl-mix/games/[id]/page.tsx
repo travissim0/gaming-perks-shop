@@ -6,6 +6,34 @@ import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
 
+/**
+ * Class name plus, when a player spent real time as more than one class, a proportional split:
+ * a thin stacked bar in class colours and a "Medic 62% · Marine 38%" line. Classes under 5% of the
+ * game are folded away so a 10-second Marine at the dropship does not show up. Hover for minutes.
+ */
+function ClassSplit({ classes, primary }: { classes?: Record<string, number>; primary: string }) {
+  const entries = Object.entries(classes ?? {})
+    .map(([n, s]) => [n, Number(s)] as [string, number])
+    .filter(([, s]) => s > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const shown = total > 0 ? entries.filter(([, s]) => s / total >= 0.05) : [];
+  if (shown.length < 2) return <ClassName name={primary} />;
+  return (
+    <div className="min-w-[7rem]" title={entries.map(([n, s]) => `${n} ${fmtDuration(s)}`).join(' · ')}>
+      <ClassName name={primary} />
+      <div className="mt-1 flex h-1.5 w-28 overflow-hidden rounded-full bg-gray-800">
+        {shown.map(([n, s]) => (
+          <span key={n} style={{ width: `${(s / total) * 100}%`, background: classColor(n) ?? '#6b7280' }} />
+        ))}
+      </div>
+      <div className="mt-0.5 whitespace-nowrap text-[10px] text-gray-500">
+        {shown.map(([n, s]) => `${n} ${Math.round((s / total) * 100)}%`).join(' · ')}
+      </div>
+    </div>
+  );
+}
+
 interface PlayerRow {
   alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; is_shotcaller?: boolean; primary_class: string; classes: Record<string, number>;
   kills: number; deaths: number; team_kills: number; kills_scoreboard: number | null; deaths_scoreboard: number | null;
@@ -157,7 +185,7 @@ export default function UslMixGamePage() {
                         {p.is_captain && <span className="ml-1 text-xs text-amber-300" title="captain">★</span>}
                         {p.is_shotcaller && <span className="ml-1 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 rounded px-1" title="shotcaller (claimed with ?sc)">SC</span>}
                       </td>
-                      <td className="py-2 px-2"><ClassName name={p.primary_class} /></td>
+                      <td className="py-2 px-2"><ClassSplit classes={p.classes} primary={p.primary_class} /></td>
                       <td className="py-2 px-2 text-right tabular-nums text-white">
                         {p.kills}{p.team_kills ? <span className="text-xs text-rose-400" title="team kills"> ({p.team_kills}tk)</span> : null}
                       </td>

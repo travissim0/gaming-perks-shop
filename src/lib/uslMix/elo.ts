@@ -6,8 +6,11 @@
  *   1. Team strength = mean rating of its players. Expected score
  *      E = 1 / (1 + 10^((R_opp - R_team) / 400)).
  *   2. Actual score S = 1 (win), 0 (loss), 0.5 (draw).
- *   3. Margin-of-victory multiplier: mov = 1 + MOV_MAX_BONUS * min(1, |killDiff| / MOV_FULL_AT).
- *      A 40+ kill blowout moves ratings 50% more than a 1-kill game.
+ *   3. Margin-of-victory multiplier: mov = 1 + MOV_MAX_BONUS * min(1, |killDiff| / MOV_FULL_AT) * surprise,
+ *      where surprise fades from 1 at a 50/50 matchup to 0 once the WINNER was expected to score
+ *      0.5 + MOV_FADE_AT. A 40+ kill blowout between even teams moves ratings 50% more than a
+ *      1-kill game; a favourite stomping an underdog earns no bonus at all (Travis, 2026-09-08:
+ *      otherwise the margin bonus rewards stacking). Nobody ever gains by killing less.
  *   4. Base team delta for a player = K * (S - E) * mov, where K is larger while the
  *      player is provisional (< PROVISIONAL_GAMES games).
  *   5. Captain bonus: a flat CAPTAIN_BONUS on top of a rated game's delta for both captains,
@@ -41,6 +44,12 @@ export const ELO = {
   HEAL_PER_KILL: 150,
   MOV_MAX_BONUS: 0.5,
   MOV_FULL_AT: 40,
+  /**
+   * How far above 50/50 the winner's expected score has to be before the margin bonus is gone.
+   * 0.25 => no bonus once the winner was a 75% favourite (about a 190-point average-rating gap).
+   * Same idea as FiveThirtyEight's NBA Elo margin adjustment.
+   */
+  MOV_FADE_AT: 0.25,
   /** flat rating points for each captain of a rated mix, win or lose (very mild by request) */
   CAPTAIN_BONUS: 1,
   /** teams smaller than this are not rated */
@@ -72,9 +81,10 @@ export function kFactorFor(games: number): number {
   return games < ELO.PROVISIONAL_GAMES ? ELO.K_PROVISIONAL : ELO.K_BASE;
 }
 
-export function movMultiplier(killDiff: number): number {
+export function movMultiplier(killDiff: number, winnerExpected = 0.5): number {
   if (killDiff <= 0) return 1;
-  return 1 + ELO.MOV_MAX_BONUS * Math.min(1, killDiff / ELO.MOV_FULL_AT);
+  const surprise = clamp(1 - (winnerExpected - 0.5) / ELO.MOV_FADE_AT, 0, 1);
+  return 1 + ELO.MOV_MAX_BONUS * Math.min(1, killDiff / ELO.MOV_FULL_AT) * surprise;
 }
 
 function impactOf(p: RatingInputPlayer): number {
@@ -127,12 +137,15 @@ export function computeGameRatings(
   const avg = (t: TeamInput) => t.players.reduce((s, p) => s + stateOf(p.alias_key).rating, 0) / t.players.length;
   const avgA = avg(a);
   const avgB = avg(b);
-  const mov = movMultiplier(Math.abs(a.kills - b.kills));
+  const eA = expectedScore(avgA, avgB);
+  const eB = expectedScore(avgB, avgA);
+  const winnerExpected = a.result === 'win' ? eA : b.result === 'win' ? eB : 0.5;
+  const mov = movMultiplier(Math.abs(a.kills - b.kills), winnerExpected);
 
   const changes: PlayerRatingChange[] = [];
   const sides: Array<[TeamInput, number]> = [
-    [a, expectedScore(avgA, avgB)],
-    [b, expectedScore(avgB, avgA)],
+    [a, eA],
+    [b, eB],
   ];
   for (const [team, expected] of sides) {
     const actual = team.result === 'win' ? 1 : team.result === 'loss' ? 0 : 0.5;
