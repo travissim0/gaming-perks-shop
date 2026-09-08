@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, LabelList, Cell } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl, ClassName, classColor, SortTh, useSortedRows, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 interface Insights {
   totals: { games: number; games_selected: number; players_rated: number; kills: number; avg_duration_seconds: number; maps: string[] };
@@ -19,6 +19,34 @@ interface LeaderRow {
   rank: number; alias: string; rating: number; peak_rating: number; rated_games: number; wins: number; losses: number; win_rate: number | null; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; url: string;
   opening_kills: number; opening_deaths: number; opening_fights_won: number;
 }
+
+const LEADER_GETTERS: SortGetters<LeaderRow, 'rank' | 'player' | 'rating' | 'games' | 'wl' | 'win' | 'kd' | 'acc'> = {
+  rank: (p) => p.rank,
+  player: (p) => p.alias,
+  rating: (p) => p.rating,
+  games: (p) => p.rated_games,
+  wl: (p) => p.wins - p.losses,
+  win: (p) => p.win_rate,
+  kd: (p) => p.kd_ratio,
+  acc: (p) => p.accuracy,
+};
+const OPENER_GETTERS: SortGetters<LeaderRow, 'player' | 'opens' | 'won'> = {
+  player: (p) => p.alias,
+  opens: (p) => p.opening_kills,
+  won: (p) => (p.opening_kills ? p.opening_fights_won / p.opening_kills : null),
+};
+type ClassStat = Insights['class_stats'][number];
+const CLASS_GETTERS: SortGetters<ClassStat, 'class' | 'played' | 'win' | 'kpg' | 'dpg' | 'kd' | 'acc' | 'heal'> = {
+  class: (c) => c.class_name,
+  played: (c) => c.appearances,
+  win: (c) => c.win_rate,
+  kpg: (c) => c.kills_per_game,
+  dpg: (c) => c.deaths_per_game,
+  kd: (c) => Number(c.kd_ratio),
+  acc: (c) => c.accuracy,
+  heal: (c) => c.heal_per_game,
+};
+const NO_CLASS_STATS: ClassStat[] = [];
 
 interface GameRow {
   id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; duration_seconds: number; end_reason: string | null;
@@ -87,6 +115,10 @@ export default function UslMixOverviewPage() {
   );
   const weaponChart = useMemo(() => (insights?.weapon_stats ?? []).slice(0, 10).map((w) => ({ name: w.weapon, kills: w.kills, share: w.share })), [insights]);
 
+  const leaderTable = useSortedRows(leaders, LEADER_GETTERS, { key: 'rating', dir: 'desc' });
+  const openerTable = useSortedRows(openers, OPENER_GETTERS, { key: 'opens', dir: 'desc' });
+  const classTable = useSortedRows(insights?.class_stats ?? NO_CLASS_STATS, CLASS_GETTERS, { key: 'played', dir: 'desc' });
+
   const empty = !loading && insights && insights.totals.games === 0;
 
   return (
@@ -146,18 +178,18 @@ export default function UslMixOverviewPage() {
               <table className={tableCls.table}>
                 <thead className={tableCls.thead}>
                   <tr className={tableCls.headRow}>
-                    <th className="text-left py-2 pr-2">#</th>
-                    <th className="text-left py-2 pr-2">Player</th>
-                    <th className="text-right py-2 px-2">Rating</th>
-                    <th className="text-right py-2 px-2">Games</th>
-                    <th className="text-right py-2 px-2">W–L</th>
-                    <th className="text-right py-2 px-2">Win %</th>
-                    <th className="text-right py-2 px-2">K/D</th>
-                    <th className="text-right py-2 pl-2">Acc %</th>
+                    <SortTh col="rank" sort={leaderTable.sort} onToggle={leaderTable.toggle} text className="text-left py-2 pr-2">#</SortTh>
+                    <SortTh col="player" sort={leaderTable.sort} onToggle={leaderTable.toggle} text className="text-left py-2 pr-2">Player</SortTh>
+                    <SortTh col="rating" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 px-2">Rating</SortTh>
+                    <SortTh col="games" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 px-2">Games</SortTh>
+                    <SortTh col="wl" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 px-2" title="sorted by wins minus losses">W–L</SortTh>
+                    <SortTh col="win" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 px-2">Win %</SortTh>
+                    <SortTh col="kd" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 px-2">K/D</SortTh>
+                    <SortTh col="acc" sort={leaderTable.sort} onToggle={leaderTable.toggle} className="text-right py-2 pl-2">Acc %</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {leaders.slice(0, 25).map((p) => (
+                  {leaderTable.rows.slice(0, 25).map((p) => (
                     <tr key={p.alias} className={tableCls.row}>
                       <td className="py-2 pr-2 text-gray-500 tabular-nums">{p.rank}</td>
                       <td className="py-2 pr-2">
@@ -209,13 +241,13 @@ export default function UslMixOverviewPage() {
             <table className={tableCls.table}>
               <thead className={tableCls.thead}>
                 <tr className={tableCls.headRow}>
-                  <th className="text-left py-1.5 pr-2">Player</th>
-                  <th className="text-right py-1.5 px-2">Opens</th>
-                  <th className="text-right py-1.5 pl-2" title="share of those fights their side won on kills">Won after</th>
+                  <SortTh col="player" sort={openerTable.sort} onToggle={openerTable.toggle} text className="text-left py-1.5 pr-2">Player</SortTh>
+                  <SortTh col="opens" sort={openerTable.sort} onToggle={openerTable.toggle} className="text-right py-1.5 px-2">Opens</SortTh>
+                  <SortTh col="won" sort={openerTable.sort} onToggle={openerTable.toggle} className="text-right py-1.5 pl-2" title="share of those fights their side won on kills">Won after</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {openers.map((p) => (
+                {openerTable.rows.map((p) => (
                   <tr key={p.alias} className={tableCls.rowStatic}>
                     <td className="py-1.5 pr-2"><Link href={p.url} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link></td>
                     <td className="py-1.5 px-2 text-right tabular-nums text-amber-300 font-semibold">{p.opening_kills}</td>
@@ -327,18 +359,18 @@ export default function UslMixOverviewPage() {
               <table className={tableCls.table}>
                 <thead className={tableCls.thead}>
                   <tr className={tableCls.headRow}>
-                    <th className="text-left py-2 pr-2">Class</th>
-                    <th className="text-right py-2 px-2">Played</th>
-                    <th className="text-right py-2 px-2">Win %</th>
-                    <th className="text-right py-2 px-2">K / game</th>
-                    <th className="text-right py-2 px-2">D / game</th>
-                    <th className="text-right py-2 px-2">K/D</th>
-                    <th className="text-right py-2 px-2">Acc %</th>
-                    <th className="text-right py-2 pl-2">Heal / game</th>
+                    <SortTh col="class" sort={classTable.sort} onToggle={classTable.toggle} text className="text-left py-2 pr-2">Class</SortTh>
+                    <SortTh col="played" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">Played</SortTh>
+                    <SortTh col="win" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">Win %</SortTh>
+                    <SortTh col="kpg" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">K / game</SortTh>
+                    <SortTh col="dpg" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">D / game</SortTh>
+                    <SortTh col="kd" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">K/D</SortTh>
+                    <SortTh col="acc" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 px-2">Acc %</SortTh>
+                    <SortTh col="heal" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-2 pl-2">Heal / game</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {insights!.class_stats.map((c) => (
+                  {classTable.rows.map((c) => (
                     <tr key={c.class_name} className={tableCls.rowStatic}>
                       <td className="py-2 pr-2"><ClassName name={c.class_name} /></td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.appearances}</td>

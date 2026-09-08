@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName, SortTh, useSortedRows, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerProfile {
   alias: string;
@@ -19,10 +19,43 @@ interface PlayerProfile {
   leadership?: { captain_games: number; shotcaller_games: number };
 }
 
+type ClassRow = PlayerProfile['classes'][number];
+type MapRow = PlayerProfile['maps'][number];
+type RecentRow = PlayerProfile['recent_games'][number];
+const CLASS_GETTERS: SortGetters<ClassRow, 'class' | 'games' | 'win' | 'kd'> = {
+  class: (k) => k.class_name,
+  games: (k) => k.games,
+  win: (k) => (k.games ? k.wins / k.games : null),
+  kd: (k) => (k.deaths ? k.kills / k.deaths : k.kills),
+};
+const MAP_GETTERS: SortGetters<MapRow, 'map' | 'games' | 'won'> = {
+  map: (m) => m.map_key,
+  games: (m) => m.games,
+  won: (m) => (m.games ? m.wins / m.games : null),
+};
+const RECENT_GETTERS: SortGetters<RecentRow, 'when' | 'map' | 'side' | 'result' | 'class' | 'k' | 'd' | 'open' | 'acc' | 'delta'> = {
+  when: (g) => new Date(g.ended_at).getTime(),
+  map: (g) => g.map_key,
+  side: (g) => g.side,
+  result: (g) => g.result,
+  class: (g) => g.primary_class,
+  k: (g) => g.kills,
+  d: (g) => g.deaths,
+  open: (g) => g.opening_kills ?? 0,
+  acc: (g) => g.accuracy,
+  delta: (g) => g.rating_delta,
+};
+const NO_CLASSES: ClassRow[] = [];
+const NO_MAPS: MapRow[] = [];
+const NO_RECENT: RecentRow[] = [];
+
 export default function UslMixPlayerPage() {
   const params = useParams<{ alias: string }>();
   const [data, setData] = useState<PlayerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const classTable = useSortedRows(data?.classes ?? NO_CLASSES, CLASS_GETTERS, { key: 'games', dir: 'desc' });
+  const mapTable = useSortedRows(data?.maps ?? NO_MAPS, MAP_GETTERS, { key: 'games', dir: 'desc' });
+  const recentTable = useSortedRows(data?.recent_games ?? NO_RECENT, RECENT_GETTERS, { key: 'when', dir: 'desc' });
 
   useEffect(() => {
     if (!params?.alias) return;
@@ -94,14 +127,14 @@ export default function UslMixPlayerPage() {
             <table className={tableCls.table}>
               <thead className={tableCls.thead}>
                 <tr className={tableCls.headRow}>
-                  <th className="text-left py-1.5">Class</th>
-                  <th className="text-right py-1.5">Games</th>
-                  <th className="text-right py-1.5">Win %</th>
-                  <th className="text-right py-1.5">K/D</th>
+                  <SortTh col="class" sort={classTable.sort} onToggle={classTable.toggle} text className="text-left py-1.5">Class</SortTh>
+                  <SortTh col="games" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-1.5">Games</SortTh>
+                  <SortTh col="win" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-1.5">Win %</SortTh>
+                  <SortTh col="kd" sort={classTable.sort} onToggle={classTable.toggle} className="text-right py-1.5">K/D</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {data.classes.map((k) => (
+                {classTable.rows.map((k) => (
                   <tr key={k.class_name} className={tableCls.rowStatic}>
                     <td className="py-1.5"><ClassName name={k.class_name} /></td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{k.games}</td>
@@ -135,8 +168,15 @@ export default function UslMixPlayerPage() {
             <p className="text-sm text-gray-500">No games.</p>
           ) : (
             <table className={tableCls.table}>
+              <thead className={tableCls.thead}>
+                <tr className={tableCls.headRow}>
+                  <SortTh col="map" sort={mapTable.sort} onToggle={mapTable.toggle} text className="text-left py-1.5">Map</SortTh>
+                  <SortTh col="games" sort={mapTable.sort} onToggle={mapTable.toggle} className="text-right py-1.5">Games</SortTh>
+                  <SortTh col="won" sort={mapTable.sort} onToggle={mapTable.toggle} className="text-right py-1.5">Won</SortTh>
+                </tr>
+              </thead>
               <tbody>
-                {data.maps.map((m) => (
+                {mapTable.rows.map((m) => (
                   <tr key={m.map_key} className={tableCls.rowStatic}>
                     <td className="py-1.5 text-white">{m.map_key}</td>
                     <td className="py-1.5 text-right tabular-nums text-gray-300">{m.games} games</td>
@@ -166,21 +206,21 @@ export default function UslMixPlayerPage() {
             <table className={tableCls.table}>
               <thead className={tableCls.thead}>
                 <tr className={tableCls.headRow}>
-                  <th className="text-left py-2 pr-2">When</th>
-                  <th className="text-left py-2 px-2">Map</th>
+                  <SortTh col="when" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-left py-2 pr-2">When</SortTh>
+                  <SortTh col="map" sort={recentTable.sort} onToggle={recentTable.toggle} text className="text-left py-2 px-2">Map</SortTh>
                   <th className="text-left py-2 px-2">Game</th>
-                  <th className="text-left py-2 px-2">Side</th>
-                  <th className="text-left py-2 px-2">Result</th>
-                  <th className="text-left py-2 px-2">Class</th>
-                  <th className="text-right py-2 px-2">K</th>
-                  <th className="text-right py-2 px-2">D</th>
-                  <th className="text-right py-2 px-2" title="opening kills">Open</th>
-                  <th className="text-right py-2 px-2">Acc</th>
-                  <th className="text-right py-2 pl-2">Δ</th>
+                  <SortTh col="side" sort={recentTable.sort} onToggle={recentTable.toggle} text className="text-left py-2 px-2">Side</SortTh>
+                  <SortTh col="result" sort={recentTable.sort} onToggle={recentTable.toggle} text className="text-left py-2 px-2">Result</SortTh>
+                  <SortTh col="class" sort={recentTable.sort} onToggle={recentTable.toggle} text className="text-left py-2 px-2">Class</SortTh>
+                  <SortTh col="k" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2">K</SortTh>
+                  <SortTh col="d" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2">D</SortTh>
+                  <SortTh col="open" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2" title="opening kills">Open</SortTh>
+                  <SortTh col="acc" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2">Acc</SortTh>
+                  <SortTh col="delta" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 pl-2">Δ</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {data.recent_games.map((g) => (
+                {recentTable.rows.map((g) => (
                   <tr key={g.game_id} className={tableCls.row}>
                     <td className="py-2 pr-2 text-gray-500 text-xs">{fmtDate(g.ended_at)}</td>
                     <td className="py-2 px-2 text-gray-300">{g.map_key ?? '—'}</td>

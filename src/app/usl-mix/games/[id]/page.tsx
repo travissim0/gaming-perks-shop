@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 /**
  * Class name plus, when a player spent real time as more than one class, a proportional split:
@@ -41,6 +41,18 @@ interface PlayerRow {
   weapon_kills: Record<string, { name: string | null; count: number }>; rating_before: number | null; rating_after: number | null; rating_delta: number | null; performance: number | null;
   opening_kills: number; opening_deaths: number; opening_fights_won: number;
 }
+type TeamCol = 'player' | 'class' | 'kills' | 'deaths' | 'open' | 'acc' | 'heal' | 'delta';
+const TEAM_GETTERS: SortGetters<PlayerRow, TeamCol> = {
+  player: (p) => p.alias,
+  class: (p) => p.primary_class,
+  kills: (p) => p.kills,
+  deaths: (p) => p.deaths,
+  open: (p) => p.opening_kills,
+  acc: (p) => p.accuracy,
+  heal: (p) => p.heal_amount,
+  delta: (p) => p.rating_delta,
+};
+
 interface KillEvent {
   t_ms: number; killer: string | null; victim: string; killer_side: string | null; victim_side: string | null; killer_class: string | null; victim_class: string | null;
   weapon_id: number | null; weapon_name: string | null; root_weapon_id: number | null; root_weapon_name: string | null; team_kill: boolean; kill_type: string; attribution: string;
@@ -124,6 +136,9 @@ export default function UslMixGamePage() {
     [data]
   );
 
+  // one sort for both team boards, so clicking "D" on one side sorts the other side the same way
+  const { sort: teamSort, toggle: toggleTeamSort } = useSortState<TeamCol>({ key: 'kills', dir: 'desc' });
+
   if (error) {
     return (
       <UslMixShell title="Game">
@@ -167,18 +182,18 @@ export default function UslMixGamePage() {
               <table className={tableCls.table}>
                 <thead className={tableCls.thead}>
                   <tr className={tableCls.headRow}>
-                    <th className="text-left py-2 pr-2">Player</th>
-                    <th className="text-left py-2 px-2">Class</th>
-                    <th className="text-right py-2 px-2">K</th>
-                    <th className="text-right py-2 px-2">D</th>
-                    <th className="text-right py-2 px-2" title="opening kills (fights won after)">Open</th>
-                    <th className="text-right py-2 px-2">Acc</th>
-                    <th className="text-right py-2 px-2">Heal</th>
-                    <th className="text-right py-2 pl-2">Δ</th>
+                    <SortTh col="player" sort={teamSort} onToggle={toggleTeamSort} text className="text-left py-2 pr-2">Player</SortTh>
+                    <SortTh col="class" sort={teamSort} onToggle={toggleTeamSort} text className="text-left py-2 px-2">Class</SortTh>
+                    <SortTh col="kills" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">K</SortTh>
+                    <SortTh col="deaths" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">D</SortTh>
+                    <SortTh col="open" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2" title="opening kills (fights won after)">Open</SortTh>
+                    <SortTh col="acc" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Acc</SortTh>
+                    <SortTh col="heal" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Heal</SortTh>
+                    <SortTh col="delta" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 pl-2">Δ</SortTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {t.players.map((p) => (
+                  {sortRows(t.players, TEAM_GETTERS, teamSort).map((p) => (
                     <tr key={p.alias} className={tableCls.rowStatic}>
                       <td className="py-2 pr-2">
                         <Link href={`/usl-mix/players/${encodeURIComponent(p.alias)}`} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link>

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import NeutralNavbar from '@/components/home/NeutralNavbar';
 
 /** Titan / Collective series colors - validated for the dark surface, keep in fixed order. */
@@ -195,6 +196,76 @@ export const tableCls = {
 };
 
 export const controlCls = 'bg-gray-900/60 border border-gray-700/50 rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-cyan-500/50';
+
+// ---- Sortable tables --------------------------------------------------------------------------
+// Click a header to sort by that column: numbers high-to-low first (kills, ratings, win rates -
+// what you want to see on a first click), text A-Z first, a second click flips. Column getters
+// live beside each table so the row shape never has to match the header label; a getter returning
+// null/undefined/'' sorts last either way, and ties keep the table's original order.
+
+export type SortDir = 'asc' | 'desc';
+export interface SortState<K extends string = string> { key: K; dir: SortDir }
+export type SortValue = number | string | null | undefined;
+export type SortGetters<T, K extends string> = Record<K, (row: T) => SortValue>;
+
+export function sortRows<T, K extends string>(rows: T[], getters: SortGetters<T, K>, sort: SortState<K>): T[] {
+  const get = getters[sort.key];
+  if (!get) return rows;
+  const dir = sort.dir === 'asc' ? 1 : -1;
+  const isEmpty = (v: SortValue) => v === null || v === undefined || v === '';
+  return rows
+    .map((row, i) => ({ row, i, v: get(row) }))
+    .sort((a, b) => {
+      if (isEmpty(a.v) && isEmpty(b.v)) return a.i - b.i;
+      if (isEmpty(a.v)) return 1;
+      if (isEmpty(b.v)) return -1;
+      const cmp = typeof a.v === 'number' && typeof b.v === 'number'
+        ? a.v - b.v
+        : String(a.v).localeCompare(String(b.v), undefined, { sensitivity: 'base', numeric: true });
+      return cmp === 0 ? a.i - b.i : cmp * dir;
+    })
+    .map((x) => x.row);
+}
+
+/** Sort state on its own - for several tables that should follow one click (the two team boards on a game page). */
+export function useSortState<K extends string>(initial: SortState<K>) {
+  const [sort, setSort] = useState<SortState<K>>(initial);
+  const toggle = useCallback((key: K, firstDir: SortDir = 'desc') => {
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: firstDir }));
+  }, []);
+  return { sort, toggle };
+}
+
+/** Sort state plus the sorted rows, for a single table. Keep `getters` at module scope so it is stable. */
+export function useSortedRows<T, G extends SortGetters<T, string>>(rows: T[], getters: G, initial: SortState<Extract<keyof G, string>>) {
+  // K comes from the getters' keys, not from `initial` - otherwise TS narrows K to the one initial key
+  type K = Extract<keyof G, string>;
+  const { sort, toggle } = useSortState<K>(initial);
+  const sorted = useMemo(() => sortRows(rows, getters as SortGetters<T, K>, sort), [rows, getters, sort]);
+  return { rows: sorted, sort, toggle };
+}
+
+/** A clickable header cell. `text` columns sort A-Z on the first click; everything else high-to-low. */
+export function SortTh<K extends string>({
+  col, sort, onToggle, text = false, className = '', title, children,
+}: {
+  col: K; sort: SortState<K>; onToggle: (key: K, firstDir?: SortDir) => void; text?: boolean; className?: string; title?: string; children: ReactNode;
+}) {
+  const active = sort.key === col;
+  return (
+    <th
+      className={`${className} cursor-pointer select-none whitespace-nowrap ${active ? 'text-cyan-300' : 'hover:text-gray-200'}`}
+      title={title}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => onToggle(col, text ? 'asc' : 'desc')}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <span aria-hidden className={`text-[9px] leading-none ${active ? 'opacity-100' : 'opacity-0'}`}>{active && sort.dir === 'asc' ? '\u25B2' : '\u25BC'}</span>
+      </span>
+    </th>
+  );
+}
 
 export function SegmentedControl<T extends string>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void }) {
   return (
