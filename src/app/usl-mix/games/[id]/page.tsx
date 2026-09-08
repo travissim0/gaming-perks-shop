@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, SegmentedControl, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 /**
  * Class name plus, when a player spent real time as more than one class, a proportional split:
@@ -73,12 +73,38 @@ interface GameDetail {
 
 const sideColor = (side: string | null | undefined) => (side === 'T' || side === 'C' ? SIDE_COLORS[side] : undefined);
 
+/** Kills within this many ms of the previous kill share one marker on the kills-over-time chart. */
+const MARKER_CLUSTER_MS = 20_000;
+interface KillCluster { start_ms: number; end_ms: number; events: KillEvent[]; a: number; b: number; openings: number }
+interface TimelinePoint { t: number; a: number; b: number; diff: number; cluster: KillCluster | null; clusterEnd: boolean }
+
+/**
+ * Marker on a team's line at the last point of a kill cluster: radius grows with that team's kills
+ * in the cluster (count printed inside from 2 up), an amber ring means the cluster opened a fight.
+ * Recharts calls this for every point; points that are not a cluster end draw nothing.
+ */
+function killMarker(team: 'a' | 'b', color: string, props: any) {
+  const pt: TimelinePoint | undefined = props?.payload;
+  const c = pt?.cluster;
+  if (!pt?.clusterEnd || !c) return null;
+  const count = team === 'a' ? c.a : c.b;
+  if (!count) return null;
+  const r = 3 + Math.min(count, 6) * 0.8;
+  return (
+    <g key={`${team}-${props.index}`}>
+      {c.openings > 0 && <circle cx={props.cx} cy={props.cy} r={r + 2.5} fill="none" stroke="#fbbf24" strokeWidth={1.2} opacity={0.9} />}
+      <circle cx={props.cx} cy={props.cy} r={r} fill={color} stroke="#0a0e1a" strokeWidth={1.5} />
+      {count > 1 && <text x={props.cx} y={props.cy} dy={3} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0a0e1a">{count}</text>}
+    </g>
+  );
+}
+
 /** A player in the kill feed: alias in their class color, a small dot for their side. */
 function Actor({ alias, cls, side }: { alias: string; cls: string | null; side: string | null }) {
   return (
     <span className="inline-flex items-center gap-1.5" title={`${cls ?? 'unknown class'} · ${side === 'T' ? 'Titan' : side === 'C' ? 'Collective' : 'side unknown'}`}>
       <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: sideColor(side) ?? '#6b7280' }} />
-      <span className="font-medium" style={{ color: classColor(cls) ?? '#e5e7eb' }}>{alias}</span>
+      <span className="font-semibold" style={{ color: classColor(cls) ?? '#e5e7eb' }}>{alias}</span>
     </span>
   );
 }
@@ -88,6 +114,7 @@ export default function UslMixGamePage() {
   const [data, setData] = useState<GameDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showExtras, setShowExtras] = useState(false);
+  const [markers, setMarkers] = useState<'on' | 'off'>('on');
 
   useEffect(() => {
     if (!params?.id) return;
@@ -106,22 +133,38 @@ export default function UslMixGamePage() {
     ].map((t) => ({ ...t, players: data.players.filter((p) => p.team_name === t.name) }));
   }, [data]);
 
-  /** Cumulative enemy kills per team, one point per event plus the start and end of the game. */
+  /**
+   * Cumulative enemy kills per team, one point per event plus the start and end of the game. Every
+   * point also knows its marker cluster: kills within MARKER_CLUSTER_MS of the previous kill share
+   * one, and only the cluster's last point draws the dot, so a 6-kill push is one labelled marker
+   * instead of six. Hovering anywhere inside a cluster lists its kills in the tooltip.
+   */
   const killTimeline = useMemo(() => {
     if (!data || teams.length < 2) return [];
     const teamOfAlias = new Map<string, number>();
     teams.forEach((t, i) => t.players.forEach((p) => teamOfAlias.set(p.alias.toLowerCase(), i)));
     const counts = [0, 0];
-    const points: Array<{ t: number; a: number; b: number; diff: number }> = [{ t: 0, a: 0, b: 0, diff: 0 }];
+    const points: TimelinePoint[] = [{ t: 0, a: 0, b: 0, diff: 0, cluster: null, clusterEnd: false }];
+    let cluster: KillCluster | null = null;
+    let lastMs = -Infinity;
     for (const e of data.kill_events) {
       if (!e.killer || e.team_kill) continue;
       const idx = teamOfAlias.get(e.killer.toLowerCase());
       if (idx === undefined) continue;
       counts[idx]++;
-      points.push({ t: Math.round(e.t_ms / 600) / 100, a: counts[0], b: counts[1], diff: counts[0] - counts[1] });
+      if (!cluster || e.t_ms - lastMs > MARKER_CLUSTER_MS) cluster = { start_ms: e.t_ms, end_ms: e.t_ms, events: [], a: 0, b: 0, openings: 0 };
+      cluster.events.push(e);
+      cluster.end_ms = e.t_ms;
+      if (idx === 0) cluster.a++;
+      else cluster.b++;
+      if (e.is_opening) cluster.openings++;
+      lastMs = e.t_ms;
+      const prev = points[points.length - 1];
+      if (prev.cluster === cluster) prev.clusterEnd = false;
+      points.push({ t: Math.round(e.t_ms / 600) / 100, a: counts[0], b: counts[1], diff: counts[0] - counts[1], cluster, clusterEnd: true });
     }
     const endMin = Math.round((data.game.duration_seconds / 60) * 100) / 100;
-    if (points[points.length - 1].t < endMin) points.push({ t: endMin, a: counts[0], b: counts[1], diff: counts[0] - counts[1] });
+    if (points[points.length - 1].t < endMin) points.push({ t: endMin, a: counts[0], b: counts[1], diff: counts[0] - counts[1], cluster: null, clusterEnd: false });
     return points;
   }, [data, teams]);
 
@@ -156,6 +199,8 @@ export default function UslMixGamePage() {
 
   const g = data.game;
   const [ta, tb] = teams;
+  const colorA = sideColor(ta.side) ?? '#3987e5';
+  const colorB = sideColor(tb.side) ?? '#d95926';
 
   return (
     <UslMixShell
@@ -275,7 +320,16 @@ export default function UslMixGamePage() {
 
       {/* Kills over time + kill feed side by side */}
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        <Panel title="Kills over time" accent="purple" right={<span className="text-xs text-gray-500">cumulative enemy kills · minutes</span>}>
+        <Panel
+          title="Kills over time"
+          accent="purple"
+          right={
+            <div className="flex flex-wrap items-center gap-3 justify-end">
+              <span className="text-xs text-gray-500">cumulative enemy kills · minutes{markers === 'on' ? ` · dot = kills within ${MARKER_CLUSTER_MS / 1000}s, ring = opened a fight` : ''}</span>
+              <SegmentedControl value={markers} onChange={setMarkers} options={[{ value: 'on', label: 'Kill markers' }, { value: 'off', label: 'Lines only' }]} />
+            </div>
+          }
+        >
           {killTimeline.length < 2 ? (
             <p className="text-sm text-gray-500">No kill events.</p>
           ) : (
@@ -289,20 +343,38 @@ export default function UslMixGamePage() {
                     {...tooltipStyle}
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
-                      const pt: any = payload[0].payload;
+                      const pt: TimelinePoint = payload[0].payload;
+                      const c = markers === 'on' ? pt.cluster : null;
                       return (
                         <div style={tooltipStyle.contentStyle as any} className="px-3 py-2">
                           <div style={{ color: '#9ca3af' }}>{Number(label).toFixed(1)} min</div>
-                          <div style={{ color: sideColor(ta.side) ?? '#e5e7eb' }}>{ta.name}: {pt.a}</div>
-                          <div style={{ color: sideColor(tb.side) ?? '#e5e7eb' }}>{tb.name}: {pt.b}</div>
+                          <div style={{ color: colorA }}>{ta.name}: {pt.a}</div>
+                          <div style={{ color: colorB }}>{tb.name}: {pt.b}</div>
                           <div className="text-gray-300">lead: {pt.diff > 0 ? `${ta.name} +${pt.diff}` : pt.diff < 0 ? `${tb.name} +${-pt.diff}` : 'even'}</div>
+                          {c && (
+                            <div className="mt-1.5 pt-1.5 border-t border-gray-700/60">
+                              <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-0.5">
+                                {c.events.length} kill{c.events.length === 1 ? '' : 's'} · {fmtDuration(Math.floor(c.start_ms / 1000))}{c.end_ms > c.start_ms ? ` – ${fmtDuration(Math.floor(c.end_ms / 1000))}` : ''}
+                              </div>
+                              {c.events.slice(0, 8).map((e, i) => (
+                                <div key={i} className="whitespace-nowrap">
+                                  <span className="font-semibold" style={{ color: sideColor(e.killer_side) ?? '#e5e7eb' }}>{e.killer}</span>
+                                  <span className="text-gray-500"> ▸ </span>
+                                  <span style={{ color: sideColor(e.victim_side) ?? '#e5e7eb' }}>{e.victim}</span>
+                                  {e.root_weapon_name && <span className="text-gray-500"> · {e.root_weapon_name}</span>}
+                                  {e.is_opening && <span className="ml-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">open</span>}
+                                </div>
+                              ))}
+                              {c.events.length > 8 && <div className="text-gray-500">+{c.events.length - 8} more</div>}
+                            </div>
+                          )}
                         </div>
                       );
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12, color: '#d1d5db' }} formatter={(v) => (v === 'a' ? ta.name : tb.name)} />
-                  <Line type="stepAfter" dataKey="a" stroke={sideColor(ta.side) ?? '#3987e5'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
-                  <Line type="stepAfter" dataKey="b" stroke={sideColor(tb.side) ?? '#d95926'} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+                  <Line type="stepAfter" dataKey="a" stroke={colorA} strokeWidth={2} dot={markers === 'on' ? ((p: any) => killMarker('a', colorA, p)) as any : false} activeDot={{ r: 4 }} isAnimationActive={false} />
+                  <Line type="stepAfter" dataKey="b" stroke={colorB} strokeWidth={2} dot={markers === 'on' ? ((p: any) => killMarker('b', colorB, p)) as any : false} activeDot={{ r: 4 }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

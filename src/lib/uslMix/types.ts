@@ -28,11 +28,22 @@ export interface TeamPayload {
  * Applied at ingest and again when reading, so rows stored before 2026-09-06 roll up too.
  */
 const SIDE_SUFFIXED_WEAPONS = /^(RPG Launcher|Ripper Gun)\s+[TC]$/i;
+/** Item-file naming: the child a wrapper fires is "<Weapon> -- Main" ("Mortar -- Main"); players only ever see "<Weapon>". */
+const MAIN_SUFFIX = /\s+--\s+Main$/i;
+/**
+ * Roll-up mistakes fixed in the zone script (v1.5.0, 2026-09-08) that older rows may still carry:
+ * RPG shrapnel is shared with the Grenadier's bouncing GL, and the script used to climb the GL
+ * branch when a shrapnel piece (not the rocket) was the nearest explosion to the death.
+ */
+const LEGACY_ROOT_FIXES: Record<string, string> = { 'gl bouncy -- main': 'RPG Launcher' };
 
 export function normalizeWeaponName(name: string | null | undefined): string | null {
   if (!name) return null;
-  const m = name.trim().match(SIDE_SUFFIXED_WEAPONS);
-  return m ? m[1] : name;
+  const trimmed = name.trim();
+  const legacy = LEGACY_ROOT_FIXES[trimmed.toLowerCase()];
+  if (legacy) return legacy;
+  const m = trimmed.match(SIDE_SUFFIXED_WEAPONS);
+  return (m ? m[1] : trimmed).replace(MAIN_SUFFIX, '');
 }
 
 export interface WeaponCount {

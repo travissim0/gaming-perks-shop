@@ -93,6 +93,22 @@ export default function UslMixApiDocsPage() {
               ]}
               example={`curl "${BASE}/api/usl-mix/insights?map=els"`}
             />
+            <Endpoint
+              method="GET"
+              path="/api/usl-mix/leaders"
+              desc="Top players over a rolling window: per-player totals (kills, K/D, heals, opening kills, rating change), category leaders, and the best player in every class."
+              params={[
+                ['period', 'week | month | year | all (rolling 7 / 30 / 365 days; default week)'],
+                ['kind', 'mix | pub | all'],
+                ['map', 'restrict to one map'],
+                ['minGames', 'games needed for the K/D, win-rate and per-class rankings, default 2'],
+                ['board', 'flat mode, one ranked list: kills | kd | kills_per_game | win_rate | heal | opening_kills | rating_gain | class:<name>'],
+                ['limit', 'entries in flat mode, default 10, max 100'],
+              ]}
+              example={`curl "${BASE}/api/usl-mix/leaders?period=month"
+curl "${BASE}/api/usl-mix/leaders?board=kills&period=week&limit=10"
+curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
+            />
           </Panel>
 
           <Panel title="Ingest (game server → site)">

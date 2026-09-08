@@ -54,6 +54,53 @@ interface GameRow {
   players: Array<{ alias: string }>;
 }
 
+type Period = 'week' | 'month' | 'year' | 'all';
+const PERIOD_OPTIONS: Array<{ value: Period; label: string }> = [
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+  { value: 'all', label: 'All time' },
+];
+const PERIOD_LABEL: Record<Period, string> = { week: 'last 7 days', month: 'last 30 days', year: 'last 365 days', all: 'all time' };
+interface LeaderEntry { alias: string; value: number; display: string; games: number; top_class: string | null; url: string }
+interface ClassLeader { alias: string; games: number; wins: number; losses: number; kills: number; deaths: number; kd_ratio: number; kills_per_game: number; heal_per_game: number; accuracy: number | null; url: string }
+type LeaderBoardKey = 'kills' | 'kd' | 'kills_per_game' | 'win_rate' | 'heal' | 'opening_kills' | 'rating_gain';
+interface Leaders {
+  filters: { period: Period; minGames: number };
+  totals: { games: number; players: number };
+  top: Record<LeaderBoardKey, LeaderEntry[]>;
+  by_class: Array<{ class_name: string; ranked_by: string; min_games_met: boolean; appearances: number; players: number; leader: ClassLeader; runner_up: ClassLeader | null }>;
+}
+/** The six headline categories of the "Top players" panel; the API also has kills_per_game. */
+const LEADER_TILES: Array<{ key: LeaderBoardKey; label: string; hint: (minGames: number) => string; color: string }> = [
+  { key: 'kills', label: 'Most kills', hint: () => 'total', color: 'text-amber-300' },
+  { key: 'kd', label: 'Best K/D', hint: (m) => `at least ${m} games`, color: 'text-cyan-300' },
+  { key: 'win_rate', label: 'Best win rate', hint: (m) => `at least ${m} games`, color: 'text-emerald-300' },
+  { key: 'heal', label: 'Most healing', hint: () => 'HP healed', color: 'text-green-300' },
+  { key: 'opening_kills', label: 'Most opening kills', hint: () => 'first kill of a fight', color: 'text-amber-300' },
+  { key: 'rating_gain', label: 'Biggest rating gain', hint: () => 'rated mixes', color: 'text-purple-300' },
+];
+
+function LeaderTile({ label, hint, entry, color }: { label: string; hint: string; entry: LeaderEntry | undefined; color: string }) {
+  return (
+    <div className="rounded-xl border border-gray-700/40 bg-gray-900/40 p-3 min-w-0">
+      <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400">{label}</div>
+      {entry ? (
+        <>
+          <Link href={entry.url} className="block mt-1 text-base font-bold text-cyan-300 hover:text-cyan-200 truncate">{entry.alias}</Link>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className={`text-2xl font-black tabular-nums ${color}`}>{entry.display}</span>
+            <span className="text-xs text-gray-500">{hint} · {entry.games} game{entry.games === 1 ? '' : 's'}</span>
+          </div>
+          {entry.top_class && <div className="text-xs mt-0.5"><ClassName name={entry.top_class} /></div>}
+        </>
+      ) : (
+        <div className="mt-1 text-sm text-gray-600">nobody qualifies yet</div>
+      )}
+    </div>
+  );
+}
+
 export default function UslMixOverviewPage() {
   const [map, setMap] = useState('');
   const [kind, setKind] = useState<'all' | 'mix' | 'pub'>('all');
@@ -62,6 +109,9 @@ export default function UslMixOverviewPage() {
   const [games, setGames] = useState<GameRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>('week');
+  const [leadersData, setLeadersData] = useState<Leaders | null>(null);
+  const [leadersLoading, setLeadersLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +142,28 @@ export default function UslMixOverviewPage() {
       cancelled = true;
     };
   }, [map, kind]);
+
+  // period leaders follow the map / kind filters plus their own window
+  useEffect(() => {
+    let cancelled = false;
+    setLeadersLoading(true);
+    const qs = new URLSearchParams({ period, kind });
+    if (map) qs.set('map', map);
+    fetch(`/api/usl-mix/leaders?${qs}`)
+      .then((r) => r.json())
+      .then((r) => {
+        if (!cancelled) setLeadersData(r.success ? r : null);
+      })
+      .catch(() => {
+        if (!cancelled) setLeadersData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLeadersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, map, kind]);
 
   const sideChart = useMemo(() => {
     if (!insights) return [];
@@ -167,6 +239,74 @@ export default function UslMixOverviewPage() {
           </p>
         </Panel>
       )}
+
+      {/* Top players over a rolling window (Chris, 2026-09-08) */}
+      <Panel
+        title="Top players"
+        accent="rose"
+        className="mb-8"
+        right={
+          <div className="flex flex-wrap items-center gap-3 justify-end">
+            <span className="text-xs text-gray-500">
+              {leadersData ? `${leadersData.totals.games} game${leadersData.totals.games === 1 ? '' : 's'} · ${leadersData.totals.players} players · ${PERIOD_LABEL[period]}` : ''}
+              {leadersLoading ? ' · loading…' : ''}
+            </span>
+            <SegmentedControl value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
+          </div>
+        }
+      >
+        {!leadersData || leadersData.totals.games === 0 ? (
+          <p className="text-sm text-gray-500">{leadersLoading ? 'Loading…' : `No games in the ${PERIOD_LABEL[period]}.`}</p>
+        ) : (
+          <div className="grid lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-2 grid grid-cols-2 gap-3 content-start">
+              {LEADER_TILES.map((t) => (
+                <LeaderTile key={t.key} label={t.label} hint={t.hint(leadersData.filters.minGames)} entry={leadersData.top[t.key]?.[0]} color={t.color} />
+              ))}
+            </div>
+            <div className="lg:col-span-3 min-w-0">
+              <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
+                Best in each class · kills per game, medics by heal per game · at least {leadersData.filters.minGames} games as that class
+              </div>
+              {leadersData.by_class.length === 0 ? (
+                <p className="text-sm text-gray-500">No class data yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className={tableCls.table}>
+                    <thead className={tableCls.thead}>
+                      <tr className={tableCls.headRow}>
+                        <th className="text-left py-2 pr-2">Class</th>
+                        <th className="text-left py-2 px-2">Player</th>
+                        <th className="text-right py-2 px-2">Games</th>
+                        <th className="text-right py-2 px-2">K / game</th>
+                        <th className="text-right py-2 px-2">K/D</th>
+                        <th className="text-right py-2 px-2">Heal / game</th>
+                        <th className="text-left py-2 pl-2">Runner-up</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leadersData.by_class.map((c) => (
+                        <tr key={c.class_name} className={tableCls.rowStatic}>
+                          <td className="py-2 pr-2 whitespace-nowrap"><ClassName name={c.class_name} /></td>
+                          <td className="py-2 px-2">
+                            <Link href={c.leader.url} className="text-cyan-300 hover:text-cyan-200 font-medium">{c.leader.alias}</Link>
+                            {!c.min_games_met && <span className="ml-1 text-[10px] text-gray-500" title={`nobody has ${leadersData.filters.minGames} games as this class yet`}>(only {c.leader.games})</span>}
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.leader.games}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums ${c.ranked_by === 'kills_per_game' ? 'text-white font-semibold' : 'text-gray-300'}`}>{c.leader.kills_per_game}</td>
+                          <td className="py-2 px-2 text-right tabular-nums text-gray-300">{Number(c.leader.kd_ratio).toFixed(2)}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums ${c.ranked_by === 'heal_per_game' ? 'text-white font-semibold' : 'text-gray-300'}`}>{c.leader.heal_per_game || '—'}</td>
+                          <td className="py-2 pl-2 text-xs text-gray-400">{c.runner_up ? <Link href={c.runner_up.url} className="hover:text-gray-200">{c.runner_up.alias}</Link> : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Panel>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
@@ -398,8 +538,11 @@ export default function UslMixOverviewPage() {
               <li key={g.id}>
                 <Link href={`/usl-mix/games/${g.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
                   <span className="text-xs text-gray-500 w-28">{fmtDate(g.ended_at)}</span>
-                  <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
-                  {g.game_kind === 'mix' && g.rated && <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title="counted for ELO">rated</span>}
+                  {/* fixed-width slot for the kind + rated badges, so the map name lines up whether or not the game was rated */}
+                  <span className="flex items-center gap-1 w-36 shrink-0">
+                    <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
+                    {g.game_kind === 'mix' && g.rated && <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-emerald-500/40 text-emerald-300 bg-emerald-500/10" title="counted for ELO">rated</span>}
+                  </span>
                   <span className="text-sm text-gray-300 w-24">{g.map_key ?? '—'}</span>
                   <span className="flex items-center gap-2 text-sm">
                     <SideBadge side={g.team_a_side} />

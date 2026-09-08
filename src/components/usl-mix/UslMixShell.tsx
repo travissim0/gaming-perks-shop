@@ -285,21 +285,22 @@ export function SegmentedControl<T extends string>({ value, options, onChange }:
 
 
 /**
- * Class colors = the in-game backpack hues (Travis, 2026-09-06). Desaturated so they read as
- * labels, lifted just enough for the dark surface. Grenadier, Ripper Gunner and Sniper were not
- * specified and are placeholders.
+ * Class colors = the in-game backpack hues (Travis, 2026-09-06), re-saturated on 2026-09-08 after
+ * Chris found the desaturated set too flat; class names now render bold in these colors. Ripper
+ * Gunner and Heavy Ripper Gunner wear the same suit in game, so they share a red (light / dark).
+ * Grenadier is a saturated dark brown. Sniper is still a placeholder.
  */
 export const CLASS_COLORS: Array<{ match: RegExp; color: string; label: string }> = [
-  { match: /heavy\s*ripper/i, color: '#b85c5c', label: 'Heavy Ripper' },
-  { match: /ripper/i, color: '#d07e7e', label: 'Ripper Gunner (placeholder)' },
-  { match: /machine\s*gun|lmg/i, color: '#f3f4f6', label: 'LMG' },
-  { match: /marine/i, color: '#5fa8a3', label: 'Marine' },
-  { match: /demo/i, color: '#7fb07f', label: 'Demolitions' },
-  { match: /medic/i, color: '#c9b35a', label: 'Medic' },
-  { match: /assault/i, color: '#9d7cb8', label: 'Assault Trooper' },
-  { match: /ranger/i, color: '#c97fb4', label: 'Ranger' },
-  { match: /grenad/i, color: '#c9945c', label: 'Grenadier (placeholder)' },
-  { match: /sniper/i, color: '#8c9db8', label: 'Sniper (placeholder)' },
+  { match: /heavy\s*ripper/i, color: '#d14545', label: 'Heavy Ripper Gunner' },
+  { match: /ripper/i, color: '#e86c6c', label: 'Ripper Gunner' },
+  { match: /machine\s*gun|lmg/i, color: '#f9fafb', label: 'LMG' },
+  { match: /marine/i, color: '#2ec4b6', label: 'Marine' },
+  { match: /demo/i, color: '#5ed36a', label: 'Demolitions' },
+  { match: /medic/i, color: '#e5c445', label: 'Medic' },
+  { match: /assault/i, color: '#a970e0', label: 'Assault Trooper' },
+  { match: /ranger/i, color: '#e57bd0', label: 'Ranger' },
+  { match: /grenad/i, color: '#b5651d', label: 'Grenadier' },
+  { match: /sniper/i, color: '#7da6e3', label: 'Sniper (placeholder)' },
 ];
 
 export function classColor(name: string | null | undefined): string | undefined {
@@ -308,12 +309,12 @@ export function classColor(name: string | null | undefined): string | undefined 
   return CLASS_COLORS.find((c) => c.match.test(n))?.color;
 }
 
-/** A class name in its backpack color; falls back to plain text for unknown classes. */
+/** A class name in its backpack color, bold so the hue reads; falls back to plain text for unknown classes. */
 export function ClassName({ name, className = '' }: { name: string | null | undefined; className?: string }) {
   if (!name) return <span className={className}>—</span>;
   const color = classColor(name);
   return (
-    <span className={`font-medium ${className}`} style={color ? { color } : undefined}>
+    <span className={`font-semibold ${className}`} style={color ? { color } : undefined}>
       {name}
     </span>
   );

@@ -76,7 +76,7 @@ export default function UslMixGamesPage() {
               const top = g.players?.[0];
               return (
                 <li key={g.id}>
-                  <Link href={`/usl-mix/games/${g.id}`} className="grid md:grid-cols-[7rem_8rem_6rem_1fr_auto] gap-x-4 gap-y-1 items-center py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
+                  <Link href={`/usl-mix/games/${g.id}`} className="grid md:grid-cols-[7rem_9rem_6rem_1fr_auto] gap-x-4 gap-y-1 items-center py-3 hover:bg-cyan-500/5 rounded-xl px-2 -mx-2 transition-colors">
                     <span className="text-xs text-gray-500">{fmtDate(g.ended_at)}</span>
                     <span className="flex items-center gap-1 w-fit">
                       <span className="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border border-gray-600/60 text-gray-300 bg-gray-900/40">{g.game_kind}{g.team_size ? ` ${g.team_size}v${g.team_size}` : ''}</span>
