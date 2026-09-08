@@ -10,7 +10,10 @@
  *      A 40+ kill blowout moves ratings 50% more than a 1-kill game.
  *   4. Base team delta for a player = K * (S - E) * mov, where K is larger while the
  *      player is provisional (< PROVISIONAL_GAMES games).
- *   5. Fairness for the "the team with the worst player loses" problem: each player's
+ *   5. Captain bonus: a flat CAPTAIN_BONUS on top of a rated game's delta for both captains,
+ *      win or lose. Deliberately tiny - a nudge for stepping up when nobody wants to, not a
+ *      reason to captain. Shotcaller tags are NOT an input here by design.
+ *   6. Fairness for the "the team with the worst player loses" problem: each player's
  *      delta is scaled by their performance relative to their OWN team:
  *        impact_i = kills_i - deaths_i + heal_amount_i / HEAL_PER_KILL
  *        perf_i   = clamp(1 + PERF_WEIGHT * (impact_i - teamMean) / scale, PERF_MIN, PERF_MAX)
@@ -38,6 +41,8 @@ export const ELO = {
   HEAL_PER_KILL: 150,
   MOV_MAX_BONUS: 0.5,
   MOV_FULL_AT: 40,
+  /** flat rating points for each captain of a rated mix, win or lose (very mild by request) */
+  CAPTAIN_BONUS: 1,
   /** teams smaller than this are not rated */
   MIN_PLAYERS_PER_TEAM: 2,
 } as const;
@@ -138,7 +143,8 @@ export function computeGameRatings(
       const k = kFactorFor(st.games);
       const perfMult = perf.get(p.alias_key) ?? 1;
       const adj = gain ? perfMult : 2 - perfMult;
-      const delta = round2(k * (actual - expected) * (team.result === 'draw' ? 1 : mov) * adj);
+      const captainBonus = p.is_captain ? ELO.CAPTAIN_BONUS : 0;
+      const delta = round2(k * (actual - expected) * (team.result === 'draw' ? 1 : mov) * adj + captainBonus);
       changes.push({
         alias: p.alias,
         alias_key: p.alias_key,

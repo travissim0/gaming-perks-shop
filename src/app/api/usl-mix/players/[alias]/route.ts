@@ -68,6 +68,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         team_name: r.team_name,
         result: r.result,
         is_captain: r.is_captain,
+        is_shotcaller: r.is_shotcaller === true,
         primary_class: r.primary_class,
         kills: r.kills,
         deaths: r.deaths,
@@ -84,7 +85,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
     const classes = new Map<string, { class_name: string; games: number; wins: number; kills: number; deaths: number; seconds: number }>();
     const weapons = new Map<string, { weapon: string; weapon_id: number; kills: number }>();
     const maps = new Map<string, { map_key: string; games: number; wins: number }>();
+    let captainGames = 0;
+    let shotcallerGames = 0;
     for (const r of all) {
+      if (r.is_captain) captainGames++;
+      if (r.is_shotcaller) shotcallerGames++;
       const cls = r.primary_class || 'Unknown';
       const c = classes.get(cls) ?? { class_name: cls, games: 0, wins: 0, kills: 0, deaths: 0, seconds: 0 };
       c.games++;
@@ -127,6 +132,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
         maps: Array.from(maps.values()).sort((a, b) => b.games - a.games),
         rating_history: history ?? [],
         recent_games: recent,
+        leadership: { captain_games: captainGames, shotcaller_games: shotcallerGames },
       },
       { cache: 30 }
     );

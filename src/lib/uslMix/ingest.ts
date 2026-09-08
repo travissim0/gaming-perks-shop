@@ -5,12 +5,32 @@ import { computeGameRatings, ELO, type RatingState, type TeamInput } from './elo
 import { splitFights, openingStatsByPlayer } from './fights';
 
 /** Sanity limits so a buggy script cannot flood the tables. */
-const LIMITS = {
+export const LIMITS = {
   MAX_PLAYERS: 64,
   MAX_KILL_EVENTS: 5000,
   MAX_DURATION_SECONDS: 4 * 3600,
   INSERT_CHUNK: 500,
+  /**
+   * A game with fewer total kills than this is a false start - a *restart / *endgame on a game that
+   * never got going - not a result. The zone script skips these itself (min_game_kills); this is the
+   * backstop so a 0-0 stub can never be stored or, worse, rated as a draw. Mirrors USLMixes.cs
+   * FALSE_START_MAX_KILLS.
+   */
+  MIN_GAME_KILLS: 5,
+  /**
+   * Second false-start tell: this many players still at 0 kills / 0 deaths inside the first
+   * FALSE_START_WINDOW_SECONDS. Pre-game skirmishing before a host restarts can clear the kill floor,
+   * but no real game leaves three players untouched. Mirrors USLMixes.cs FALSE_START_MIN_ZERO_PLAYERS.
+   */
+  FALSE_START_ZERO_PLAYERS: 3,
+  FALSE_START_WINDOW_SECONDS: 10 * 60,
 };
+
+/** Shared false-start test: kill floor, or three untouched players early in the game. */
+export function isFalseStart(totalKills: number, zeroZeroPlayers: number, durationSeconds: number): boolean {
+  if (totalKills < LIMITS.MIN_GAME_KILLS) return true;
+  return zeroZeroPlayers >= LIMITS.FALSE_START_ZERO_PLAYERS && durationSeconds < LIMITS.FALSE_START_WINDOW_SECONDS;
+}
 
 export class IngestError extends Error {
   status: number;
@@ -54,6 +74,7 @@ export function validatePayload(body: any): GameResultPayload {
       deaths: numOr(t?.deaths, 0),
       result: result ?? 'draw',
       captain: strOrNull(t?.captain),
+      shotcaller: strOrNull(t?.shotcaller),
       player_count: numOr(t?.player_count, 0),
     };
   });
@@ -70,6 +91,7 @@ export function validatePayload(body: any): GameResultPayload {
       team_name: String(p?.team_name ?? ''),
       result: result ?? 'draw',
       is_captain: p?.is_captain === true,
+      is_shotcaller: p?.is_shotcaller === true,
       primary_class: strOrNull(p?.primary_class) ?? 'Unknown',
       classes: sanitizeNumberMap(p?.classes),
       kills: numOr(p?.kills, 0),
@@ -208,6 +230,7 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     end_reason: payload.end_reason ?? null,
     team_a_name: a.name, team_a_side: a.side, team_a_kills: a.kills, team_a_deaths: a.deaths, team_a_result: a.result, team_a_captain: a.captain, team_a_players: a.player_count,
     team_b_name: b.name, team_b_side: b.side, team_b_kills: b.kills, team_b_deaths: b.deaths, team_b_result: b.result, team_b_captain: b.captain, team_b_players: b.player_count,
+    team_a_shotcaller: a.shotcaller, team_b_shotcaller: b.shotcaller,
     winner_side: winner?.side ?? null,
     winner_team: winner?.name ?? null,
     loser_team: loser?.name ?? null,
@@ -217,6 +240,12 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
   };
 
   let { data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(gameRow).select('id').single();
+  if (gameErr && /column .*shotcaller.* does not exist/i.test(gameErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-shotcaller.sql) - store without the seats rather than lose the game
+    console.warn('[usl-mix] usl_mix_games.team_*_shotcaller columns missing; inserting without them');
+    const { team_a_shotcaller: _sa, team_b_shotcaller: _sb, ...noSeats } = gameRow;
+    ({ data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(noSeats).select('id').single());
+  }
   if (gameErr && /column .*rated.* does not exist/i.test(gameErr.message || '')) {
     // schema not migrated yet (usl-mix-add-rated.sql) - store without the flag rather than lose the game
     console.warn('[usl-mix] usl_mix_games.rated column missing; inserting without it');
@@ -245,6 +274,7 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     team_name: p.team_name,
     result: p.result,
     is_captain: p.is_captain,
+    is_shotcaller: p.is_shotcaller,
     primary_class: p.primary_class,
     classes: p.classes,
     kills: p.kills,
@@ -264,6 +294,11 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING),
   }));
   let { error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows);
+  if (playersErr && /column .*shotcaller.* does not exist/i.test(playersErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-shotcaller.sql) - drop the flag rather than lose the game
+    console.warn('[usl-mix] usl_mix_game_players.is_shotcaller column missing; inserting without it');
+    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ is_shotcaller: _s, ...rest }) => rest)));
+  }
   if (playersErr && /column .*opening_.* does not exist/i.test(playersErr.message || '')) {
     // schema not migrated yet (usl-mix-add-opening-kills.sql) - store without the counters rather than lose the game
     console.warn('[usl-mix] usl_mix_game_players opening_* columns missing; inserting without them');
@@ -340,11 +375,15 @@ export async function applyRatingsForGame(supabase: SupabaseClient, gameId: stri
   if (gErr || !game) return { applied: false, reason: 'game not found', changes: 0 };
   if (game.game_kind !== 'mix') return { applied: false, reason: `game_kind ${game.game_kind} is never rated`, changes: 0 };
   if (!game.rated) return { applied: false, reason: 'unrated mix (captains did not both ?rated)', changes: 0 };
+  if ((game.team_a_kills ?? 0) + (game.team_b_kills ?? 0) < LIMITS.MIN_GAME_KILLS) {
+    // a *restart stub (0-0) would otherwise rate as a draw and move everyone toward the other team's average
+    return { applied: false, reason: `false start (fewer than ${LIMITS.MIN_GAME_KILLS} kills) is never rated`, changes: 0 };
+  }
   if (game.elo_applied) return { applied: false, reason: 'already applied', changes: 0 };
 
   const { data: players, error: pErr } = await supabase
     .from('usl_mix_game_players')
-    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount')
+    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount, is_captain')
     .eq('game_id', gameId);
   if (pErr || !players) return { applied: false, reason: 'players not found', changes: 0 };
 

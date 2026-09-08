@@ -17,6 +17,8 @@ export interface TeamPayload {
   deaths: number;
   result: Result;
   captain: string | null;
+  /** self-declared via ?sc in the zone - a badge, never an ELO input */
+  shotcaller: string | null;
   player_count: number;
 }
 
@@ -44,6 +46,7 @@ export interface PlayerPayload {
   team_name: string;
   result: Result;
   is_captain: boolean;
+  is_shotcaller: boolean;
   primary_class: string;
   /** class name -> seconds played as that class */
   classes: Record<string, number>;
@@ -112,6 +115,8 @@ export interface RatingInputPlayer {
   alias_key: string;
   team_name: string;
   result: Result;
+  /** captains get ELO.CAPTAIN_BONUS on a rated game, win or lose */
+  is_captain?: boolean;
   kills: number;
   deaths: number;
   heal_amount: number;

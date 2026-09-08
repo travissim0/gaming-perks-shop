@@ -7,7 +7,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerRow {
-  alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; primary_class: string; classes: Record<string, number>;
+  alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; is_shotcaller?: boolean; primary_class: string; classes: Record<string, number>;
   kills: number; deaths: number; team_kills: number; kills_scoreboard: number | null; deaths_scoreboard: number | null;
   shots_fired: number; shots_landed: number; accuracy: number | null; bio_dart_hits: number; heal_amount: number; heal_uses: number; play_seconds: number;
   weapon_kills: Record<string, { name: string | null; count: number }>; rating_before: number | null; rating_after: number | null; rating_delta: number | null; performance: number | null;
@@ -155,6 +155,7 @@ export default function UslMixGamePage() {
                       <td className="py-2 pr-2">
                         <Link href={`/usl-mix/players/${encodeURIComponent(p.alias)}`} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link>
                         {p.is_captain && <span className="ml-1 text-xs text-amber-300" title="captain">★</span>}
+                        {p.is_shotcaller && <span className="ml-1 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 rounded px-1" title="shotcaller (claimed with ?sc)">SC</span>}
                       </td>
                       <td className="py-2 px-2"><ClassName name={p.primary_class} /></td>
                       <td className="py-2 px-2 text-right tabular-nums text-white">

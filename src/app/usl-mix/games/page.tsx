@@ -15,10 +15,16 @@ const PAGE = 25;
 export default function UslMixGamesPage() {
   const [kind, setKind] = useState<'all' | 'mix' | 'pub' | 'test'>('all');
   const [alias, setAlias] = useState('');
+  const [aliasQuery, setAliasQuery] = useState(''); // debounced copy - one request per pause in typing, not per keystroke
   const [offset, setOffset] = useState(0);
   const [games, setGames] = useState<GameRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setAliasQuery(alias.trim()), 300);
+    return () => clearTimeout(t);
+  }, [alias]);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,7 +33,7 @@ export default function UslMixGamesPage() {
       const qs = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
       if (kind !== 'all') qs.set('kind', kind);
       else qs.set('kind', 'all');
-      if (alias.trim()) qs.set('alias', alias.trim());
+      if (aliasQuery) qs.set('alias', aliasQuery);
       const r = await fetch(`/api/usl-mix/games?${qs}`).then((x) => x.json());
       if (cancelled) return;
       setGames(r.data ?? []);
@@ -37,7 +43,7 @@ export default function UslMixGamesPage() {
     return () => {
       cancelled = true;
     };
-  }, [kind, alias, offset]);
+  }, [kind, aliasQuery, offset]);
 
   return (
     <UslMixShell title="Recorded games" subtitle="Every game the zone posted, newest first. Only mixes where both captains agreed with ?rated move ratings; everything else is recorded as casual play. Test snapshots (*mixstats sendnow) show under All or Test.">

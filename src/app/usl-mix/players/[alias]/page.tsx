@@ -15,7 +15,8 @@ interface PlayerProfile {
   weapons: Array<{ weapon: string; kills: number }>;
   maps: Array<{ map_key: string; games: number; wins: number }>;
   rating_history: Array<{ game_id: string; rating_after: number; delta: number; created_at: string }>;
-  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; opening_kills?: number; url: string }>;
+  recent_games: Array<{ game_id: string; ended_at: string; map_key: string | null; game_kind: string; rated?: boolean; team_a_name: string; team_a_kills: number; team_b_name: string; team_b_kills: number; side: string | null; result: string; is_captain?: boolean; is_shotcaller?: boolean; primary_class: string; kills: number; deaths: number; accuracy: number | null; rating_delta: number | null; opening_kills?: number; url: string }>;
+  leadership?: { captain_games: number; shotcaller_games: number };
 }
 
 export default function UslMixPlayerPage() {
@@ -150,6 +151,8 @@ export default function UslMixPlayerPage() {
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-400">Heal output</dt><dd className="text-white tabular-nums">{c?.heal_amount?.toLocaleString() ?? 0} hp</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Bio dart hits</dt><dd className="text-white tabular-nums">{c?.bio_dart_hits ?? 0}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-400">Captained</dt><dd className="text-white tabular-nums">{data.leadership?.captain_games ?? 0} games</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-400" title="claimed with ?sc in the zone - a badge, not a rating input">Called the shots</dt><dd className="text-white tabular-nums">{data.leadership?.shotcaller_games ?? 0} games</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Last game</dt><dd className="text-white">{fmtDate(r?.last_game_at ?? data.recent_games[0]?.ended_at)}</dd></div>
           </dl>
         </Panel>
@@ -186,6 +189,8 @@ export default function UslMixPlayerPage() {
                         {g.team_a_name} {g.team_a_kills}–{g.team_b_kills} {g.team_b_name}
                       </Link>
                       <span className="ml-1 text-xs text-gray-500 uppercase">{g.game_kind}{g.game_kind === 'mix' && g.rated ? ' · rated' : ''}</span>
+                      {g.is_captain && <span className="ml-1 text-xs text-amber-300" title="captain">★</span>}
+                      {g.is_shotcaller && <span className="ml-1 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 rounded px-1" title="shotcaller">SC</span>}
                     </td>
                     <td className="py-2 px-2"><SideBadge side={g.side} /></td>
                     <td className="py-2 px-2"><ResultBadge result={g.result} /></td>

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { corsJson, corsError, corsPreflight } from '@/lib/uslMix/cors';
-import { IngestError, applyRatingsForGame, storeGame, validatePayload } from '@/lib/uslMix/ingest';
+import { IngestError, applyRatingsForGame, isFalseStart, storeGame, validatePayload } from '@/lib/uslMix/ingest';
 
 /**
  * POST /api/usl-mix/ingest - game server -> site.
@@ -60,6 +60,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const payload = validatePayload(body);
+
+    // False starts (a *restart / *endgame before anyone died) are acknowledged, never stored: the zone
+    // resumes the same mix for the next game, and that one is the record. 200 so the script does not
+    // retry or mark the payload as failed.
+    const totalKills = payload.teams[0].kills + payload.teams[1].kills;
+    const zeroZero = payload.players.filter((p) => (p.kills ?? 0) === 0 && (p.deaths ?? 0) === 0).length;
+    if (isFalseStart(totalKills, zeroZero, payload.duration_seconds)) {
+      console.log(`[usl-mix] skipped ${payload.game_kind} ${payload.match_id.slice(0, 8)}: ${totalKills} kill(s), ${zeroZero} players at 0-0 after ${payload.duration_seconds}s - false start / restart`);
+      return corsJson({ success: true, skipped: true, reason: `${totalKills} kill(s), ${zeroZero} players at 0-0 - false start or restart, not recorded` });
+    }
+
     const supabase = getServiceSupabase();
     const stored = await storeGame(supabase, payload, body);
     let ratings: { applied: boolean; reason?: string; changes: number } = { applied: false, reason: 'duplicate', changes: 0 };
