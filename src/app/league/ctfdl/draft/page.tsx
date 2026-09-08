@@ -11,6 +11,7 @@ import DraftPlayerCard from '@/components/ctfdl/DraftPlayerCard';
 import DraftChat from '@/components/ctfdl/DraftChat';
 import {
   teamOnClock,
+  teamIndexForPick,
   roundOf,
   totalPicks,
   formatClock,
@@ -185,6 +186,29 @@ export default function CtfdlDraftLobbyPage() {
   const total = draft ? totalPicks(draft, teams.length) : 0;
   const round = draft ? roundOf(draft.current_pick, teams.length) : 0;
 
+  // Upcoming pick order (fantasy-style ticker): from the current pick forward.
+  const upcoming = useMemo(() => {
+    if (!draft || teams.length === 0 || draft.status === 'complete') return [] as { k: number; round: number; team: DraftTeam }[];
+    const start = draft.status === 'setup' ? 1 : draft.current_pick;
+    const end = Math.min(total, start + Math.max(teams.length * 2, 12) - 1);
+    const out: { k: number; round: number; team: DraftTeam }[] = [];
+    for (let k = start; k <= end; k++) {
+      const idx = teamIndexForPick(k, teams.length, draft.order_type);
+      if (idx >= 0) out.push({ k, round: roundOf(k, teams.length), team: teams[idx] });
+    }
+    return out;
+  }, [draft, teams, total]);
+
+  const myNextPick = useMemo(() => {
+    if (!draft || !myTeamId || teams.length === 0 || draft.status === 'complete') return null;
+    const start = draft.status === 'setup' ? 1 : draft.current_pick;
+    for (let k = start; k <= total; k++) {
+      const idx = teamIndexForPick(k, teams.length, draft.order_type);
+      if (teams[idx]?.id === myTeamId) return { k, round: roundOf(k, teams.length), away: k - start };
+    }
+    return null;
+  }, [draft, teams, total, myTeamId]);
+
   const shell = (children: React.ReactNode) => (
     <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
@@ -256,6 +280,40 @@ export default function CtfdlDraftLobbyPage() {
           )}
         </div>
       </div>
+
+      {/* Draft order ticker */}
+      {upcoming.length > 0 && (
+        <div className="rounded-xl bg-[#131A2B] px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8B98B0]">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8B98B0]">{draft.status === 'setup' ? 'Draft order' : 'Up next'}</span>
+            {myNextPick && (
+              <span className="text-[#E6EDF7]">
+                {myNextPick.away === 0 && draft.status !== 'setup'
+                  ? 'You are on the clock now.'
+                  : <>Your next pick is <span className="text-[#22D3EE]">#{myNextPick.k}</span> (round {myNextPick.round}), {myNextPick.away} pick{myNextPick.away === 1 ? '' : 's'} away.</>}
+              </span>
+            )}
+            <span className="ml-auto">{draft.order_type === 'snake' ? 'Snake: order reverses each round' : 'Straight: same order every round'}</span>
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {upcoming.map(({ k, round: r, team }, i) => {
+              const current = draft.status !== 'setup' && i === 0;
+              const mine = team.id === myTeamId;
+              return (
+                <div
+                  key={k}
+                  className={`flex shrink-0 flex-col items-center rounded-md px-2.5 py-1.5 text-center ${current ? 'bg-[#22D3EE] text-[#0B0F1A]' : mine ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#0B0F1A] text-[#E6EDF7]'}`}
+                  title={`Pick ${k} · Round ${r} · ${team.squad_name}`}
+                >
+                  <span className={`text-[10px] tabular-nums ${current ? 'opacity-80' : 'text-[#8B98B0]'}`}>{r}.{String(((k - 1) % teams.length) + 1).padStart(2, '0')}</span>
+                  <span className="font-display text-sm leading-tight">{team.squad_tag || team.squad_name.slice(0, 6)}</span>
+                </div>
+              );
+            })}
+            {upcoming.length > 0 && upcoming[upcoming.length - 1].k < total && <div className="shrink-0 self-center text-xs text-[#8B98B0]">… {total - upcoming[upcoming.length - 1].k} more</div>}
+          </div>
+        </div>
+      )}
 
       {/* Staff controls */}
       {isStaff && (
