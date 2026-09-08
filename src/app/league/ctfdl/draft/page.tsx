@@ -29,7 +29,10 @@ export default function CtfdlDraftLobbyPage() {
 
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<'staff' | 'rating' | 'name' | 'queue'>('staff');
+  const [dayFilter, setDayFilter] = useState<'any' | 'weekdays' | 'weekends'>('any');
+  const [sortBy, setSortBy] = useState<'staff' | 'rating' | 'name'>('staff');
+  const [showDetails, setShowDetails] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [queue, setQueue] = useState<string[]>([]);
   const queueDirty = useRef(false);
@@ -125,26 +128,51 @@ export default function CtfdlDraftLobbyPage() {
     }
   };
 
+  const undrafted = useMemo(() => players.filter((p) => !p.picked_team_id), [players]);
+
+  // How many undrafted players list each class (preferred or secondary) — tells captains how scarce a class is.
+  const classCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of CLASS_OPTIONS) counts[c] = undrafted.filter((p) => p.preferred_roles.includes(c) || p.secondary_roles.includes(c)).length;
+    return counts;
+  }, [undrafted]);
+
+  const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const WEEKENDS = ['Saturday', 'Sunday'];
+
   const available = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const qIndex = (id: string) => { const i = queue.indexOf(id); return i < 0 ? 999 : i; };
-    return players
-      .filter((p) => !p.picked_team_id)
+    const focusRating = (p: DraftPlayer) => (classFilter === 'all' ? 0 : p.class_ratings?.[classFilter] || 0);
+    const prefersFocus = (p: DraftPlayer) => (classFilter !== 'all' && p.preferred_roles.includes(classFilter) ? 1 : 0);
+    return undrafted
       .filter((p) => classFilter === 'all' || p.preferred_roles.includes(classFilter) || p.secondary_roles.includes(classFilter))
+      .filter((p) => dayFilter === 'any' || (dayFilter === 'weekdays' ? WEEKDAYS : WEEKENDS).some((d) => p.availability_days.includes(d)))
       .filter((p) => !term || [p.alias, p.notes || '', p.contact_info || '', ...p.preferred_roles, ...p.secondary_roles].join(' ').toLowerCase().includes(term))
       .sort((a, b) => {
-        if (sortBy === 'queue') { const d = qIndex(a.player_id) - qIndex(b.player_id); if (d !== 0) return d; }
-        if (sortBy === 'staff' || sortBy === 'queue') {
+        if (classFilter !== 'all') {
+          // Preferred beats secondary, then rating in that class.
+          const pf = prefersFocus(b) - prefersFocus(a);
+          if (pf !== 0) return pf;
+          const fr = focusRating(b) - focusRating(a);
+          if (fr !== 0) return fr;
+        }
+        if (sortBy === 'name') return a.alias.localeCompare(b.alias);
+        if (sortBy === 'staff') {
           const ra = a.staff_rank ?? 999, rb = b.staff_rank ?? 999;
           if (ra !== rb) return ra - rb;
         }
-        if (sortBy === 'rating' || sortBy === 'staff' || sortBy === 'queue') {
-          const d = avgRating(b) - avgRating(a);
-          if (d !== 0) return d;
-        }
+        const d = avgRating(b) - avgRating(a);
+        if (d !== 0) return d;
         return a.alias.localeCompare(b.alias);
       });
-  }, [players, search, classFilter, sortBy, queue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undrafted, search, classFilter, dayFilter, sortBy]);
+
+  // Captains see their queued players pinned on top, in queue order.
+  const queuedAvailable = useMemo(() => queue.map((id) => available.find((p) => p.player_id === id)).filter((p): p is DraftPlayer => !!p), [queue, available]);
+  const restAvailable = useMemo(() => (queuedAvailable.length > 0 ? available.filter((p) => !queue.includes(p.player_id)) : available), [available, queuedAvailable, queue]);
+
+  const toggleExpanded = (id: string) => setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const nextAuto = useMemo(() => (myTeamId && draft?.auto_pick ? autoPickCandidate(players, queue) : null), [players, queue, myTeamId, draft]);
 
@@ -279,51 +307,87 @@ export default function CtfdlDraftLobbyPage() {
       )}
 
       {/* Board */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1.6fr)_minmax(0,0.75fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1.4fr)_minmax(0,0.55fr)]">
         {/* Available */}
         <section className="rounded-xl bg-[#131A2B] p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <h2 className="font-display text-lg text-[#E6EDF7]">Available · {available.length}</h2>
-            <span className="ml-auto text-xs text-[#8B98B0]">{players.filter((p) => p.picked_team_id).length} drafted</span>
+            <span className="text-xs text-[#8B98B0]">{players.filter((p) => p.picked_team_id).length} drafted</span>
+            <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-[#8B98B0]">
+              <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} className="text-[#22D3EE]" />
+              Show details
+            </label>
           </div>
+
+          {/* Class chips with counts */}
+          <div className="mb-2 flex flex-wrap gap-1">
+            <button type="button" onClick={() => setClassFilter('all')} className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${classFilter === 'all' ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
+              All {undrafted.length}
+            </button>
+            {CLASS_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setClassFilter(classFilter === c ? 'all' : c)}
+                className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${classFilter === c ? 'bg-[#22D3EE] text-[#0B0F1A]' : classCounts[c] === 0 ? 'bg-white/5 text-[#8B98B0]/50' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}
+                title={`${classCounts[c]} available who play ${c}`}
+              >
+                {c} <span className={classFilter === c ? 'opacity-70' : 'text-[#8B98B0]'}>{classCounts[c]}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="mb-3 flex flex-wrap gap-2">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#0B0F1A] px-2.5 py-1.5 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none" />
-            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none">
-              <option value="all">All classes</option>
-              {CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="flex overflow-hidden rounded-md border border-white/10 text-xs">
+              {(['any', 'weekdays', 'weekends'] as const).map((d) => (
+                <button key={d} type="button" onClick={() => setDayFilter(d)} className={`px-2 py-1.5 ${dayFilter === d ? 'bg-[#34D399]/20 text-[#34D399]' : 'bg-[#0B0F1A] text-[#8B98B0] hover:text-[#E6EDF7]'}`}>
+                  {d === 'any' ? 'Any day' : d === 'weekdays' ? 'Weekdays' : 'Weekends'}
+                </button>
+              ))}
+            </div>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none">
               <option value="staff">Staff rank</option>
               <option value="rating">Self-rating</option>
               <option value="name">Name</option>
-              {myTeamId && <option value="queue">My queue</option>}
             </select>
           </div>
-          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1">
+
+          <div className="max-h-[70vh] space-y-1 overflow-y-auto pr-1">
             {available.length === 0 && <p className="py-8 text-center text-sm text-[#8B98B0]">Nobody matches.</p>}
-            {available.map((p) => {
+            {queuedAvailable.length > 0 && (
+              <div className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">Your queue</div>
+            )}
+            {[...queuedAvailable, ...restAvailable].map((p, i) => {
               const qi = queue.indexOf(p.player_id);
+              const isFirstRest = queuedAvailable.length > 0 && i === queuedAvailable.length;
               return (
-                <DraftPlayerCard
-                  key={p.player_id}
-                  player={p}
-                  queuePos={qi >= 0 ? qi + 1 : null}
-                  highlight={!!nextAuto && nextAuto.player_id === p.player_id}
-                  actions={
-                    <>
-                      {myTeamId && draft.status !== 'complete' && (
-                        <button onClick={() => toggleQueue(p.player_id)} title={qi >= 0 ? 'Remove from queue' : 'Add to queue'} className={`rounded-md px-2 py-1 text-xs ${qi >= 0 ? 'bg-[#22D3EE]/20 text-[#22D3EE]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
-                          {qi >= 0 ? '✓' : '+'}
-                        </button>
-                      )}
-                      {canPick && (
-                        <button onClick={() => pick(p.player_id)} disabled={busy === p.player_id} className="rounded-md bg-[#22D3EE] px-2.5 py-1 text-xs font-semibold text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50">
-                          {busy === p.player_id ? '…' : 'Pick'}
-                        </button>
-                      )}
-                    </>
-                  }
-                />
+                <div key={p.player_id}>
+                  {isFirstRest && <div className="pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[#8B98B0]">Everyone else</div>}
+                  <DraftPlayerCard
+                    player={p}
+                    compact
+                    expanded={showDetails || expanded.has(p.player_id)}
+                    onToggle={() => toggleExpanded(p.player_id)}
+                    focusClass={classFilter === 'all' ? null : classFilter}
+                    queuePos={qi >= 0 ? qi + 1 : null}
+                    highlight={!!nextAuto && nextAuto.player_id === p.player_id}
+                    actions={
+                      <>
+                        {myTeamId && draft.status !== 'complete' && (
+                          <button onClick={() => toggleQueue(p.player_id)} title={qi >= 0 ? 'Remove from queue' : 'Add to queue'} className={`rounded-md px-2 py-1 text-xs ${qi >= 0 ? 'bg-[#22D3EE]/20 text-[#22D3EE]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
+                            {qi >= 0 ? '✓' : '+'}
+                          </button>
+                        )}
+                        {canPick && (
+                          <button onClick={() => pick(p.player_id)} disabled={busy === p.player_id} className="rounded-md bg-[#22D3EE] px-2.5 py-1 text-xs font-semibold text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50">
+                            {busy === p.player_id ? '…' : 'Pick'}
+                          </button>
+                        )}
+                      </>
+                    }
+                  />
+                </div>
               );
             })}
           </div>
