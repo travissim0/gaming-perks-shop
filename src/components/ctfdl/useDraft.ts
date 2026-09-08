@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { secondsLeft, type DraftBundle } from '@/lib/ctfdl-draft';
+import { secondsLeft, type DraftBundle, type DraftPresence } from '@/lib/ctfdl-draft';
 
 /**
  * Live draft state for the lobby / recap / admin pages.
@@ -21,6 +21,7 @@ export function useDraft(opts: { draftId?: string | null; seasonId?: string | nu
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [viewers, setViewers] = useState(0);
+  const [present, setPresent] = useState<DraftPresence[]>([]);
   const offsetRef = useRef(0);
   const lastTickedPick = useRef<number | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
@@ -70,24 +71,42 @@ export function useDraft(opts: { draftId?: string | null; seasonId?: string | nu
     refetch();
   }, [refetch]);
 
-  // Realtime + presence
+  // Realtime + presence (who is in the room: staff / captains / viewers)
   const liveId = bundle?.draft?.id || null;
+  const meId = bundle?.viewer?.user_id || null;
+  const meAlias = bundle?.viewer?.alias || null;
+  const meStaff = !!bundle?.viewer?.is_staff;
+  const meTeam = bundle?.viewer?.my_team_id || null;
   useEffect(() => {
     if (!liveId) return;
-    const channel = supabase.channel(`ctfdl-draft-${liveId}`, { config: { presence: { key: Math.random().toString(36).slice(2) } } });
+    const channel = supabase.channel(`ctfdl-draft-${liveId}`, { config: { presence: { key: meId || `anon-${Math.random().toString(36).slice(2)}` } } });
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_drafts', filter: `id=eq.${liveId}` }, () => { refetch(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_draft_picks', filter: `draft_id=eq.${liveId}` }, () => { refetch(); });
     if (presence) {
       channel.on('presence', { event: 'sync' }, () => {
-        setViewers(Object.keys(channel.presenceState()).length);
+        const state = channel.presenceState<DraftPresence>();
+        const people: DraftPresence[] = [];
+        const seen = new Set<string>();
+        for (const key of Object.keys(state)) {
+          const entry = state[key][0];
+          if (!entry) continue;
+          const id = entry.user_id || key;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          people.push({ user_id: entry.user_id || null, alias: entry.alias || null, is_staff: !!entry.is_staff, team_id: entry.team_id || null });
+        }
+        setViewers(people.length);
+        setPresent(people);
       });
     }
     channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED' && presence) channel.track({ at: Date.now() });
+      if (status === 'SUBSCRIBED' && presence) {
+        channel.track({ user_id: meId, alias: meAlias, is_staff: meStaff, team_id: meTeam, at: Date.now() });
+      }
     });
     return () => { supabase.removeChannel(channel); };
-  }, [liveId, presence, refetch]);
+  }, [liveId, presence, refetch, meId, meAlias, meStaff, meTeam]);
 
   // Polling fallback while the draft is running
   const status = bundle?.draft?.status;
@@ -120,5 +139,5 @@ export function useDraft(opts: { draftId?: string | null; seasonId?: string | nu
     })();
   }, [bundle, clock, refetch]);
 
-  return { bundle, loading, error, refetch, applyBundle, clock, serverNow, viewers, authHeaders };
+  return { bundle, loading, error, refetch, applyBundle, clock, serverNow, viewers, present, authHeaders };
 }

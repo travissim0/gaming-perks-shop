@@ -138,7 +138,11 @@ export async function loadQueue(draftId: string, teamId: string): Promise<string
 
 export async function loadBundle(draft: DraftRow | null, viewerId: string | null): Promise<DraftBundle> {
   const league = await ctfdlLeague();
-  const viewer = { user_id: viewerId, is_staff: viewerId ? await isStaff(viewerId) : false, my_team_id: null as string | null };
+  const viewer = { user_id: viewerId, alias: null as string | null, is_staff: viewerId ? await isStaff(viewerId) : false, my_team_id: null as string | null };
+  if (viewerId) {
+    const { data: me } = await supabaseAdmin.from('profiles').select('in_game_alias').eq('id', viewerId).maybeSingle();
+    viewer.alias = me?.in_game_alias || null;
+  }
 
   if (!draft) {
     return { draft: null, teams: [], picks: [], players: [], season: null, league: league ? { id: league.id, slug: league.slug, name: league.name } : null, server_time: new Date().toISOString(), viewer };

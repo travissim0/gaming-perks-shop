@@ -27,7 +27,7 @@ import {
  */
 export default function CtfdlDraftLobbyPage() {
   const { user } = useAuth();
-  const { bundle, loading, error, refetch, applyBundle, clock, viewers, authHeaders } = useDraft({ presence: true });
+  const { bundle, loading, error, refetch, applyBundle, clock, viewers, present, authHeaders } = useDraft({ presence: true });
 
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('all');
@@ -281,6 +281,42 @@ export default function CtfdlDraftLobbyPage() {
           )}
         </div>
       </div>
+
+      {/* Who's in the room */}
+      {teams.length > 0 && (() => {
+        const staffHere = present.filter((p) => p.is_staff);
+        const presentTeamIds = new Set(present.map((p) => p.team_id).filter(Boolean));
+        const captainsHere = teams.filter((t) => presentTeamIds.has(t.id)).length;
+        const others = present.filter((p) => !p.is_staff && !p.team_id).length;
+        return (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-[#131A2B] px-4 py-2.5 text-xs">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8B98B0]">In the room</span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[#8B98B0]">Captains {captainsHere}/{teams.length}</span>
+              {teams.map((t) => {
+                const here = presentTeamIds.has(t.id);
+                return (
+                  <span
+                    key={t.id}
+                    title={`${t.squad_name} · captain ${t.captain_alias || '—'} · ${here ? 'in the room' : 'not here'}`}
+                    className={`rounded px-1.5 py-0.5 font-display text-sm ${here ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-white/5 text-[#8B98B0]/60 line-through'}`}
+                  >
+                    {t.squad_tag || t.squad_name.slice(0, 6)}
+                  </span>
+                );
+              })}
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[#8B98B0]">Staff</span>
+              {staffHere.length === 0 && <span className="text-[#8B98B0]/60">none</span>}
+              {staffHere.map((p, i) => (
+                <span key={p.user_id || i} className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[#F59E0B]">{p.alias || 'Staff'}</span>
+              ))}
+            </span>
+            {others > 0 && <span className="ml-auto text-[#8B98B0]">{others} watching</span>}
+          </div>
+        );
+      })()}
 
       {/* Draft order ticker */}
       {upcoming.length > 0 && (

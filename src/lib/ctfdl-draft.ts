@@ -72,9 +72,17 @@ export interface DraftBundle {
   league: { id: string; slug: string; name: string } | null;
   /** ISO timestamp from the server, so clients can offset their clocks. */
   server_time: string;
-  viewer: { user_id: string | null; is_staff: boolean; my_team_id: string | null };
+  viewer: { user_id: string | null; alias: string | null; is_staff: boolean; my_team_id: string | null };
   /** Only present for the viewer's own team (captain) — ordered player ids. */
   my_queue?: string[];
+}
+
+/** Someone in the draft room (from Realtime presence). */
+export interface DraftPresence {
+  user_id: string | null;
+  alias: string | null;
+  is_staff: boolean;
+  team_id: string | null;
 }
 
 export interface DraftChatMessage {
