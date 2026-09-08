@@ -687,7 +687,8 @@ export default function FreeAgentsPage() {
                           Message
                         </button>
                       )}
-                      {isCaptain && !isMe && (
+                      {/* Invites only make sense in a squad league (CTFPL). Draft/OvD rosters are built by the draft or staff. */}
+                      {isCaptain && !isMe && league?.format === 'squad' && (
                         <button
                           type="button"
                           onClick={() => invitePlayerToSquad(agent.player_id)}
