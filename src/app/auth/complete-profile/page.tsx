@@ -73,6 +73,10 @@ function CompleteProfileContent() {
           email: email,
           in_game_alias: alias.trim(),
           avatar_url: selectedAvatar || getDefaultAvatarUrl(),
+          // OAuth accounts land here to pick an alias; that's the last step,
+          // so mark the profile complete (otherwise it stays 'pending' and is
+          // hidden from admin player pickers).
+          registration_status: 'completed',
           updated_at: new Date().toISOString(),
         });
 

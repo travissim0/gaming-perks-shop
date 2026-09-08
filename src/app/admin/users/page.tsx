@@ -392,6 +392,7 @@ export default function AdminUsersPage() {
     switch (status) {
       case 'completed': return 'bg-green-500';
       case 'pending': return 'bg-yellow-500';
+      case 'pending_verification': return 'bg-orange-500';
       case 'failed': return 'bg-red-500';
       default: return 'bg-gray-500';
     }
@@ -611,6 +612,7 @@ export default function AdminUsersPage() {
               >
                 <option value="all">All</option>
                 <option value="pending">Pending</option>
+                <option value="pending_verification">Pending (in-game invite)</option>
                 <option value="completed">Completed</option>
                 <option value="failed">Failed</option>
               </select>
@@ -724,6 +726,7 @@ export default function AdminUsersPage() {
                             className="appearance-none bg-transparent border-none text-xs font-medium focus:outline-none cursor-pointer"
                           >
                             <option value="pending">Pending</option>
+                            <option value="pending_verification">Pending (in-game invite)</option>
                             <option value="completed">Completed</option>
                             <option value="failed">Failed</option>
                           </select>

@@ -403,6 +403,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: user.email,
           in_game_alias: inGameAlias,
           avatar_url: finalAvatarUrl,
+          // Web sign-up collects alias + password up front, so the account is
+          // complete here. (In-game invites use 'pending_verification' until
+          // /auth/complete-registration.) Without this the column stayed at
+          // its 'pending' default and admin player pickers hid the user.
+          registration_status: 'completed',
           last_seen: new Date().toISOString(),
         }]);
       
