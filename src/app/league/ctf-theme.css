@@ -117,6 +117,44 @@
   border-color: rgba(255, 255, 255, 0.06);
 }
 
+/* ---- Checkboxes ----------------------------------------------------------
+   globals.css strips native input appearance site-wide, which makes an
+   unstyled checkbox invisible. Draw our own; the tick colour follows the
+   input's `color` (so `text-[#F59E0B]` gives an amber box). */
+.ctf-theme input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+  background: var(--ctf-page);
+  color: var(--ctf-accent);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: border-color 0.12s;
+}
+.ctf-theme input[type='checkbox']::before {
+  content: '';
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scale(0);
+  transition: transform 0.1s;
+}
+.ctf-theme input[type='checkbox']:hover { border-color: currentColor; }
+.ctf-theme input[type='checkbox']:checked { border-color: currentColor; }
+.ctf-theme input[type='checkbox']:checked::before { transform: scale(1); }
+.ctf-theme input[type='checkbox']:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 /* ---- Rulebook prose (rendered TipTap documents) ------------------------ */
 .ctf-theme .rules-prose {
   color: var(--ctf-text);

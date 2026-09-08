@@ -979,7 +979,7 @@ export default function CTFManagementPage() {
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <label className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5 text-amber-300 cursor-pointer" title="Players who ticked 'interested in captaining' when registering. Only staff can see this.">
-                <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="h-4 w-4 accent-amber-400" />
+                <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="h-4 w-4 accent-amber-400" style={{ WebkitAppearance: 'checkbox', appearance: 'auto' }} />
                 Captain candidates only ({freeAgents.filter((a) => captainCandidates.has(a.player_id)).length})
               </label>
               <span className="text-gray-400">

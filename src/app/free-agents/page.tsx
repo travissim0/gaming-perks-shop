@@ -543,12 +543,12 @@ export default function FreeAgentsPage() {
             <option value="name">Name A–Z</option>
           </select>
           <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#E6EDF7]">
-            <input type="checkbox" checked={includeInSquadPlayers} onChange={(e) => setIncludeInSquadPlayers(e.target.checked)} className="h-4 w-4 accent-[#22D3EE]" />
+            <input type="checkbox" checked={includeInSquadPlayers} onChange={(e) => setIncludeInSquadPlayers(e.target.checked)} className="text-[#22D3EE]" />
             Include players in squads
           </label>
           {isStaff && (
             <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#F59E0B]/10 px-2 py-1 text-sm text-[#F59E0B]" title="Staff only — players who ticked 'interested in captaining'">
-              <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="h-4 w-4 accent-[#F59E0B]" />
+              <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="text-[#F59E0B]" />
               Captain candidates ({captainCandidates.size})
             </label>
           )}

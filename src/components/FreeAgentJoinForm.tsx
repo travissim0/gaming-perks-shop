@@ -353,7 +353,7 @@ export default function FreeAgentJoinForm({
               </select>
             </label>
             <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-[#E6EDF7]">
-              <input type="checkbox" checked={syncTimes} onChange={toggleSync} className="h-4 w-4 accent-[#22D3EE]" />
+              <input type="checkbox" checked={syncTimes} onChange={toggleSync} className="text-[#22D3EE]" />
               Same time every day
             </label>
           </div>
@@ -446,7 +446,7 @@ export default function FreeAgentJoinForm({
               type="checkbox"
               checked={formData.willing_to_captain}
               onChange={(e) => setFormData((prev) => ({ ...prev, willing_to_captain: e.target.checked }))}
-              className="mt-0.5 h-4 w-4 accent-[#F59E0B]"
+              className="mt-0.5 text-[#F59E0B]"
             />
             <span>
               <span className="block text-sm font-medium text-[#E6EDF7]">I'm interested in being a captain this season</span>
