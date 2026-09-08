@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getLeagues, pickFeatured, getOpenSeason } from '@/lib/leagues';
 
 interface Squad {
   id: string;
@@ -28,12 +29,17 @@ interface FreeAgent {
   player_id: string;
   player_alias: string;
   preferred_roles: string[];
+  secondary_roles?: string[];
   availability: string;
+  availability_days?: string[];
+  availability_times?: Record<string, { start: string; end: string }>;
   skill_level: string;
   notes?: string;
   is_active: boolean;
   created_at: string;
   contact_info?: string;
+  league_slug?: string | null;
+  season_number?: number | null;
 }
 
 interface UserProfile {
@@ -83,6 +89,9 @@ export default function CTFManagementPage() {
   const [editingFreeAgent, setEditingFreeAgent] = useState<FreeAgent | null>(null);
   const [showClearFreeAgentsConfirm, setShowClearFreeAgentsConfirm] = useState(false);
   const [clearingPool, setClearingPool] = useState(false);
+  // Staff-only: players who ticked "interested in captaining" (served by /api/free-agents/captain-interest)
+  const [captainCandidates, setCaptainCandidates] = useState<Set<string>>(new Set());
+  const [captainOnly, setCaptainOnly] = useState(false);
   
   // League ban state
   const [bannedPlayers, setBannedPlayers] = useState<BannedPlayer[]>([]);
@@ -242,20 +251,11 @@ export default function CTFManagementPage() {
   const loadFreeAgents = async () => {
     try {
       setFreeAgentsLoading(true);
-      
-      // Check if free_agents table exists
+
       const { data, error } = await supabase
         .from('free_agents')
         .select(`
-          id,
-          player_id,
-          preferred_roles,
-          availability,
-          skill_level,
-          notes,
-          is_active,
-          created_at,
-          contact_info,
+          *,
           profiles!free_agents_player_id_fkey(in_game_alias)
         `)
         .eq('is_active', true)
@@ -263,7 +263,6 @@ export default function CTFManagementPage() {
 
       if (error) {
         if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
-          // Table doesn't exist, will need to create it
           setFreeAgents([]);
           return;
         }
@@ -275,20 +274,42 @@ export default function CTFManagementPage() {
         player_id: agent.player_id,
         player_alias: agent.profiles?.in_game_alias || 'Unknown',
         preferred_roles: Array.isArray(agent.preferred_roles) ? agent.preferred_roles : [],
+        secondary_roles: Array.isArray(agent.secondary_roles) ? agent.secondary_roles : [],
         availability: agent.availability || '',
+        availability_days: Array.isArray(agent.availability_days) ? agent.availability_days : [],
+        availability_times: agent.availability_times || {},
         skill_level: agent.skill_level || 'intermediate',
         notes: agent.notes,
         is_active: agent.is_active,
         created_at: agent.created_at,
-        contact_info: agent.contact_info
+        contact_info: agent.contact_info,
+        league_slug: agent.league_slug ?? null,
+        season_number: agent.season_number ?? null,
       }));
 
       setFreeAgents(formattedAgents);
+      loadCaptainCandidates();
     } catch (error) {
       console.error('Error loading free agents:', error);
       setFreeAgents([]);
     } finally {
       setFreeAgentsLoading(false);
+    }
+  };
+
+  // Staff-only captain interest, read through the service-role API (the table has no client RLS policies).
+  const loadCaptainCandidates = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch('/api/free-agents/captain-interest', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      setCaptainCandidates(new Set<string>(json.player_ids || []));
+    } catch (e) {
+      console.error('Error loading captain candidates:', e);
     }
   };
 
@@ -471,6 +492,21 @@ export default function CTFManagementPage() {
 
   const addToFreeAgentPool = async (formData: Partial<FreeAgent>) => {
     try {
+      // Tag the row with the featured league's open season so it shows in the
+      // current pool and survives season rollover the same way self-registrations do.
+      let league_slug: string | null = null;
+      let season_number: number | null = null;
+      try {
+        const featured = pickFeatured(await getLeagues());
+        const open = featured ? await getOpenSeason(featured) : null;
+        if (featured && open) {
+          league_slug = featured.slug;
+          season_number = open.season_number;
+        }
+      } catch (e) {
+        console.warn('Could not resolve open season for manual add:', e);
+      }
+
       const { error } = await supabase
         .from('free_agents')
         .insert({
@@ -480,6 +516,8 @@ export default function CTFManagementPage() {
           skill_level: formData.skill_level || 'intermediate',
           notes: formData.notes,
           contact_info: formData.contact_info,
+          league_slug,
+          season_number,
           is_active: true
         });
 
@@ -938,6 +976,17 @@ export default function CTFManagementPage() {
               </div>
             )}
 
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5 text-amber-300 cursor-pointer" title="Players who ticked 'interested in captaining' when registering. Only staff can see this.">
+                <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="h-4 w-4 accent-amber-400" />
+                Captain candidates only ({freeAgents.filter((a) => captainCandidates.has(a.player_id)).length})
+              </label>
+              <span className="text-gray-400">
+                {freeAgents.length} active registration{freeAgents.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
             {/* Free Agents List */}
             <div className="bg-gray-800 rounded-lg overflow-hidden">
               {freeAgentsLoading ? (
@@ -947,44 +996,70 @@ export default function CTFManagementPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full text-sm">
                     <thead className="bg-gray-700">
                       <tr>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Player</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Preferred Roles</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Skill Level</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Availability</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-300">Classes</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-300">Availability (EST)</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-300">Season</th>
+                        <th className="text-left py-3 px-4 font-medium text-amber-300" title="Staff only">Captain?</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {freeAgents.map((agent) => (
-                        <tr key={agent.id} className="border-b border-gray-700 hover:bg-gray-700/30">
+                      {freeAgents.filter((a) => !captainOnly || captainCandidates.has(a.player_id)).map((agent) => (
+                        <tr key={agent.id} className="border-b border-gray-700 hover:bg-gray-700/30 align-top">
                           <td className="py-3 px-4">
                             <div className="font-medium text-white">{agent.player_alias}</div>
                             {agent.contact_info && (
-                              <div className="text-sm text-gray-400">{agent.contact_info}</div>
+                              <div className="text-xs text-gray-400">@{agent.contact_info.replace(/^@/, '')}</div>
+                            )}
+                            {agent.notes && (
+                              <div className="mt-1 max-w-xs text-xs text-gray-500 line-clamp-2" title={agent.notes}>{agent.notes}</div>
                             )}
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex flex-wrap gap-1">
                               {agent.preferred_roles.map((role, index) => (
-                                <span key={index} className="bg-blue-600 text-white px-2 py-1 rounded text-xs">
+                                <span key={`p-${index}`} className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">
+                                  {role}
+                                </span>
+                              ))}
+                              {(agent.secondary_roles || []).map((role, index) => (
+                                <span key={`s-${index}`} className="bg-gray-600 text-gray-200 px-2 py-0.5 rounded text-xs" title="Secondary">
                                   {role}
                                 </span>
                               ))}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              agent.skill_level === 'beginner' ? 'bg-green-600 text-white' :
-                              agent.skill_level === 'intermediate' ? 'bg-yellow-600 text-white' :
-                              'bg-red-600 text-white'
-                            }`}>
-                              {agent.skill_level}
-                            </span>
+                          <td className="py-3 px-4 text-gray-300">
+                            {(agent.availability_days?.length || 0) > 0 ? (
+                              <div className="space-y-1">
+                                <div className="flex gap-0.5">
+                                  {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map((d) => {
+                                    const on = agent.availability_days!.includes(d);
+                                    return <span key={d} title={d} className={`w-6 rounded py-0.5 text-center text-[10px] font-semibold ${on ? 'bg-green-500/25 text-green-300' : 'bg-gray-700 text-gray-500'}`}>{d.slice(0, 2)}</span>;
+                                  })}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {Array.from(new Set(Object.values(agent.availability_times || {}).map((t) => `${t.start}–${t.end}`))).join(' · ') || 'Times not set'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs">{agent.availability || '—'}</span>
+                            )}
                           </td>
-                          <td className="py-3 px-4 text-gray-300">{agent.availability}</td>
+                          <td className="py-3 px-4 text-xs text-gray-300 whitespace-nowrap">
+                            {agent.league_slug ? `${agent.league_slug.toUpperCase()} S${agent.season_number ?? '?'}` : <span className="text-gray-500">untagged</span>}
+                          </td>
+                          <td className="py-3 px-4">
+                            {captainCandidates.has(agent.player_id) ? (
+                              <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">Yes</span>
+                            ) : (
+                              <span className="text-xs text-gray-500">—</span>
+                            )}
+                          </td>
                           <td className="py-3 px-4">
                             <div className="flex space-x-2">
                               <button 

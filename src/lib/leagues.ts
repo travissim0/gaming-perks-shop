@@ -137,6 +137,40 @@ export async function getLatestSeason(league: LeagueInfo): Promise<LeagueSeason 
   return (data as LeagueSeason) || null;
 }
 
+/**
+ * The season players can register for: the active season, else an upcoming
+ * one. Null means registration is closed (off-season).
+ */
+export async function getOpenSeason(league: LeagueInfo): Promise<LeagueSeason | null> {
+  const active = await getActiveSeason(league);
+  if (active) return active;
+  const latest = await getLatestSeason(league);
+  if (latest && latest.status === 'upcoming') return latest;
+  return null;
+}
+
+/** "CTFDL Season 5" / "CTFDL · Fall 2026" style label for headers. */
+export function seasonLabel(league: LeagueInfo, season: LeagueSeason | null): string {
+  if (!season) return league.name;
+  const name = season.season_name?.trim();
+  const generic = `Season ${season.season_number}`;
+  if (name && name.toLowerCase() !== generic.toLowerCase()) return `${league.name} ${generic} · ${name}`;
+  return `${league.name} ${generic}`;
+}
+
+/** How the pool is used, worded per league format (draft vs squad vs OvD). */
+export function poolBlurb(league: LeagueInfo): string {
+  switch (league.format) {
+    case 'draft':
+      return 'Captains draft their teams from this pool once registration closes.';
+    case 'ovd':
+      return 'Staff build the offense and defense rosters from this pool.';
+    case 'squad':
+    default:
+      return 'Squad captains recruit from this pool and can invite you directly.';
+  }
+}
+
 /** Active season if there is one; otherwise the latest season and whether it's upcoming or off-season. */
 export async function getSeasonStatus(
   league: LeagueInfo,

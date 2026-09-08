@@ -100,18 +100,37 @@ async function retryWithContext<T>(
 
 // Enhanced helper functions with better error handling and retry logic
 
-export const getFreeAgents = async () => {
+/**
+ * Active free agents. When a league season is given, only that season's
+ * registrations are returned (legacy rows with no league tag are included so
+ * nobody vanishes before the backfill runs). Falls back to the untagged query
+ * if the league columns don't exist yet.
+ */
+export const getFreeAgents = async (leagueSlug?: string, seasonNumber?: number) => {
   try {
     const operation = async () => {
-      const { data, error } = await supabase
-        .from('free_agents')
-        .select(`
+      const select = `
           *,
           profiles!free_agents_player_id_fkey (
             in_game_alias,
             avatar_url
           )
-        `)
+        `;
+
+      if (leagueSlug && typeof seasonNumber === 'number') {
+        const scoped = await supabase
+          .from('free_agents')
+          .select(select)
+          .eq('is_active', true)
+          .or(`league_slug.is.null,and(league_slug.eq.${leagueSlug},season_number.eq.${seasonNumber})`)
+          .order('created_at', { ascending: false });
+        if (!scoped.error) return scoped.data || [];
+        console.warn('getFreeAgents: season filter failed, falling back to unscoped', scoped.error.message);
+      }
+
+      const { data, error } = await supabase
+        .from('free_agents')
+        .select(select)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
