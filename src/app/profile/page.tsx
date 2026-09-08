@@ -21,6 +21,7 @@ interface Squad {
   tag: string;
   description: string | null;
   is_legacy: boolean;
+  is_active?: boolean;
 }
 
 interface SquadMember {
@@ -227,39 +228,39 @@ export default function ProfilePage() {
     if (!user) return;
 
     try {
+      // Current squad = active membership in a squad that is itself active and not legacy.
       const { data: activeSquads } = await supabase
         .from('squad_members')
         .select(`
           squads!inner(
-            id, name, tag, description, is_legacy
+            id, name, tag, description, is_legacy, is_active
           )
         `)
         .eq('player_id', user.id)
         .eq('status', 'active')
         .eq('squads.is_legacy', false)
+        .eq('squads.is_active', true)
         .limit(1) as { data: SquadMember[] | null; error: any };
 
-      const { data: legacySquads } = await supabase
+      // Past squads = legacy, or archived (inactive) from an earlier season.
+      const { data: pastSquads } = await supabase
         .from('squad_members')
         .select(`
           squads!inner(
-            id, name, tag, description, is_legacy
+            id, name, tag, description, is_legacy, is_active
           )
         `)
         .eq('player_id', user.id)
-        .eq('squads.is_legacy', true)
-        .limit(1) as { data: SquadMember[] | null; error: any };
+        .or('is_legacy.eq.true,is_active.eq.false', { referencedTable: 'squads' })
+        .limit(3) as { data: SquadMember[] | null; error: any };
 
       const squadsProfile: Squad[] = [];
       if (activeSquads?.length && activeSquads[0].squads) {
         squadsProfile.push(activeSquads[0].squads);
       }
-      if (
-        legacySquads?.length && legacySquads[0].squads &&
-        (!activeSquads?.length || !activeSquads[0].squads || legacySquads[0].squads.id !== activeSquads[0].squads.id)
-      ) {
-        squadsProfile.push(legacySquads[0].squads);
-      }
+      (pastSquads || []).forEach((m) => {
+        if (m.squads && !squadsProfile.some((s) => s.id === m.squads.id)) squadsProfile.push(m.squads);
+      });
       setUserSquad(squadsProfile);
     } catch (error) {
       console.error('Error loading user squad:', error);
@@ -533,31 +534,33 @@ export default function ProfilePage() {
           {/* Squad Section (read-only) */}
           <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/20 rounded-lg p-6 mb-6">
             <h2 className="text-lg font-bold text-cyan-400 mb-4 tracking-wide">Squad</h2>
-            {userSquad.length > 0 ? (
-              userSquad.filter(squad => squad && squad.id).map((squad) => (
-                <div key={squad.id} className="bg-gray-800 border border-cyan-500/30 rounded-lg p-4 mb-3 last:mb-0">
+            {userSquad.filter(squad => squad && squad.id).map((squad) => {
+              const isCurrent = !squad.is_legacy && (squad as any).is_active !== false;
+              return (
+                <div key={squad.id} className={`bg-gray-800 border rounded-lg p-4 mb-3 ${isCurrent ? 'border-cyan-500/30' : 'border-gray-600/50 opacity-80'}`}>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold text-cyan-400">
+                    <h3 className={`text-xl font-bold ${isCurrent ? 'text-cyan-400' : 'text-gray-300'}`}>
                       [{squad.tag || 'N/A'}] {squad.name || 'Unknown Squad'}
                     </h3>
                     <Link
                       href={`/squads/${squad.id}`}
-                      className="bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded text-sm font-medium transition-colors duration-300 text-white"
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors duration-300 text-white ${isCurrent ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-gray-600 hover:bg-gray-500'}`}
                     >
-                      Manage Squad
+                      {isCurrent ? 'Manage Squad' : 'View'}
                     </Link>
                   </div>
                   {squad.description && (
                     <p className="text-gray-300 text-sm">{squad.description}</p>
                   )}
-                  {squad.is_legacy && (
-                    <span className="text-xs text-yellow-400 font-mono">Legacy Squad</span>
+                  {!isCurrent && (
+                    <span className="text-xs text-yellow-400 font-mono">{squad.is_legacy ? 'Legacy squad' : 'Archived squad (past season)'}</span>
                   )}
                 </div>
-              ))
-            ) : (
+              );
+            })}
+            {!userSquad.some((squad) => squad && !squad.is_legacy && (squad as any).is_active !== false) && (
               <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 text-center">
-                <p className="text-gray-400 mb-3">You are not currently in a squad</p>
+                <p className="text-gray-400 mb-3">{userSquad.length > 0 ? 'You are not on a current squad' : 'You are not currently in a squad'}</p>
                 <Link
                   href="/squads"
                   className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-medium transition-colors duration-300 text-white"

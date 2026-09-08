@@ -109,16 +109,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if user is already in an active (non-legacy) squad
+    // Check if user is already in a current squad. Legacy squads and archived
+    // (inactive) squads from past seasons don't count — a player can keep
+    // those memberships for history and still create or join a new squad.
     const { data: existingMembership, error: membershipError } = await supabase
       .from('squad_members')
       .select(`
         id,
-        squads!inner(is_legacy)
+        squads!inner(is_legacy, is_active)
       `)
       .eq('player_id', captainId)
       .eq('status', 'active')
       .eq('squads.is_legacy', false)
+      .eq('squads.is_active', true)
       .maybeSingle();
 
     if (membershipError && membershipError.code !== 'PGRST116') {

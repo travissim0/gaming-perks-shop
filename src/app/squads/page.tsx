@@ -405,15 +405,18 @@ export default function SquadsPage() {
         role: m.role
       })));
 
-      // Prioritize squad selection:
-      // 1. Active (non-legacy) squads first
-      // 2. Then legacy squads
-      // 3. Then inactive squads
-      const membershipData = allMembershipsData.find(m => 
+      // Only a CURRENT squad (active, not legacy) counts as "your squad" here.
+      // Legacy or archived squads from past seasons keep their membership rows
+      // for history but must not block creating/joining a new squad; they stay
+      // reachable from the profile page ("View") and /squads/[id].
+      const membershipData = allMembershipsData.find(m =>
         (m.squads as any).is_legacy === false && (m.squads as any).is_active !== false
-      ) || allMembershipsData.find(m => 
-        (m.squads as any).is_legacy === true
-      ) || allMembershipsData[0]; // Fallback to first one
+      );
+      if (!membershipData) {
+        console.log('🏴 Only legacy/archived memberships found, treating as no current squad');
+        setUserSquad(null);
+        return;
+      }
 
       const squadData = membershipData.squads as any;
       console.log('🏴 Selected squad for display:', {

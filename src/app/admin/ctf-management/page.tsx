@@ -420,7 +420,9 @@ export default function CTFManagementPage() {
     if (ids.length === 0) { setShowArchiveConfirm(false); return; }
     setArchiving(true);
     try {
-      const { error } = await supabase.from('squads').update({ is_active: false }).in('id', ids);
+      // Inactive + legacy: the site already lets players hold legacy memberships
+      // alongside one current squad, so this frees them to create/join next season.
+      const { error } = await supabase.from('squads').update({ is_active: false, is_legacy: true }).in('id', ids);
       if (error) throw error;
       setSquads((prev) => prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: false } : s)));
       toast.success(`Archived ${ids.length} squad${ids.length === 1 ? '' : 's'} from ${rollover.league.name} Season ${rollover.season.season_number}`);
@@ -811,7 +813,7 @@ export default function CTFManagementPage() {
                     <div className="font-medium text-amber-200">Season rollover · {label}</div>
                     <div className="text-gray-400">
                       {pending.length > 0
-                        ? `${pending.length} squad${pending.length === 1 ? '' : 's'} from this season ${pending.length === 1 ? 'is' : 'are'} still active. Archiving marks them inactive so their players read as "last season" in the free-agent pool. Memberships and history are kept.`
+                        ? `${pending.length} squad${pending.length === 1 ? '' : 's'} from this season ${pending.length === 1 ? 'is' : 'are'} still active. Archiving marks them inactive and legacy, so their players read as "last season" in the pool and can create or join a new squad. Memberships and history are kept.`
                         : 'All squads from this season are already archived.'}
                     </div>
                   </div>
