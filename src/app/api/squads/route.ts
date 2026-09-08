@@ -59,14 +59,32 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, tag, description, captainId, logoUrl, discordLink, websiteLink } = body;
+    const { name, description, captainId, logoUrl, discordLink, websiteLink } = body;
+    let tag: string = typeof body.tag === 'string' ? body.tag.trim().toUpperCase() : '';
 
-    // Validate required fields
-    if (!name || !tag || !captainId) {
+    // Validate required fields (tag is optional — derived from the name when blank)
+    if (!name || !captainId) {
       return NextResponse.json(
-        { error: 'Name, tag, and captain ID are required' },
+        { error: 'Name and captain ID are required' },
         { status: 400 }
       );
+    }
+
+    if (!tag) {
+      const { makeSquadTag } = await import('@/lib/squadTag');
+      const base = makeSquadTag(name);
+      tag = base;
+      // Avoid colliding with an active squad's tag: BRUH → BRU1, BRU2, …
+      for (let i = 0; i < 10; i++) {
+        const { data: clash } = await supabase
+          .from('squads')
+          .select('id')
+          .eq('tag', tag)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (!clash) break;
+        tag = base.slice(0, 3) + (i + 1);
+      }
     }
 
     // Check if squad name or tag already exists

@@ -1491,8 +1491,8 @@ export default function SquadsPage() {
   };
 
   const handleCreateSquad = async () => {
-    if (!squadName.trim() || !squadTag.trim() || !user) {
-      toast.error('Please fill in all required fields');
+    if (!squadName.trim() || !user) {
+      toast.error('Please enter a squad name');
       return;
     }
 
@@ -2339,14 +2339,14 @@ export default function SquadsPage() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Squad Tag (3-5 chars)</label>
+                  <label className="block text-sm font-medium mb-2">Squad Tag <span className="text-gray-400 font-normal">(optional — auto-generated from the name)</span></label>
                   <input
                     type="text"
                     value={squadTag}
                     onChange={(e) => setSquadTag(e.target.value.toUpperCase())}
                     className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
                     maxLength={5}
-                    required
+                    placeholder="Leave blank to auto-generate"
                   />
                 </div>
                 <div className="mb-4">

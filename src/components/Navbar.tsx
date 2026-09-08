@@ -637,6 +637,12 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         CTFDL
                       </Link>
                       <Link
+                        href="/league/ctfdl/draft"
+                        className="flex items-center px-4 py-2 pl-11 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 transition-colors text-sm"
+                      >
+                        CTFDL draft
+                      </Link>
+                      <Link
                         href="/league/standings?league=ovdl"
                         className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                       >
@@ -929,6 +935,16 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       >
                         <span className="mr-3">🛡️</span>
                         CTFDL
+                      </Link>
+                      <Link
+                        href="/league/ctfdl/draft"
+                        className="flex items-center px-3 py-2 pl-10 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                        onClick={() => {
+                          setActiveMobileDropdown(null);
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        CTFDL draft
                       </Link>
                       <Link
                         href="/league/standings?league=ovdl"
@@ -1771,6 +1787,12 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     <span className="font-medium">CTFDL</span>
                   </Link>
                   <Link
+                    href="/league/ctfdl/draft"
+                    className="flex items-center px-4 py-2 pl-12 text-gray-400 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-sm"
+                  >
+                    CTFDL draft
+                  </Link>
+                  <Link
                     href="/league/standings?league=ovdl"
                     className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                   >
@@ -2005,6 +2027,13 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     >
                       <span className="mr-3">🛡️</span>
                       CTFDL
+                    </Link>
+                    <Link
+                      href="/league/ctfdl/draft"
+                      className="flex items-center px-3 py-2 pl-10 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      CTFDL draft
                     </Link>
                     <Link
                       href="/league/standings?league=ovdl"
