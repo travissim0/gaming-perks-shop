@@ -51,6 +51,13 @@ export interface WeaponCount {
   count: number;
 }
 
+/** Per-weapon accuracy from the zone's tracker (script v1.7.0+); bio darts are reported separately as bio_dart_hits. */
+export interface WeaponHits {
+  name: string | null;
+  fired: number;
+  landed: number;
+}
+
 export interface PlayerPayload {
   alias: string;
   side: Side | null;
@@ -76,6 +83,8 @@ export interface PlayerPayload {
   /** root weapon id (as string key) -> {name, count} */
   weapon_kills: Record<string, WeaponCount>;
   weapon_deaths: Record<string, WeaponCount>;
+  /** weapon id (as string key) -> {name, fired, landed}; empty from scripts before v1.7.0 */
+  weapon_hits: Record<string, WeaponHits>;
 }
 
 export interface KillEventPayload {

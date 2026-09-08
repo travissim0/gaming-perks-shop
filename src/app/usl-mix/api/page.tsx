@@ -60,7 +60,7 @@ export default function UslMixApiDocsPage() {
             <Endpoint
               method="GET"
               path="/api/usl-mix/games/{id}"
-              desc="One game in full: teams, every player row (kills, deaths, class time, accuracy, heals, weapon kills, rating change) and every kill event with weapon attribution."
+              desc="One game in full: teams, every player row (kills, deaths, class time, shots fired / landed, accuracy, per-weapon hits, heals, weapon kills, rating change) and every kill event with weapon attribution."
               params={[['id', 'game UUID or the zone script match_id']]}
               example={`curl "${BASE}/api/usl-mix/games/<uuid>"`}
             />
@@ -96,13 +96,13 @@ export default function UslMixApiDocsPage() {
             <Endpoint
               method="GET"
               path="/api/usl-mix/leaders"
-              desc="Top players over a rolling window: per-player totals (kills, K/D, heals, opening kills, rating change), category leaders, and the best player in every class."
+              desc="Top players over a rolling window: per-player totals (kills, K/D, hits, accuracy, heals, opening kills, rating change), category leaders, the best player in every class, and single-game records (most kills / opening kills / hits, best accuracy, most healing in one game)."
               params={[
                 ['period', 'week | month | year | all (rolling 7 / 30 / 365 days; default week)'],
                 ['kind', 'mix | pub | all'],
                 ['map', 'restrict to one map'],
                 ['minGames', 'games needed for the K/D, win-rate and per-class rankings, default 2'],
-                ['board', 'flat mode, one ranked list: kills | kd | kills_per_game | win_rate | heal | opening_kills | rating_gain | class:<name>'],
+                ['board', 'flat mode, one ranked list: kills | kd | kills_per_game | win_rate | heal | hits | accuracy | opening_kills | rating_gain | class:<name> | record:<kills|opening_kills|hits|accuracy|heal>'],
                 ['limit', 'entries in flat mode, default 10, max 100'],
               ]}
               example={`curl "${BASE}/api/usl-mix/leaders?period=month"

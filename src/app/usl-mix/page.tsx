@@ -64,11 +64,21 @@ const PERIOD_OPTIONS: Array<{ value: Period; label: string }> = [
 const PERIOD_LABEL: Record<Period, string> = { week: 'last 7 days', month: 'last 30 days', year: 'last 365 days', all: 'all time' };
 interface LeaderEntry { alias: string; value: number; display: string; games: number; top_class: string | null; url: string }
 interface ClassLeader { alias: string; games: number; wins: number; losses: number; kills: number; deaths: number; kd_ratio: number; kills_per_game: number; heal_per_game: number; accuracy: number | null; url: string }
-type LeaderBoardKey = 'kills' | 'kd' | 'kills_per_game' | 'win_rate' | 'heal' | 'opening_kills' | 'rating_gain';
+type LeaderBoardKey = 'kills' | 'kd' | 'kills_per_game' | 'win_rate' | 'heal' | 'hits' | 'accuracy' | 'opening_kills' | 'rating_gain';
+type RecordKey = 'kills' | 'opening_kills' | 'hits' | 'accuracy' | 'heal';
+interface RecordEntry { alias: string; value: number; display: string; game_id: string; map_key: string | null; ended_at: string | null; kills: number; deaths: number; primary_class: string | null; url: string; player_url: string }
+const RECORD_TILES: Array<{ key: RecordKey; label: string; color: string }> = [
+  { key: 'kills', label: 'Most kills in a game', color: 'text-amber-300' },
+  { key: 'opening_kills', label: 'Most opening kills in a game', color: 'text-amber-300' },
+  { key: 'hits', label: 'Most hits in a game', color: 'text-sky-300' },
+  { key: 'accuracy', label: 'Best accuracy in a game', color: 'text-teal-300' },
+  { key: 'heal', label: 'Most healing in a game', color: 'text-green-300' },
+];
 interface Leaders {
   filters: { period: Period; minGames: number };
   totals: { games: number; players: number };
   top: Record<LeaderBoardKey, LeaderEntry[]>;
+  records?: Record<RecordKey, RecordEntry[]>;
   by_class: Array<{ class_name: string; ranked_by: string; min_games_met: boolean; appearances: number; players: number; leader: ClassLeader; runner_up: ClassLeader | null }>;
 }
 /** The six headline categories of the "Top players" panel; the API also has kills_per_game. */
@@ -77,6 +87,8 @@ const LEADER_TILES: Array<{ key: LeaderBoardKey; label: string; hint: (minGames:
   { key: 'kd', label: 'Best K/D', hint: (m) => `at least ${m} games`, color: 'text-cyan-300' },
   { key: 'win_rate', label: 'Best win rate', hint: (m) => `at least ${m} games`, color: 'text-emerald-300' },
   { key: 'heal', label: 'Most healing', hint: () => 'HP healed', color: 'text-green-300' },
+  { key: 'hits', label: 'Most hits', hint: () => 'shots landed', color: 'text-sky-300' },
+  { key: 'accuracy', label: 'Best accuracy', hint: () => 'at least 100 shots', color: 'text-teal-300' },
   { key: 'opening_kills', label: 'Most opening kills', hint: () => 'first kill of a fight', color: 'text-amber-300' },
   { key: 'rating_gain', label: 'Biggest rating gain', hint: () => 'rated mixes', color: 'text-purple-300' },
 ];
@@ -303,6 +315,33 @@ export default function UslMixOverviewPage() {
                   </table>
                 </div>
               )}
+            </div>
+            {/* single-game records */}
+            <div className="lg:col-span-5 border-t border-gray-700/40 pt-4">
+              <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">Single-game records · {PERIOD_LABEL[period]} · accuracy needs 50 shots</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                {RECORD_TILES.map((t) => {
+                  const r = leadersData.records?.[t.key]?.[0];
+                  return (
+                    <div key={t.key} className="rounded-xl border border-gray-700/40 bg-gray-900/40 p-3 min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400">{t.label}</div>
+                      {r ? (
+                        <>
+                          <div className="flex items-baseline gap-2 mt-1 min-w-0">
+                            <span className={`text-xl font-black tabular-nums ${t.color}`}>{r.display}</span>
+                            <Link href={r.player_url} className="text-sm font-bold text-cyan-300 hover:text-cyan-200 truncate">{r.alias}</Link>
+                          </div>
+                          <Link href={r.url} className="block text-xs text-gray-500 hover:text-gray-300 truncate" title="open the game">
+                            {r.kills}-{r.deaths}{r.primary_class ? ` as ${r.primary_class}` : ''} on {r.map_key ?? '?'} · {fmtDate(r.ended_at)}
+                          </Link>
+                        </>
+                      ) : (
+                        <div className="mt-1 text-sm text-gray-600">—</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

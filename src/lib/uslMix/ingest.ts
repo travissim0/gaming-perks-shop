@@ -108,6 +108,7 @@ export function validatePayload(body: any): GameResultPayload {
       play_seconds: numOr(p?.play_seconds, 0),
       weapon_kills: sanitizeWeaponMap(p?.weapon_kills),
       weapon_deaths: sanitizeWeaponMap(p?.weapon_deaths),
+      weapon_hits: sanitizeHitMap(p?.weapon_hits),
     };
   });
   // duplicate aliases would violate the unique constraint - merge is wrong, reject is right
@@ -177,6 +178,16 @@ function sanitizeNumberMap(v: unknown): Record<string, number> {
   if (!v || typeof v !== 'object') return out;
   for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
     if (isNum(val)) out[String(k).slice(0, 64)] = val;
+  }
+  return out;
+}
+
+function sanitizeHitMap(v: unknown): Record<string, { name: string | null; fired: number; landed: number }> {
+  const out: Record<string, { name: string | null; fired: number; landed: number }> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const [k, val] of Object.entries(v as Record<string, any>)) {
+    if (!/^\d+$/.test(k)) continue;
+    out[k] = { name: normalizeWeaponName(strOrNull(val?.name)), fired: numOr(val?.fired, 0), landed: numOr(val?.landed, 0) };
   }
   return out;
 }
@@ -291,9 +302,15 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     play_seconds: p.play_seconds,
     weapon_kills: p.weapon_kills,
     weapon_deaths: p.weapon_deaths,
+    weapon_hits: p.weapon_hits,
     ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING),
   }));
   let { error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows);
+  if (playersErr && /column .*weapon_hits.* does not exist/i.test(playersErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-weapon-hits.sql) - drop the per-weapon map rather than lose the game
+    console.warn('[usl-mix] usl_mix_game_players.weapon_hits column missing; inserting without it');
+    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ weapon_hits: _h, ...rest }) => rest)));
+  }
   if (playersErr && /column .*shotcaller.* does not exist/i.test(playersErr.message || '')) {
     // schema not migrated yet (usl-mix-add-shotcaller.sql) - drop the flag rather than lose the game
     console.warn('[usl-mix] usl_mix_game_players.is_shotcaller column missing; inserting without it');

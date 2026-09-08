@@ -41,12 +41,13 @@ interface PlayerRow {
   weapon_kills: Record<string, { name: string | null; count: number }>; rating_before: number | null; rating_after: number | null; rating_delta: number | null; performance: number | null;
   opening_kills: number; opening_deaths: number; opening_fights_won: number;
 }
-type TeamCol = 'player' | 'class' | 'kills' | 'deaths' | 'open' | 'acc' | 'heal' | 'delta';
+type TeamCol = 'player' | 'class' | 'kills' | 'deaths' | 'hits' | 'open' | 'acc' | 'heal' | 'delta';
 const TEAM_GETTERS: SortGetters<PlayerRow, TeamCol> = {
   player: (p) => p.alias,
   class: (p) => p.primary_class,
   kills: (p) => p.kills,
   deaths: (p) => p.deaths,
+  hits: (p) => p.shots_landed,
   open: (p) => p.opening_kills,
   acc: (p) => p.accuracy,
   heal: (p) => p.heal_amount,
@@ -231,6 +232,7 @@ export default function UslMixGamePage() {
                     <SortTh col="class" sort={teamSort} onToggle={toggleTeamSort} text className="text-left py-2 px-2">Class</SortTh>
                     <SortTh col="kills" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">K</SortTh>
                     <SortTh col="deaths" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">D</SortTh>
+                    <SortTh col="hits" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2" title="shots that hit an enemy (bio darts not counted)">Hits</SortTh>
                     <SortTh col="open" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2" title="opening kills (fights won after)">Open</SortTh>
                     <SortTh col="acc" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Acc</SortTh>
                     <SortTh col="heal" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Heal</SortTh>
@@ -250,6 +252,7 @@ export default function UslMixGamePage() {
                         {p.kills}{p.team_kills ? <span className="text-xs text-rose-400" title="team kills"> ({p.team_kills}tk)</span> : null}
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.deaths}</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-300" title={p.shots_fired ? `${p.shots_landed} of ${p.shots_fired} shots` : undefined}>{p.shots_landed || '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap" title={`${p.opening_kills} opening kills · ${p.opening_fights_won} fights won after · ${p.opening_deaths} opening deaths`}>
                         {p.opening_kills ? <span className="text-amber-300 font-semibold">{p.opening_kills}</span> : <span className="text-gray-600">—</span>}
                         {p.opening_fights_won ? <span className="text-xs text-emerald-300"> ({p.opening_fights_won}w)</span> : null}
