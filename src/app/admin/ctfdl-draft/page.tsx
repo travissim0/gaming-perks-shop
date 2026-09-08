@@ -302,8 +302,17 @@ export default function CtfdlDraftAdminPage() {
               {draft.status !== 'setup' && draft.current_pick > 1 && <button onClick={() => confirm('Undo the last pick?') && action('undo', 'Last pick undone')} disabled={!!busy} className={`${btn} bg-gray-700 hover:bg-gray-600 text-white`}>Undo last pick</button>}
               {draft.status === 'live' && <button onClick={() => action('skip', 'Turn skipped')} disabled={!!busy} className={`${btn} bg-gray-700 hover:bg-gray-600 text-white`}>Skip turn</button>}
               {(draft.status === 'live' || draft.status === 'paused') && <button onClick={() => confirm('End the draft now?') && action('end', 'Draft ended')} disabled={!!busy} className={`${btn} bg-red-700 hover:bg-red-600 text-white`}>End draft</button>}
+              {draft.status !== 'setup' && (
+                <button
+                  onClick={() => confirm(`Reset this draft? All ${bundle?.picks.length || 0} picks are pulled back and the players the draft placed on squads are removed from them. Teams, ranking and queues are kept.`) && action('reset', 'Draft reset to not started')}
+                  disabled={!!busy}
+                  className={`${btn} bg-gray-700 hover:bg-amber-700 text-white ml-auto`}
+                >
+                  Reset draft
+                </button>
+              )}
               {draft.status === 'setup' && <button onClick={() => confirm('Delete this draft? Teams and ranking will be lost.') && action('delete', 'Draft deleted')} disabled={!!busy} className={`${btn} bg-gray-700 hover:bg-red-700 text-white ml-auto`}>Delete draft</button>}
-              <span className="text-xs text-gray-500 w-full">Picking for captains happens in the lobby: as staff, every Pick button there picks for whichever team is on the clock.</span>
+              <span className="text-xs text-gray-500 w-full">Picking for captains happens in the lobby: as staff, every Pick button there picks for whichever team is on the clock. To scrap a draft that has run (e.g. a test), Reset it first, then Delete.</span>
             </div>
           </>
         )}

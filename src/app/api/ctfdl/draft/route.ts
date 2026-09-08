@@ -32,7 +32,9 @@ export async function GET(request: NextRequest) {
  * { action: 'update', draft_id, order_type?, roster_size?, pick_seconds?, auto_pick? }
  * { action: 'set_teams', draft_id, squad_ids: [] }        (in pick order; setup only)
  * { action: 'set_rankings', draft_id, player_ids: [] }    (staff ranking, any time)
- * { action: 'start' | 'pause' | 'resume' | 'undo' | 'skip' | 'end' | 'delete', draft_id }
+ * { action: 'start' | 'pause' | 'resume' | 'undo' | 'skip' | 'end' | 'reset' | 'delete', draft_id }
+ *   reset  = pull back every pick (and the memberships it created), back to setup
+ *   delete = only while in setup (reset first if it has run)
  */
 export async function POST(request: NextRequest) {
   const user = await userFromRequest(request);
@@ -166,6 +168,30 @@ export async function POST(request: NextRequest) {
           .eq('id', draftId);
         if (error) throw new Error(error.message);
         await postSystemMessage(draftId, 'Staff ended the draft.');
+        break;
+      }
+      case 'reset': {
+        // Pull every pick back: remove only the squad memberships the draft
+        // created, delete the picks, and return to setup. Teams, ranking,
+        // queues and chat history are kept.
+        const { data: picks, error: pErr } = await supabaseAdmin
+          .from('ctfdl_draft_picks')
+          .select('id, membership_id')
+          .eq('draft_id', draftId);
+        if (pErr) throw new Error(pErr.message);
+        const memberIds = (picks || []).map((p: any) => p.membership_id).filter(Boolean);
+        if (memberIds.length > 0) {
+          const { error } = await supabaseAdmin.from('squad_members').delete().in('id', memberIds);
+          if (error) throw new Error(error.message);
+        }
+        const { error: dErr } = await supabaseAdmin.from('ctfdl_draft_picks').delete().eq('draft_id', draftId);
+        if (dErr) throw new Error(dErr.message);
+        const { error } = await supabaseAdmin
+          .from('ctfdl_drafts')
+          .update({ status: 'setup', current_pick: 1, turn_started_at: null, paused_remaining: null, started_at: null, completed_at: null, updated_at: new Date().toISOString() })
+          .eq('id', draftId);
+        if (error) throw new Error(error.message);
+        await postSystemMessage(draftId, `Staff reset the draft — ${picks?.length || 0} pick${(picks?.length || 0) === 1 ? '' : 's'} pulled back, players returned to the pool.`);
         break;
       }
       case 'delete': {

@@ -112,6 +112,7 @@ export default function CtfdlDraftLobbyPage() {
     if (!draft) return;
     if (action === 'end' && !confirm('End the draft now? Remaining picks will not be made.')) return;
     if (action === 'undo' && !confirm('Undo the last pick? The player goes back to the pool and that team is back on the clock.')) return;
+    if (action === 'reset' && !confirm('Reset the whole draft? Every pick is pulled back, drafted players come off their squads, and the draft returns to not started.')) return;
     setBusy(action);
     try {
       const res = await fetch('/api/ctfdl/draft', {
@@ -325,6 +326,7 @@ export default function CtfdlDraftLobbyPage() {
           {draft.status !== 'setup' && draft.current_pick > 1 && <button onClick={() => staffAction('undo')} disabled={!!busy} className="rounded-md bg-white/10 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/15 disabled:opacity-50">Undo last pick</button>}
           {draft.status === 'live' && <button onClick={() => staffAction('skip')} disabled={!!busy} className="rounded-md bg-white/10 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/15 disabled:opacity-50">Skip turn</button>}
           {(draft.status === 'live' || draft.status === 'paused') && <button onClick={() => staffAction('end')} disabled={!!busy} className="rounded-md px-3 py-1.5 text-sm text-[#F87171] hover:bg-white/10 disabled:opacity-50">End draft</button>}
+          {draft.status === 'complete' && <button onClick={() => staffAction('reset')} disabled={!!busy} className="rounded-md px-3 py-1.5 text-sm text-[#F59E0B] hover:bg-white/10 disabled:opacity-50">Reset draft</button>}
           {draft.status === 'live' && onClock && <span className="text-xs text-[#8B98B0]">Pick buttons below pick for {onClock.squad_name}.</span>}
           <Link href="/admin/ctfdl-draft" className="ml-auto text-xs text-[#F59E0B] hover:underline">Draft settings</Link>
         </div>
