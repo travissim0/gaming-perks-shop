@@ -159,22 +159,19 @@ export default function NeutralNavbar() {
                         <span>🏆</span>
                         <span className="font-semibold">CTF Leagues</span>
                       </Link>
-                      <Link
-                        href="/map-vote"
+                      <a
+                        href="https://www.uslzone.com/pages/mix.php"
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
                         onClick={() => setShowZonesDropdown(false)}
                       >
-                        <span>🗳️</span>
-                        <span className="font-semibold">USL Map Vote</span>
-                      </Link>
-                      <Link
-                        href="/dueling/bo9-stats"
-                        className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 transition-all"
-                        onClick={() => setShowZonesDropdown(false)}
-                      >
-                        <span>📊</span>
-                        <span className="font-semibold">USL Dueling Stats</span>
-                      </Link>
+                        <span>🎖️</span>
+                        <span className="font-semibold">USL Mix Stats</span>
+                        <svg className="w-3 h-3 ml-auto text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
                       <Link
                         href="/triple-threat"
                         className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-orange-300 hover:bg-orange-600/10 transition-all"
@@ -182,31 +179,6 @@ export default function NeutralNavbar() {
                       >
                         <span>⚡</span>
                         <span className="font-semibold">Triple Threat</span>
-                      </Link>
-                      <div className="border-t border-gray-700/60 my-1" />
-                      <Link
-                        href="/league/standings?league=ctfpl"
-                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
-                        onClick={() => setShowZonesDropdown(false)}
-                      >
-                        <span className="w-4 text-center">·</span>
-                        <span>CTFPL</span>
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ctfdl"
-                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
-                        onClick={() => setShowZonesDropdown(false)}
-                      >
-                        <span className="w-4 text-center">·</span>
-                        <span>CTFDL</span>
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ovdl"
-                        className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 transition-all text-sm"
-                        onClick={() => setShowZonesDropdown(false)}
-                      >
-                        <span className="w-4 text-center">·</span>
-                        <span>OVDL</span>
                       </Link>
                     </div>
                   </div>
@@ -492,22 +464,16 @@ export default function NeutralNavbar() {
                     <span>🏆</span>
                     <span className="font-semibold">CTF Leagues</span>
                   </Link>
-                  <Link
-                    href="/map-vote"
+                  <a
+                    href="https://www.uslzone.com/pages/mix.php"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <span>🗳️</span>
-                    <span className="font-semibold">USL Map Vote</span>
-                  </Link>
-                  <Link
-                    href="/dueling/bo9-stats"
-                    className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-emerald-300 hover:bg-emerald-600/10 rounded-lg transition-all"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <span>📊</span>
-                    <span className="font-semibold">USL Dueling Stats</span>
-                  </Link>
+                    <span>🎖️</span>
+                    <span className="font-semibold">USL Mix Stats</span>
+                  </a>
                   <Link
                     href="/triple-threat"
                     className="flex items-center gap-3 px-4 py-2.5 text-gray-300 hover:text-orange-300 hover:bg-orange-600/10 rounded-lg transition-all"
@@ -516,31 +482,7 @@ export default function NeutralNavbar() {
                     <span>⚡</span>
                     <span className="font-semibold">Triple Threat</span>
                   </Link>
-                  <Link
-                    href="/league/standings?league=ctfpl"
-                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <span className="w-4 text-center">·</span>
-                    <span>CTFPL</span>
-                  </Link>
-                  <Link
-                    href="/league/standings?league=ctfdl"
-                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <span className="w-4 text-center">·</span>
-                    <span>CTFDL</span>
-                  </Link>
-                  <Link
-                    href="/league/standings?league=ovdl"
-                    className="flex items-center gap-3 px-4 py-2 text-gray-400 hover:text-cyan-300 hover:bg-cyan-600/10 rounded-lg transition-all text-sm"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <span className="w-4 text-center">·</span>
-                    <span>OVDL</span>
-                  </Link>
-                </div>
+                                  </div>
               )}
             </div>
 
