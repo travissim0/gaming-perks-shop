@@ -68,6 +68,9 @@ public/*
 !public/tools/
 # Infantry zone editors SPA (built by infantry-cfs-studio, base=/editors/)
 !public/editors/
+
+# baked Infantry sprite atlases (scripts/bake-infantry-atlas.mjs)
+!public/sprites/
 # Rules PDF for /rules page
 !public/CTFDL-S3-Rules.pdf
 !public/OVD-League-2024_2025-Season-1.pdf
