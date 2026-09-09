@@ -130,24 +130,18 @@ export default function AdminNewsPage() {
         published_at: formData.status === 'published' ? new Date().toISOString() : null
       };
 
-      if (editingPost) {
-        // Update existing post
-        const { error } = await supabase
-          .from('news_posts')
-          .update(postData)
-          .eq('id', editingPost.id);
-
-        if (error) throw error;
-        toast.success('Post updated successfully');
-      } else {
-        // Create new post
-        const { error } = await supabase
-          .from('news_posts')
-          .insert([postData]);
-
-        if (error) throw error;
-        toast.success('Post created successfully');
-      }
+      // Saves go through the server (service role + permission check) so
+      // row-level security can't block them, and real errors surface.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Your session expired. Sign in again.');
+      const res = await fetch('/api/admin/news', {
+        method: editingPost ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(editingPost ? { id: editingPost.id, post: postData } : { post: postData }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || `Save failed (${res.status})`);
+      toast.success(editingPost ? 'Post updated' : 'Post created');
 
       // Reset form and refresh posts
       setFormData({
@@ -163,9 +157,9 @@ export default function AdminNewsPage() {
       setShowCreateForm(false);
       setEditingPost(null);
       fetchPosts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving post:', error);
-      toast.error('Failed to save post');
+      toast.error(error?.message ? `Failed to save post: ${error.message}` : 'Failed to save post');
     }
   };
 
@@ -191,18 +185,27 @@ export default function AdminNewsPage() {
     if (!confirm('Are you sure you want to delete this post?')) return;
 
     try {
-      const { error } = await supabase
-        .from('news_posts')
-        .delete()
-        .eq('id', postId);
-
-      if (error) throw error;
-      toast.success('Post deleted successfully');
+      await newsApi('DELETE', { id: postId });
+      toast.success('Post deleted');
       fetchPosts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting post:', error);
-      toast.error('Failed to delete post');
+      toast.error(error?.message ? `Failed to delete post: ${error.message}` : 'Failed to delete post');
     }
+  };
+
+  /** Server-side news writes (service role + permission check); throws with the real error message. */
+  const newsApi = async (method: 'POST' | 'PUT' | 'DELETE', body: Record<string, any>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Your session expired. Sign in again.');
+    const res = await fetch('/api/admin/news', {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+    return json;
   };
 
   const handleStatusChange = async (postId: string, newStatus: string) => {
@@ -212,17 +215,12 @@ export default function AdminNewsPage() {
         updateData.published_at = new Date().toISOString();
       }
 
-      const { error } = await supabase
-        .from('news_posts')
-        .update(updateData)
-        .eq('id', postId);
-
-      if (error) throw error;
-      toast.success(`Post ${newStatus} successfully`);
+      await newsApi('PUT', { id: postId, post: updateData });
+      toast.success(`Post ${newStatus}`);
       fetchPosts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating status:', error);
-      toast.error('Failed to update status');
+      toast.error(error?.message ? `Failed to update status: ${error.message}` : 'Failed to update status');
     }
   };
 
@@ -344,7 +342,8 @@ export default function AdminNewsPage() {
                       type="checkbox"
                       checked={formData.featured}
                       onChange={(e) => setFormData(prev => ({ ...prev, featured: e.target.checked }))}
-                      className="rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 accent-blue-500"
+                      style={{ WebkitAppearance: 'checkbox', appearance: 'auto' }}
                     />
                     <span className="text-sm font-medium">Featured Post</span>
                   </label>
