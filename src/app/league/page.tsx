@@ -1171,7 +1171,7 @@ export default function Home() {
                         <div className="text-gray-400 text-xs">{gameData.gameType}</div>
                       )}
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {(() => {
                         const teams = activePlayers.reduce((acc, p) => {
                           const team = p.team || 'Unknown';
@@ -1180,15 +1180,39 @@ export default function Home() {
                           return acc;
                         }, {} as Record<string, GamePlayer[]>);
 
-                        return Object.entries(teams).map(([team, players]) => (
-                          <div key={team} className="bg-gray-800/50 rounded p-2">
-                            <div className="text-xs font-bold mb-1" style={{ color: getTeamColor(team) }}>
-                              {team} ({players.length})
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {players.slice(0, 8).map((p, i) => (
-                                <span key={i} className="text-xs font-mono">
+                        // Playing teams first; NP and spec sink to the bottom where they belong.
+                        const ordered = Object.entries(teams).sort(([a], [b]) => {
+                          const an = isNonPlayingTeam(a) ? 1 : 0;
+                          const bn = isNonPlayingTeam(b) ? 1 : 0;
+                          return an - bn || a.localeCompare(b);
+                        });
+
+                        return ordered.map(([team, players]) => {
+                          const teamColor = isNonPlayingTeam(team) ? '#6b7280' : getTeamColor(team);
+                          return (
+                            <div key={team}>
+                              {/* Header bar - the separator between teams, like the in-game list */}
+                              <div
+                                className="flex items-baseline justify-between px-1.5 py-[3px] bg-gray-800/80 border-l-2 rounded-sm"
+                                style={{ borderColor: teamColor }}
+                              >
+                                <span
+                                  className="text-[10px] font-bold uppercase tracking-wider truncate"
+                                  style={{ color: teamColor }}
+                                >
+                                  {team}
+                                </span>
+                                <span className="text-[9px] font-mono text-gray-500 ml-1.5 flex-shrink-0">
+                                  {players.length}
+                                </span>
+                              </div>
+
+                              {/* Two dense columns - narrower and shorter than one wrapped line of names */}
+                              <div className="grid grid-cols-2 gap-x-2 px-1.5 pt-0.5">
+                                {players.slice(0, 14).map((p, i) => (
                                   <span
+                                    key={i}
+                                    className="text-[10px] font-mono leading-[1.4] truncate"
                                     style={getPlayerDisplayStyle(p.class, p.team)}
                                     title={
                                       isNonPlayingTeam(p.team)
@@ -1198,19 +1222,20 @@ export default function Home() {
                                   >
                                     {p.alias}
                                   </span>
-                                  {i < Math.min(7, players.length - 1) ? ',' : ''}
-                                </span>
-                              ))}
-                              {players.length > 8 && (
-                                <span className="text-xs text-gray-500">+{players.length - 8}</span>
-                              )}
+                                ))}
+                                {players.length > 14 && (
+                                  <span className="text-[10px] font-mono leading-[1.4] text-gray-500">
+                                    +{players.length - 14}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ));
+                          );
+                        });
                       })()}
                     </div>
-                    <div className="text-center mt-2">
-                      <span className="text-gray-500 text-xs">{activePlayers.length} players</span>
+                    <div className="text-center mt-1.5">
+                      <span className="text-gray-500 text-[10px]">{activePlayers.length} players</span>
                     </div>
                   </div>
                 </section>
