@@ -29,6 +29,12 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0');
     const featured_only = searchParams.get('featured') === 'true';
     const postId = searchParams.get('postId');
+    // Audience: posts carry metadata.audience ('all' | 'ctf' | …). When a page
+    // asks for an audience it gets "everyone" posts plus that audience's posts.
+    // No audience param = everything (the homepage).
+    const audience = searchParams.get('audience');
+    // Over-fetch when filtering by audience so the page still gets `limit` rows.
+    const fetchLimit = audience ? Math.min(Math.max(limit * 4, 20), 100) : limit;
     
     // Get user context if available
     const authHeader = request.headers.get('authorization');
@@ -162,7 +168,7 @@ export async function GET(request: NextRequest) {
     try {
       const result = await supabase.rpc('get_news_posts_with_read_status', {
         user_uuid: user?.id || null,
-        limit_count: limit,
+        limit_count: fetchLimit,
         offset_count: offset
       });
       posts = result.data;
@@ -195,7 +201,7 @@ export async function GET(request: NextRequest) {
           .order('featured', { ascending: false })
           .order('priority', { ascending: false })
           .order('published_at', { ascending: false })
-          .range(offset, offset + limit - 1);
+          .range(offset, offset + fetchLimit - 1);
 
         if (postsError) {
           console.error('Error in fallback query:', postsError);
@@ -266,7 +272,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter featured posts if requested
-    const filteredPosts = featured_only ? posts?.filter((post: NewsPost) => post.featured) : posts;
+    let filteredPosts = featured_only ? posts?.filter((post: NewsPost) => post.featured) : posts;
+    if (audience) {
+      filteredPosts = (filteredPosts || []).filter((post: any) => {
+        const a = post?.metadata?.audience;
+        return !a || a === 'all' || a === audience;
+      }).slice(0, limit);
+    }
 
     // Get total count for pagination
     let totalCount = 0;

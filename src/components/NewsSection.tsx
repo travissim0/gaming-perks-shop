@@ -34,6 +34,8 @@ interface NewsSectionProps {
   heroLayout?: boolean;
   allowCollapse?: boolean;
   collapsedPosition?: 'inline' | 'below-server';
+  /** Only posts for everyone plus this audience (e.g. 'ctf'). Omit for all posts. */
+  audience?: string;
 }
 
 const NewsSection = ({ 
@@ -42,7 +44,8 @@ const NewsSection = ({
   showReadState = true,
   heroLayout = false,
   allowCollapse = false,
-  collapsedPosition = 'inline'
+  collapsedPosition = 'inline',
+  audience,
 }: NewsSectionProps) => {
   const [posts, setPosts] = useState<NewsPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,7 @@ const NewsSection = ({
       
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/news?limit=${limit}`, {
+      const response = await fetch(`/api/news?limit=${limit}${audience ? `&audience=${encodeURIComponent(audience)}` : ''}`, {
         headers: session?.access_token ? {
           'authorization': `Bearer ${session.access_token}`
         } : {}

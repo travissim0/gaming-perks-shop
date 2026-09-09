@@ -30,7 +30,7 @@ async function gate(request: NextRequest) {
   return { user };
 }
 
-const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'author_name', 'author_id', 'status', 'featured', 'priority', 'tags', 'published_at'] as const;
+const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'author_name', 'author_id', 'status', 'featured', 'priority', 'tags', 'published_at', 'metadata'] as const;
 
 function pick(post: any) {
   const out: Record<string, any> = {};

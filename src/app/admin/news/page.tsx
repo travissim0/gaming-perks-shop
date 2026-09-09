@@ -42,7 +42,9 @@ export default function AdminNewsPage() {
     featured: false,
     priority: 0,
     tags: '',
-    status: 'published' as 'draft' | 'published' | 'archived'
+    status: 'published' as 'draft' | 'published' | 'archived',
+    // Who the post is for: 'all' = everywhere (homepage + zones), 'ctf' = CTF pages only.
+    audience: 'all' as 'all' | 'ctf',
   });
 
   useEffect(() => {
@@ -134,7 +136,8 @@ export default function AdminNewsPage() {
         featured: formData.featured,
         priority: formData.priority,
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-        published_at: formData.status === 'published' ? new Date().toISOString() : null
+        published_at: formData.status === 'published' ? new Date().toISOString() : null,
+        metadata: { ...(editingPost?.metadata || {}), audience: formData.audience },
       };
 
       // Saves go through the server (service role + permission check) so
@@ -159,7 +162,8 @@ export default function AdminNewsPage() {
         featured: false,
         priority: 0,
         tags: '',
-        status: 'published'
+        status: 'published',
+        audience: 'all',
       });
       setShowCreateForm(false);
       setEditingPost(null);
@@ -182,6 +186,7 @@ export default function AdminNewsPage() {
       content: typeof post.content === 'string' ? post.content : JSON.stringify(post.content ?? { type: 'doc', content: [] }),
       featured_image_url: post.featured_image_url || '',
       featured: post.featured,
+      audience: post.metadata?.audience === 'ctf' ? 'ctf' : 'all',
       priority: post.priority,
       tags: post.tags.join(', '),
       status: post.status as 'draft' | 'published' | 'archived'
@@ -257,7 +262,8 @@ export default function AdminNewsPage() {
                 featured: false,
                 priority: 0,
                 tags: '',
-                status: 'published'
+                status: 'published',
+                audience: 'all',
               });
             }}
             className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors"
@@ -329,6 +335,19 @@ export default function AdminNewsPage() {
                     <option value="draft">Draft</option>
                     <option value="published">Published</option>
                     <option value="archived">Archived</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Audience</label>
+                  <select
+                    value={formData.audience}
+                    onChange={(e) => setFormData(prev => ({ ...prev, audience: e.target.value as 'all' | 'ctf' }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                    title="Everyone = homepage and every zone. CTF = only the CTF pages."
+                  >
+                    <option value="all">Everyone (homepage + CTF)</option>
+                    <option value="ctf">CTF only</option>
                   </select>
                 </div>
 
@@ -440,6 +459,9 @@ export default function AdminNewsPage() {
                         <span className="text-purple-400">⭐ Yes</span>
                       ) : (
                         <span className="text-gray-500">No</span>
+                      )}
+                      {post.metadata?.audience === 'ctf' && (
+                        <span className="ml-2 rounded bg-cyan-600/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300" title="Shown on CTF pages only">CTF</span>
                       )}
                     </td>
                     <td className="px-4 py-4 text-gray-400">

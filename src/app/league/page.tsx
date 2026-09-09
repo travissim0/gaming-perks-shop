@@ -1354,7 +1354,7 @@ export default function Home() {
                   <h3 className="text-lg font-bold text-blue-400 tracking-wider">News & Updates</h3>
                 </div>
                 <div className="p-4">
-                  <NewsSection limit={1} showReadState={true} heroLayout={false} allowCollapse={true} />
+                  <NewsSection limit={1} showReadState={true} heroLayout={false} allowCollapse={true} audience="ctf" />
                 </div>
               </section>
 
