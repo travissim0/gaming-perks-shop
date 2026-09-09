@@ -27,6 +27,20 @@ interface AtlasMeta {
   sourceRows: number[];
 }
 
+/**
+ * Every class comes off the same man.blo sprite; only the uniform ramp is tinted, so the
+ * red helmet and blue boots stay put. Hues match how the classes read in game.
+ */
+const CLASSES = [
+  { slug: 'infantry', label: 'Infantry', swatch: '#b02a2a' },
+  { slug: 'heavy-weapons', label: 'Heavy Weapons', swatch: '#2a8f96' },
+  { slug: 'squad-leader', label: 'Squad Leader', swatch: '#3f8f3f' },
+  { slug: 'field-medic', label: 'Field Medic', swatch: '#b39418' },
+  { slug: 'combat-engineer', label: 'Combat Engineer', swatch: '#7a5326' },
+  { slug: 'infiltrator', label: 'Infiltrator', swatch: '#96398f' },
+  { slug: 'jump-trooper', label: 'Jump Trooper', swatch: '#8a8a8a' },
+] as const;
+
 const SPEED = 130;          // px per second
 const SCALE = 2;            // the sprite is small; 2x keeps the pixels crisp
 const STAGE_W = 900;
@@ -38,6 +52,7 @@ export default function SpriteDemoPage() {
   const [meta, setMeta] = useState<AtlasMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [cls, setCls] = useState<string>('infantry');
 
   // Live state kept in refs - the render loop must not re-run on every keypress.
   const keys = useRef<Set<string>>(new Set());
@@ -48,12 +63,16 @@ export default function SpriteDemoPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setReady(false);
     (async () => {
       try {
-        const res = await fetch('/sprites/infantry.json');
+        const res = await fetch(`/sprites/${cls}.json`);
         if (!res.ok) throw new Error(`atlas metadata ${res.status}`);
         const json: AtlasMeta = await res.json();
-        if (!cancelled) setMeta(json);
+        if (!cancelled) {
+          setMeta(json);
+          setError(null);
+        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Could not load the sprite atlas');
       }
@@ -61,7 +80,7 @@ export default function SpriteDemoPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cls]);
 
   // Keyboard. Arrow keys are swallowed so the page does not scroll while walking.
   useEffect(() => {
@@ -163,7 +182,7 @@ export default function SpriteDemoPage() {
       setReady(true);
       stop = startLoop(img, meta);
     };
-    img.onerror = () => setError('Could not load /sprites/infantry.png');
+    img.onerror = () => setError(`Could not load /sprites/${meta.image}`);
     img.src = `/sprites/${meta.image}`;
     return () => stop?.();
   }, [meta, startLoop]);
@@ -182,6 +201,27 @@ export default function SpriteDemoPage() {
             atlas. <span className="text-gray-300">WASD</span> or the{' '}
             <span className="text-gray-300">arrow keys</span> to walk.
           </p>
+          {/* Class picker - one atlas per class, swapped at runtime */}
+          <div className="flex flex-wrap gap-1.5 mt-4">
+            {CLASSES.map((c) => (
+              <button
+                key={c.slug}
+                onClick={() => setCls(c.slug)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
+                  cls === c.slug
+                    ? 'border-cyan-500/60 bg-cyan-500/10 text-gray-100'
+                    : 'border-gray-700/60 bg-gray-900/50 text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                }`}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-sm border border-black/30"
+                  style={{ backgroundColor: c.swatch }}
+                />
+                {c.label}
+              </button>
+            ))}
+          </div>
+
           {meta && (
             <div className="flex flex-wrap gap-2 mt-3 text-xs">
               <Chip label="source" value={meta.source} />
@@ -222,9 +262,9 @@ export default function SpriteDemoPage() {
                   Sprite atlas not found
                 </div>
                 <div className="text-gray-500 text-xs mt-1 max-w-sm">
-                  Bake it first:
+                  Bake them first:
                   <code className="block mt-1 text-gray-400">
-                    node scripts/bake-infantry-atlas.mjs --blo man.blo --rowStep 4
+                    bash scripts/bake-all-classes.sh man.blo
                   </code>
                 </div>
                 <div className="text-gray-700 text-[10px] font-mono mt-2">{error}</div>

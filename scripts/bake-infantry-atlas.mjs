@@ -45,6 +45,18 @@ const HSV = (arg('hsv', '0,0,0') || '0,0,0').split(',').map(Number);
 // every one costs atlas area, so keep every Nth row. 4 gives 16 directions.
 const ROW_STEP = Math.max(1, parseInt(arg('rowStep', '1'), 10) || 1);
 const ONLY_ROW = arg('onlyRow') !== null ? parseInt(arg('onlyRow'), 10) : null;
+/**
+ * --tint <hue>[,<sat>[,<valueScale>]] colours the uniform directly: hue in degrees,
+ * saturation 0-1, valueScale multiplies brightness (for browns and other dark tints).
+ *
+ * This is preferred over --hsv for producing the classes. The game encodes each class as
+ * an HSV triple in the zone's .veh (Infantry 35,60,0; Heavy Weapons 10,60,0; Squad
+ * Leader 65,60,0; Infiltrator 15,60,0; Jump Trooper 65,-30,0), but those values do not
+ * fit any single linear hue scale I could solve against the actual in-game colours, so
+ * the exact encoding is still unknown. Naming the target hue is honest and verifiable;
+ * the .veh triples stay recorded above for whenever parity matters.
+ */
+const TINT = arg('tint') ? arg('tint').split(',').map(Number) : null;
 
 if (!BLO_PATH) {
   console.error('--blo <path to .blo> is required');
@@ -425,6 +437,26 @@ if (HSV.some((n) => n !== 0) && header.userPalette === 0) {
 // shadow into a solid grey blob. Alpha ramp matches the studio's renderer.
 const shadowIndex = 256 - header.shadowCount;
 
+// The uniform is the near-grey ramp inside the user palette. The other ramps in that
+// range are fixed accents - the red helmet and the blue boots/pack - and recolouring
+// them along with the uniform is wrong. Detected by saturation rather than assumed, so
+// this holds for sprites whose ramps sit in a different order.
+const uniformBand = [];
+if (header.userPalette > 0) {
+  for (let i = uStart; i < uEnd; i++) {
+    const argb = palette[i];
+    const r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
+    const { s: sat } = rgbToHsv(r, g, b);
+    if (sat < 0.35) uniformBand.push(i);
+  }
+}
+if (TINT) {
+  console.log(`tint      hue ${TINT[0]} sat ${TINT[1] ?? 0.55} value x${TINT[2] ?? 1}`);
+  console.log(`uniform   ${uniformBand.length} palette entries (${uniformBand[0]}..${uniformBand[uniformBand.length - 1]})`);
+}
+
+const tintSet = new Set(uniformBand);
+
 const rgbaPalette = new Uint8Array(256 * 4);
 for (let i = 0; i < 256; i++) {
   if (header.shadowCount > 0 && i >= shadowIndex) {
@@ -438,7 +470,17 @@ for (let i = 0; i < 256; i++) {
 
   const argb = palette[i];
   let r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
-  if (recolour && i >= uStart && i < uEnd) [r, g, b] = shiftHsv([r, g, b], HSV);
+
+  if (TINT && tintSet.has(i)) {
+    // Keep each entry's brightness so the ramp still shades; replace hue and saturation.
+    const { v } = rgbToHsv(r, g, b);
+    const hue = (((TINT[0] % 360) + 360) % 360) / 360;
+    const sat = TINT[1] === undefined ? 0.55 : TINT[1];
+    const val = Math.min(1, v * (TINT[2] === undefined ? 1 : TINT[2]));
+    [r, g, b] = hsvToRgb(hue, sat, val);
+  } else if (recolour && i >= uStart && i < uEnd) {
+    [r, g, b] = shiftHsv([r, g, b], HSV);
+  }
   rgbaPalette[i * 4] = r;
   rgbaPalette[i * 4 + 1] = g;
   rgbaPalette[i * 4 + 2] = b;
