@@ -71,19 +71,20 @@ export async function GET(request: NextRequest) {
       const BASE_COLS =
         'game_id, alias, side, team_name, result, is_captain, is_shotcaller, primary_class, kills, deaths, ' +
         'shots_fired, shots_landed, accuracy, heal_amount, opening_kills, opening_deaths, opening_fights_won, rating_delta';
-      let { data: players, error: playersErr } = await supabase
+      const withVocal = await supabase
         .from('usl_mix_game_players')
         .select(`${BASE_COLS}, is_vocal`)
         .in('game_id', ids)
         .order('kills', { ascending: false });
-      if (playersErr) {
-        // usl-mix-add-vocal-firstpick.sql not applied yet
-        ({ data: players } = await supabase
-          .from('usl_mix_game_players')
-          .select(BASE_COLS)
-          .in('game_id', ids)
-          .order('kills', { ascending: false }));
-      }
+      // usl-mix-add-vocal-firstpick.sql not applied yet -> retry without it
+      const fallback = withVocal.error
+        ? await supabase
+            .from('usl_mix_game_players')
+            .select(BASE_COLS)
+            .in('game_id', ids)
+            .order('kills', { ascending: false })
+        : null;
+      const players: any[] = ((withVocal.error ? fallback?.data : withVocal.data) ?? []) as any[];
       for (const p of players ?? []) {
         const list = playersByGame.get(p.game_id) ?? [];
         list.push(p);
