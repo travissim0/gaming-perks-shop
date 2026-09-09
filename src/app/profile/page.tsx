@@ -815,6 +815,14 @@ export default function ProfilePage() {
                           <Link href={`/squads/${current.id}`} className="font-display text-base text-[#E6EDF7] hover:text-[#22D3EE]">[{current.tag}] {current.name}</Link>
                           <Link href={`/squads/${current.id}`} className="rounded-md bg-white/5 px-2.5 py-1 text-xs text-[#E6EDF7] hover:bg-white/10">Manage</Link>
                         </div>
+                      ) : seasonCtx?.league?.format && seasonCtx.league.format !== 'squad' ? (
+                        // Draft / OvD season: the draft (or staff) places you; only captains create squads.
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm text-[#8B98B0]">
+                            No squad yet — {seasonCtx.registration ? `the ${seasonCtx.league.name} draft places you on one.` : `register and the ${seasonCtx.league.name} draft places you on one.`}
+                          </span>
+                          <Link href="/squads" className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Captains: create your squad</Link>
+                        </div>
                       ) : (
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm text-[#8B98B0]">Not on a current squad</span>
