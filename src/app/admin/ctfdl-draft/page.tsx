@@ -98,7 +98,7 @@ export default function CtfdlDraftAdminPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Failed');
       if (json.deleted) { await refetch(); } else if (json.bundle) applyBundle(json.bundle); else await refetch();
-      toast.success(label);
+      toast.success(typeof json.cleared === 'number' && json.cleared > 0 ? `${label} · ${json.cleared} leftover player${json.cleared === 1 ? '' : 's'} removed from rosters` : label);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -108,7 +108,11 @@ export default function CtfdlDraftAdminPage() {
 
   const createDraft = () => seasonId && post({ action: 'create', league_season_id: seasonId, ...settings, pick_seconds: settings.pick_seconds === '' ? null : Number(settings.pick_seconds) }, 'Draft created');
   const saveSettings = () => draft && post({ action: 'update', draft_id: draft.id, ...settings, pick_seconds: settings.pick_seconds === '' ? null : Number(settings.pick_seconds) }, 'Settings saved');
-  const saveTeams = () => draft && post({ action: 'set_teams', draft_id: draft.id, squad_ids: selected }, 'Teams saved');
+  const saveTeams = () => {
+    if (!draft) return;
+    if (!confirm('Save these teams? Any players still on these squads from a previous season (other than the captain) are removed from the roster so the draft can fill it. Memberships are kept as history.')) return;
+    post({ action: 'set_teams', draft_id: draft.id, squad_ids: selected }, 'Teams saved');
+  };
   const saveRanking = () => draft && post({ action: 'set_rankings', draft_id: draft.id, player_ids: ranking }, 'Ranking saved');
   const action = (a: string, label: string) => draft && post({ action: a, draft_id: draft.id }, label);
 

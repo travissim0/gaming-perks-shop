@@ -1792,308 +1792,133 @@ export default function SquadsPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-6">
 
-        {/* User's Squad Section - Only show for authenticated users */}
-        {user && (dataLoading || loading ? (
-          <div className="bg-gray-800 rounded-lg p-6 mb-8">
-            <div className="animate-pulse">
-              <div className="h-6 bg-gray-700 rounded w-1/3 mb-4"></div>
-              <div className="h-4 bg-gray-700 rounded w-2/3 mb-2"></div>
-              <div className="h-4 bg-gray-700 rounded w-1/2"></div>
-            </div>
-          </div>
-        ) : userSquad ? (
-          (canManageSquad || sentJoinRequests.length > 0) ? (
-          <div className="bg-gray-800 rounded-lg p-6 mb-8">
-            {/* Squad Management Actions - Mobile Optimized */}
-            {canManageSquad && (
-              <div className="flex flex-col sm:flex-row gap-3 mb-6">
-                {/* Primary Actions Group */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    onClick={() => setShowInviteForm(true)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                  >
-                    <span>👥</span>
-                    Invite Player
-                  </button>
-                  {canEditSquadPhotos && (
-                    <button
-                      onClick={() => setShowBannerForm(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <span>🖼️</span>
-                      {userSquad?.banner_url ? 'Update Picture' : 'Add Picture'}
-                    </button>
-                  )}
-                  {isCaptain && (
-                    <button
-                      onClick={openEditForm}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <span>✏️</span>
-                      Edit Details
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Pending Invites */}
-            {canManageSquad && pendingInvites.length > 0 && (
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  📤 Pending Invitations
-                  {userSquad?.is_legacy && (
-                    <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
-                      🏛️ LEGACY SQUAD
-                    </span>
-                  )}
-                </h3>
-                {userSquad?.is_legacy && (
-                  <div className="bg-amber-600/10 border border-amber-500/20 rounded-lg p-3 mb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-amber-400">💡</span>
-                      <span className="text-amber-300 font-medium text-sm">Legacy Squad Invitations</span>
-                    </div>
-                    <p className="text-amber-200 text-xs">
-                      Players can join your legacy squad while keeping their current active squad membership. 
-                      This preserves historical squad connections without affecting competitive play.
-                    </p>
+        {/* ---- Your squad: manage / invites / requests (signed in) ------------ */}
+        {user && !(dataLoading || loading) && (() => {
+          const mineLeague = userSquad ? leagueOf(userSquad as unknown as Squad) : null;
+          const draftSquad = !!mineLeague?.format && mineLeague.format !== 'squad';
+          const showManage = !!userSquad && canManageSquad;
+          const inviteRows = pendingInvites.filter((inv) => !joinRequests.some((r) => r.id === inv.id));
+          const showRecruiting = showManage && !draftSquad && (inviteRows.length > 0 || joinRequests.length > 0);
+          const showSentRequests = sentJoinRequests.length > 0;
+          const showReceived = !userSquad && receivedInvitations.length > 0;
+          if (!showManage && !showSentRequests && !showReceived) return null;
+          const ghost = 'rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10';
+          const accent = 'rounded-md bg-[#22D3EE] px-3 py-1.5 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]';
+          const row = 'flex flex-wrap items-center justify-between gap-2 rounded-md bg-[#0B0F1A] px-3 py-2 text-sm';
+          return (
+            <div className="mb-4 space-y-3">
+              {showManage && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#131A2B] px-4 py-3">
+                  <div className="text-sm text-[#8B98B0]">
+                    Managing{' '}
+                    <Link href={`/squads/${userSquad!.id}`} className="font-display text-base text-[#E6EDF7] hover:text-[#22D3EE]">[{userSquad!.tag}] {userSquad!.name}</Link>
+                    {draftSquad ? <span> · roster is filled by the {mineLeague?.name} draft</span> : null}
+                    {userSquad?.is_legacy ? <span className="ml-2 rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Legacy</span> : null}
                   </div>
-                )}
-                <div className="grid gap-3">
-                  {pendingInvites.map((invite) => (
-                    <div key={invite.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold text-cyan-400">{invite.invited_alias}</span>
-                            {userSquad?.is_legacy && (
-                              <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
-                                🏛️ LEGACY INVITE
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-400 mb-2">
-                            Invited by {invite.invited_by_alias} • Expires {new Date(invite.expires_at).toLocaleDateString()}
-                          </div>
-                          {userSquad?.is_legacy && (
-                            <div className="text-xs text-amber-300 bg-amber-600/10 p-2 rounded border border-amber-500/20">
-                              💡 This player can accept and join your legacy squad while keeping their current active squad membership.
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded-full text-xs font-medium border border-yellow-500/30 animate-pulse">
-                            ⏳ Pending Response
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex flex-wrap gap-2">
+                    {!draftSquad && <button onClick={() => setShowInviteForm(true)} className={accent}>Invite player</button>}
+                    {canEditSquadPhotos && <button onClick={() => setShowBannerForm(true)} className={ghost}>{userSquad?.banner_url ? 'Update picture' : 'Add picture'}</button>}
+                    {isCaptain && <button onClick={openEditForm} className={ghost}>Edit details</button>}
+                    <Link href={`/squads/${userSquad!.id}`} className={ghost}>Squad page</Link>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Join Requests to Squad */}
-            {canManageSquad && joinRequests.length > 0 && (
-              <div>
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  📤 Pending Invitations & Join Requests
-                  <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded text-xs font-medium border border-blue-500/30">
-                    {joinRequests.length}
-                  </span>
-                </h3>
-                <div className="grid gap-3">
-                  {joinRequests.map((request) => {
-                    const isJoinRequest = request.request_type === 'join_request';
-                    const isInvitation = request.request_type === 'invitation';
-                    
-                    return (
-                      <div key={request.id} className="bg-gray-700 rounded p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-semibold text-green-400">{request.invited_alias}</span>
-                              {isJoinRequest && (
-                                <span className="bg-green-600/20 text-green-300 px-2 py-1 rounded text-xs font-medium border border-green-500/30">
-                                  📥 JOIN REQUEST
-                                </span>
-                              )}
-                              {isInvitation && (
-                                <span className="bg-blue-600/20 text-blue-300 px-2 py-1 rounded text-xs font-medium border border-blue-500/30">
-                                  📤 INVITATION SENT
-                                </span>
-                              )}
-                              {userSquad?.is_legacy && (
-                                <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
-                                  🏛️ LEGACY
-                                </span>
-                              )}
+              {showRecruiting && (
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Invites and requests <span className="text-sm text-[#8B98B0]">· {inviteRows.length + joinRequests.length}</span></h2>
+                  {userSquad?.is_legacy && <p className="mb-2 text-xs text-[#F59E0B]">Legacy squad: players can join while keeping their current active squad.</p>}
+                  <ul className="space-y-1.5">
+                    {joinRequests.map((request) => {
+                      const isJoinRequest = request.request_type === 'join_request';
+                      return (
+                        <li key={request.id} className={row}>
+                          <div className="min-w-0">
+                            <span className="text-[#E6EDF7]">{request.invited_alias}</span>
+                            <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isJoinRequest ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{isJoinRequest ? 'Wants to join' : 'Invited'}</span>
+                            <div className="text-xs text-[#8B98B0]">
+                              {isJoinRequest ? `Requested ${new Date(request.created_at).toLocaleDateString()}` : `Invited by ${request.inviter_alias} on ${new Date(request.created_at).toLocaleDateString()}`} · expires {new Date(request.expires_at).toLocaleDateString()}
+                              {request.message ? <span className="text-[#8B98B0]/80"> · “{request.message}”</span> : null}
                             </div>
-                            <div className="text-sm text-gray-400 mb-2">
-                              {isJoinRequest ? (
-                                <>Requested to join {new Date(request.created_at).toLocaleDateString()}</>
-                              ) : (
-                                <>Invited by {request.inviter_alias} on {new Date(request.created_at).toLocaleDateString()}</>
-                              )}
-                              {' • Expires '}{new Date(request.expires_at).toLocaleDateString()}
-                            </div>
-                            {userSquad?.is_legacy && isInvitation && (
-                              <div className="text-sm text-amber-300 bg-amber-600/10 p-2 rounded mb-2 border border-amber-500/20">
-                                💡 Legacy squad invitation - {request.invited_alias} can join while keeping their current active squad membership.
-                              </div>
-                            )}
-                            {request.message && (
-                              <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
-                                "{request.message}"
-                              </div>
-                            )}
                           </div>
-                          <div className="flex gap-2 ml-4">
-                            {isJoinRequest && (
+                          <div className="flex gap-1.5">
+                            {isJoinRequest ? (
                               <>
-                                <button
-                                  onClick={() => approveJoinRequest(request.id, request.invited_player_id)}
-                                  className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => denyJoinRequest(request.id)}
-                                  className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                                >
-                                  Deny
-                                </button>
+                                <button onClick={() => approveJoinRequest(request.id, request.invited_player_id)} className="rounded bg-[#34D399]/15 px-2.5 py-1 text-xs text-[#34D399] hover:bg-[#34D399]/25">Approve</button>
+                                <button onClick={() => denyJoinRequest(request.id)} className="rounded bg-white/5 px-2.5 py-1 text-xs text-[#F87171] hover:bg-white/10">Deny</button>
                               </>
-                            )}
-                            {isInvitation && (
-                              <button
-                                onClick={() => denyJoinRequest(request.id)}
-                                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm"
-                                title="Cancel this invitation"
-                              >
-                                Cancel Invite
-                              </button>
+                            ) : (
+                              <button onClick={() => denyJoinRequest(request.id)} className="rounded bg-white/5 px-2.5 py-1 text-xs text-[#8B98B0] hover:bg-white/10">Cancel invite</button>
                             )}
                           </div>
+                        </li>
+                      );
+                    })}
+                    {inviteRows.map((invite) => (
+                      <li key={invite.id} className={row}>
+                        <div className="min-w-0">
+                          <span className="text-[#E6EDF7]">{invite.invited_alias}</span>
+                          <span className="ml-2 rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">Invited</span>
+                          <div className="text-xs text-[#8B98B0]">By {invite.invited_by_alias} · expires {new Date(invite.expires_at).toLocaleDateString()}</div>
                         </div>
-                      </div>
-                    );
-                  })}
+                        <span className="text-xs text-[#F59E0B]">Awaiting reply</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Sent Join Requests - Show for ALL users */}
-            {sentJoinRequests.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">Your Pending Join Requests</h2>
-                <div className="grid gap-3">
-                  {sentJoinRequests.map((request) => (
-                    <div key={request.id} className="bg-gray-700 rounded p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-semibold text-orange-400">
-                              [{request.squad_tag}] {request.squad_name}
-                            </span>
-                            <span className="bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs">
-                              REQUEST PENDING
-                            </span>
+              {showSentRequests && (
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Your join requests <span className="text-sm text-[#8B98B0]">· {sentJoinRequests.length}</span></h2>
+                  <ul className="space-y-1.5">
+                    {sentJoinRequests.map((request) => (
+                      <li key={request.id} className={row}>
+                        <div className="min-w-0">
+                          <span className="text-[#E6EDF7]">[{request.squad_tag}] {request.squad_name}</span>
+                          <span className="ml-2 rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Pending</span>
+                          <div className="text-xs text-[#8B98B0]">
+                            Sent {new Date(request.created_at).toLocaleDateString()} · expires {new Date(request.expires_at).toLocaleDateString()} · waiting on the captain
+                            {request.message ? <span className="text-[#8B98B0]/80"> · “{request.message}”</span> : null}
                           </div>
-                          <div className="text-sm text-gray-400 mb-2">
-                            Requested {new Date(request.created_at).toLocaleDateString()} • Expires {new Date(request.expires_at).toLocaleDateString()}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Waiting for squad captain to approve your request
-                          </div>
-                          {request.message && (
-                            <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3 mt-2">
-                              Your message: "{request.message}"
-                            </div>
-                          )}
                         </div>
-                        <div className="flex gap-2 ml-4">
-                          <button
-                            onClick={() => withdrawJoinRequest(request.id)}
-                            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                          >
-                            Withdraw Request
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                        <button onClick={() => withdrawJoinRequest(request.id)} className="rounded bg-white/5 px-2.5 py-1 text-xs text-[#F87171] hover:bg-white/10">Withdraw</button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-            )}
-          </div>
-          ) : null
-        ) : (
-          <div className="space-y-6 mb-8">
-            {/* Received Invitations */}
-            {receivedInvitations.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">Squad Invitations</h2>
-                <div className="grid gap-3">
-                  {receivedInvitations.map((invitation) => {
-                    // Check if this invitation is from a legacy squad
-                    const isLegacyInvite = allSquads.find(s => s.id === invitation.squad_id)?.is_legacy;
-                    
-                    return (
-                      <div key={invitation.id} className="bg-gray-700 rounded p-4">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-semibold text-cyan-400">
-                                [{invitation.squad_tag}] {invitation.squad_name}
-                              </span>
-                              {isLegacyInvite && (
-                                <span className="bg-amber-600/20 text-amber-300 px-2 py-1 rounded text-xs font-medium border border-amber-500/30">
-                                  🏛️ LEGACY
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-400 mb-2">
-                              Invited by {invitation.inviter_alias} • Expires {new Date(invitation.expires_at).toLocaleDateString()}
-                            </div>
-                            {isLegacyInvite && (
-                              <div className="text-sm text-amber-300 bg-amber-600/10 p-2 rounded mb-2 border border-amber-500/20">
-                                💡 This is a legacy squad invitation. You can join this historical squad while keeping your current active squad membership.
-                              </div>
-                            )}
-                            {invitation.message && (
-                              <div className="text-sm text-gray-300 bg-gray-600 p-2 rounded mb-3">
-                                "{invitation.message}"
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-2 ml-4">
-                            <button
-                              onClick={() => acceptInvitation(invitation.id, invitation.squad_id!)}
-                              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm"
-                            >
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => declineInvitation(invitation.id)}
-                              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm"
-                            >
-                              Decline
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Not on a squad: the header strip below offers Create squad */}
-          </div>
-        ))}
+              {showReceived && (
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Squad invitations <span className="text-sm text-[#8B98B0]">· {receivedInvitations.length}</span></h2>
+                  <ul className="space-y-1.5">
+                    {receivedInvitations.map((invitation) => {
+                      const isLegacyInvite = allSquads.find((s) => s.id === invitation.squad_id)?.is_legacy;
+                      return (
+                        <li key={invitation.id} className={row}>
+                          <div className="min-w-0">
+                            <span className="text-[#E6EDF7]">[{invitation.squad_tag}] {invitation.squad_name}</span>
+                            {isLegacyInvite && <span className="ml-2 rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Legacy</span>}
+                            <div className="text-xs text-[#8B98B0]">
+                              Invited by {invitation.inviter_alias} · expires {new Date(invitation.expires_at).toLocaleDateString()}
+                              {isLegacyInvite ? ' · you keep your current active squad' : ''}
+                              {invitation.message ? <span className="text-[#8B98B0]/80"> · “{invitation.message}”</span> : null}
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button onClick={() => acceptInvitation(invitation.id, invitation.squad_id!)} className="rounded bg-[#34D399]/15 px-2.5 py-1 text-xs text-[#34D399] hover:bg-[#34D399]/25">Accept</button>
+                            <button onClick={() => declineInvitation(invitation.id)} className="rounded bg-white/5 px-2.5 py-1 text-xs text-[#F87171] hover:bg-white/10">Decline</button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {/* END OF USER SQUAD SECTION */}
 
         {/* ---- Squads: header strip ------------------------------------------ */}

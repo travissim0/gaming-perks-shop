@@ -97,6 +97,24 @@ export async function POST(request: NextRequest) {
           // draft layout (no invites / join requests). Ignore if the column is missing.
           const { error: tagErr } = await supabaseAdmin.from('squads').update({ league_slug: 'ctfdl' }).in('id', squadIds);
           if (tagErr) console.warn('set_teams: could not tag squads with league_slug', tagErr.message);
+
+          // The draft fills these rosters. Leftover members from a previous season
+          // (kept when the squad was archived) are set inactive — history stays,
+          // the captain remains, and the draft adds players fresh.
+          const { data: caps } = await supabaseAdmin.from('squads').select('id, captain_id').in('id', squadIds);
+          let cleared = 0;
+          for (const s of caps || []) {
+            const { data: rows } = await supabaseAdmin
+              .from('squad_members')
+              .update({ status: 'inactive' })
+              .eq('squad_id', s.id)
+              .eq('status', 'active')
+              .neq('player_id', s.captain_id)
+              .select('id');
+            cleared += rows?.length || 0;
+          }
+          const bundle = await loadBundle(await resolveDraft(draftId), user.id);
+          return NextResponse.json({ ok: true, bundle, cleared });
         }
         break;
       }
