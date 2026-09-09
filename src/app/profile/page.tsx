@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import PlayerProfileHero from '@/components/PlayerProfileHero';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import AvatarSelector from '@/components/AvatarSelector';
@@ -131,6 +130,33 @@ export default function ProfilePage() {
 
   // Squad state (read-only display)
   const [userSquad, setUserSquad] = useState<Squad[]>([]);
+
+  // Avatar panel (upload + presets) lives inside the Account card, opened from the header avatar
+  const [showAvatarPanel, setShowAvatarPanel] = useState(false);
+
+  // This season: the running league's open season and my registration (from /api/league/register)
+  const [seasonCtx, setSeasonCtx] = useState<{
+    league: { slug: string; name: string; format: string | null } | null;
+    season: { season_number: number; season_name: string | null; status: string } | null;
+    registration: { preferred_roles?: string[] } | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { setSeasonCtx({ league: null, season: null, registration: null }); return; }
+        const res = await fetch('/api/league/register', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        const json = res.ok ? await res.json() : null;
+        if (!cancelled) setSeasonCtx({ league: json?.league || null, season: json?.season || null, registration: json?.registration || null });
+      } catch {
+        if (!cancelled) setSeasonCtx({ league: null, season: null, registration: null });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Games state
   const [userGames, setUserGames] = useState<RecordedGame[]>([]);
@@ -499,396 +525,318 @@ export default function ProfilePage() {
   // ---------- Render ----------
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
 
-      <main className="container mx-auto py-8 px-4">
-        <div className="max-w-4xl mx-auto">
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        <div>
 
-          {/* ===== ZONE 1: Profile Overview (read-only) ===== */}
-
-          {/* Profile Hero */}
-          <PlayerProfileHero
-            playerName={inGameAlias || 'Player'}
-            profile={heroData?.profile ?? null}
-            aliases={heroData?.aliases ?? []}
-            squad={heroData?.squad ?? null}
-            freeAgent={heroData?.freeAgent ?? null}
-            elo={heroData?.elo ?? null}
-            isRegistered={heroData?.isRegistered ?? true}
-            loading={heroLoading || profileLoading}
-          />
-
-          {/* View Public Profile link */}
-          {inGameAlias && (
-            <div className="flex justify-center -mt-4 mb-6">
-              <Link
-                href={`/stats/player/${encodeURIComponent(inGameAlias)}`}
-                className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+          {/* ===== Header: identity at a glance ===== */}
+          <div className="mb-4 rounded-xl bg-[#131A2B] p-4 md:p-5">
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setShowAvatarPanel((v) => !v)}
+                className="group relative h-16 w-16 flex-none overflow-hidden rounded-xl bg-[#1B2438]"
+                title="Change avatar"
               >
-                View Public Profile &rarr;
-              </Link>
-            </div>
-          )}
-
-          {/* Squad Section (read-only) */}
-          <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/20 rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-bold text-cyan-400 mb-4 tracking-wide">Squad</h2>
-            {userSquad.filter(squad => squad && squad.id).map((squad) => {
-              const isCurrent = !squad.is_legacy && (squad as any).is_active !== false;
-              return (
-                <div key={squad.id} className={`bg-gray-800 border rounded-lg p-4 mb-3 ${isCurrent ? 'border-cyan-500/30' : 'border-gray-600/50 opacity-80'}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className={`text-xl font-bold ${isCurrent ? 'text-cyan-400' : 'text-gray-300'}`}>
-                      [{squad.tag || 'N/A'}] {squad.name || 'Unknown Squad'}
-                    </h3>
-                    <Link
-                      href={`/squads/${squad.id}`}
-                      className={`px-3 py-1 rounded text-sm font-medium transition-colors duration-300 text-white ${isCurrent ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-gray-600 hover:bg-gray-500'}`}
-                    >
-                      {isCurrent ? 'Manage Squad' : 'View'}
-                    </Link>
-                  </div>
-                  {squad.description && (
-                    <p className="text-gray-300 text-sm">{squad.description}</p>
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center font-display text-2xl text-[#22D3EE]">{inGameAlias ? inGameAlias.charAt(0).toUpperCase() : '?'}</span>
+                )}
+                <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF7] opacity-0 transition-opacity group-hover:opacity-100">Change</span>
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-display text-2xl leading-none text-[#E6EDF7] md:text-3xl">{inGameAlias || 'Player'}</h1>
+                  {heroData?.elo && (
+                    <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]" title={`Peak ${Math.round(heroData.elo.elo_peak)}`}>
+                      {heroData.elo.tier?.name || 'Rated'} · {Math.round(heroData.elo.weighted_elo)}
+                    </span>
                   )}
-                  {!isCurrent && (
-                    <span className="text-xs text-yellow-400 font-mono">{squad.is_legacy ? 'Legacy squad' : 'Archived squad (past season)'}</span>
+                  {seasonCtx?.registration && seasonCtx.league && seasonCtx.season && (
+                    <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#34D399]">Registered · {seasonCtx.league.name} S{seasonCtx.season.season_number}</span>
+                  )}
+                  {heroData?.profile?.ctf_role && (
+                    <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#8B98B0]">{heroData.profile.ctf_role.replace('ctf_', 'CTF ')}</span>
+                  )}
+                  {heroData?.profile?.is_league_banned && (
+                    <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F87171]">League ban</span>
                   )}
                 </div>
-              );
-            })}
-            {!userSquad.some((squad) => squad && !squad.is_legacy && (squad as any).is_active !== false) && (
-              <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 text-center">
-                <p className="text-gray-400 mb-3">{userSquad.length > 0 ? 'You are not on a current squad' : 'You are not currently in a squad'}</p>
-                <Link
-                  href="/squads"
-                  className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded font-medium transition-colors duration-300 text-white"
-                >
-                  Join or Create Squad
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-[#8B98B0]">
+                  {heroData?.profile?.created_at && <span>Member since {new Date(heroData.profile.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>}
+                  {(seasonCtx?.registration?.preferred_roles?.length || heroData?.freeAgent?.preferred_roles?.length) ? (
+                    <span>Plays <span className="text-[#E6EDF7]">{(seasonCtx?.registration?.preferred_roles || heroData?.freeAgent?.preferred_roles || []).join(', ')}</span></span>
+                  ) : null}
+                  {userGames[0]?.gameDate && <span>Last recorded game {new Date(userGames[0].gameDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                </div>
+              </div>
+              {inGameAlias && (
+                <Link href={`/stats/player/${encodeURIComponent(inGameAlias)}`} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">
+                  Public profile
                 </Link>
-              </div>
-            )}
-          </div>
-
-          {/* ===== ZONE 2: Account Settings (editable) ===== */}
-
-          <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/20 rounded-lg p-8 mb-6">
-            <h2 className="text-2xl font-bold text-cyan-400 mb-6 tracking-wide">Account Settings</h2>
-
-            {profileLoading ? (
-              <div className="animate-pulse space-y-4">
-                <div className="h-24 w-24 bg-gray-700 rounded-full mx-auto" />
-                <div className="h-12 bg-gray-700 rounded" />
-                <div className="h-12 bg-gray-700 rounded" />
-              </div>
-            ) : (
-              <form onSubmit={handleUpdateProfile} className="space-y-8">
-                {/* Avatar */}
-                <div className="text-center">
-                  <div className="relative inline-block">
-                    <div className="h-32 w-32 rounded-full overflow-hidden mx-auto bg-gray-700 border-4 border-cyan-500 shadow-lg shadow-cyan-500/25">
-                      {avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt="Avatar"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-3xl text-cyan-400 font-bold">
-                          {inGameAlias ? inGameAlias.charAt(0).toUpperCase() : '?'}
-                        </div>
-                      )}
-                    </div>
-                    {uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 rounded-full">
-                        <div className="text-cyan-400 font-bold text-lg">{uploadProgress}%</div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-6">
-                    <label className="block text-sm font-bold text-gray-400 mb-3 tracking-wide uppercase">
-                      Upload Profile Image
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="avatar-upload"
-                    />
-                    <label
-                      htmlFor="avatar-upload"
-                      className="inline-block bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 px-6 py-3 rounded-lg cursor-pointer text-white font-medium tracking-wide border border-gray-500 hover:border-cyan-500 transition-all duration-300"
-                    >
-                      Choose File
-                    </label>
-                    {avatarFile && (
-                      <p className="mt-3 text-sm text-cyan-300 font-mono">
-                        {avatarFile.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Preset Avatars */}
-                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
-                  <AvatarSelector
-                    selectedAvatar={avatarUrl}
-                    onAvatarSelect={(url) => {
-                      setAvatarUrl(url);
-                      setAvatarFile(null);
-                    }}
-                    showLabel={true}
-                    size="medium"
-                  />
-                </div>
-
-                {/* Email + Display Name */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
-                    <label htmlFor="email" className="block text-sm font-bold text-gray-400 mb-3 tracking-wide uppercase">
-                      Email
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300 font-mono"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Email verification required for changes
-                    </p>
-                  </div>
-
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
-                    <label htmlFor="inGameAlias" className="block text-sm font-bold text-gray-400 mb-3 tracking-wide uppercase">
-                      Display Name / Main Alias
-                    </label>
-                    <input
-                      id="inGameAlias"
-                      type="text"
-                      value={inGameAlias}
-                      onChange={handleAliasChange}
-                      onBlur={handleAliasBlur}
-                      required
-                      className={`w-full px-4 py-3 bg-gray-800 border rounded-lg text-white focus:outline-none focus:ring-2 transition-all duration-300 font-mono ${
-                        aliasError
-                          ? 'border-red-500 focus:border-red-400 focus:ring-red-500/20'
-                          : 'border-gray-600 focus:border-cyan-500 focus:ring-cyan-500/20'
-                      }`}
-                      placeholder="Enter your combat alias..."
-                    />
-                    {aliasError && (
-                      <p className="mt-2 text-sm text-red-400">{aliasError}</p>
-                    )}
-                    {!aliasError && (
-                      <p className="mt-2 text-xs text-gray-500">
-                        Must contain at least 1 valid character
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* AKA Aliases */}
-                <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-6">
-                  <label className="block text-sm font-bold text-gray-400 mb-3 tracking-wide uppercase">
-                    Also Known As (AKA)
-                  </label>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {aliases
-                      .filter(alias => alias.trim().toLowerCase() !== inGameAlias.trim().toLowerCase())
-                      .map(alias => (
-                        <span
-                          key={alias}
-                          className="flex items-center bg-cyan-800 text-cyan-100 px-3 py-1 rounded-full font-mono text-sm"
-                        >
-                          {alias}
-                          <button
-                            type="button"
-                            onClick={() => removeAlias(alias)}
-                            className="ml-2 text-cyan-300 hover:text-red-400 font-bold focus:outline-none"
-                          >
-                            &times;
-                          </button>
-                        </span>
-                      ))}
-                    <input
-                      type="text"
-                      value={aliasInput}
-                      onChange={e => setAliasInput(e.target.value)}
-                      onKeyDown={handleAliasInput}
-                      className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-white font-mono focus:outline-none"
-                      placeholder="Add alias and press space..."
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Press space or enter to add each alias. Main alias is automatically included.
-                  </p>
-                </div>
-
-                {/* Update Button */}
-                <div className="flex justify-center pt-4">
-                  <button
-                    type="submit"
-                    disabled={updateLoading}
-                    className={`px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-bold text-lg tracking-wider border border-cyan-500 hover:border-cyan-400 transition-all duration-300 shadow-2xl hover:shadow-cyan-500/25 ${
-                      updateLoading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    {updateLoading ? 'Updating...' : 'Update Profile'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {/* ===== ZONE 3: Recorded Games (read-only, outside form) ===== */}
-
-          <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/20 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-cyan-400 tracking-wide">
-                My Recorded Games
-              </h2>
-              {userGames.length > 0 && (
-                <button
-                  onClick={() => setShowAllGames(!showAllGames)}
-                  className="text-sm text-cyan-400 hover:text-cyan-300 underline"
-                >
-                  {showAllGames ? 'Show Less' : `View All ${userGames.length} Games`}
-                </button>
               )}
             </div>
+          </div>
 
-            {gamesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-cyan-500" />
-                <span className="ml-3 text-cyan-400">Loading your games...</span>
-              </div>
-            ) : userGames.length === 0 ? (
-              <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 text-center">
-                <p className="text-gray-400 mb-3">No recorded games found</p>
-                <p className="text-sm text-gray-500">Your games will appear here once they&apos;ve been recorded with video</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {(showAllGames ? userGames : userGames.slice(0, 5)).map((game) => (
-                  <div
-                    key={game.gameId}
-                    className="bg-gray-800 border border-gray-600 rounded-lg p-4 hover:border-cyan-500/50 transition-all duration-300"
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            {/* ===== Left: account + recorded games ===== */}
+            <div className="space-y-4">
+              <form onSubmit={handleUpdateProfile} className="rounded-xl bg-[#131A2B] p-4 md:p-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">Account</h2>
+                  <button
+                    type="submit"
+                    disabled={updateLoading || profileLoading}
+                    className="rounded-md bg-[#22D3EE] px-3 py-1.5 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="text-lg font-bold text-white">
-                            {game.gameMode} - {game.mapName}
-                          </h4>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            game.userStats?.result === 'win'
-                              ? 'bg-green-500/20 text-green-400'
-                              : game.userStats?.result === 'loss'
-                              ? 'bg-red-500/20 text-red-400'
-                              : 'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {game.userStats?.result === 'win' ? 'Win' :
-                             game.userStats?.result === 'loss' ? 'Loss' : 'Unknown'}
-                          </span>
-                        </div>
+                    {updateLoading ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
 
-                        <div className="flex items-center gap-4 text-sm text-gray-300 mb-2">
-                          <span>{formatGameDate(game.gameDate)}</span>
-                          <span>{formatGameDuration(game.duration)}</span>
-                          <span>{game.totalPlayers} players</span>
-                        </div>
-
-                        {game.userStats && (
-                          <div className="flex items-center gap-4 text-sm">
-                            <span className="font-medium" style={getClassColorStyle(game.userStats.class)}>
-                              {game.userStats.class}
+                {profileLoading ? (
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-9 rounded bg-[#1B2438]" />
+                    <div className="h-9 rounded bg-[#1B2438]" />
+                    <div className="h-9 w-2/3 rounded bg-[#1B2438]" />
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]">In-game alias (display name)</span>
+                      <input
+                        id="inGameAlias"
+                        type="text"
+                        value={inGameAlias}
+                        onChange={handleAliasChange}
+                        onBlur={handleAliasBlur}
+                        required
+                        className={`w-full rounded-md border bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] focus:outline-none ${aliasError ? 'border-[#F87171]' : 'border-white/10 focus:border-[#22D3EE]'}`}
+                        placeholder="Your alias"
+                      />
+                      {aliasError && <span className="mt-1 block text-xs text-[#F87171]">{aliasError}</span>}
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]">Email</span>
+                      <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+                      />
+                      <span className="mt-1 block text-xs text-[#8B98B0]">Changing it sends a confirmation link to the new address.</span>
+                    </label>
+                    <div className="md:col-span-2">
+                      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]">Also known as</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {aliases
+                          .filter((alias) => alias.trim().toLowerCase() !== inGameAlias.trim().toLowerCase())
+                          .map((alias) => (
+                            <span key={alias} className="inline-flex items-center gap-1 rounded-md bg-[#1B2438] px-2 py-1 text-xs text-[#E6EDF7]">
+                              {alias}
+                              <button type="button" onClick={() => removeAlias(alias)} className="text-[#8B98B0] hover:text-[#F87171]" aria-label={`Remove ${alias}`}>✕</button>
                             </span>
-                            <span className="text-yellow-400">
-                              {game.userStats.kills}K/{game.userStats.deaths}D
-                            </span>
-                            {game.userStats.captures > 0 && (
-                              <span className="text-blue-400">
-                                {game.userStats.captures} caps
-                              </span>
-                            )}
-                            {game.userStats.carrier_kills > 0 && (
-                              <span className="text-purple-400">
-                                {game.userStats.carrier_kills} carrier kills
-                              </span>
-                            )}
-                            <span className="text-gray-400">
-                              Team: {game.userStats.team}
-                            </span>
-                          </div>
-                        )}
+                          ))}
+                        <input
+                          type="text"
+                          value={aliasInput}
+                          onChange={(e) => setAliasInput(e.target.value)}
+                          onKeyDown={handleAliasInput}
+                          className="min-w-[10rem] rounded-md border border-dashed border-white/15 bg-transparent px-2 py-1 text-xs text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
+                          placeholder="Add an old alias, press Enter"
+                        />
                       </div>
-
-                      {game.videoInfo.has_video && (
-                        <div className="flex gap-2 ml-4">
-                          {game.videoInfo.youtube_url && (
-                            <button
-                              onClick={() => setVideoModal({ isOpen: true, game })}
-                              className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-300 flex items-center gap-1"
-                            >
-                              YouTube
-                            </button>
-                          )}
-                          {game.videoInfo.vod_url && (
-                            <a
-                              href={game.videoInfo.vod_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-sm font-medium transition-colors duration-300 flex items-center gap-1"
-                            >
-                              VOD
-                            </a>
-                          )}
-                        </div>
-                      )}
+                      <span className="mt-1 block text-xs text-[#8B98B0]">Old names you've played under, so your stats link up. Your main alias is included automatically.</span>
                     </div>
 
-                    {/* Player details toggle */}
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300 text-sm font-medium">
-                        View All Players ({game.players.length})
-                      </summary>
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {Object.entries(
-                          game.players.reduce((acc: any, player) => {
-                            if (!acc[player.team]) acc[player.team] = [];
-                            acc[player.team].push(player);
-                            return acc;
-                          }, {})
-                        ).map(([team, players]: [string, any]) => (
-                          <div key={team} className="bg-gray-700 rounded p-3">
-                            <h5 className="font-bold text-cyan-400 mb-2">{team}</h5>
-                            <div className="space-y-1">
-                              {players.map((player: RecordedGamePlayer, idx: number) => (
-                                <div key={idx} className="flex justify-between text-xs">
-                                  <span className="font-medium" style={getClassColorStyle(player.main_class)}>
-                                    {player.player_name === inGameAlias ? '* ' : ''}{player.player_name}
-                                  </span>
-                                  <span className="text-gray-300">
-                                    {player.kills}K/{player.deaths}D
-                                    {player.flag_captures ? ` ${player.flag_captures}C` : ''}
-                                  </span>
-                                </div>
-                              ))}
+                    {showAvatarPanel && (
+                      <div className="md:col-span-2 rounded-lg bg-[#0B0F1A] p-3">
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]">Avatar</span>
+                          <div className="flex items-center gap-2">
+                            <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" id="avatar-upload" />
+                            <label htmlFor="avatar-upload" className="cursor-pointer rounded-md bg-white/5 px-2.5 py-1 text-xs text-[#E6EDF7] hover:bg-white/10">Upload image</label>
+                            {avatarFile && <span className="text-xs text-[#22D3EE]">{avatarFile.name}</span>}
+                            <button type="button" onClick={() => setShowAvatarPanel(false)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Close</button>
+                          </div>
+                        </div>
+                        <AvatarSelector
+                          selectedAvatar={avatarUrl}
+                          onAvatarSelect={(url) => { setAvatarUrl(url); setAvatarFile(null); }}
+                          showLabel={false}
+                          size="small"
+                        />
+                        <p className="mt-2 text-xs text-[#8B98B0]">JPEG, PNG or GIF up to 2MB. Pick one, then Save changes.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </form>
+
+              {/* Recorded games */}
+              <div className="rounded-xl bg-[#131A2B] p-4 md:p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">Recorded games <span className="text-sm text-[#8B98B0]">· {userGames.length}</span></h2>
+                  {userGames.length > 5 && (
+                    <button onClick={() => setShowAllGames(!showAllGames)} className="text-xs text-[#22D3EE] hover:underline">
+                      {showAllGames ? 'Show fewer' : `Show all ${userGames.length}`}
+                    </button>
+                  )}
+                </div>
+
+                {gamesLoading ? (
+                  <p className="py-6 text-center text-sm text-[#8B98B0]">Loading your games…</p>
+                ) : userGames.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-[#8B98B0]">No recorded games yet. Games appear here once they've been recorded with video.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(showAllGames ? userGames : userGames.slice(0, 5)).map((game) => (
+                      <div key={game.gameId} className="rounded-lg bg-[#0B0F1A] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-[#E6EDF7]">{game.gameMode} · {game.mapName}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${game.userStats?.result === 'win' ? 'bg-[#34D399]/15 text-[#34D399]' : game.userStats?.result === 'loss' ? 'bg-[#F87171]/15 text-[#F87171]' : 'bg-white/5 text-[#8B98B0]'}`}>
+                                {game.userStats?.result === 'win' ? 'Win' : game.userStats?.result === 'loss' ? 'Loss' : '—'}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-[#8B98B0]">
+                              <span>{formatGameDate(game.gameDate)}</span>
+                              <span>{formatGameDuration(game.duration)}</span>
+                              <span>{game.totalPlayers} players</span>
+                              {game.userStats && (
+                                <>
+                                  <span style={getClassColorStyle(game.userStats.class)}>{game.userStats.class}</span>
+                                  <span className="text-[#E6EDF7]">{game.userStats.kills}K / {game.userStats.deaths}D</span>
+                                  {game.userStats.captures > 0 && <span>{game.userStats.captures} caps</span>}
+                                  {game.userStats.carrier_kills > 0 && <span>{game.userStats.carrier_kills} carrier kills</span>}
+                                  <span>Team {game.userStats.team}</span>
+                                </>
+                              )}
                             </div>
                           </div>
-                        ))}
+                          {game.videoInfo.has_video && (
+                            <div className="flex gap-1.5">
+                              {game.videoInfo.youtube_url && (
+                                <button onClick={() => setVideoModal({ isOpen: true, game })} className="rounded-md bg-[#22D3EE] px-2.5 py-1 text-xs font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">Watch</button>
+                              )}
+                              {game.videoInfo.vod_url && (
+                                <a href={game.videoInfo.vod_url} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/5 px-2.5 py-1 text-xs text-[#E6EDF7] hover:bg-white/10">VOD</a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs text-[#8B98B0] hover:text-[#E6EDF7]">All players ({game.players.length})</summary>
+                          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                            {Object.entries(
+                              game.players.reduce((acc: any, player) => {
+                                if (!acc[player.team]) acc[player.team] = [];
+                                acc[player.team].push(player);
+                                return acc;
+                              }, {})
+                            ).map(([team, players]: [string, any]) => (
+                              <div key={team} className="rounded-md bg-[#131A2B] p-2">
+                                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#8B98B0]">{team}</div>
+                                <div className="space-y-0.5">
+                                  {players.map((player: RecordedGamePlayer, idx: number) => (
+                                    <div key={idx} className="flex justify-between text-xs">
+                                      <span style={getClassColorStyle(player.main_class)}>{player.player_name === inGameAlias ? '★ ' : ''}{player.player_name}</span>
+                                      <span className="text-[#8B98B0]">{player.kills}K/{player.deaths}D{player.flag_captures ? ` ${player.flag_captures}C` : ''}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       </div>
-                    </details>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ===== Right: stats, season, squad ===== */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Games', value: heroData?.elo?.total_games ?? '—' },
+                  { label: 'Win rate', value: heroData?.elo ? `${(heroData.elo.win_rate * (heroData.elo.win_rate <= 1 ? 100 : 1)).toFixed(1)}%` : '—' },
+                  { label: 'K/D', value: heroData?.elo ? heroData.elo.kill_death_ratio.toFixed(2) : '—' },
+                  { label: 'Peak ELO', value: heroData?.elo ? Math.round(heroData.elo.elo_peak) : '—' },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-lg bg-[#131A2B] px-3 py-3 text-center">
+                    <div className="font-display text-2xl text-[#E6EDF7]">{s.value}</div>
+                    <div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">{s.label}</div>
                   </div>
                 ))}
               </div>
-            )}
+
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">This season</h2>
+                {!seasonCtx ? (
+                  <p className="text-sm text-[#8B98B0]">Loading…</p>
+                ) : !seasonCtx.league || !seasonCtx.season ? (
+                  <p className="text-sm text-[#8B98B0]">No season is open for registration right now.</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#E6EDF7]">
+                      {seasonCtx.league.name} Season {seasonCtx.season.season_number}
+                      <span className="text-[#8B98B0]"> · {seasonCtx.registration ? 'registered' : 'not registered'}</span>
+                    </p>
+                    {seasonCtx.registration?.preferred_roles?.length ? (
+                      <p className="mt-0.5 text-xs text-[#8B98B0]">Preferred: {seasonCtx.registration.preferred_roles.join(', ')}</p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href="/league/register" className={`rounded-md px-3 py-1.5 text-sm ${seasonCtx.registration ? 'bg-white/5 text-[#E6EDF7] hover:bg-white/10' : 'bg-[#22D3EE] font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]'}`}>
+                        {seasonCtx.registration ? 'Edit registration' : 'Register'}
+                      </Link>
+                      <Link href="/free-agents" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Pool</Link>
+                      {seasonCtx.league.slug === 'ctfdl' && <Link href="/league/ctfdl/draft" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Draft lobby</Link>}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Squad</h2>
+                {(() => {
+                  const current = userSquad.find((s) => s && !s.is_legacy && s.is_active !== false);
+                  const past = userSquad.filter((s) => s && s.id !== current?.id);
+                  return (
+                    <>
+                      {current ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <Link href={`/squads/${current.id}`} className="font-display text-base text-[#E6EDF7] hover:text-[#22D3EE]">[{current.tag}] {current.name}</Link>
+                          <Link href={`/squads/${current.id}`} className="rounded-md bg-white/5 px-2.5 py-1 text-xs text-[#E6EDF7] hover:bg-white/10">Manage</Link>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-[#8B98B0]">Not on a current squad</span>
+                          <Link href="/squads" className="rounded-md bg-[#22D3EE] px-2.5 py-1 text-xs font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">Join or create</Link>
+                        </div>
+                      )}
+                      {past.length > 0 && (
+                        <div className="mt-2 text-xs text-[#8B98B0]">
+                          Past:{' '}
+                          {past.map((s, i) => (
+                            <span key={s.id}>
+                              {i > 0 ? ', ' : ''}
+                              <Link href={`/squads/${s.id}`} className="hover:text-[#E6EDF7]">[{s.tag}] {s.name}</Link>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
         </div>
       </main>
