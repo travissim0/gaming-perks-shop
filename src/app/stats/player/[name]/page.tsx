@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import PlayerProfileHero from '@/components/PlayerProfileHero';
 import { useAuth } from '@/lib/AuthContext';
-import { getClassColor, getClassColorStyle } from '@/utils/classColors';
+import { supabase } from '@/lib/supabase';
+import { getClassColorStyle } from '@/utils/classColors';
+import { getLeagues, pickFeatured, getOpenSeason, type LeagueInfo, type LeagueSeason } from '@/lib/leagues';
 import type { EloTier } from '@/utils/eloTiers';
 
 // ---------- Types ----------
@@ -118,11 +118,11 @@ interface ProfileResponse {
 }
 
 const DATE_FILTERS = [
-  { value: 'all', label: 'All Time' },
-  { value: 'day', label: 'Last 24 Hours' },
-  { value: 'week', label: 'Last Week' },
-  { value: 'month', label: 'Last Month' },
-  { value: 'year', label: 'Last Year' }
+  { value: 'all', label: 'All time' },
+  { value: 'day', label: '24 hours' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
 ];
 
 // ---------- Component ----------
@@ -139,6 +139,9 @@ export default function PlayerPage() {
   const [error, setError] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+
+  // Season context for the badge: is this player registered / drafted for the running league season?
+  const [seasonBadge, setSeasonBadge] = useState<{ league: LeagueInfo; season: LeagueSeason; registered: boolean; classes: string[]; draftedTag: string | null } | null>(null);
 
   // Fetch profile data once on mount (independent of filters)
   useEffect(() => {
@@ -160,6 +163,46 @@ export default function PlayerPage() {
     };
     fetchProfile();
   }, [playerName]);
+
+  // Season badge (public data: registration + draft pick for the featured league's open season)
+  useEffect(() => {
+    const pid = profileData?.profile?.id;
+    if (!pid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const league = pickFeatured(await getLeagues());
+        if (!league) return;
+        const season = await getOpenSeason(league);
+        if (!season || cancelled) return;
+        const { data: reg } = await supabase
+          .from('free_agents')
+          .select('preferred_roles')
+          .eq('player_id', pid)
+          .eq('is_active', true)
+          .eq('league_slug', league.slug)
+          .eq('season_number', season.season_number)
+          .maybeSingle();
+        let draftedTag: string | null = null;
+        if (league.slug === 'ctfdl') {
+          const { data: draft } = await supabase.from('ctfdl_drafts').select('id').eq('league_season_id', season.id).maybeSingle();
+          if (draft) {
+            const { data: pick } = await supabase
+              .from('ctfdl_draft_picks')
+              .select('team_id, ctfdl_draft_teams(squads(tag))')
+              .eq('draft_id', draft.id)
+              .eq('player_id', pid)
+              .maybeSingle();
+            draftedTag = (pick as any)?.ctfdl_draft_teams?.squads?.tag ?? (pick ? 'drafted' : null);
+          }
+        }
+        if (!cancelled) setSeasonBadge({ league, season, registered: !!reg, classes: reg?.preferred_roles || [], draftedTag });
+      } catch (e) {
+        console.error('season badge', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profileData?.profile?.id]);
 
   // Fetch stats data (re-fetches on filter changes)
   const fetchPlayerData = async () => {
@@ -198,13 +241,14 @@ export default function PlayerPage() {
 
   useEffect(() => {
     fetchPlayerData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameMode, dateFilter]);
 
   // ---------- Formatters ----------
 
   const formatNumber = (num: number, decimals = 0) => Number(num).toFixed(decimals);
   const formatPercentage = (num: number) => `${(num * 100).toFixed(1)}%`;
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
   // ---------- Compute aggregate totals from all-time stats ----------
 
@@ -217,449 +261,304 @@ export default function PlayerPage() {
     { totalGames: 0, totalKills: 0, totalCaptures: 0 }
   );
 
+  const isMe = !!user && !!profileData?.profile?.id && user.id === profileData.profile.id;
+  const profile = profileData?.profile;
+  const elo = profileData?.elo;
+  const cs = playerData?.calculatedStats;
+  const lastGame = playerData?.recentGames?.[0]?.game_date || playerData?.aggregateStats?.[0]?.last_game_date || null;
+
+  const chipCls = (on: boolean) => `rounded-md px-2.5 py-1 text-xs font-medium ${on ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`;
+  const th = (label: string, right = true) => (
+    <th className={`px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[#8B98B0] ${right ? 'text-right' : 'text-left'}`}>{label}</th>
+  );
+  const winCls = (rate: number) => (rate >= 0.6 ? 'text-[#34D399]' : rate >= 0.4 ? 'text-[#F59E0B]' : 'text-[#F87171]');
+
   // ---------- Render ----------
 
   if (error && !playerData) {
     return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
+      <div className="ctf-theme min-h-screen">
         <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12"
-          >
-            <h1 className="text-3xl font-bold text-red-400 mb-4">Error</h1>
-            <p className="text-red-200 mb-6">{error}</p>
-            <button
-              onClick={() => window.history.back()}
-              className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 px-6 py-2 rounded-lg font-semibold transition-all duration-200 hover:scale-105"
-            >
-              Go Back
-            </button>
-          </motion.div>
+        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
+          <h1 className="font-display text-3xl text-[#F87171]">{error}</h1>
+          <p className="mt-2 text-sm text-[#8B98B0]">Check the spelling, or find them on the players list.</p>
+          <div className="mt-6 flex justify-center gap-2">
+            <Link href="/squads/players" className="rounded-md bg-[#22D3EE] px-4 py-2 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">Players</Link>
+            <Link href="/stats" className="rounded-md bg-white/5 px-4 py-2 text-sm text-[#E6EDF7] hover:bg-white/10">Leaderboard</Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
+    <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
-      <div className="container mx-auto px-4 py-6">
-        {/* Breadcrumb */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="mb-4"
-        >
-          <Link
-            href="/stats"
-            className="text-sm text-gray-400 hover:text-cyan-400 transition-colors"
-          >
-            ← Back to Leaderboard
-          </Link>
-        </motion.div>
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <div className="mb-3 text-sm">
+          <Link href="/stats" className="text-[#8B98B0] hover:text-[#E6EDF7]">← Leaderboard</Link>
+        </div>
 
-        {/* Profile Hero */}
-        <PlayerProfileHero
-          playerName={playerName}
-          profile={profileData?.profile ?? null}
-          aliases={profileData?.aliases ?? []}
-          squad={profileData?.squad ?? null}
-          freeAgent={profileData?.freeAgent ?? null}
-          elo={profileData?.elo ?? null}
-          isRegistered={profileData?.isRegistered ?? false}
-          loading={profileLoading}
-          stats={playerData?.calculatedStats ? {
-            totalGames: aggregateTotals?.totalGames,
-            winRate: playerData.calculatedStats.winRate,
-            killDeathRatio: playerData.calculatedStats.killDeathRatio,
-            avgAccuracy: playerData.calculatedStats.avgAccuracy,
-            totalKills: aggregateTotals?.totalKills,
-            totalCaptures: aggregateTotals?.totalCaptures,
-          } : null}
-        />
+        {/* ---- Header strip ---------------------------------------------- */}
+        <div className="mb-4 rounded-xl bg-[#131A2B] p-4 md:p-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="h-16 w-16 flex-none overflow-hidden rounded-xl bg-[#1B2438]">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center font-display text-2xl text-[#22D3EE]">{playerName.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-display text-2xl leading-none text-[#E6EDF7] md:text-3xl">{playerName}</h1>
+                {elo && (
+                  <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]" title={`Peak ${Math.round(elo.elo_peak)}`}>
+                    {elo.tier?.name || 'Rated'} · {Math.round(elo.weighted_elo)}
+                  </span>
+                )}
+                {seasonBadge?.draftedTag ? (
+                  <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">Drafted{seasonBadge.draftedTag !== 'drafted' ? ` → [${seasonBadge.draftedTag}]` : ''} · {seasonBadge.league.name} S{seasonBadge.season.season_number}</span>
+                ) : seasonBadge?.registered ? (
+                  <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#34D399]">Registered · {seasonBadge.league.name} S{seasonBadge.season.season_number}</span>
+                ) : null}
+                {profileData?.squad && (
+                  <Link href={`/squads/${profileData.squad.id}`} className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF7] hover:bg-white/10">
+                    [{profileData.squad.tag}] {profileData.squad.name}{profileData.squad.role === 'captain' ? ' · captain' : ''}
+                  </Link>
+                )}
+                {profile?.ctf_role && (
+                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#8B98B0]">{profile.ctf_role.replace('ctf_', 'CTF ')}</span>
+                )}
+                {profile?.is_league_banned && (
+                  <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F87171]">League ban</span>
+                )}
+                {!profileLoading && !profile && (
+                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#8B98B0]">No site account</span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-[#8B98B0]">
+                {profile?.created_at && <span>Member since {new Date(profile.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>}
+                {(seasonBadge?.classes.length || profileData?.freeAgent?.preferred_roles?.length) ? (
+                  <span>Plays <span className="text-[#E6EDF7]">{(seasonBadge?.classes.length ? seasonBadge.classes : profileData!.freeAgent!.preferred_roles).join(', ')}</span></span>
+                ) : null}
+                {profileData?.aliases && profileData.aliases.filter((a) => a.toLowerCase() !== playerName.toLowerCase()).length > 0 && (
+                  <span>Also known as <span className="text-[#E6EDF7]">{profileData.aliases.filter((a) => a.toLowerCase() !== playerName.toLowerCase()).join(', ')}</span></span>
+                )}
+                {lastGame && <span>Last game {formatDate(lastGame)}</span>}
+              </div>
+            </div>
+            {isMe && (
+              <Link href="/profile" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Edit profile</Link>
+            )}
+          </div>
+        </div>
 
-        {/* Loading overlay for stats */}
         {loading && !playerData && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-12"
-          >
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4" />
-            <p className="text-gray-400">Loading player statistics...</p>
-          </motion.div>
+          <div className="py-12 text-center text-sm text-[#8B98B0]">Loading player statistics…</div>
         )}
 
         {playerData && (
           <>
-            {/* Filters */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/5 backdrop-blur-lg rounded-xl p-5 mb-8 border border-white/10"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Game Mode
-                  </label>
-                  <select
-                    value={gameMode}
-                    onChange={(e) => setGameMode(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  >
-                    <option value="all">All Modes</option>
-                    {playerData.gameModeBreakdown.map(stats => (
-                      <option key={stats.game_mode} value={stats.game_mode}>
-                        {stats.game_mode}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Time Period
-                  </label>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
-                  >
-                    {DATE_FILTERS.map(filter => (
-                      <option key={filter.value} value={filter.value}>
-                        {filter.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            {/* ---- Headline tiles (respect the filters below) -------------- */}
+            {cs && (
+              <div className="mb-4 grid grid-cols-3 gap-2 md:grid-cols-6">
+                {[
+                  { label: 'Games', value: aggregateTotals?.totalGames ?? '—' },
+                  { label: 'Win rate', value: formatPercentage(cs.winRate), cls: winCls(cs.winRate) },
+                  { label: 'K/D', value: formatNumber(cs.killDeathRatio, 2) },
+                  { label: 'Accuracy', value: formatPercentage(cs.avgAccuracy) },
+                  { label: elo ? 'ELO' : 'Caps', value: elo ? Math.round(elo.weighted_elo) : aggregateTotals?.totalCaptures ?? '—' },
+                  { label: 'Kills', value: (aggregateTotals?.totalKills ?? 0).toLocaleString() },
+                ].map((t) => (
+                  <div key={t.label} className="rounded-lg bg-[#131A2B] px-3 py-3 text-center">
+                    <div className={`font-display text-2xl ${t.cls || 'text-[#E6EDF7]'}`}>{t.value}</div>
+                    <div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">{t.label}</div>
+                  </div>
+                ))}
               </div>
-            </motion.div>
+            )}
 
-            {/* Stats Overview */}
-            {playerData.calculatedStats && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8"
-              >
-                <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-                  <h3 className="text-lg font-semibold text-cyan-400 mb-4">Combat Stats</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Avg Kills/Game:</span>
-                      <span className="font-bold">{formatNumber(playerData.calculatedStats.avgKillsPerGame, 1)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Avg Deaths/Game:</span>
-                      <span className="font-bold">{formatNumber(playerData.calculatedStats.avgDeathsPerGame, 1)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">K/D Ratio:</span>
-                      <span className="font-bold text-cyan-400">{formatNumber(playerData.calculatedStats.killDeathRatio, 2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Avg Accuracy:</span>
-                      <span className="font-bold text-purple-400">{formatPercentage(playerData.calculatedStats.avgAccuracy)}</span>
-                    </div>
-                  </div>
+            {/* ---- Filters --------------------------------------------------- */}
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-[#131A2B] px-4 py-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-[#8B98B0]">Mode</span>
+              <button type="button" onClick={() => setGameMode('all')} className={chipCls(gameMode === 'all')}>All</button>
+              {playerData.gameModeBreakdown.map((m) => (
+                <button key={m.game_mode} type="button" onClick={() => setGameMode(m.game_mode)} className={chipCls(gameMode === m.game_mode)}>
+                  {m.game_mode} <span className={gameMode === m.game_mode ? 'opacity-70' : 'text-[#8B98B0]'}>{m.total_games}</span>
+                </button>
+              ))}
+              <span className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-[#8B98B0]">Period</span>
+              {DATE_FILTERS.map((f) => (
+                <button key={f.value} type="button" onClick={() => setDateFilter(f.value)} className={chipCls(dateFilter === f.value)}>{f.label}</button>
+              ))}
+              {loading && <span className="text-xs text-[#8B98B0]">Updating…</span>}
+            </div>
+
+            {/* ---- Summary cards --------------------------------------------- */}
+            {cs && (
+              <div className="mb-4 grid gap-4 md:grid-cols-3">
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h3 className="mb-2 font-display text-lg text-[#E6EDF7]">Combat</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Avg kills / game</dt><dd className="tabular-nums text-[#E6EDF7]">{formatNumber(cs.avgKillsPerGame, 1)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Avg deaths / game</dt><dd className="tabular-nums text-[#E6EDF7]">{formatNumber(cs.avgDeathsPerGame, 1)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">K/D</dt><dd className="tabular-nums text-[#E6EDF7]">{formatNumber(cs.killDeathRatio, 2)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Accuracy</dt><dd className="tabular-nums text-[#E6EDF7]">{formatPercentage(cs.avgAccuracy)}</dd></div>
+                  </dl>
                 </div>
-
-                <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-                  <h3 className="text-lg font-semibold text-purple-400 mb-4">Game Performance</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Win Rate:</span>
-                      <span className="font-bold text-green-400">{formatPercentage(playerData.calculatedStats.winRate)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Avg Captures/Game:</span>
-                      <span className="font-bold">{formatNumber(playerData.calculatedStats.avgCapturesPerGame, 1)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Recent Games:</span>
-                      <span className="font-bold">{playerData.recentGames.length}</span>
-                    </div>
-                  </div>
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h3 className="mb-2 font-display text-lg text-[#E6EDF7]">Objective</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Win rate</dt><dd className={`tabular-nums ${winCls(cs.winRate)}`}>{formatPercentage(cs.winRate)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Avg captures / game</dt><dd className="tabular-nums text-[#E6EDF7]">{formatNumber(cs.avgCapturesPerGame, 1)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Total captures</dt><dd className="tabular-nums text-[#E6EDF7]">{aggregateTotals?.totalCaptures ?? '—'}</dd></div>
+                    <div className="flex justify-between"><dt className="text-[#8B98B0]">Games in view</dt><dd className="tabular-nums text-[#E6EDF7]">{playerData.recentGames.length}</dd></div>
+                  </dl>
                 </div>
-
-                <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-                  <h3 className="text-lg font-semibold text-green-400 mb-4">Game Mode Breakdown</h3>
-                  <div className="space-y-2">
-                    {playerData.gameModeBreakdown.slice(0, 3).map(stats => (
-                      <div key={stats.game_mode} className="flex justify-between">
-                        <span className="text-gray-400">{stats.game_mode}:</span>
-                        <span className="font-bold">{stats.total_games} games</span>
+                <div className="rounded-xl bg-[#131A2B] p-4">
+                  <h3 className="mb-2 font-display text-lg text-[#E6EDF7]">Modes</h3>
+                  <dl className="space-y-1.5 text-sm">
+                    {playerData.gameModeBreakdown.slice(0, 4).map((m) => (
+                      <div key={m.game_mode} className="flex justify-between">
+                        <dt className="text-[#8B98B0]">{m.game_mode}</dt>
+                        <dd className="tabular-nums text-[#E6EDF7]">{m.total_games} games <span className={winCls(m.win_rate)}>· {formatPercentage(m.win_rate)}</span></dd>
                       </div>
                     ))}
+                  </dl>
+                </div>
+              </div>
+            )}
+
+            {/* ---- All-time by game mode ------------------------------------- */}
+            {playerData.aggregateStats && playerData.aggregateStats.length > 0 && (
+              <div className="mb-4 overflow-hidden rounded-xl bg-[#131A2B]">
+                <div className="flex items-baseline justify-between px-4 pt-4">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">All-time by mode</h2>
+                  <span className="text-xs text-[#8B98B0]">Not affected by the filters</span>
+                </div>
+                <div className="overflow-x-auto p-2">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead><tr>{th('Mode', false)}{th('Games')}{th('Win rate')}{th('Kills')}{th('Deaths')}{th('K/D')}{th('Caps')}{th('EB hits')}{th('Last active')}</tr></thead>
+                    <tbody>
+                      {playerData.aggregateStats.map((s) => (
+                        <tr key={s.game_mode} className="border-t border-white/[0.06] hover:bg-[#1B2438]">
+                          <td className="px-3 py-2 text-[#E6EDF7]">{s.game_mode}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{s.total_games}</td>
+                          <td className={`px-3 py-2 text-right tabular-nums ${winCls(s.win_rate)}`}>{formatPercentage(s.win_rate)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{s.total_kills.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{s.total_deaths.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{formatNumber(s.kill_death_ratio, 2)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{s.total_captures}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{s.total_eb_hits}</td>
+                          <td className="px-3 py-2 text-right text-xs text-[#8B98B0]">{formatDate(s.last_game_date)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ---- Class breakdown (from the games in view) ------------------- */}
+            {playerData.recentGames && playerData.recentGames.length > 0 && (() => {
+              const classStats = playerData.recentGames.reduce((acc: any, game) => {
+                const className = game.main_class;
+                if (!acc[className]) acc[className] = { games: 0, wins: 0, kills: 0, deaths: 0, captures: 0, totalAccuracy: 0 };
+                acc[className].games += 1;
+                if (game.result === 'Win') acc[className].wins += 1;
+                acc[className].kills += game.kills;
+                acc[className].deaths += game.deaths;
+                acc[className].captures += game.captures;
+                acc[className].totalAccuracy += game.accuracy;
+                return acc;
+              }, {});
+              const sortedClasses = Object.entries(classStats)
+                .map(([className, stats]: [string, any]) => ({
+                  className,
+                  ...stats,
+                  winRate: stats.games > 0 ? stats.wins / stats.games : 0,
+                  kd: stats.deaths > 0 ? stats.kills / stats.deaths : stats.kills,
+                  avgAccuracy: stats.games > 0 ? stats.totalAccuracy / stats.games : 0,
+                  avgKills: stats.games > 0 ? stats.kills / stats.games : 0,
+                  avgDeaths: stats.games > 0 ? stats.deaths / stats.games : 0,
+                  avgCaptures: stats.games > 0 ? stats.captures / stats.games : 0,
+                }))
+                .sort((a, b) => b.games - a.games);
+              return (
+                <div className="mb-4 overflow-hidden rounded-xl bg-[#131A2B]">
+                  <div className="flex items-baseline justify-between px-4 pt-4">
+                    <h2 className="font-display text-lg text-[#E6EDF7]">By class</h2>
+                    <span className="text-xs text-[#8B98B0]">From the {playerData.recentGames.length} games in view</span>
+                  </div>
+                  <div className="overflow-x-auto p-2">
+                    <table className="w-full min-w-[640px] text-sm">
+                      <thead><tr>{th('Class', false)}{th('Games')}{th('Win rate')}{th('K/D')}{th('Avg K')}{th('Avg D')}{th('Avg caps')}{th('Accuracy')}</tr></thead>
+                      <tbody>
+                        {sortedClasses.map((c, i) => (
+                          <tr key={c.className} className="border-t border-white/[0.06] hover:bg-[#1B2438]">
+                            <td className="px-3 py-2">
+                              <span className="font-medium" style={getClassColorStyle(c.className)}>{c.className}</span>
+                              {i === 0 && <span className="ml-2 rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#8B98B0]">Main</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{c.games}</td>
+                            <td className={`px-3 py-2 text-right tabular-nums ${winCls(c.winRate)}`}>{formatPercentage(c.winRate)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{formatNumber(c.kd, 2)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{formatNumber(c.avgKills, 1)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{formatNumber(c.avgDeaths, 1)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{formatNumber(c.avgCaptures, 1)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{formatPercentage(c.avgAccuracy)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </motion.div>
-            )}
+              );
+            })()}
 
-            {/* Class/Role Breakdown */}
+            {/* ---- Recent games ----------------------------------------------- */}
             {playerData.recentGames && playerData.recentGames.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 mb-8"
-              >
-                <div className="p-6 border-b border-white/10">
-                  <h2 className="text-2xl font-bold text-cyan-400">Class/Role Breakdown</h2>
-                  <p className="text-gray-400 text-sm mt-1">Performance statistics by class played</p>
+              <div className="mb-4 overflow-hidden rounded-xl bg-[#131A2B]">
+                <div className="flex items-baseline justify-between px-4 pt-4">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">Recent games <span className="text-sm text-[#8B98B0]">· {playerData.recentGames.length}</span></h2>
                 </div>
-                <div className="overflow-x-auto">
-                  {(() => {
-                    const classStats = playerData.recentGames.reduce((acc: any, game) => {
-                      const className = game.main_class;
-                      if (!acc[className]) {
-                        acc[className] = {
-                          games: 0, wins: 0, kills: 0, deaths: 0,
-                          captures: 0, accuracy: 0, totalAccuracy: 0
-                        };
-                      }
-                      acc[className].games += 1;
-                      if (game.result === 'Win') acc[className].wins += 1;
-                      acc[className].kills += game.kills;
-                      acc[className].deaths += game.deaths;
-                      acc[className].captures += game.captures;
-                      acc[className].totalAccuracy += game.accuracy;
-                      return acc;
-                    }, {});
-
-                    const sortedClasses = Object.entries(classStats)
-                      .map(([className, stats]: [string, any]) => ({
-                        className,
-                        ...stats,
-                        winRate: stats.games > 0 ? stats.wins / stats.games : 0,
-                        kd: stats.deaths > 0 ? stats.kills / stats.deaths : stats.kills,
-                        avgAccuracy: stats.games > 0 ? stats.totalAccuracy / stats.games : 0,
-                        avgKills: stats.games > 0 ? stats.kills / stats.games : 0,
-                        avgDeaths: stats.games > 0 ? stats.deaths / stats.games : 0,
-                        avgCaptures: stats.games > 0 ? stats.captures / stats.games : 0
-                      }))
-                      .sort((a, b) => b.games - a.games);
-
-                    return (
-                      <table className="w-full">
-                        <thead className="bg-white/5">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Class</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Games</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Win Rate</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">K/D</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Avg K</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Avg D</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Avg Caps</th>
-                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Avg Acc</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedClasses.map((classData, index) => (
-                            <motion.tr
-                              key={classData.className}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: index * 0.05 }}
-                              className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                            >
-                              <td className="px-4 py-3 text-sm" style={getClassColorStyle(classData.className)}>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold">{classData.className}</span>
-                                  <span className="text-xs text-gray-500">(#{index + 1})</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm font-bold text-cyan-400">
-                                {classData.games}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm">
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                  classData.winRate >= 0.6 ? 'bg-green-500/20 text-green-400' :
-                                  classData.winRate >= 0.4 ? 'bg-yellow-500/20 text-yellow-400' :
-                                  'bg-red-500/20 text-red-400'
-                                }`}>
-                                  {formatPercentage(classData.winRate)}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm font-bold text-purple-400">
-                                {formatNumber(classData.kd, 2)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm text-green-400">
-                                {formatNumber(classData.avgKills, 1)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm text-red-400">
-                                {formatNumber(classData.avgDeaths, 1)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm text-cyan-400">
-                                {formatNumber(classData.avgCaptures, 1)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-sm text-blue-300">
-                                {formatPercentage(classData.avgAccuracy)}
-                              </td>
-                            </motion.tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    );
-                  })()}
-                </div>
-              </motion.div>
-            )}
-
-            {/* Recent Games */}
-            {playerData.recentGames && playerData.recentGames.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10 mb-8"
-              >
-                <div className="p-6 border-b border-white/10">
-                  <h2 className="text-2xl font-bold text-cyan-400">Recent Games</h2>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Mode</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Arena</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Result</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Class</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">K</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">D</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">K/D</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Caps</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Accuracy</th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Actions</th>
-                      </tr>
-                    </thead>
+                <div className="overflow-x-auto p-2">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead><tr>{th('Date', false)}{th('Mode', false)}{th('Arena', false)}{th('Result', false)}{th('Class', false)}{th('K')}{th('D')}{th('K/D')}{th('Caps')}{th('Acc')}<th className="px-3 py-2" /></tr></thead>
                     <tbody>
-                      {playerData.recentGames.map((game, index) => (
-                        <motion.tr
-                          key={game.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                        >
-                          <td className="px-4 py-3 text-sm">{formatDate(game.game_date)}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className="bg-white/10 px-2 py-1 rounded text-xs">
-                              {game.game_mode}
-                            </span>
+                      {playerData.recentGames.map((game) => (
+                        <tr key={game.id} className="border-t border-white/[0.06] hover:bg-[#1B2438]">
+                          <td className="px-3 py-2 text-xs text-[#8B98B0] whitespace-nowrap">{formatDate(game.game_date)}</td>
+                          <td className="px-3 py-2 text-xs text-[#E6EDF7]">{game.game_mode}</td>
+                          <td className="px-3 py-2 text-xs text-[#8B98B0]">{game.arena_name}</td>
+                          <td className="px-3 py-2">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${game.result === 'Win' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}>{game.result}</span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-300">{game.arena_name}</td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                              game.result === 'Win'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-red-500/20 text-red-400'
-                            }`}>
-                              {game.result}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm" style={getClassColorStyle(game.main_class)}>
-                            <span className="font-medium">{game.main_class}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm font-bold text-green-400">{game.kills}</td>
-                          <td className="px-4 py-3 text-right text-sm font-bold text-red-400">{game.deaths}</td>
-                          <td className="px-4 py-3 text-right text-sm font-bold">
-                            {game.deaths > 0 ? formatNumber(game.kills / game.deaths, 2) : game.kills.toString()}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-cyan-400">{game.captures}</td>
-                          <td className="px-4 py-3 text-right text-sm text-purple-400">
-                            {formatPercentage(game.accuracy)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-3 py-2 text-xs font-medium" style={getClassColorStyle(game.main_class)}>{game.main_class}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{game.kills}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{game.deaths}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{game.deaths > 0 ? formatNumber(game.kills / game.deaths, 2) : game.kills}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{game.captures}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{formatPercentage(game.accuracy)}</td>
+                          <td className="px-3 py-2 text-right">
                             {game.game_id && (
-                              <Link
-                                href={`/stats/game/${encodeURIComponent(game.game_id)}`}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs transition-colors"
-                              >
-                                View Game
-                              </Link>
+                              <Link href={`/stats/game/${encodeURIComponent(game.game_id)}`} className="rounded-md bg-white/5 px-2 py-1 text-xs text-[#E6EDF7] hover:bg-white/10 whitespace-nowrap">View game</Link>
                             )}
                           </td>
-                        </motion.tr>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </motion.div>
+              </div>
             )}
 
-            {/* All-Time Stats by Game Mode */}
-            {playerData.aggregateStats && playerData.aggregateStats.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 backdrop-blur-lg rounded-xl overflow-hidden border border-white/10"
-              >
-                <div className="p-6 border-b border-white/10">
-                  <h2 className="text-2xl font-bold text-purple-400">All-Time Statistics</h2>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-white/5">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Game Mode</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Games</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Win Rate</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Total Kills</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Total Deaths</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">K/D Ratio</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Total Caps</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">EB Hits</th>
-                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-400">Last Active</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {playerData.aggregateStats.map((stats, index) => (
-                        <motion.tr
-                          key={stats.game_mode}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                        >
-                          <td className="px-4 py-3 text-sm font-medium">
-                            <span className="bg-white/10 px-2 py-1 rounded text-xs">
-                              {stats.game_mode}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm">{stats.total_games}</td>
-                          <td className="px-4 py-3 text-right text-sm text-green-400">{formatPercentage(stats.win_rate)}</td>
-                          <td className="px-4 py-3 text-right text-sm font-bold">{stats.total_kills}</td>
-                          <td className="px-4 py-3 text-right text-sm">{stats.total_deaths}</td>
-                          <td className="px-4 py-3 text-right text-sm font-bold text-cyan-400">
-                            {formatNumber(stats.kill_death_ratio, 2)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-purple-400">{stats.total_captures}</td>
-                          <td className="px-4 py-3 text-right text-sm text-yellow-400">{stats.total_eb_hits}</td>
-                          <td className="px-4 py-3 text-right text-sm text-gray-400">
-                            {formatDate(stats.last_game_date)}
-                          </td>
-                        </motion.tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
-            )}
-
-            {/* No Data */}
             {(!playerData.recentGames?.length && !playerData.aggregateStats?.length) && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-center py-12"
-              >
-                <p className="text-xl text-gray-300 mb-4">No game statistics found</p>
-                <p className="text-gray-500">This player hasn&apos;t played any games yet or they may be filtered out by your current settings</p>
-              </motion.div>
+              <div className="rounded-xl bg-[#131A2B] py-12 text-center">
+                <p className="font-display text-2xl text-[#E6EDF7]">No game statistics found</p>
+                <p className="mt-1 text-sm text-[#8B98B0]">This player hasn't played any recorded games yet, or the filters are hiding them.</p>
+              </div>
             )}
           </>
         )}
