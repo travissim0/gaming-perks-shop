@@ -65,11 +65,25 @@ export async function GET(request: NextRequest) {
     const ids = (games ?? []).map((g: any) => g.id);
     let playersByGame = new Map<string, any[]>();
     if (ids.length) {
-      const { data: players } = await supabase
+      // PostgREST rejects the ENTIRE select if one column is missing, which silently empties every
+      // game's player list rather than erroring - so anything added by a migration that may not have
+      // run yet is requested separately, with a fallback to the columns we know exist.
+      const BASE_COLS =
+        'game_id, alias, side, team_name, result, is_captain, is_shotcaller, primary_class, kills, deaths, ' +
+        'shots_fired, shots_landed, accuracy, heal_amount, opening_kills, opening_deaths, opening_fights_won, rating_delta';
+      let { data: players, error: playersErr } = await supabase
         .from('usl_mix_game_players')
-        .select('game_id, alias, side, team_name, result, is_captain, is_shotcaller, is_vocal, primary_class, kills, deaths, shots_fired, shots_landed, accuracy, heal_amount, opening_kills, opening_deaths, opening_fights_won, rating_delta')
+        .select(`${BASE_COLS}, is_vocal`)
         .in('game_id', ids)
         .order('kills', { ascending: false });
+      if (playersErr) {
+        // usl-mix-add-vocal-firstpick.sql not applied yet
+        ({ data: players } = await supabase
+          .from('usl_mix_game_players')
+          .select(BASE_COLS)
+          .in('game_id', ids)
+          .order('kills', { ascending: false }));
+      }
       for (const p of players ?? []) {
         const list = playersByGame.get(p.game_id) ?? [];
         list.push(p);
