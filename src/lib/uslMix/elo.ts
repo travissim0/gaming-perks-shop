@@ -20,7 +20,7 @@
  *      delta is scaled by their performance relative to their OWN team, judged against what
  *      their CLASS MIX normally produces (KI, 2026-09-08: a medic/marine switcher must not be
  *      read as a marine who only got 2 kills):
- *        impact_i   = kills_i - deaths_i + heal_amount_i / HEAL_PER_KILL
+ *        impact_i   = kills_i - deaths_i + (heal_amount_i + 30 * bio_dart_hits_i) / HEAL_PER_KILL
  *        expected_i = sum over classes c of minutes_ic * norm_c, where norm_c is the league's
  *                     impact per minute for class c (usl_mix_v_class_stats; a class with under
  *                     CLASS_NORM_MIN_MINUTES of recorded play falls back to the all-class norm)
@@ -37,6 +37,7 @@
  */
 
 import type { RatingInputPlayer, Result } from './types';
+import { totalHeal } from './types';
 
 export const ELO = {
   BASE_RATING: 1200,
@@ -97,7 +98,9 @@ export function movMultiplier(killDiff: number, winnerExpected = 0.5): number {
 }
 
 function impactOf(p: RatingInputPlayer): number {
-  return p.kills - p.deaths + (p.heal_amount || 0) / ELO.HEAL_PER_KILL;
+  // bio darts heal a flat 30 each and are reported separately by the zone - a medic who darts rather
+  // than standing still with the MediKit was otherwise scored as having contributed nothing
+  return p.kills - p.deaths + totalHeal(p.heal_amount, p.bio_dart_hits) / ELO.HEAL_PER_KILL;
 }
 
 /** League impact per minute by class (see classNormsFromRows); `overall` covers classes without enough data. */

@@ -426,7 +426,7 @@ export async function applyRatingsForGame(supabase: SupabaseClient, gameId: stri
 
   const { data: players, error: pErr } = await supabase
     .from('usl_mix_game_players')
-    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount, is_captain, classes, play_seconds')
+    .select('id, alias, alias_key, team_name, result, kills, deaths, heal_amount, bio_dart_hits, is_captain, classes, play_seconds')
     .eq('game_id', gameId);
   if (pErr || !players) return { applied: false, reason: 'players not found', changes: 0 };
 

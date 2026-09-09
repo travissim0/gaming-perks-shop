@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, SegmentedControl, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import { BIO_DART_HEAL, totalHeal } from '@/lib/uslMix/types';
 
 /**
  * Class name plus, when a player spent real time as more than one class, a proportional split:
@@ -50,7 +51,7 @@ const TEAM_GETTERS: SortGetters<PlayerRow, TeamCol> = {
   hits: (p) => p.shots_landed,
   open: (p) => p.opening_kills,
   acc: (p) => p.accuracy,
-  heal: (p) => p.heal_amount,
+  heal: (p) => totalHeal(p.heal_amount, p.bio_dart_hits),
   delta: (p) => p.rating_delta,
 };
 
@@ -259,7 +260,11 @@ export default function UslMixGamePage() {
                         {p.opening_fights_won ? <span className="text-xs text-emerald-300"> ({p.opening_fights_won}w)</span> : null}
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.accuracy !== null ? `${p.accuracy}%` : '—'}</td>
-                      <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.heal_amount || (p.bio_dart_hits ? `${p.bio_dart_hits} darts` : '—')}</td>
+                      <td className="py-2 px-2 text-right tabular-nums text-gray-300 whitespace-nowrap"
+                          title={p.bio_dart_hits ? `${p.heal_amount} hp from MediKit + ${p.bio_dart_hits} bio darts x ${BIO_DART_HEAL} hp` : undefined}>
+                        {totalHeal(p.heal_amount, p.bio_dart_hits) || '—'}
+                        {p.bio_dart_hits ? <span className="text-xs text-emerald-300"> (+{p.bio_dart_hits * BIO_DART_HEAL})</span> : null}
+                      </td>
                       {SHOW_RATINGS && <td className={`py-2 pl-2 text-right tabular-nums ${p.rating_delta === null ? 'text-gray-500' : Number(p.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(p.rating_delta)}</td>}
                     </tr>
                   ))}

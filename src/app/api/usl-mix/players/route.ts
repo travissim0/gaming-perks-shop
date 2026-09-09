@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { clampInt, corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
+import { BIO_DART_HEAL, totalHeal } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/players - the rating leaderboard (mix games) merged with career totals (mix + pub).
@@ -63,7 +64,10 @@ export async function GET(request: NextRequest) {
         shots_fired: shots,
         shots_landed: Number(c?.shots_landed ?? 0),
         accuracy: shots > 0 ? Math.round((Number(c.shots_landed) / shots) * 1000) / 10 : null,
-        heal_amount: Number(c?.heal_amount ?? 0),
+        heal_amount: totalHeal(c?.heal_amount, c?.bio_dart_hits),
+        heal_medikit: Number(c?.heal_amount ?? 0),
+        bio_dart_hits: Number(c?.bio_dart_hits ?? 0),
+        bio_dart_heal: Number(c?.bio_dart_hits ?? 0) * BIO_DART_HEAL,
         opening_kills: Number(c?.opening_kills ?? 0),
         opening_deaths: Number(c?.opening_deaths ?? 0),
         opening_fights_won: Number(c?.opening_fights_won ?? 0),

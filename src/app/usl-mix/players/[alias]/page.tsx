@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName, SortTh, useSortedRows, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import { BIO_DART_HEAL, totalHeal } from '@/lib/uslMix/types';
 
 interface PlayerProfile {
   alias: string;
@@ -206,8 +207,17 @@ export default function UslMixPlayerPage() {
         </Panel>
         <Panel title="Support" accent="green">
           <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-gray-400">Heal output</dt><dd className="text-white tabular-nums">{c?.heal_amount?.toLocaleString() ?? 0} hp</dd></div>
-            <div className="flex justify-between"><dt className="text-gray-400">Bio dart hits</dt><dd className="text-white tabular-nums">{c?.bio_dart_hits ?? 0}</dd></div>
+            <div className="flex justify-between" title={`${(c?.heal_amount ?? 0).toLocaleString()} hp from MediKit + ${c?.bio_dart_hits ?? 0} bio darts x ${BIO_DART_HEAL} hp`}>
+              <dt className="text-gray-400">Heal output</dt>
+              <dd className="text-white tabular-nums">{totalHeal(c?.heal_amount, c?.bio_dart_hits).toLocaleString()} hp</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-400">Bio dart hits</dt>
+              <dd className="text-white tabular-nums">
+                {c?.bio_dart_hits ?? 0}
+                {c?.bio_dart_hits ? <span className="text-xs text-emerald-300"> (+{(c.bio_dart_hits * BIO_DART_HEAL).toLocaleString()})</span> : null}
+              </dd>
+            </div>
             <div className="flex justify-between"><dt className="text-gray-400">Captained</dt><dd className="text-white tabular-nums">{data.leadership?.captain_games ?? 0} games</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400" title="claimed with ?sc in the zone - a badge, not a rating input">Called the shots</dt><dd className="text-white tabular-nums">{data.leadership?.shotcaller_games ?? 0} games</dd></div>
             <div className="flex justify-between"><dt className="text-gray-400">Last game</dt><dd className="text-white">{fmtDate(r?.last_game_at ?? data.recent_games[0]?.ended_at)}</dd></div>

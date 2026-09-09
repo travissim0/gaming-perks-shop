@@ -144,9 +144,23 @@ export interface RatingInputPlayer {
   kills: number;
   deaths: number;
   heal_amount: number;
+  /** landed bio darts; worth BIO_DART_HEAL hp each and counted as healing in the impact score */
+  bio_dart_hits?: number;
   /** class name -> seconds played as that class; lets the performance score judge a medic as a medic */
   classes?: Record<string, number>;
   play_seconds?: number;
+}
+
+/**
+ * A landed bio dart heals a flat 30 hp - BioHeal (item 52) carries repairAmount 30 in usl_s57.itm.
+ * The zone reports dart hits separately from heal_amount (which only covers MediKit-style repairs),
+ * so every heal figure on the site adds them back in rather than under-reporting medics who dart.
+ */
+export const BIO_DART_HEAL = 30;
+
+/** MediKit healing plus bio dart healing - the number to show anywhere "heals" is displayed. */
+export function totalHeal(healAmount: number | null | undefined, bioDartHits: number | null | undefined): number {
+  return Number(healAmount ?? 0) + Number(bioDartHits ?? 0) * BIO_DART_HEAL;
 }
 
 export function aliasKey(alias: string): string {
