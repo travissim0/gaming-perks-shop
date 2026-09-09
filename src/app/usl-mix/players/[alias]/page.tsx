@@ -106,7 +106,7 @@ export default function UslMixPlayerPage() {
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
         {!SHOW_RATINGS ? (
-        <Panel title="Rating" className="lg:col-span-2" right={<span className="text-xs text-gray-500">hidden for now</span>}>
+        <Panel title="ELO ratings are hidden" className="lg:col-span-2" right={<span className="text-xs text-gray-500">mixes are for casual play</span>}>
           <p className="text-sm text-gray-400 max-w-prose">
             Tracked across {history.length} game{history.length === 1 ? '' : 's'}, but hidden — we use it internally to
             help make mixes more balanced, and that is all it does. Nobody is ranked against anybody.

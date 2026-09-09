@@ -350,11 +350,11 @@ export default function UslMixOverviewPage() {
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
         {!SHOW_RATINGS ? (
-        <Panel title="Public ratings are hidden" className="lg:col-span-2" right={<span className="text-xs text-gray-500">mixes are for casual play</span>}>
+        <Panel title="ELO ratings are hidden" className="lg:col-span-2" right={<span className="text-xs text-gray-500">mixes are for casual play</span>}>
           <p className="text-sm text-gray-400 max-w-prose">
-            Public ratings are hidden for now. We use them <span className="text-gray-300">internally, to help make
-            mixes more balanced</span> — that is the whole job they do. There is no ladder and nobody is ranked
-            against anybody.
+            Hidden for now. We use them <span className="text-gray-300">internally, to help make mixes more
+            balanced</span> — that is the whole job they do. There is no ladder and nobody is ranked against
+            anybody.
           </p>
           <p className="text-sm text-gray-400 max-w-prose mt-3">
             Curious about your own? We&apos;re looking at letting registered players look up just theirs. No pressure
