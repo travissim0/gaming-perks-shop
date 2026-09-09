@@ -120,12 +120,15 @@ export async function POST(request: NextRequest) {
     is_active: true,
   };
 
-  // Existing active row for this season (or a legacy untagged one) → update it.
+  // Existing row for this season (active or deactivated, e.g. by the squad-join
+  // trigger) or a legacy untagged active row → update it rather than inserting
+  // a duplicate that would trip the one-active-row-per-season rule.
   const { data: rows, error: rowsErr } = await supabaseAdmin
     .from('free_agents')
-    .select('id, league_slug, season_number')
+    .select('id, league_slug, season_number, is_active, updated_at')
     .eq('player_id', user.id)
-    .eq('is_active', true);
+    .order('is_active', { ascending: false })
+    .order('updated_at', { ascending: false });
   if (rowsErr) {
     console.error('register: lookup failed', rowsErr);
     return NextResponse.json({ error: 'Could not check your registration' }, { status: 500 });
@@ -133,7 +136,7 @@ export async function POST(request: NextRequest) {
 
   const existing =
     (rows || []).find((r: any) => r.league_slug === league.slug && r.season_number === season.season_number) ||
-    (rows || []).find((r: any) => r.league_slug == null);
+    (rows || []).find((r: any) => r.league_slug == null && r.is_active);
 
   let mode: 'created' | 'updated';
   if (existing) {

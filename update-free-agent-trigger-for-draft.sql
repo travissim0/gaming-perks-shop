@@ -8,8 +8,10 @@
 --
 -- 1. Trigger now only deactivates registrations for squad-format leagues
 --    (or untagged legacy rows). Draft/OvD registrations stay active.
--- 2. ctfdl_draft_undo_pick reactivates the undone player's registration.
--- 3. One-off: reactivate the CTFDL Season 5 rows the old trigger switched off.
+-- 2. ctfdl_draft_undo_pick reactivates the undone player's registration
+--    (unless they already have an active row for that season).
+-- 3. One-off: reactivate the CTFDL Season 5 rows the old trigger switched off,
+--    skipping players who re-registered and already have an active row.
 -- Idempotent.
 -- ============================================================================
 
@@ -18,7 +20,6 @@ CREATE OR REPLACE FUNCTION public.remove_from_free_agent_pool_on_squad_join()
 RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  -- Joining a squad ends a free-agent listing only for squad-format leagues.
   UPDATE public.free_agents fa
      SET is_active = false, updated_at = now()
    WHERE fa.player_id = NEW.player_id
@@ -58,11 +59,23 @@ BEGIN
   IF p.membership_id IS NOT NULL THEN
     DELETE FROM squad_members WHERE id = p.membership_id;
   END IF;
-  IF p.player_id IS NOT NULL THEN
+
+  -- Reactivate their most recent deactivated row, unless one is already active.
+  IF p.player_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM free_agents a
+        WHERE a.player_id = p.player_id AND a.league_slug = 'ctfdl'
+          AND a.season_number = v_season AND a.is_active = true
+  ) THEN
     UPDATE free_agents
        SET is_active = true, updated_at = now()
-     WHERE player_id = p.player_id AND league_slug = 'ctfdl' AND season_number = v_season;
+     WHERE id = (
+       SELECT id FROM free_agents b
+        WHERE b.player_id = p.player_id AND b.league_slug = 'ctfdl'
+          AND b.season_number = v_season AND b.is_active = false
+        ORDER BY b.updated_at DESC LIMIT 1
+     );
   END IF;
+
   DELETE FROM ctfdl_draft_picks WHERE id = p.id;
 
   UPDATE ctfdl_drafts
@@ -80,7 +93,22 @@ $$;
 
 REVOKE ALL ON FUNCTION public.ctfdl_draft_undo_pick(UUID) FROM PUBLIC, anon, authenticated;
 
--- ---- 3. One-off: bring back the Season 5 test registrations ----------------
-UPDATE public.free_agents
+-- ---- 3. One-off: bring back the Season 5 registrations ---------------------
+UPDATE public.free_agents fa
    SET is_active = true, updated_at = now()
- WHERE league_slug = 'ctfdl' AND season_number = 5 AND is_active = false;
+ WHERE fa.league_slug = 'ctfdl'
+   AND fa.season_number = 5
+   AND fa.is_active = false
+   -- no active row already for this player/season
+   AND NOT EXISTS (
+     SELECT 1 FROM public.free_agents a
+      WHERE a.player_id = fa.player_id AND a.league_slug = fa.league_slug
+        AND a.season_number = fa.season_number AND a.is_active = true
+   )
+   -- only their most recent inactive row
+   AND fa.id = (
+     SELECT b.id FROM public.free_agents b
+      WHERE b.player_id = fa.player_id AND b.league_slug = fa.league_slug
+        AND b.season_number = fa.season_number AND b.is_active = false
+      ORDER BY b.updated_at DESC LIMIT 1
+   );

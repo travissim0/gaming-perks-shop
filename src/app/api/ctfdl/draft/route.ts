@@ -189,12 +189,32 @@ export async function POST(request: NextRequest) {
         if (playerIds.length > 0) {
           const { data: season } = await supabaseAdmin.from('league_seasons').select('season_number').eq('id', draft.league_season_id).maybeSingle();
           if (season) {
-            await supabaseAdmin
+            // Skip anyone who already has an active row (e.g. re-registered), or
+            // the one-active-row-per-season index would reject the update.
+            const { data: active } = await supabaseAdmin
               .from('free_agents')
-              .update({ is_active: true, updated_at: new Date().toISOString() })
+              .select('player_id')
               .in('player_id', playerIds)
               .eq('league_slug', 'ctfdl')
-              .eq('season_number', season.season_number);
+              .eq('season_number', season.season_number)
+              .eq('is_active', true);
+            const alreadyActive = new Set((active || []).map((r: any) => r.player_id));
+            const toRevive = playerIds.filter((id: string) => !alreadyActive.has(id));
+            for (const id of toRevive) {
+              const { data: latest } = await supabaseAdmin
+                .from('free_agents')
+                .select('id')
+                .eq('player_id', id)
+                .eq('league_slug', 'ctfdl')
+                .eq('season_number', season.season_number)
+                .eq('is_active', false)
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (latest) {
+                await supabaseAdmin.from('free_agents').update({ is_active: true, updated_at: new Date().toISOString() }).eq('id', latest.id);
+              }
+            }
           }
         }
         const { error: dErr } = await supabaseAdmin.from('ctfdl_draft_picks').delete().eq('draft_id', draftId);
