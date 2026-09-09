@@ -11,7 +11,7 @@ import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
 import { canAddPlayerToSquad, hasAdminOverride, getSquadMemberCountDisplay } from '@/utils/squadValidation';
 import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpers';
-import { getLeagues, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
+import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
 import { CLASS_COLORS } from '@/lib/constants';
 
 interface SquadMember {
@@ -281,13 +281,13 @@ export default function SquadDetailPage() {
 
   const loadLeagueContext = async (s: Squad) => {
     try {
-      if (!s.league_slug) {
-        setLeagueInfo(null); setSeasonInfo(null); setStanding(null); setDraftPicks({}); setMemberClasses({});
-        return;
-      }
-      const league = (await getLeagues()).find((l) => l.slug === s.league_slug) || null;
+      // Tagged squads use their league; untagged ones default to the league that
+      // is running now (one league at a time), so a squad created during a CTFDL
+      // season reads as a CTFDL squad. Staff can override the tag in admin.
+      const leagues = await getLeagues();
+      const league = (s.league_slug ? leagues.find((l) => l.slug === s.league_slug) : pickFeatured(leagues)) || null;
       setLeagueInfo(league);
-      if (!league) return;
+      if (!league) { setSeasonInfo(null); setStanding(null); setDraftPicks({}); setMemberClasses({}); return; }
 
       const season = await getLatestSeason(league);
       setSeasonInfo(season);
