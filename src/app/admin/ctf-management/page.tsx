@@ -22,6 +22,7 @@ interface Squad {
   created_at: string;
   last_match_date?: string;
   banner_url?: string;
+  league_slug?: string | null;
 }
 
 interface FreeAgent {
@@ -210,9 +211,7 @@ export default function CTFManagementPage() {
   const loadSquads = async () => {
     try {
       setSquadsLoading(true);
-      const { data, error } = await supabase
-        .from('squads')
-        .select(`
+      const cols = `
           id,
           name,
           tag,
@@ -224,8 +223,15 @@ export default function CTFManagementPage() {
           banner_url,
           profiles!squads_captain_id_fkey(in_game_alias),
           squad_members!inner(id)
-        `)
+        `;
+      let { data, error } = await supabase
+        .from('squads')
+        .select(`${cols}, league_slug`)
         .order('created_at', { ascending: false });
+      // league_slug arrives with add-squad-league.sql; fall back until it's run.
+      if (error && String(error.message || '').includes('league_slug')) {
+        ({ data, error } = await supabase.from('squads').select(cols).order('created_at', { ascending: false }));
+      }
 
       if (error) throw error;
 
@@ -237,6 +243,7 @@ export default function CTFManagementPage() {
         captain_alias: squad.profiles?.in_game_alias || 'Unknown',
         captain_id: squad.captain_id,
         member_count: squad.squad_members?.length || 0,
+        league_slug: squad.league_slug ?? null,
         is_active: squad.is_active,
         tournament_eligible: squad.tournament_eligible || false,
         created_at: squad.created_at,
@@ -432,6 +439,20 @@ export default function CTFManagementPage() {
       toast.error('Failed to archive squads');
     } finally {
       setArchiving(false);
+    }
+  };
+
+  // Which league a squad plays in. Drives the squad page layout (recruiting vs draft).
+  const setSquadLeague = async (squadId: string, leagueSlug: string) => {
+    const value = leagueSlug || null;
+    try {
+      const { error } = await supabase.from('squads').update({ league_slug: value }).eq('id', squadId);
+      if (error) throw error;
+      setSquads((prev) => prev.map((s) => (s.id === squadId ? { ...s, league_slug: value } : s)));
+      toast.success(value ? `Squad set to ${value.toUpperCase()}` : 'Squad league cleared');
+    } catch (error) {
+      console.error('Error setting squad league:', error);
+      toast.error('Failed to set squad league (has add-squad-league.sql been run?)');
     }
   };
 
@@ -862,6 +883,7 @@ export default function CTFManagementPage() {
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Squad</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Captain</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Members</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-300">League</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Status</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Tournament</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-300">Actions</th>
@@ -878,6 +900,19 @@ export default function CTFManagementPage() {
                           </td>
                           <td className="py-3 px-4 text-cyan-400">{squad.captain_alias}</td>
                           <td className="py-3 px-4">{squad.member_count}</td>
+                          <td className="py-3 px-4">
+                            <select
+                              value={squad.league_slug || ''}
+                              onChange={(e) => setSquadLeague(squad.id, e.target.value)}
+                              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white"
+                              title="Which league this squad plays in (sets the squad page layout)"
+                            >
+                              <option value="">—</option>
+                              <option value="ctfpl">CTFPL</option>
+                              <option value="ctfdl">CTFDL</option>
+                              <option value="ovdl">OVDL</option>
+                            </select>
+                          </td>
                           <td className="py-3 px-4">
                             <button
                               onClick={() => toggleSquadStatus(squad.id, 'is_active', squad.is_active)}

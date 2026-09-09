@@ -219,12 +219,17 @@ export const queries = {
   getSquadDetails: async (squadId: string) => {
     return supabaseQuery(
       async () => {
-        const query = getCachedSupabase()
+        const base = 'id, name, tag, description, discord_link, website_link, captain_id, created_at, updated_at, banner_url, is_active, is_legacy, tournament_eligible, max_members';
+        const full = await getCachedSupabase()
           .from('squads')
-          .select('id, name, tag, description, discord_link, website_link, captain_id, created_at, updated_at, banner_url, is_active, is_legacy, tournament_eligible, max_members')
+          .select(`${base}, league_slug`)
           .eq('id', squadId)
           .maybeSingle();
-        return await query;
+        // league_slug arrives with add-squad-league.sql; until then fall back to the old columns.
+        if (full.error && String(full.error.message || '').includes('league_slug')) {
+          return await getCachedSupabase().from('squads').select(base).eq('id', squadId).maybeSingle();
+        }
+        return full;
       },
       { 
         errorMessage: 'Failed to load squad details',

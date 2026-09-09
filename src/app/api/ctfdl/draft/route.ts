@@ -93,6 +93,10 @@ export async function POST(request: NextRequest) {
             .from('ctfdl_draft_teams')
             .insert(squadIds.map((squad_id, i) => ({ draft_id: draftId, squad_id, pick_order: i + 1 })));
           if (error) throw new Error(error.message);
+          // A squad in a CTFDL draft is a CTFDL squad: its page switches to the
+          // draft layout (no invites / join requests). Ignore if the column is missing.
+          const { error: tagErr } = await supabaseAdmin.from('squads').update({ league_slug: 'ctfdl' }).in('id', squadIds);
+          if (tagErr) console.warn('set_teams: could not tag squads with league_slug', tagErr.message);
         }
         break;
       }
