@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
-import { queries, robustFetch } from '@/utils/dataFetching';
+import { queries, robustFetch, cacheUtils } from '@/utils/dataFetching';
 import { canAddPlayerToSquad, hasAdminOverride, getSquadMemberCountDisplay } from '@/utils/squadValidation';
 import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpers';
 import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
@@ -251,6 +251,10 @@ export default function SquadDetailPage() {
 
   const loadSquadDetails = async () => {
     if (!squadId) return;
+
+    // Squad details/members are cached for 5 minutes; this page is where
+    // rosters change (kick, promote, transfer, leave), so always read fresh.
+    cacheUtils.clear(squadId);
 
     const { data: squadData, success } = await queries.getSquadDetails(squadId);
     if (!success || !squadData) return;
@@ -1507,7 +1511,7 @@ export default function SquadDetailPage() {
                                   {isCaptain() && member.role !== 'captain' && (
                                     <button onClick={() => transferOwnership(member.player_id, member.in_game_alias)} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F59E0B] hover:bg-white/10" title="Transfer captaincy">Make captain</button>
                                   )}
-                                  {(isCaptain() || (canManageSquad() && member.role === 'player')) && (
+                                  {member.role !== 'captain' && (isCaptain() || (canManageSquad() && member.role === 'player')) && (
                                     <button onClick={() => kickMember(member.id, member.in_game_alias)} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F87171] hover:bg-white/10" title="Remove from squad">Kick</button>
                                   )}
                                 </div>
