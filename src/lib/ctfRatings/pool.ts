@@ -16,7 +16,8 @@ export interface PlayerCard {
   kills: number;
   deaths: number;
   kd: number;
-  win_rate: number;
+  win_rate: number | null;
+  decided_games: number;
   captures: number;
   carrier_kills: number;
   carry_time_seconds: number;
@@ -47,7 +48,7 @@ export async function loadPool(force = false): Promise<PlayerCard[]> {
     supabase
       .from('ctf_player_card_stats')
       .select(
-        'player_key, player_name, games, kills, deaths, kd, win_rate, captures, carrier_kills, carry_time_seconds, accuracy, explosives_left_per_death, resources_left_per_death, main_class, last_played',
+        'player_key, player_name, games, kills, deaths, kd, win_rate, decided_games, captures, carrier_kills, carry_time_seconds, accuracy, explosives_left_per_death, resources_left_per_death, main_class, last_played',
       )
       .gte('games', CTF_RATING.MIN_GAMES),
     supabase.from('ctf_player_ratings').select('player_key, rating, wins, losses'),
@@ -74,7 +75,8 @@ export async function loadPool(force = false): Promise<PlayerCard[]> {
       kills: c.kills ?? 0,
       deaths: c.deaths ?? 0,
       kd: Number(c.kd ?? 0),
-      win_rate: c.win_rate ?? 0,
+      win_rate: c.win_rate === null || c.win_rate === undefined ? null : c.win_rate,
+      decided_games: c.decided_games ?? 0,
       captures: c.captures ?? 0,
       carrier_kills: c.carrier_kills ?? 0,
       carry_time_seconds: c.carry_time_seconds ?? 0,

@@ -14,7 +14,8 @@ interface PlayerCard {
   kills: number;
   deaths: number;
   kd: number;
-  win_rate: number;
+  win_rate: number | null;
+  decided_games: number;
   captures: number;
   carrier_kills: number;
   carry_time_seconds: number;
@@ -80,6 +81,7 @@ export default function CommunityRatingsPage() {
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -98,9 +100,16 @@ export default function CommunityRatingsPage() {
         const params = excluded.length ? `?exclude=${encodeURIComponent(excluded.join(','))}` : '';
         const res = await fetch(`/api/ctf/ratings/matchup${params}`, { headers });
         const json = await res.json();
-        if (json.success) setMatchup(json.matchup);
-      } catch {
-        toast.error('Could not load a matchup');
+        if (json.success) {
+          setMatchup(json.matchup);
+          setLoadError(null);
+        } else {
+          // Distinguish "the pool is genuinely thin" from "this never got set up",
+          // which otherwise both render as an empty card.
+          setLoadError(json.error || 'Could not load a matchup');
+        }
+      } catch (e: any) {
+        setLoadError(e?.message || 'Could not load a matchup');
       }
     },
     [authHeaders],
@@ -216,7 +225,7 @@ export default function CommunityRatingsPage() {
               <div>
                 <div className="font-semibold text-gray-200 text-sm">Explore CTF Stats</div>
                 <div className="text-gray-500 text-xs">
-                  Per-game breakdowns, class splits, ELO leaderboard and more
+                  Per-game breakdowns, class splits, recent games and more
                 </div>
               </div>
             </div>
@@ -253,6 +262,15 @@ export default function CommunityRatingsPage() {
 
           {loading ? (
             <div className="text-center py-12 text-gray-500">Loading matchup…</div>
+          ) : loadError ? (
+            <div className="text-center py-12 space-y-2">
+              <div className="text-amber-400/90 text-sm font-semibold">Ratings are not set up yet</div>
+              <div className="text-gray-500 text-xs max-w-md mx-auto">
+                Run <code className="text-gray-400">supabase-ctf-community-ratings.sql</code> in the
+                SQL editor to create the view and tables this page reads.
+              </div>
+              <div className="text-gray-700 text-[10px] font-mono pt-1">{loadError}</div>
+            </div>
           ) : !matchup ? (
             <div className="text-center py-12 text-gray-500">
               Not enough rated players yet — needs two with {totals?.minGames ?? 5}+ recorded games.
@@ -354,7 +372,12 @@ export default function CommunityRatingsPage() {
                         {p.wins}-{p.losses}
                       </td>
                       <td className="px-4 py-2 text-right font-mono text-gray-300">{p.kd}</td>
-                      <td className="px-4 py-2 text-right font-mono text-gray-400">{p.win_rate}%</td>
+                      <td
+                        className="px-4 py-2 text-right font-mono text-gray-400"
+                        title={p.win_rate === null ? undefined : `over ${p.decided_games} decided games`}
+                      >
+                        {p.win_rate === null ? '—' : `${p.win_rate}%`}
+                      </td>
                       <td className="px-4 py-2 text-right font-mono text-gray-400">{p.games}</td>
                       <td className="px-4 py-2 text-right font-mono text-gray-400">{p.captures}</td>
                       <td className="px-4 py-2 text-right font-mono text-gray-400">
@@ -415,9 +438,17 @@ function Tile({
   );
 }
 
-function Stat({ value, label }: { value: string | number; label: string }) {
+function Stat({
+  value,
+  label,
+  title,
+}: {
+  value: string | number;
+  label: string;
+  title?: string;
+}) {
   return (
-    <div className="text-center">
+    <div className="text-center" title={title}>
       <div className="font-bold text-gray-100 font-mono">{value}</div>
       <div className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</div>
     </div>
@@ -452,7 +483,15 @@ function VoteCard({
       {/* Core line - the same three USL leads with */}
       <div className="grid grid-cols-3 gap-2 mt-4">
         <Stat value={player.kd} label="K/D" />
-        <Stat value={`${player.win_rate}%`} label="WR" />
+        <Stat
+          value={player.win_rate === null ? '—' : `${player.win_rate}%`}
+          label="WR"
+          title={
+            player.win_rate === null
+              ? 'No games with a recorded winner'
+              : `Over ${player.decided_games} games that recorded a winner`
+          }
+        />
         <Stat value={player.games} label="Games" />
       </div>
 
