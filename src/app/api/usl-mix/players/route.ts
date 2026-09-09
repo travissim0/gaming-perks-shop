@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
         kills,
         deaths,
         kd_ratio: deaths > 0 ? Math.round((kills / deaths) * 100) / 100 : kills,
+        shots_fired: shots,
+        shots_landed: Number(c?.shots_landed ?? 0),
         accuracy: shots > 0 ? Math.round((Number(c.shots_landed) / shots) * 1000) / 10 : null,
         heal_amount: Number(c?.heal_amount ?? 0),
         opening_kills: Number(c?.opening_kills ?? 0),

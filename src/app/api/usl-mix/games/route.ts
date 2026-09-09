@@ -11,7 +11,9 @@ import { aliasKey } from '@/lib/uslMix/types';
  *   ?alias=Name              only games this player was in
  *   ?since=2026-09-01        ISO date lower bound on ended_at
  *   ?rated=true|false        only ELO-rated (or only unrated) games
- * Each game carries a compact player list (alias, side, class, K/D, result).
+ * Each game carries a compact player list: alias, side, class, K/D, shots fired/landed, accuracy,
+ * heals, opening kills, and the captain / shotcaller / vocal flags - enough to build league-wide
+ * aggregates without a detail fetch per game.
  */
 export const runtime = 'nodejs';
 
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
     if (ids.length) {
       const { data: players } = await supabase
         .from('usl_mix_game_players')
-        .select('game_id, alias, side, team_name, result, is_captain, primary_class, kills, deaths, accuracy, heal_amount, rating_delta')
+        .select('game_id, alias, side, team_name, result, is_captain, is_shotcaller, is_vocal, primary_class, kills, deaths, shots_fired, shots_landed, accuracy, heal_amount, opening_kills, opening_deaths, opening_fights_won, rating_delta')
         .in('game_id', ids)
         .order('kills', { ascending: false });
       for (const p of players ?? []) {
