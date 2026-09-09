@@ -350,15 +350,16 @@ export default function UslMixOverviewPage() {
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
         {!SHOW_RATINGS ? (
-        <Panel title="Ratings are hidden this season" className="lg:col-span-2" right={<span className="text-xs text-gray-500">every mix still counts</span>}>
+        <Panel title="Public ratings are hidden" className="lg:col-span-2" right={<span className="text-xs text-gray-500">mixes are for casual play</span>}>
           <p className="text-sm text-gray-400 max-w-prose">
-            Every mix is rated and every game is recorded — but individual ratings aren&apos;t published while the season
-            is running. A visible ladder was pushing mixes toward slow, campy, play-not-to-lose games, which isn&apos;t
-            what most people log on for.
+            Public ratings are hidden for now. We use them <span className="text-gray-300">internally, to help make
+            mixes more balanced</span> — that is the whole job they do. There is no ladder and nobody is ranked
+            against anybody.
           </p>
           <p className="text-sm text-gray-400 max-w-prose mt-3">
-            The ratings have one job: <span className="text-gray-300">keeping drafts balanced</span>. Nobody is ranked
-            against anybody — not now, and not at the end of the season either.
+            Curious about your own? We&apos;re looking at letting registered players look up just theirs. No pressure
+            either way — the game mode is designed for casual play, and your performance metrics are available to you
+            on request.
           </p>
           <p className="text-xs text-gray-500 mt-3">
             Everything else stays public — kills, classes, accuracy, heals, opening kills, and every game log below.

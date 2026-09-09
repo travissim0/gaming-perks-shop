@@ -106,11 +106,14 @@ export default function UslMixPlayerPage() {
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
         {!SHOW_RATINGS ? (
-        <Panel title="Rating history" className="lg:col-span-2" right={<span className="text-xs text-gray-500">hidden this season</span>}>
+        <Panel title="Rating" className="lg:col-span-2" right={<span className="text-xs text-gray-500">hidden for now</span>}>
           <p className="text-sm text-gray-400 max-w-prose">
-            Your rating is tracked across {history.length} rated game{history.length === 1 ? '' : 's'}, but it
-            isn&apos;t shown to you or anyone else. It exists for one reason: so the draft can put balanced teams
-            together. There&apos;s no ladder and no season-end ranking.
+            Tracked across {history.length} game{history.length === 1 ? '' : 's'}, but hidden — we use it internally to
+            help make mixes more balanced, and that is all it does. Nobody is ranked against anybody.
+          </p>
+          <p className="text-sm text-gray-400 max-w-prose mt-3">
+            Want to know your own? We&apos;re looking at letting registered players look it up. No pressure — mixes are
+            designed for casual play, and your performance metrics are available to you on request.
           </p>
         </Panel>
         ) : (
