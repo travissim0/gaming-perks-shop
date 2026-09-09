@@ -176,13 +176,26 @@ export async function POST(request: NextRequest) {
         // queues and chat history are kept.
         const { data: picks, error: pErr } = await supabaseAdmin
           .from('ctfdl_draft_picks')
-          .select('id, membership_id')
+          .select('id, membership_id, player_id')
           .eq('draft_id', draftId);
         if (pErr) throw new Error(pErr.message);
         const memberIds = (picks || []).map((p: any) => p.membership_id).filter(Boolean);
         if (memberIds.length > 0) {
           const { error } = await supabaseAdmin.from('squad_members').delete().in('id', memberIds);
           if (error) throw new Error(error.message);
+        }
+        // Reactivate registrations in case the squad-join trigger switched them off.
+        const playerIds = (picks || []).map((p: any) => p.player_id).filter(Boolean);
+        if (playerIds.length > 0) {
+          const { data: season } = await supabaseAdmin.from('league_seasons').select('season_number').eq('id', draft.league_season_id).maybeSingle();
+          if (season) {
+            await supabaseAdmin
+              .from('free_agents')
+              .update({ is_active: true, updated_at: new Date().toISOString() })
+              .in('player_id', playerIds)
+              .eq('league_slug', 'ctfdl')
+              .eq('season_number', season.season_number);
+          }
         }
         const { error: dErr } = await supabaseAdmin.from('ctfdl_draft_picks').delete().eq('draft_id', draftId);
         if (dErr) throw new Error(dErr.message);
