@@ -1102,22 +1102,19 @@ export default function SquadDetailPage() {
     if (!confirm(`Are you sure you want to kick ${memberName} from the squad?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('squad_members')
-        .delete()
-        .eq('id', memberId);
+      // Server route: row security only lets the captain delete directly, and a
+      // blocked delete reports success with nothing removed.
+      await squadMemberAction('kick', memberId);
 
-      if (error) throw error;
-
-      toast.success('Member kicked successfully');
+      toast.success(`${memberName} removed from the squad`);
       await Promise.allSettled([
         loadSquadDetails(),
         loadPendingRequests(),
         loadSentInvites()
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error kicking member:', error);
-      toast.error('Failed to kick member');
+      toast.error(error?.message || 'Failed to remove member');
     }
   };
 
@@ -1126,19 +1123,28 @@ export default function SquadDetailPage() {
     if (!confirm(`Are you sure you want to ${newRole === 'co_captain' ? 'promote' : 'demote'} ${memberName} to ${roleText}?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('squad_members')
-        .update({ role: newRole })
-        .eq('id', memberId);
+      await squadMemberAction(newRole === 'co_captain' ? 'promote' : 'demote', memberId);
 
-      if (error) throw error;
-
-      toast.success(`Member ${newRole === 'co_captain' ? 'promoted' : 'demoted'} successfully`);
+      toast.success(`${memberName} ${newRole === 'co_captain' ? 'promoted to co-captain' : 'demoted to player'}`);
       await loadSquadDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating member role:', error);
-      toast.error('Failed to update member role');
+      toast.error(error?.message || 'Failed to update member role');
     }
+  };
+
+  /** Roster changes go through the server (service role) so staff and captains both work; errors surface. */
+  const squadMemberAction = async (action: 'kick' | 'promote' | 'demote', memberId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Your session expired. Sign in again.');
+    const res = await fetch('/api/squads/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action, squad_id: squadId, member_id: memberId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Request failed');
+    return json;
   };
 
   const disbandSquad = async () => {

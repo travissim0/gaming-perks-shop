@@ -99,16 +99,16 @@ export async function POST(request: NextRequest) {
           if (tagErr) console.warn('set_teams: could not tag squads with league_slug', tagErr.message);
 
           // The draft fills these rosters. Leftover members from a previous season
-          // (kept when the squad was archived) are set inactive — history stays,
-          // the captain remains, and the draft adds players fresh.
+          // (still attached when the squad was reactivated) are removed — the
+          // captain stays and the draft adds players fresh. Same delete semantics
+          // as kick/leave, so a re-drafted player never collides with a stale row.
           const { data: caps } = await supabaseAdmin.from('squads').select('id, captain_id').in('id', squadIds);
           let cleared = 0;
           for (const s of caps || []) {
             const { data: rows } = await supabaseAdmin
               .from('squad_members')
-              .update({ status: 'inactive' })
+              .delete()
               .eq('squad_id', s.id)
-              .eq('status', 'active')
               .neq('player_id', s.captain_id)
               .select('id');
             cleared += rows?.length || 0;

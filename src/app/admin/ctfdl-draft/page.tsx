@@ -110,7 +110,7 @@ export default function CtfdlDraftAdminPage() {
   const saveSettings = () => draft && post({ action: 'update', draft_id: draft.id, ...settings, pick_seconds: settings.pick_seconds === '' ? null : Number(settings.pick_seconds) }, 'Settings saved');
   const saveTeams = () => {
     if (!draft) return;
-    if (!confirm('Save these teams? Any players still on these squads from a previous season (other than the captain) are removed from the roster so the draft can fill it. Memberships are kept as history.')) return;
+    if (!confirm('Save these teams? Any players still on these squads from a previous season (other than the captain) are removed from the roster so the draft can fill it.')) return;
     post({ action: 'set_teams', draft_id: draft.id, squad_ids: selected }, 'Teams saved');
   };
   const saveRanking = () => draft && post({ action: 'set_rankings', draft_id: draft.id, player_ids: ranking }, 'Ranking saved');
