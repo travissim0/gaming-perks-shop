@@ -9,6 +9,12 @@ interface HeroSlide {
   subtitle: string;
   buttonText: string;
   buttonLink: string;
+  /** Opens buttonLink in a new tab when the destination is off-site */
+  buttonExternal?: boolean;
+  /** Optional smaller companion link rendered under the main CTA */
+  secondaryText?: string;
+  secondaryLink?: string;
+  secondaryExternal?: boolean;
   accentColor: string;
   glowColor: string;
 }
@@ -24,11 +30,14 @@ const heroSlides: HeroSlide[] = [
     glowColor: 'rgba(34, 211, 238, 0.5)',
   },
   {
-    id: 'usl-dueling',
+    id: 'usl-mix',
     title: 'USL STATS',
-    subtitle: 'BO9 Duel Stats & Squad Battle Analytics',
+    subtitle: 'Mix Match Stats, ELO Ratings & Player Analytics',
     buttonText: 'View Stats',
-    buttonLink: '/dueling/bo9-stats',
+    buttonLink: 'https://www.uslzone.com/pages/mix.php',
+    buttonExternal: true,
+    secondaryText: 'Also on freeinf.org',
+    secondaryLink: '/usl-mix',
     accentColor: 'from-green-400 to-emerald-500',
     glowColor: 'rgba(34, 197, 94, 0.5)',
   },
@@ -51,6 +60,71 @@ const heroSlides: HeroSlide[] = [
     glowColor: 'rgba(59, 130, 246, 0.5)',
   },
 ];
+
+// Renders an internal Next link or an external anchor with the same styling
+function SlideLink({
+  href,
+  external,
+  className,
+  style,
+  children,
+}: {
+  href: string;
+  external?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className={className} style={style}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={className} style={style}>
+      {children}
+    </Link>
+  );
+}
+
+// Primary CTA plus the optional smaller companion link
+function SlideCta({ slide, arrowShift }: { slide: HeroSlide; arrowShift: string }) {
+  return (
+    <>
+      <SlideLink
+        href={slide.buttonLink}
+        external={slide.buttonExternal}
+        className={`group relative px-6 py-3 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white overflow-hidden transition-all duration-300 hover:scale-105`}
+        style={{
+          boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
+        }}
+      >
+        <span className="relative z-10 flex items-center gap-2">
+          {slide.buttonText}
+          <svg className={`w-4 h-4 ${arrowShift} transition-transform`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </span>
+        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+      </SlideLink>
+
+      {slide.secondaryText && slide.secondaryLink && (
+        <SlideLink
+          href={slide.secondaryLink}
+          external={slide.secondaryExternal}
+          className="mt-3 inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 underline decoration-dotted underline-offset-4 transition-colors"
+        >
+          {slide.secondaryText}
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </SlideLink>
+      )}
+    </>
+  );
+}
 
 // Generate stars once
 const generateStars = (count: number, layer: number) => {
@@ -206,21 +280,7 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
             {slide.subtitle}
           </p>
 
-          <Link
-            href={slide.buttonLink}
-            className={`group relative px-6 py-3 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white overflow-hidden transition-all duration-300 hover:scale-105`}
-            style={{
-              boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
-            }}
-          >
-            <span className="relative z-10 flex items-center gap-2">
-              {slide.buttonText}
-              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </span>
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-          </Link>
+          <SlideCta slide={slide} arrowShift="group-hover:translate-x-0.5" />
 
           {/* Navigation Dots */}
           <div className="flex items-center gap-3 mt-7">
@@ -437,23 +497,7 @@ export default function DynamicHeroCarousel({ compact = false }: DynamicHeroCaro
         </p>
 
         {/* CTA Button */}
-        <Link
-          href={slide.buttonLink}
-          className={`group relative px-6 py-3 bg-gradient-to-r ${slide.accentColor} rounded-lg font-bold text-white overflow-hidden transition-all duration-300 hover:scale-105`}
-          style={{
-            boxShadow: `0 0 20px ${slide.glowColor}, 0 0 40px ${slide.glowColor}`,
-          }}
-        >
-          <span className="relative z-10 flex items-center gap-2">
-            {slide.buttonText}
-            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </span>
-
-          {/* Button glow effect */}
-          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-        </Link>
+        <SlideCta slide={slide} arrowShift="group-hover:translate-x-1" />
 
         {/* Navigation Dots */}
         <div className="flex items-center gap-3 mt-6">

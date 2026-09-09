@@ -566,14 +566,14 @@ export default function HomeNew() {
 
             {/* Left Sidebar: Carousel + Donations + Supporters */}
             <div className="lg:col-span-1 space-y-4 order-2 lg:order-1">
+              {/* Hero Banner (compact carousel) */}
+              <DynamicHeroCarousel compact />
+
               {/* Infantry v2 Client + Web Editors - compact side panels */}
               <ClientEditorsShowcase />
 
               {/* Infantry 2 Launch Signup */}
               <LaunchSignupBanner />
-
-              {/* Compact Carousel */}
-              <DynamicHeroCarousel compact />
 
               {/* Recent Activity - Side by Side (hide orders if empty) */}
               <div className="grid grid-cols-1 gap-3">
