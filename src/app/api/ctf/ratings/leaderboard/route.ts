@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { CTF_RATING, startOfUtcDay } from '@/lib/ctfRatings/elo';
 import { loadPool, resolveViewerKey } from '@/lib/ctfRatings/pool';
-import { getVoter } from '@/lib/ctfRatings/auth';
+import { NO_ACCESS_MESSAGE, resolveAccess } from '@/lib/ctfRatings/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
+    const access = await resolveAccess(request);
+    if (!access.canView) {
+      return NextResponse.json(
+        { success: false, error: NO_ACCESS_MESSAGE, forbidden: true, signedIn: !!access.userId },
+        { status: 403 },
+      );
+    }
+
     const supabase = getServiceSupabase();
     const pool = await loadPool();
 
@@ -40,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     // Caller's own standing, when they are signed in.
     let viewer: any = null;
-    const voter = await getVoter(request);
+    const voter = access.userId ? { id: access.userId } : null;
     if (voter) {
       // Counted server-side rather than fetched and tallied, so a prolific voter's
       // history never has to travel just to render one percentage.
@@ -73,6 +81,8 @@ export async function GET(request: NextRequest) {
         agreement: myVoteCount > 0 ? Math.round((100 * agreedCount) / myVoteCount) : null,
         rank: rankIndex >= 0 ? rankIndex + 1 : null,
         rating: rankIndex >= 0 ? ranked[rankIndex].rating : null,
+        canVote: access.canVote,
+        isAdmin: access.isAdmin,
         playerName: rankIndex >= 0 ? ranked[rankIndex].player_name : null,
       };
     }

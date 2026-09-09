@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { CTF_RATING, pickMatchup, startOfUtcDay } from '@/lib/ctfRatings/elo';
 import { loadPool } from '@/lib/ctfRatings/pool';
-import { getVoter } from '@/lib/ctfRatings/auth';
+import { NO_ACCESS_MESSAGE, resolveAccess } from '@/lib/ctfRatings/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
+    const access = await resolveAccess(request);
+    if (!access.canView) {
+      return NextResponse.json(
+        { success: false, error: NO_ACCESS_MESSAGE, forbidden: true, signedIn: !!access.userId },
+        { status: 403 },
+      );
+    }
+
     const pool = await loadPool();
 
     if (pool.length < 2) {
@@ -36,15 +44,12 @@ export async function GET(request: NextRequest) {
     // Voting status for the signed-in caller (anonymous callers still get a matchup,
     // they just cannot submit a vote).
     let votesToday = 0;
-    let signedIn = false;
-    const voter = await getVoter(request);
-    if (voter) {
-      signedIn = true;
+    if (access.userId) {
       const supabase = getServiceSupabase();
       const { count } = await supabase
         .from('ctf_rating_votes')
         .select('id', { count: 'exact', head: true })
-        .eq('voter_id', voter.id)
+        .eq('voter_id', access.userId)
         .gte('created_at', startOfUtcDay());
       votesToday = count ?? 0;
     }
@@ -53,7 +58,8 @@ export async function GET(request: NextRequest) {
       success: true,
       matchup: { a: matchup[0], b: matchup[1] },
       poolSize: pool.length,
-      signedIn,
+      signedIn: !!access.userId,
+      canVote: access.canVote,
       votesToday,
       dailyLimit: CTF_RATING.DAILY_VOTE_LIMIT,
     });

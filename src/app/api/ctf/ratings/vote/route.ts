@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { CTF_RATING, applyVote, startOfUtcDay } from '@/lib/ctfRatings/elo';
 import { invalidatePool, loadPool } from '@/lib/ctfRatings/pool';
-import { getVoter } from '@/lib/ctfRatings/auth';
+import { NO_ACCESS_MESSAGE, resolveAccess } from '@/lib/ctfRatings/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,13 +13,17 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    const voter = await getVoter(request);
-    if (!voter) {
+    const access = await resolveAccess(request);
+    if (!access.userId) {
+      return NextResponse.json({ success: false, error: 'Sign in to vote' }, { status: 401 });
+    }
+    if (!access.canVote) {
       return NextResponse.json(
-        { success: false, error: 'Sign in to vote' },
-        { status: 401 },
+        { success: false, error: NO_ACCESS_MESSAGE, forbidden: true },
+        { status: 403 },
       );
     }
+    const voter = { id: access.userId };
 
     const body = await request.json().catch(() => ({}));
     const winnerKey = String(body.winnerKey || '').toLowerCase().trim();

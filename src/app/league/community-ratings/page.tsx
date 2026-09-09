@@ -82,6 +82,8 @@ export default function CommunityRatingsPage() {
   const [voting, setVoting] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [canVote, setCanVote] = useState(false);
   const [search, setSearch] = useState('');
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -103,6 +105,10 @@ export default function CommunityRatingsPage() {
         if (json.success) {
           setMatchup(json.matchup);
           setLoadError(null);
+          setForbidden(false);
+          setCanVote(!!json.canVote);
+        } else if (json.forbidden) {
+          setForbidden(true);
         } else {
           // Distinguish "the pool is genuinely thin" from "this never got set up",
           // which otherwise both render as an empty card.
@@ -124,6 +130,9 @@ export default function CommunityRatingsPage() {
         setPlayers(json.players || []);
         setTotals(json.totals || null);
         setViewer(json.viewer || null);
+        setForbidden(false);
+      } else if (json.forbidden) {
+        setForbidden(true);
       }
     } catch {
       toast.error('Could not load the leaderboard');
@@ -151,6 +160,10 @@ export default function CommunityRatingsPage() {
   const castVote = async (winner: PlayerCard, loser: PlayerCard) => {
     if (!user) {
       toast.error('Sign in to vote');
+      return;
+    }
+    if (!canVote) {
+      toast.error('You do not have rater access');
       return;
     }
     if (voting) return;
@@ -184,10 +197,35 @@ export default function CommunityRatingsPage() {
   const votesToday = viewer?.votesToday ?? 0;
   const dailyLimit = viewer?.dailyLimit ?? 50;
   const atLimit = !!user && votesToday >= dailyLimit;
+  const canSubmit = canVote && !!user;
 
   const filtered = search.trim()
     ? players.filter((p) => p.player_name.toLowerCase().includes(search.trim().toLowerCase()))
     : players;
+
+  if (forbidden) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white">
+        <Navbar user={user} />
+        <div className="max-w-lg mx-auto px-4 py-24 text-center space-y-3">
+          <div className="text-4xl">⚔️</div>
+          <h1 className="text-xl font-bold text-gray-200">Community Ratings is in closed testing</h1>
+          <p className="text-gray-500 text-sm">
+            The board is limited to CTF raters while it fills up — a leaderboard of real players
+            is not worth showing until enough votes are in for it to mean anything.
+          </p>
+          {!user && (
+            <p className="text-gray-500 text-sm">
+              <Link href="/auth/login" className="text-cyan-400 hover:underline">
+                Sign in
+              </Link>{' '}
+              if you already have access.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -280,13 +318,13 @@ export default function CommunityRatingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-center">
                 <VoteCard
                   player={matchup.a}
-                  disabled={voting || atLimit || !user}
+                  disabled={voting || atLimit || !canSubmit}
                   onClick={() => castVote(matchup.a, matchup.b)}
                 />
                 <div className="text-center text-gray-600 font-bold text-sm">VS</div>
                 <VoteCard
                   player={matchup.b}
-                  disabled={voting || atLimit || !user}
+                  disabled={voting || atLimit || !canSubmit}
                   onClick={() => castVote(matchup.b, matchup.a)}
                 />
               </div>
@@ -299,6 +337,11 @@ export default function CommunityRatingsPage() {
                       Sign in
                     </Link>{' '}
                     to cast votes.
+                  </p>
+                )}
+                {user && !canVote && (
+                  <p className="text-gray-500 text-sm">
+                    You can view the board but not vote on it yet.
                   </p>
                 )}
                 {atLimit && (
