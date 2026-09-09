@@ -3774,9 +3774,9 @@ namespace CTFGameType
     public class PlayerStatsIntegration
     {
         private static readonly HttpClient httpClient = new HttpClient();
-        // Use localhost for development, production URL for live server
-        private const string STATS_API_ENDPOINT = "http://localhost:3000/api/player-stats";
-        // If you need to use production: "https://freeinf.org/api/player-stats"
+        // Production endpoint. Use the www host directly - apex freeinf.org 307-redirects to www.
+        private const string STATS_API_ENDPOINT = "https://www.freeinf.org/api/player-stats";
+        // For local development against a dev server: "http://localhost:3000/api/player-stats"
         
         public static async Task SendPlayerStatsToWebsite(List<PlayerStatData> playerStats, string gameId = null)
         {
