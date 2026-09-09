@@ -10,7 +10,7 @@ import NewsSection from '@/components/NewsSection';
 import { useDonationMode } from '@/hooks/useDonationMode';
 import { supabase } from '@/lib/supabase';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
-import { getClassColor, getPlayerColor, isNonPlayingTeam } from '@/utils/classColors';
+import { getClassColor, getPlayerDisplayStyle, isNonPlayingTeam } from '@/utils/classColors';
 import { getEloTier } from '@/utils/eloTiers';
 import { getLeagues, pickFeatured, getSeasonStatus, getStandings, type StandingRow } from '@/lib/leagues';
 import LeagueStatusSection, { type LeagueStatusData, type LeagueStatusEntry } from '@/components/ctf/LeagueStatusSection';
@@ -1187,17 +1187,18 @@ export default function Home() {
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {players.slice(0, 8).map((p, i) => (
-                                <span
-                                  key={i}
-                                  className="text-xs font-mono"
-                                  style={{ color: getPlayerColor(p.class, p.team) }}
-                                  title={
-                                    isNonPlayingTeam(p.team)
-                                      ? `${p.alias} - not in the game (${p.team})`
-                                      : `${p.class}${getWeaponEmoji(p.weapon || '')}`
-                                  }
-                                >
-                                  {p.alias}{i < Math.min(7, players.length - 1) ? ',' : ''}
+                                <span key={i} className="text-xs font-mono">
+                                  <span
+                                    style={getPlayerDisplayStyle(p.class, p.team)}
+                                    title={
+                                      isNonPlayingTeam(p.team)
+                                        ? `${p.alias} - not in the game (${p.team})`
+                                        : `${p.class}${getWeaponEmoji(p.weapon || '')}`
+                                    }
+                                  >
+                                    {p.alias}
+                                  </span>
+                                  {i < Math.min(7, players.length - 1) ? ',' : ''}
                                 </span>
                               ))}
                               {players.length > 8 && (

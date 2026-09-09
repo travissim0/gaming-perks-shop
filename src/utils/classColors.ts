@@ -6,7 +6,7 @@ export const CLASS_COLORS: Record<string, string> = {
   'Combat Engineer': '#a3621b', // brown
   'Field Medic': '#ca8a04', // dark yellow
   'Infiltrator': '#d946ef', // pinkish purple
-  'Jump Trooper': '#818cf8', // indigo - was grey, which now means 'not in the game'
+  'Jump Trooper': '#cbd5e1', // grey, matching the class backpack in game
   // Game mode class names (used in recordings/game data)
   'Engineer': '#f59e0b', // amber
   'Medic': '#10b981', // green
@@ -41,8 +41,8 @@ export const isNonPlayingTeam = (team?: string | null): boolean => {
   return NON_PLAYING_TEAM.test(team.trim());
 };
 
-/** Grey, reserved for players who are not in the game. */
-export const NON_PLAYING_COLOR = '#6b7280';
+/** Dim grey for players who are not in the game. Deliberately recessive. */
+export const NON_PLAYING_COLOR = '#4b5563';
 
 /**
  * Colour for a player in a live list. Class colours mean "in the game"; anyone on NP
@@ -55,4 +55,32 @@ export const getPlayerColor = (className: string, team?: string | null): string 
 export const getPlayerColorStyle = (
   className: string,
   team?: string | null,
-): React.CSSProperties => ({ color: getPlayerColor(className, team) }); 
+): React.CSSProperties => ({ color: getPlayerColor(className, team) });
+
+/**
+ * How a player's name should read in a live list.
+ *
+ * Jump Trooper is grey because its backpack is grey in game, which would otherwise
+ * collide with the grey used for people who are not playing. The two are separated by
+ * weight rather than hue: Jump Trooper gets a filled chip so it stays a real class,
+ * while NP and spec are flat, dimmed and italic so they recede without disappearing.
+ */
+export const getPlayerDisplayStyle = (
+  className: string,
+  team?: string | null,
+): React.CSSProperties => {
+  if (isNonPlayingTeam(team)) {
+    return { color: NON_PLAYING_COLOR, opacity: 0.6, fontStyle: 'italic' };
+  }
+
+  if (className === 'Jump Trooper') {
+    return {
+      color: '#e2e8f0',
+      backgroundColor: 'rgba(148, 163, 184, 0.28)',
+      borderRadius: '3px',
+      padding: '0 4px',
+    };
+  }
+
+  return { color: getClassColor(className) };
+}; 

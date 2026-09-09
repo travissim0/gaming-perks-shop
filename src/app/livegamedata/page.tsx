@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getClassColorStyle, getPlayerColorStyle } from '@/utils/classColors';
+import { getClassColorStyle, getPlayerColorStyle, getPlayerDisplayStyle } from '@/utils/classColors';
 
 interface PlayerData {
   alias: string;
@@ -388,7 +388,7 @@ export default function LiveGameDataPage() {
                             <span className="text-gray-400">{player.alias}</span>
                             <span 
                               className="text-xs px-1 py-0.5 rounded"
-                              style={getPlayerColorStyle(player.className, player.team)}
+                              style={getPlayerDisplayStyle(player.className, player.team)}
                             >
                               {player.className}
                             </span>
