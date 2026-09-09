@@ -224,13 +224,13 @@ export default function CTFManagementPage() {
           profiles!squads_captain_id_fkey(in_game_alias),
           squad_members!inner(id)
         `;
-      let { data, error } = await supabase
+      let { data, error }: { data: any[] | null; error: any } = await supabase
         .from('squads')
         .select(`${cols}, league_slug`)
         .order('created_at', { ascending: false });
       // league_slug arrives with add-squad-league.sql; fall back until it's run.
       if (error && String(error.message || '').includes('league_slug')) {
-        ({ data, error } = await supabase.from('squads').select(cols).order('created_at', { ascending: false }));
+        ({ data, error } = await supabase.from('squads').select(cols).order('created_at', { ascending: false }) as any);
       }
 
       if (error) throw error;
