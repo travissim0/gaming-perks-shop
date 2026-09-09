@@ -102,18 +102,25 @@ export default function AdminNewsPage() {
     
     try {
       // Parse the rich text content if it's a JSON string, otherwise create simple structure
-      let richContent;
-      try {
-        richContent = JSON.parse(formData.content);
-      } catch {
-        // If content is not valid JSON, convert plain text to rich content format
-        richContent = {
-          type: 'doc',
-          content: formData.content.split('\n\n').map(paragraph => ({
-            type: 'paragraph',
-            content: [{ type: 'text', text: paragraph }]
-          }))
-        };
+      // Content can be: a rich-text JSON string (editor output), an already-parsed
+      // document object (loaded from an existing post), or plain text.
+      let richContent: any;
+      const raw: any = formData.content;
+      if (raw && typeof raw === 'object') {
+        richContent = raw;
+      } else {
+        const text = typeof raw === 'string' ? raw : '';
+        try {
+          richContent = JSON.parse(text);
+        } catch {
+          richContent = {
+            type: 'doc',
+            content: text.split('\n\n').filter(Boolean).map((paragraph) => ({
+              type: 'paragraph',
+              content: [{ type: 'text', text: paragraph }],
+            })),
+          };
+        }
       }
 
       const postData = {
@@ -171,7 +178,8 @@ export default function AdminNewsPage() {
     setFormData({
       title: post.title,
       subtitle: post.subtitle,
-      content: post.content,
+      // The editor works with the JSON string form; stored posts hold the parsed document.
+      content: typeof post.content === 'string' ? post.content : JSON.stringify(post.content ?? { type: 'doc', content: [] }),
       featured_image_url: post.featured_image_url || '',
       featured: post.featured,
       priority: post.priority,
