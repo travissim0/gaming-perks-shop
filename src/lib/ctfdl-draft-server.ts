@@ -90,7 +90,14 @@ export async function loadPicks(draftId: string): Promise<DraftPick[]> {
 /** Everyone registered for the season, minus participating captains; picked ones flagged. */
 export async function loadPlayers(draftId: string, seasonNumber: number, teams: DraftTeam[], picks: DraftPick[]): Promise<DraftPlayer[]> {
   const captainIds = new Set(teams.map((t) => t.captain_id).filter(Boolean) as string[]);
-  const [{ data: rows }, { data: ranks }] = await Promise.all([
+  const pickByPlayer: Record<string, DraftPick> = {};
+  picks.forEach((p) => { if (p.player_id) pickByPlayer[p.player_id] = p; });
+  const pickedIds = Object.keys(pickByPlayer);
+
+  // Registration rows for the season. Undrafted players must be active; drafted
+  // players are included whatever their is_active flag, because joining a squad
+  // can deactivate the pool row and their card still needs to render.
+  const [{ data: activeRows }, { data: pickedRows }, { data: ranks }] = await Promise.all([
     supabaseAdmin
       .from('free_agents')
       .select('*, profiles!free_agents_player_id_fkey(in_game_alias)')
@@ -98,14 +105,33 @@ export async function loadPlayers(draftId: string, seasonNumber: number, teams: 
       .eq('league_slug', 'ctfdl')
       .eq('season_number', seasonNumber)
       .order('created_at'),
+    pickedIds.length
+      ? supabaseAdmin
+          .from('free_agents')
+          .select('*, profiles!free_agents_player_id_fkey(in_game_alias)')
+          .in('player_id', pickedIds)
+          .eq('league_slug', 'ctfdl')
+          .eq('season_number', seasonNumber)
+      : Promise.resolve({ data: [] as any[] }),
     supabaseAdmin.from('ctfdl_draft_rankings').select('player_id, rank').eq('draft_id', draftId),
   ]);
   const rankById: Record<string, number> = {};
   (ranks || []).forEach((r: any) => { rankById[r.player_id] = r.rank; });
-  const pickByPlayer: Record<string, DraftPick> = {};
-  picks.forEach((p) => { if (p.player_id) pickByPlayer[p.player_id] = p; });
 
-  return ((rows || []) as any[])
+  const byId: Record<string, any> = {};
+  [...((activeRows || []) as any[]), ...((pickedRows || []) as any[])].forEach((r) => { if (!byId[r.player_id]) byId[r.player_id] = r; });
+
+  // If a drafted player's registration row was deleted outright, fall back to
+  // a bare profile so the board still shows their name.
+  const missing = pickedIds.filter((id) => !byId[id]);
+  if (missing.length > 0) {
+    const { data: profs } = await supabaseAdmin.from('profiles').select('id, in_game_alias').in('id', missing);
+    (profs || []).forEach((p: any) => {
+      byId[p.id] = { player_id: p.id, profiles: { in_game_alias: p.in_game_alias }, preferred_roles: [], secondary_roles: [], classes_to_try: [], class_ratings: {}, availability_days: [], availability_times: {}, created_at: pickByPlayer[p.id]?.created_at };
+    });
+  }
+
+  return Object.values(byId)
     .filter((r) => !captainIds.has(r.player_id))
     .map((r) => ({
       player_id: r.player_id,
