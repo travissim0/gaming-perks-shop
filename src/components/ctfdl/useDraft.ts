@@ -79,7 +79,11 @@ export function useDraft(opts: { draftId?: string | null; seasonId?: string | nu
   const meTeam = bundle?.viewer?.my_team_id || null;
   useEffect(() => {
     if (!liveId) return;
-    const channel = supabase.channel(`ctfdl-draft-${liveId}`, { config: { presence: { key: meId || `anon-${Math.random().toString(36).slice(2)}` } } });
+    // `enabled: true` is required — this supabase-js version leaves presence off
+    // otherwise, so no join/sync events ever arrive (verified against live).
+    const channel = supabase.channel(`ctfdl-draft-${liveId}`, {
+      config: { presence: { key: meId || `anon-${Math.random().toString(36).slice(2)}`, enabled: true } as any },
+    });
     channel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_drafts', filter: `id=eq.${liveId}` }, () => { refetch(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_draft_picks', filter: `draft_id=eq.${liveId}` }, () => { refetch(); });
