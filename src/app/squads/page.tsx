@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 import { queries, robustFetch } from '@/utils/dataFetching';
 import { getSquadMemberCountDisplay } from '@/utils/squadValidation';
+import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
 
 interface Squad {
   id: string;
@@ -29,6 +30,7 @@ interface Squad {
   is_legacy: boolean;
   tournament_eligible: boolean;
   max_members?: number;
+  league_slug?: string | null;
 }
 
 interface SquadMember {
@@ -103,6 +105,65 @@ export default function SquadsPage() {
   
   // View mode toggle (list vs reel)
   const [viewMode, setViewMode] = useState<'list' | 'reel'>('reel');
+
+  // Squad list: filters + league context (which league is running, standings for cards)
+  const [squadSearch, setSquadSearch] = useState('');
+  const [statusTab, setStatusTab] = useState<'active' | 'inactive' | 'legacy'>('active');
+  const [leagueFilter, setLeagueFilter] = useState<string>('all');
+  const [leagues, setLeagues] = useState<LeagueInfo[]>([]);
+  const [featuredLeague, setFeaturedLeague] = useState<LeagueInfo | null>(null);
+  const [featuredSeason, setFeaturedSeason] = useState<LeagueSeason | null>(null);
+  const [standingsMap, setStandingsMap] = useState<Record<string, StandingRow>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getLeagues();
+        if (cancelled) return;
+        setLeagues(list);
+        const featured = pickFeatured(list);
+        setFeaturedLeague(featured);
+        if (!featured) return;
+        const season = await getLatestSeason(featured);
+        if (cancelled) return;
+        setFeaturedSeason(season);
+        if (season) {
+          const rows = await getStandings(featured, season, 200);
+          if (cancelled) return;
+          const map: Record<string, StandingRow> = {};
+          rows.forEach((r) => { map[r.squad_id] = r; });
+          setStandingsMap(map);
+        }
+      } catch (e) {
+        console.error('Error loading league overview for squads:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const statusOf = (s: Squad): 'active' | 'inactive' | 'legacy' => (s.is_legacy ? 'legacy' : s.is_active ? 'active' : 'inactive');
+  // Untagged squads belong to the league that is running (one league at a time).
+  const leagueOf = (s: Squad): LeagueInfo | null => (s.league_slug ? leagues.find((l) => l.slug === s.league_slug) || null : featuredLeague);
+  const leagueOptions = leagues.filter((l) => allSquads.some((s) => leagueOf(s)?.slug === l.slug));
+  const ordinal = (n: number) => {
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+    const suffix = ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] || 'th';
+    return `${n}${suffix}`;
+  };
+  const visibleSquads = allSquads
+    .filter((s) => statusOf(s) === statusTab)
+    .filter((s) => leagueFilter === 'all' || leagueOf(s)?.slug === leagueFilter)
+    .filter((s) => {
+      const q = squadSearch.trim().toLowerCase();
+      return !q || s.name.toLowerCase().includes(q) || (s.tag || '').toLowerCase().includes(q) || (s.captain_alias || '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const ra = standingsMap[a.id]?.rank ?? 999, rb = standingsMap[b.id]?.rank ?? 999;
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name);
+    });
 
   // Form states
   const [squadName, setSquadName] = useState('');
@@ -565,6 +626,7 @@ export default function SquadsPage() {
           is_legacy,
           tournament_eligible,
           max_members,
+          league_slug,
           profiles!squads_captain_id_fkey(in_game_alias)
         `)
         .order('created_at', { ascending: false });
@@ -612,7 +674,8 @@ export default function SquadsPage() {
         is_active: squad.is_active || false,
         is_legacy: squad.is_legacy || false,
         tournament_eligible: squad.tournament_eligible || false,
-        max_members: squad.max_members || 15
+        max_members: squad.max_members || 15,
+        league_slug: squad.league_slug ?? null,
       }));
 
       console.log('🔍 loadAllSquads: Setting formatted squads state');
@@ -1724,10 +1787,10 @@ export default function SquadsPage() {
   // Allow anonymous users to view squads, but redirect on loading for auth check
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
+    <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
-      
-      <main className="container mx-auto py-8 px-4">
+
+      <main className="mx-auto max-w-7xl px-4 py-6">
 
         {/* User's Squad Section - Only show for authenticated users */}
         {user && (dataLoading || loading ? (
@@ -2028,302 +2091,134 @@ export default function SquadsPage() {
               </div>
             )}
 
-            {/* Create Squad Section */}
-            <div className="bg-gray-800 rounded-lg p-6 text-center">
-              <h2 className="text-xl font-semibold mb-4">You're not in a squad</h2>
-              <p className="text-gray-300 mb-4">Create your own squad or wait for an invitation</p>
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded"
-              >
-                Create Squad
-              </button>
-            </div>
+            {/* Not on a squad: the header strip below offers Create squad */}
           </div>
         ))}
         {/* END OF USER SQUAD SECTION */}
 
-        {/* Anonymous user notice */}
-        {!user && (
-          <div className="bg-gray-800 rounded-lg p-6 text-center mb-8">
-            <h2 className="text-xl font-semibold mb-4">Join the Squad System</h2>
-            <p className="text-gray-300 mb-4">Sign in to create or join squads, and manage your team</p>
-            <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded inline-block">
-              Sign In
-            </a>
-          </div>
-        )}
-
-         {/* All Squads Section */}
-         <div className="bg-gray-800 rounded-lg p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+        {/* ---- Squads: header strip ------------------------------------------ */}
+        <div className="mb-4 rounded-xl bg-[#131A2B] p-4 md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-bold text-cyan-400 tracking-wider">All Squads</h2>
-              {rosterLockStatus && (
-                <div className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
-                  rosterLockStatus.isLocked 
-                    ? 'bg-red-900/30 border border-red-500/50 text-red-300' 
-                    : 'bg-green-900/30 border border-green-500/50 text-green-300'
-                }`}>
-                  {rosterLockStatus.isLocked ? '🔒' : '🔓'}
-                  <span>
-                    {rosterLockStatus.lockedLabel === 'No active season'
-                      ? `No active season – Roster: ${rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}`
-                      : `${rosterLockStatus.lockedLabel ?? `Season ${rosterLockStatus.seasonNumber}`} Roster: ${rosterLockStatus.isLocked ? 'LOCKED' : 'UNLOCKED'}${!rosterLockStatus.lockedLabel && rosterLockStatus.seasonName ? ` - ${rosterLockStatus.seasonName}` : ''}`}
+              <div className="mb-1 text-[11px] uppercase tracking-[0.2em] text-[#8B98B0]">Squads</div>
+              <h1 className="font-display text-2xl leading-none text-[#E6EDF7] md:text-3xl">
+                {featuredLeague ? `${featuredLeague.name}${featuredSeason ? ` Season ${featuredSeason.season_number}` : ''}` : 'All squads'}
+                <span className="ml-2 text-base text-[#8B98B0]">· {allSquads.filter((s) => s.is_active && !s.is_legacy).length} active</span>
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[#8B98B0]">
+                {rosterLockStatus && (
+                  <span className={rosterLockStatus.isLocked ? 'text-[#F87171]' : 'text-[#34D399]'}>
+                    Rosters {rosterLockStatus.isLocked ? 'locked' : 'unlocked'}
                   </span>
-                </div>
-              )}
+                )}
+                {featuredLeague && (
+                  <span>{featuredLeague.format && featuredLeague.format !== 'squad' ? 'Rosters are set by the draft' : 'Captains recruit from the free agent pool'}</span>
+                )}
+              </div>
             </div>
-            
-            {/* Controls: view toggle + legend */}
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div className="inline-flex rounded-lg overflow-hidden border border-gray-600">
-                <button
-                  className={`px-3 py-1.5 ${viewMode === 'list' ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  onClick={() => setViewMode('list')}
-                >
-                  List
-                </button>
-                <button
-                  className={`px-3 py-1.5 ${viewMode === 'reel' ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  onClick={() => setViewMode('reel')}
-                >
-                  Reel
-                </button>
-              </div>
-              <div className="hidden sm:flex items-center gap-4">
-                <span className="text-gray-400 font-medium">Legend:</span>
-                <div className="flex items-center gap-1">
-                  <span className="bg-blue-600/20 text-blue-300 px-1.5 py-0.5 rounded text-xs border border-blue-500/30">#</span>
-                  <span className="text-gray-300">Regular</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="bg-orange-600/20 text-orange-300 px-1.5 py-0.5 rounded text-xs border border-orange-500/30">#T</span>
-                  <span className="text-gray-300">Transitional</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="bg-red-600/20 text-red-300 px-1.5 py-0.5 rounded text-xs border border-red-500/30">#</span>
-                  <span className="text-gray-300">Over Limit</span>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {!user ? (
+                <Link href="/auth/login?redirect=/squads" className="rounded-md bg-[#22D3EE] px-3 py-1.5 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">Sign in to create or join</Link>
+              ) : userSquad ? (
+                <Link href={`/squads/${userSquad.id}`} className="rounded-md bg-[#22D3EE]/15 px-3 py-1.5 text-sm text-[#22D3EE] hover:bg-[#22D3EE]/25">
+                  Your squad: [{userSquad.tag}] {userSquad.name} →
+                </Link>
+              ) : (
+                <button onClick={() => setShowCreateForm(true)} className="rounded-md bg-[#22D3EE] px-3 py-1.5 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">Create squad</button>
+              )}
+              <Link href="/free-agents" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Free agent pool</Link>
             </div>
           </div>
-          
-          {/* Active Squads */}
-          {dataLoading ? (
-            <div className="grid gap-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-gray-700 rounded p-4 animate-pulse">
-                  <div className="h-5 bg-gray-600 rounded w-1/3 mb-2"></div>
-                  <div className="h-4 bg-gray-600 rounded w-2/3 mb-2"></div>
-                  <div className="h-3 bg-gray-600 rounded w-1/2"></div>
-                </div>
+        </div>
+
+        {/* ---- Filters --------------------------------------------------------- */}
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-[#131A2B] px-4 py-3">
+          <input
+            type="text"
+            value={squadSearch}
+            onChange={(e) => setSquadSearch(e.target.value)}
+            placeholder="Search squads or captains…"
+            className="min-w-0 flex-1 rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-1.5 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none sm:max-w-xs"
+          />
+          <div className="flex gap-1">
+            {([['active', 'Active'], ['inactive', 'Inactive'], ['legacy', 'Legacy']] as const).map(([key, label]) => {
+              const n = allSquads.filter((s) => statusOf(s) === key).length;
+              return (
+                <button key={key} type="button" onClick={() => setStatusTab(key)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${statusTab === key ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
+                  {label} <span className={statusTab === key ? 'opacity-70' : 'text-[#8B98B0]'}>{n}</span>
+                </button>
+              );
+            })}
+          </div>
+          {leagueOptions.length > 1 && (
+            <div className="ml-auto flex items-center gap-1">
+              <span className="mr-1 text-xs text-[#8B98B0]">League</span>
+              <button type="button" onClick={() => setLeagueFilter('all')} className={`rounded-md px-2.5 py-1 text-xs font-medium ${leagueFilter === 'all' ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>All</button>
+              {leagueOptions.map((l) => (
+                <button key={l.slug} type="button" onClick={() => setLeagueFilter(l.slug)} className={`rounded-md px-2.5 py-1 text-xs font-medium ${leagueFilter === l.slug ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>{l.name}</button>
               ))}
             </div>
-           ) : (
-             <>
-               {viewMode === 'list' ? (
-                 <div className="grid gap-4">
-                   {allSquads.filter(squad => squad.is_active === true && !squad.is_legacy).map((squad) => (
-                     <Link key={squad.id} href={`/squads/${squad.id}`}>
-                       <div className="bg-gray-700 rounded-lg overflow-hidden hover:bg-gray-600 transition-colors cursor-pointer">
-                         <div className="p-4">
-                           <div className="flex flex-col sm:flex-row gap-4">
-                             {squad.banner_url && (
-                               <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
-                                 <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                                   <img src={squad.banner_url} alt={`${squad.name} picture`} className="w-full h-full object-cover" />
-                                 </div>
-                               </div>
-                             )}
-                             <div className="flex-1 min-w-0 overflow-hidden">
-                               <h3 className="text-lg font-semibold mb-2 text-cyan-400 hover:text-cyan-300 truncate">[{squad.tag}] {squad.name}</h3>
-                               <p className="text-gray-300 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
-                               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-400">
-                                   <div className="flex items-center gap-2 truncate">
-                                     <span>👥</span>
-                                     {renderMemberCountBadges(squad, memberData)}
-                                   </div>
-                                   <span className="flex items-center gap-1 truncate">👑 <span className="truncate">{squad.captain_alias}</span></span>
-                                 </div>
-                                 <div className="text-xs text-gray-500 flex-shrink-0">{new Date(squad.created_at).toLocaleDateString()}</div>
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     </Link>
-                   ))}
-                   {!dataLoading && allSquads.filter(squad => squad.is_active === true && !squad.is_legacy).length === 0 && (
-                     <div className="text-center py-8 text-gray-400">No active squads found. Be the first to create one!</div>
-                   )}
-                 </div>
-               ) : (
-                 /* Reel view */
-                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                   {allSquads.filter(squad => squad.is_active === true && !squad.is_legacy).map((squad) => (
-                     <Link key={squad.id} href={`/squads/${squad.id}`} className="group block">
-                       <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-gray-800">
-                         <div className="aspect-square w-full bg-gray-900">
-                           <img
-                             src={squad.banner_url || '/images/placeholder.png'}
-                             alt={`${squad.name} banner`}
-                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                           />
-                         </div>
-                         {/* Overlay */}
-                         <div className="absolute inset-0 bg-black/10 group-hover:bg-black/55 transition-colors duration-300" />
-                         {/* Text */}
-                         <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                           <div className="translate-y-6 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
-                             <h3 className="text-white text-xl font-bold mb-1 truncate">[{squad.tag}] {squad.name}</h3>
-                             <p className="text-gray-200 text-sm line-clamp-2 mb-2">{squad.description}</p>
-                             <div className="flex items-center justify-between text-gray-300 text-sm">
-                               <div className="flex items-center gap-3">
-                                 <div className="flex items-center gap-1"><span>👥</span>{renderMemberCountBadges(squad, memberData)}</div>
-                                 <div className="flex items-center gap-1">👑 <span className="truncate max-w-[140px]">{squad.captain_alias}</span></div>
-                               </div>
-                               <span className="text-xs text-gray-400">{new Date(squad.created_at).toLocaleDateString()}</span>
-                             </div>
-                           </div>
-                         </div>
-                       </div>
-                     </Link>
-                   ))}
-                 </div>
-               )}
-
-              {/* Inactive and Legacy Squad Buttons */}
-              {!dataLoading && (allSquads.some(squad => squad.is_active === false && !squad.is_legacy) || allSquads.some(squad => squad.is_legacy === true)) && (
-                <div className="mt-6 flex gap-4 justify-center">
-                  {allSquads.some(squad => squad.is_active === false && !squad.is_legacy) && (
-                    <button
-                      onClick={() => setShowInactiveSquads(!showInactiveSquads)}
-                      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
-                    >
-                      {showInactiveSquads ? 'Hide' : 'Show'} Inactive Squads ({allSquads.filter(s => s.is_active === false && !s.is_legacy).length})
-                    </button>
-                  )}
-                  {allSquads.some(squad => squad.is_legacy === true) && (
-                    <button
-                      onClick={() => setShowLegacySquads(!showLegacySquads)}
-                      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-gray-600"
-                    >
-                      {showLegacySquads ? 'Hide' : 'Show'} Legacy Squads ({allSquads.filter(s => s.is_legacy === true).length})
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Inactive Squads Section */}
-              {showInactiveSquads && !dataLoading && (
-                <div className="mt-6">
-                  <h3 className="text-xl font-bold mb-4 text-orange-400">Inactive Squads</h3>
-                  <div className="grid gap-4">
-                    {allSquads.filter(squad => squad.is_active === false && !squad.is_legacy).map((squad) => (
-                      <Link key={squad.id} href={`/squads/${squad.id}`}>
-                        <div className="bg-gray-700/50 rounded-lg overflow-hidden hover:bg-gray-600/50 transition-colors cursor-pointer border border-orange-500/30">
-                          <div className="p-4">
-                            <div className="flex flex-col sm:flex-row gap-4">
-                              {squad.banner_url && (
-                                <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
-                                  <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                                    <img 
-                                      src={squad.banner_url} 
-                                      alt={`${squad.name} picture`}
-                                      className="w-full h-full object-cover opacity-70"
-                                      onError={(e) => {
-                                        e.currentTarget.parentElement!.style.display = 'none';
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0 overflow-hidden">
-                                <h3 className="text-lg font-semibold mb-2 text-orange-400 hover:text-orange-300 truncate">
-                                  [{squad.tag}] {squad.name} <span className="text-sm text-gray-500">(Inactive)</span>
-                                </h3>
-                                <p className="text-gray-400 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-500">
-                                    <div className="flex items-center gap-2 truncate">
-                                      <span>👥</span>
-                                      {renderMemberCountBadges(squad, memberData)}
-                                    </div>
-                                    <span className="flex items-center gap-1 truncate">
-                                      👑 <span className="truncate">{squad.captain_alias}</span>
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-500 flex-shrink-0">
-                                    {new Date(squad.created_at).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Legacy Squads Section */}
-              {showLegacySquads && !dataLoading && (
-                <div className="mt-6">
-                  <h3 className="text-xl font-bold mb-4 text-purple-400">Legacy Squads</h3>
-                  <div className="grid gap-4">
-                    {allSquads.filter(squad => squad.is_legacy === true).map((squad) => (
-                      <Link key={squad.id} href={`/squads/${squad.id}`}>
-                        <div className="bg-gray-700/30 rounded-lg overflow-hidden hover:bg-gray-600/30 transition-colors cursor-pointer border border-purple-500/30">
-                          <div className="p-4">
-                            <div className="flex flex-col sm:flex-row gap-4">
-                              {squad.banner_url && (
-                                <div className="w-full sm:w-24 md:w-32 h-24 sm:h-24 md:h-32 flex-shrink-0">
-                                  <div className="bg-gray-800/50 rounded-lg overflow-hidden border border-gray-600/30 h-full">
-                                    <img 
-                                      src={squad.banner_url} 
-                                      alt={`${squad.name} picture`}
-                                      className="w-full h-full object-cover opacity-50"
-                                      onError={(e) => {
-                                        e.currentTarget.parentElement!.style.display = 'none';
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0 overflow-hidden">
-                                <h3 className="text-lg font-semibold mb-2 text-purple-400 hover:text-purple-300 truncate">
-                                  [{squad.tag}] {squad.name} <span className="text-sm text-gray-500">(Legacy)</span>
-                                </h3>
-                                <p className="text-gray-500 mb-3 text-sm line-clamp-2 break-words">{squad.description}</p>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-gray-600">
-                                    <div className="flex items-center gap-2 truncate">
-                                      <span>👥</span>
-                                      {renderMemberCountBadges(squad, memberData)}
-                                    </div>
-                                    <span className="flex items-center gap-1 truncate">
-                                      👑 <span className="truncate">{squad.captain_alias}</span>
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-600 flex-shrink-0">
-                                    {new Date(squad.created_at).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
           )}
         </div>
+
+        {/* ---- Grid ------------------------------------------------------------ */}
+        {dataLoading ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="animate-pulse overflow-hidden rounded-xl bg-[#131A2B]">
+                <div className="aspect-video bg-[#1B2438]" />
+                <div className="space-y-2 p-3"><div className="h-4 w-2/3 rounded bg-[#1B2438]" /><div className="h-3 w-1/2 rounded bg-[#1B2438]" /></div>
+              </div>
+            ))}
+          </div>
+        ) : visibleSquads.length === 0 ? (
+          <div className="rounded-xl bg-[#131A2B] py-14 text-center">
+            <p className="font-display text-2xl text-[#E6EDF7]">{statusTab === 'active' && !squadSearch && leagueFilter === 'all' ? 'No active squads yet' : 'No squads match'}</p>
+            <p className="mt-1 text-sm text-[#8B98B0]">{statusTab === 'active' && !squadSearch && leagueFilter === 'all' ? 'Be the first to create one.' : 'Try another tab or clear the search.'}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {visibleSquads.map((squad) => {
+              const st = standingsMap[squad.id];
+              const lg = leagueOf(squad);
+              const dim = statusTab !== 'active';
+              return (
+                <Link key={squad.id} href={`/squads/${squad.id}`} className={`group overflow-hidden rounded-xl bg-[#131A2B] transition-colors hover:bg-[#1B2438] ${dim ? 'opacity-75 hover:opacity-100' : ''}`}>
+                  <div className="relative aspect-video w-full overflow-hidden bg-[#0B0F1A]">
+                    {squad.banner_url ? (
+                      <img
+                        src={squad.banner_url}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center font-display text-3xl text-[#22D3EE]/70">{squad.tag}</div>
+                    )}
+                    {userSquad?.id === squad.id && <span className="absolute left-2 top-2 rounded bg-[#22D3EE] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#0B0F1A]">Yours</span>}
+                  </div>
+                  <div className="p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="truncate font-display text-base text-[#E6EDF7]">[{squad.tag}] {squad.name}</div>
+                      {st && <span className={`shrink-0 text-xs tabular-nums ${st.wins >= st.losses ? 'text-[#34D399]' : 'text-[#F87171]'}`}>{st.wins}–{st.losses}</span>}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B98B0]">
+                      <span className="truncate">Capt. {squad.captain_alias}</span>
+                      <span>·</span>
+                      {renderMemberCountBadges(squad, memberData)}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                      {lg && <span className="rounded bg-[#22D3EE]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">{lg.name}</span>}
+                      {st?.rank ? <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-[#8B98B0]">{ordinal(st.rank)}</span> : null}
+                      {squad.is_legacy ? <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Legacy</span>
+                        : !squad.is_active ? <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F87171]">Inactive</span> : null}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
         {/* Create Squad Modal */}
         {showCreateForm && (
