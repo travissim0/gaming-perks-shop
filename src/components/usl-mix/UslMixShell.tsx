@@ -200,9 +200,10 @@ export const controlCls = 'bg-gray-900/60 border border-gray-700/50 rounded-xl p
 /**
  * Individual ELO is computed on every mix but NOT published during the season (2026-09-09).
  * A public ladder was changing how people played - slower, campier, less talking - in a scene that
- * logs on for casual organised games. Ratings still do their real jobs behind the scenes: balancing
- * drafts and settling the season standings. Flip this to true to reveal them (season-end top 16, or
- * if the room changes its mind); every rating surface on the site is gated on it.
+ * logs on for casual organised games. Ratings have exactly one job now: balancing drafts. There is
+ * deliberately NO end-of-season reveal and no ranking - a promised reveal is still an incentive to
+ * try-hard, which is the thing being fixed (Angelus, 2026-09-09). Flip this to true only if the room
+ * changes its mind; every rating surface on the site is gated on it.
  */
 export const SHOW_RATINGS = false;
 

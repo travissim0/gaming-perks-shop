@@ -108,9 +108,9 @@ export default function UslMixPlayerPage() {
         {!SHOW_RATINGS ? (
         <Panel title="Rating history" className="lg:col-span-2" right={<span className="text-xs text-gray-500">hidden this season</span>}>
           <p className="text-sm text-gray-400 max-w-prose">
-            Your rating is being tracked across {history.length} rated game{history.length === 1 ? '' : 's'}, but it
-            isn&apos;t shown while the season is running — it balances drafts behind the scenes and decides the final
-            standings. The top 16 are revealed at season end.
+            Your rating is tracked across {history.length} rated game{history.length === 1 ? '' : 's'}, but it
+            isn&apos;t shown to you or anyone else. It exists for one reason: so the draft can put balanced teams
+            together. There&apos;s no ladder and no season-end ranking.
           </p>
         </Panel>
         ) : (

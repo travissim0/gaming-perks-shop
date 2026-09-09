@@ -357,8 +357,8 @@ export default function UslMixOverviewPage() {
             what most people log on for.
           </p>
           <p className="text-sm text-gray-400 max-w-prose mt-3">
-            The ratings still do the work you actually want from them: keeping drafts balanced and deciding the season
-            standings. <span className="text-gray-300">The top 16 are revealed at the end of the season.</span>
+            The ratings have one job: <span className="text-gray-300">keeping drafts balanced</span>. Nobody is ranked
+            against anybody — not now, and not at the end of the season either.
           </p>
           <p className="text-xs text-gray-500 mt-3">
             Everything else stays public — kills, classes, accuracy, heals, opening kills, and every game log below.
