@@ -3,12 +3,22 @@
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
 import { toast } from 'react-hot-toast';
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon?: string;
+  /** Indented child entry (no icon) */
+  sub?: boolean;
+  /** Draw a separator above this entry */
+  divider?: boolean;
+};
 
 export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobileMenuChange?: (open: boolean) => void }) {
   const router = useRouter();
@@ -486,11 +496,26 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/matches', label: 'Match Log', icon: '⚔️' },
   ];
 
-  const statsNavItems = [
+  const statsNavItems: NavItem[] = [
     { href: '/stats', label: 'Player Stats', icon: '📊' },
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
-    { href: '/usl-mix', label: 'USL Mix Stats', icon: '🎖️' },
     { href: '/dueling', label: 'Dueling', icon: '🗡️' },
+  ];
+
+  // CTFPL and OVDL are omitted while those leagues are inactive - they are
+  // still reachable from the league switcher on /league/standings.
+  const leagueNavItems: NavItem[] = [
+    { href: '/league/register', label: 'Register', icon: '🎯' },
+    { href: '/rules', label: 'Rules', icon: '📜' },
+    { href: '/tournament-matches', label: 'Schedule', icon: '🏆' },
+    { href: '/news', label: 'News', icon: '📰' },
+    { href: '/league/standings', label: 'Standings', icon: '⚔️', divider: true },
+    { href: '/league/standings?league=ctfdl', label: 'CTFDL Standings', icon: '🛡️' },
+    { href: '/league/ctfdl/draft', label: 'CTFDL draft', sub: true },
+    { href: '/league/ratings', label: 'Ratings', icon: '📊' },
+    { href: '/league/match-reports', label: 'Match Reports', icon: '📝' },
+    { href: '/event-log', label: 'Player Event Log', icon: '📋' },
+    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
   ];
 
   const communityNavItems = [
@@ -586,97 +611,18 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     onMouseLeave={() => setShowLeagueDropdown(false)}
                   >
                     <div className="py-2">
-                      <Link
-                        href="/league/register"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">🎯</span>
-                        Register
-                      </Link>
-                      <Link
-                        href="/rules"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">📜</span>
-                        Rules
-                      </Link>
-                      <Link
-                        href="/tournament-matches"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">🏆</span>
-                        Schedule
-                      </Link>
-                      <Link
-                        href="/news"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">📰</span>
-                        News
-                      </Link>
-                      <div className="border-t border-gray-600 my-1"></div>
-                      <Link
-                        href="/league/standings"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">⚔️</span>
-                        Standings
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ctfpl"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">🏆</span>
-                        CTFPL
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ctfdl"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">🛡️</span>
-                        CTFDL
-                      </Link>
-                      <Link
-                        href="/league/ctfdl/draft"
-                        className="flex items-center px-4 py-2 pl-11 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 transition-colors text-sm"
-                      >
-                        CTFDL draft
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ovdl"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">⚔️</span>
-                        OVDL
-                      </Link>
-                      <Link
-                        href="/league/ratings"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">📊</span>
-                        Ratings
-                      </Link>
-                      <Link
-                        href="/league/match-reports"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">📝</span>
-                        Match Reports
-                      </Link>
-                      <Link
-                        href="/event-log"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">📋</span>
-                        Player Event Log
-                      </Link>
-                      <Link
-                        href="/champions"
-                        className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
-                      >
-                        <span className="mr-3">👑</span>
-                        Hall of Champions
-                      </Link>
+                      {leagueNavItems.map((item) => (
+                        <Fragment key={item.href}>
+                          {item.divider && <div className="border-t border-gray-600 my-1"></div>}
+                          <Link
+                            href={item.href}
+                            className={`flex items-center hover:text-cyan-400 hover:bg-gray-700 transition-colors ${item.sub ? 'px-4 py-1 pl-11 text-gray-400 text-xs' : 'px-4 py-1.5 text-gray-300 text-sm'}`}
+                          >
+                            {item.icon && <span className="mr-3">{item.icon}</span>}
+                            {item.label}
+                          </Link>
+                        </Fragment>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -858,149 +804,22 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   </button>
                   {activeMobileDropdown === 'league' && (
                     <div className="ml-4 mt-2 space-y-1">
-                      <Link
-                        href="/league/register"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">🎯</span>
-                        Register
-                      </Link>
-                      <Link
-                        href="/rules"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">📜</span>
-                        Rules
-                      </Link>
-                      <Link
-                        href="/tournament-matches"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">🏆</span>
-                        Schedule
-                      </Link>
-                      <Link
-                        href="/news"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">📰</span>
-                        News
-                      </Link>
-                      <div className="border-t border-gray-600 my-2 mx-3"></div>
-                      <Link
-                        href="/league/standings"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">⚔️</span>
-                        Standings
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ctfpl"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">🏆</span>
-                        CTFPL
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ctfdl"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">🛡️</span>
-                        CTFDL
-                      </Link>
-                      <Link
-                        href="/league/ctfdl/draft"
-                        className="flex items-center px-3 py-2 pl-10 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        CTFDL draft
-                      </Link>
-                      <Link
-                        href="/league/standings?league=ovdl"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">⚔️</span>
-                        OVDL
-                      </Link>
-                      <Link
-                        href="/league/ratings"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">📊</span>
-                        Ratings
-                      </Link>
-                      <Link
-                        href="/league/match-reports"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">📝</span>
-                        Match Reports
-                      </Link>
-                      <Link
-                        href="/event-log"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">📋</span>
-                        Player Event Log
-                      </Link>
-                      <Link
-                        href="/champions"
-                        className="flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                        onClick={() => {
-                          setActiveMobileDropdown(null);
-                          setIsMobileMenuOpen(false);
-                        }}
-                      >
-                        <span className="mr-3">👑</span>
-                        Hall of Champions
-                      </Link>
+                      {leagueNavItems.map((item) => (
+                        <Fragment key={item.href}>
+                          {item.divider && <div className="border-t border-gray-600 my-2 mx-3"></div>}
+                          <Link
+                            href={item.href}
+                            className={`flex items-center px-3 py-2 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm ${item.sub ? 'pl-10' : ''}`}
+                            onClick={() => {
+                              setActiveMobileDropdown(null);
+                              setIsMobileMenuOpen(false);
+                            }}
+                          >
+                            {item.icon && <span className="mr-3">{item.icon}</span>}
+                            {item.label}
+                          </Link>
+                        </Fragment>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1623,7 +1442,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               <span className="font-medium">Home</span>
             </Link>
 
-            {/* League - Note: Mobile doesn't support hover dropdowns, so link to CTFPL */}
+            {/* League - Note: Mobile doesn't support hover dropdowns, so link straight to standings */}
             <Link 
               href="/league/standings"
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
@@ -1735,98 +1554,19 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               </button>
               
               <div className="absolute top-full left-0 mt-2 w-52 bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-600/50 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 backdrop-blur-sm">
-                <div className="py-3">
-                  <Link
-                    href="/league/register"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">🎯</span>
-                    <span className="font-medium">Register</span>
-                  </Link>
-                  <Link
-                    href="/rules"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">📜</span>
-                    <span className="font-medium">Rules</span>
-                  </Link>
-                  <Link
-                    href="/tournament-matches"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">🏆</span>
-                    <span className="font-medium">Schedule</span>
-                  </Link>
-                  <Link
-                    href="/news"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">📰</span>
-                    <span className="font-medium">News</span>
-                  </Link>
-                  <div className="border-t border-gray-600/50 my-2 mx-4"></div>
-                  <Link
-                    href="/league/standings"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">⚔️</span>
-                    <span className="font-medium">Standings</span>
-                  </Link>
-                  <Link
-                    href="/league/standings?league=ctfpl"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">🏆</span>
-                    <span className="font-medium">CTFPL</span>
-                  </Link>
-                  <Link
-                    href="/league/standings?league=ctfdl"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">🛡️</span>
-                    <span className="font-medium">CTFDL</span>
-                  </Link>
-                  <Link
-                    href="/league/ctfdl/draft"
-                    className="flex items-center px-4 py-2 pl-12 text-gray-400 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 text-sm"
-                  >
-                    CTFDL draft
-                  </Link>
-                  <Link
-                    href="/league/standings?league=ovdl"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">⚔️</span>
-                    <span className="font-medium">OVDL</span>
-                  </Link>
-                  <Link
-                    href="/league/ratings"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">📊</span>
-                    <span className="font-medium">Ratings</span>
-                  </Link>
-                  <Link
-                    href="/league/match-reports"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">📝</span>
-                    <span className="font-medium">Match Reports</span>
-                  </Link>
-                  <Link
-                    href="/event-log"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">📋</span>
-                    <span className="font-medium">Player Event Log</span>
-                  </Link>
-                  <Link
-                    href="/champions"
-                    className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
-                  >
-                    <span className="mr-3 text-lg">👑</span>
-                    <span className="font-medium">Hall of Champions</span>
-                  </Link>
+                <div className="py-2">
+                  {leagueNavItems.map((item) => (
+                    <Fragment key={item.href}>
+                      {item.divider && <div className="border-t border-gray-600/50 my-1.5 mx-4"></div>}
+                      <Link
+                        href={item.href}
+                        className={`flex items-center hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 ${item.sub ? 'px-4 py-1 pl-12 text-gray-400 text-xs' : 'px-4 py-1.5 text-gray-300'}`}
+                      >
+                        {item.icon && <span className="mr-3 text-base">{item.icon}</span>}
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </Link>
+                    </Fragment>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1972,101 +1712,17 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">League</h4>
                   <div className="space-y-1">
-                    <Link
-                      href="/league/register"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🎯</span>
-                      Register
-                    </Link>
-                    <Link
-                      href="/rules"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">📜</span>
-                      Rules
-                    </Link>
-                    <Link
-                      href="/tournament-matches"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🏆</span>
-                      Schedule
-                    </Link>
-                    <Link
-                      href="/news"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">📰</span>
-                      News
-                    </Link>
-                    <Link
-                      href="/league/standings"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">⚔️</span>
-                      Standings
-                    </Link>
-                    <Link
-                      href="/league/standings?league=ctfpl"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🏆</span>
-                      CTFPL
-                    </Link>
-                    <Link
-                      href="/league/standings?league=ctfdl"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">🛡️</span>
-                      CTFDL
-                    </Link>
-                    <Link
-                      href="/league/ctfdl/draft"
-                      className="flex items-center px-3 py-2 pl-10 text-gray-400 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors text-sm"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      CTFDL draft
-                    </Link>
-                    <Link
-                      href="/league/standings?league=ovdl"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">⚔️</span>
-                      OVDL
-                    </Link>
-                    <Link
-                      href="/league/ratings"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">📊</span>
-                      Ratings
-                    </Link>
-                    <Link
-                      href="/league/match-reports"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">📝</span>
-                      Match Reports
-                    </Link>
-                    <Link
-                      href="/event-log"
-                      className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <span className="mr-3">📋</span>
-                      Player Event Log
-                    </Link>
+                    {leagueNavItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center px-3 py-2 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors ${item.sub ? 'pl-10 text-gray-400 text-sm' : 'text-gray-300'}`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        {item.icon && <span className="mr-3">{item.icon}</span>}
+                        {item.label}
+                      </Link>
+                    ))}
                   </div>
                 </div>
 
