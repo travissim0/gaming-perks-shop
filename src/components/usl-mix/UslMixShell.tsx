@@ -197,6 +197,15 @@ export const tableCls = {
 
 export const controlCls = 'bg-gray-900/60 border border-gray-700/50 rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-cyan-500/50';
 
+/**
+ * Individual ELO is computed on every mix but NOT published during the season (2026-09-09).
+ * A public ladder was changing how people played - slower, campier, less talking - in a scene that
+ * logs on for casual organised games. Ratings still do their real jobs behind the scenes: balancing
+ * drafts and settling the season standings. Flip this to true to reveal them (season-end top 16, or
+ * if the room changes its mind); every rating surface on the site is gated on it.
+ */
+export const SHOW_RATINGS = false;
+
 // ---- Sortable tables --------------------------------------------------------------------------
 // Click a header to sort by that column: numbers high-to-low first (kills, ratings, win rates -
 // what you want to see on a first click), text A-Z first, a second click flips. Column getters

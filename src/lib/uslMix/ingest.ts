@@ -92,6 +92,7 @@ export function validatePayload(body: any): GameResultPayload {
       result: result ?? 'draw',
       is_captain: p?.is_captain === true,
       is_shotcaller: p?.is_shotcaller === true,
+      is_vocal: p?.is_vocal === true,
       primary_class: strOrNull(p?.primary_class) ?? 'Unknown',
       classes: sanitizeNumberMap(p?.classes),
       kills: numOr(p?.kills, 0),
@@ -156,6 +157,7 @@ export function validatePayload(body: any): GameResultPayload {
     game_kind: body.game_kind,
     team_size: numOr(body.team_size, 0),
     rated: body.game_kind === 'mix' && body.rated === true,
+    first_pick_team: strOrNull(body.first_pick_team),
     started_at: parseDate(body.started_at) ?? undefined,
     ended_at: parseDate(body.ended_at) ?? new Date().toISOString(),
     duration_seconds: duration,
@@ -242,6 +244,7 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     team_a_name: a.name, team_a_side: a.side, team_a_kills: a.kills, team_a_deaths: a.deaths, team_a_result: a.result, team_a_captain: a.captain, team_a_players: a.player_count,
     team_b_name: b.name, team_b_side: b.side, team_b_kills: b.kills, team_b_deaths: b.deaths, team_b_result: b.result, team_b_captain: b.captain, team_b_players: b.player_count,
     team_a_shotcaller: a.shotcaller, team_b_shotcaller: b.shotcaller,
+    first_pick_team: payload.first_pick_team ?? null,
     winner_side: winner?.side ?? null,
     winner_team: winner?.name ?? null,
     loser_team: loser?.name ?? null,
@@ -251,6 +254,12 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
   };
 
   let { data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(gameRow).select('id').single();
+  if (gameErr && /column .*first_pick_team.* does not exist/i.test(gameErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-vocal-firstpick.sql) - store without it rather than lose the game
+    console.warn('[usl-mix] usl_mix_games.first_pick_team missing; inserting without it');
+    const { first_pick_team: _fp, ...noFp } = gameRow;
+    ({ data: game, error: gameErr } = await supabase.from('usl_mix_games').insert(noFp).select('id').single());
+  }
   if (gameErr && /column .*shotcaller.* does not exist/i.test(gameErr.message || '')) {
     // schema not migrated yet (usl-mix-add-shotcaller.sql) - store without the seats rather than lose the game
     console.warn('[usl-mix] usl_mix_games.team_*_shotcaller columns missing; inserting without them');
@@ -286,6 +295,7 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     result: p.result,
     is_captain: p.is_captain,
     is_shotcaller: p.is_shotcaller,
+    is_vocal: p.is_vocal,
     primary_class: p.primary_class,
     classes: p.classes,
     kills: p.kills,
@@ -311,10 +321,15 @@ export async function storeGame(supabase: SupabaseClient, payload: GameResultPay
     console.warn('[usl-mix] usl_mix_game_players.weapon_hits column missing; inserting without it');
     ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ weapon_hits: _h, ...rest }) => rest)));
   }
+  if (playersErr && /column .*is_vocal.* does not exist/i.test(playersErr.message || '')) {
+    // schema not migrated yet (usl-mix-add-vocal-firstpick.sql) - drop the flag rather than lose the game
+    console.warn('[usl-mix] usl_mix_game_players.is_vocal column missing; inserting without it');
+    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ is_vocal: _v, ...rest }) => rest)));
+  }
   if (playersErr && /column .*shotcaller.* does not exist/i.test(playersErr.message || '')) {
     // schema not migrated yet (usl-mix-add-shotcaller.sql) - drop the flag rather than lose the game
     console.warn('[usl-mix] usl_mix_game_players.is_shotcaller column missing; inserting without it');
-    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ is_shotcaller: _s, ...rest }) => rest)));
+    ({ error: playersErr } = await supabase.from('usl_mix_game_players').insert(playerRows.map(({ is_shotcaller: _s, is_vocal: _v, ...rest }) => rest)));
   }
   if (playersErr && /column .*opening_.* does not exist/i.test(playersErr.message || '')) {
     // schema not migrated yet (usl-mix-add-opening-kills.sql) - store without the counters rather than lose the game

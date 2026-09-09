@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, SegmentedControl, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, SideBadge, ResultBadge, SIDE_COLORS, fmtDate, fmtDuration, fmtDelta, tableCls, tooltipStyle, ClassName, classColor, SortTh, sortRows, useSortState, SegmentedControl, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 /**
  * Class name plus, when a player spent real time as more than one class, a proportional split:
@@ -35,7 +35,7 @@ function ClassSplit({ classes, primary }: { classes?: Record<string, number>; pr
 }
 
 interface PlayerRow {
-  alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; is_shotcaller?: boolean; primary_class: string; classes: Record<string, number>;
+  alias: string; side: string | null; team_name: string; result: string; is_captain: boolean; is_shotcaller?: boolean; is_vocal?: boolean; primary_class: string; classes: Record<string, number>;
   kills: number; deaths: number; team_kills: number; kills_scoreboard: number | null; deaths_scoreboard: number | null;
   shots_fired: number; shots_landed: number; accuracy: number | null; bio_dart_hits: number; heal_amount: number; heal_uses: number; play_seconds: number;
   weapon_kills: Record<string, { name: string | null; count: number }>; rating_before: number | null; rating_after: number | null; rating_delta: number | null; performance: number | null;
@@ -236,7 +236,7 @@ export default function UslMixGamePage() {
                     <SortTh col="open" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2" title="opening kills (fights won after)">Open</SortTh>
                     <SortTh col="acc" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Acc</SortTh>
                     <SortTh col="heal" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 px-2">Heal</SortTh>
-                    <SortTh col="delta" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 pl-2">Δ</SortTh>
+                    {SHOW_RATINGS && <SortTh col="delta" sort={teamSort} onToggle={toggleTeamSort} className="text-right py-2 pl-2">Δ</SortTh>}
                   </tr>
                 </thead>
                 <tbody>
@@ -246,6 +246,7 @@ export default function UslMixGamePage() {
                         <Link href={`/usl-mix/players/${encodeURIComponent(p.alias)}`} className="text-cyan-300 hover:text-cyan-200 font-medium">{p.alias}</Link>
                         {p.is_captain && <span className="ml-1 text-xs text-amber-300" title="captain">★</span>}
                         {p.is_shotcaller && <span className="ml-1 text-[10px] font-bold text-cyan-300 border border-cyan-500/40 rounded px-1" title="shotcaller (claimed with ?sc)">SC</span>}
+                        {p.is_vocal && <span className="ml-1 text-[10px] font-bold text-violet-300 border border-violet-500/40 rounded px-1" title="on comms (claimed with ?v)">V</span>}
                       </td>
                       <td className="py-2 px-2"><ClassSplit classes={p.classes} primary={p.primary_class} /></td>
                       <td className="py-2 px-2 text-right tabular-nums text-white">
@@ -259,7 +260,7 @@ export default function UslMixGamePage() {
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.accuracy !== null ? `${p.accuracy}%` : '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.heal_amount || (p.bio_dart_hits ? `${p.bio_dart_hits} darts` : '—')}</td>
-                      <td className={`py-2 pl-2 text-right tabular-nums ${p.rating_delta === null ? 'text-gray-500' : Number(p.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(p.rating_delta)}</td>
+                      {SHOW_RATINGS && <td className={`py-2 pl-2 text-right tabular-nums ${p.rating_delta === null ? 'text-gray-500' : Number(p.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(p.rating_delta)}</td>}
                     </tr>
                   ))}
                 </tbody>

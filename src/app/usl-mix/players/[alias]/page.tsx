@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName, SortTh, useSortedRows, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName, SortTh, useSortedRows, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 interface PlayerProfile {
   alias: string;
@@ -85,9 +85,13 @@ export default function UslMixPlayerPage() {
   const r = data.rating;
 
   return (
-    <UslMixShell title={data.alias} subtitle={data.test_only ? 'Only seen in test snapshots so far (*mixstats sendnow). Real mix and pub games will replace this view.' : 'Mix rating and career totals recorded from USL Megamaps games.'}>
+    <UslMixShell title={data.alias} subtitle={data.test_only ? 'Only seen in test snapshots so far (*mixstats sendnow). Real mix and pub games will replace this view.' : 'Career totals recorded from USL Megamaps games.'}>
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-        <StatTile label="Rating" value={r ? Math.round(r.rating) : 'unrated'} hint={r ? `peak ${Math.round(r.peak_rating)} · ${r.games} rated` : 'no mix games yet'} />
+        {SHOW_RATINGS ? (
+          <StatTile label="Rating" value={r ? Math.round(r.rating) : 'unrated'} hint={r ? `peak ${Math.round(r.peak_rating)} · ${r.games} rated` : 'no mix games yet'} />
+        ) : (
+          <StatTile label="Rated mixes" value={r?.games ?? 0} hint="rating hidden this season" />
+        )}
         <StatTile label="Mix record" value={r ? `${r.wins}–${r.losses}${r.draws ? `–${r.draws}` : ''}` : '—'} hint={r?.win_rate !== null && r ? `${r.win_rate}% wins` : undefined} />
         <StatTile label="K/D" value={c ? Number(c.kd_ratio).toFixed(2) : '—'} hint={c ? `${c.kills} kills · ${c.deaths} deaths` : undefined} />
         <StatTile label="Accuracy" value={c?.accuracy !== null && c ? `${c.accuracy}%` : '—'} hint="bio darts excluded" />
@@ -101,6 +105,15 @@ export default function UslMixPlayerPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
+        {!SHOW_RATINGS ? (
+        <Panel title="Rating history" className="lg:col-span-2" right={<span className="text-xs text-gray-500">hidden this season</span>}>
+          <p className="text-sm text-gray-400 max-w-prose">
+            Your rating is being tracked across {history.length} rated game{history.length === 1 ? '' : 's'}, but it
+            isn&apos;t shown while the season is running — it balances drafts behind the scenes and decides the final
+            standings. The top 16 are revealed at season end.
+          </p>
+        </Panel>
+        ) : (
         <Panel title="Rating history" className="lg:col-span-2" right={<span className="text-xs text-gray-500">per rated mix game</span>}>
           {history.length < 2 ? (
             <p className="text-sm text-gray-500">Needs at least two rated games.</p>
@@ -119,6 +132,7 @@ export default function UslMixPlayerPage() {
             </div>
           )}
         </Panel>
+        )}
 
         <Panel title="Classes" accent="green">
           {data.classes.length === 0 ? (
@@ -216,7 +230,7 @@ export default function UslMixPlayerPage() {
                   <SortTh col="d" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2">D</SortTh>
                   <SortTh col="open" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2" title="opening kills">Open</SortTh>
                   <SortTh col="acc" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 px-2">Acc</SortTh>
-                  <SortTh col="delta" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 pl-2">Δ</SortTh>
+                  {SHOW_RATINGS && <SortTh col="delta" sort={recentTable.sort} onToggle={recentTable.toggle} className="text-right py-2 pl-2">Δ</SortTh>}
                 </tr>
               </thead>
               <tbody>
@@ -239,7 +253,7 @@ export default function UslMixPlayerPage() {
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.deaths}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{g.opening_kills ? <span className="text-amber-300">{g.opening_kills}</span> : <span className="text-gray-600">—</span>}</td>
                     <td className="py-2 px-2 text-right tabular-nums text-gray-300">{g.accuracy !== null ? `${g.accuracy}%` : '—'}</td>
-                    <td className={`py-2 pl-2 text-right tabular-nums ${g.rating_delta === null ? 'text-gray-500' : Number(g.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(g.rating_delta)}</td>
+                    {SHOW_RATINGS && <td className={`py-2 pl-2 text-right tabular-nums ${g.rating_delta === null ? 'text-gray-500' : Number(g.rating_delta) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtDelta(g.rating_delta)}</td>}
                   </tr>
                 ))}
               </tbody>

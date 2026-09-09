@@ -65,6 +65,8 @@ export interface PlayerPayload {
   result: Result;
   is_captain: boolean;
   is_shotcaller: boolean;
+  /** self-declared via ?v - "I'm on comms". A badge, never an ELO input. */
+  is_vocal: boolean;
   primary_class: string;
   /** class name -> seconds played as that class */
   classes: Record<string, number>;
@@ -125,6 +127,8 @@ export interface GameResultPayload {
   end_reason?: string;
   unattributed_deaths?: number;
   teams: TeamPayload[];
+  /** name of the team that won the coin flip and picked first, so first-vs-second pick is measurable */
+  first_pick_team?: string | null;
   players: PlayerPayload[];
   kill_events: KillEventPayload[];
 }

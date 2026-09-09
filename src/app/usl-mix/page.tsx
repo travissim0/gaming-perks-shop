@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, LabelList, Cell } from 'recharts';
-import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl, ClassName, classColor, SortTh, useSortedRows, type SortGetters } from '@/components/usl-mix/UslMixShell';
+import UslMixShell, { Panel, StatTile, SideBadge, SIDE_COLORS, SERIES_NEUTRAL, fmtDate, fmtDuration, tooltipStyle, tableCls, controlCls, SegmentedControl, ClassName, classColor, SortTh, useSortedRows, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
 
 interface Insights {
   totals: { games: number; games_selected: number; players_rated: number; kills: number; avg_duration_seconds: number; maps: string[] };
@@ -349,7 +349,23 @@ export default function UslMixOverviewPage() {
 
       <div className="grid lg:grid-cols-3 gap-6 mb-8">
         {/* Leaderboard */}
-        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">rated mixes only (both captains ?rated) · 1200 start</span>}>
+        {!SHOW_RATINGS ? (
+        <Panel title="Ratings are hidden this season" className="lg:col-span-2" right={<span className="text-xs text-gray-500">every mix still counts</span>}>
+          <p className="text-sm text-gray-400 max-w-prose">
+            Every mix is rated and every game is recorded — but individual ratings aren&apos;t published while the season
+            is running. A visible ladder was pushing mixes toward slow, campy, play-not-to-lose games, which isn&apos;t
+            what most people log on for.
+          </p>
+          <p className="text-sm text-gray-400 max-w-prose mt-3">
+            The ratings still do the work you actually want from them: keeping drafts balanced and deciding the season
+            standings. <span className="text-gray-300">The top 16 are revealed at the end of the season.</span>
+          </p>
+          <p className="text-xs text-gray-500 mt-3">
+            Everything else stays public — kills, classes, accuracy, heals, opening kills, and every game log below.
+          </p>
+        </Panel>
+        ) : (
+        <Panel title="Rating leaderboard" className="lg:col-span-2" right={<span className="text-xs text-gray-500">every mix counts · 1200 start</span>}>
           {leaders.length === 0 ? (
             <p className="text-sm text-gray-500">No rated players yet.</p>
           ) : (
@@ -387,6 +403,7 @@ export default function UslMixOverviewPage() {
             </div>
           )}
         </Panel>
+        )}
 
         <div className="flex flex-col gap-6">
         {/* Side win rate overall */}
