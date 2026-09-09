@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       spectators,
       serverStatus: totalPlayers > 0 ? 'active' : 'idle'
     };
-    setLiveGameData(stored);
+    await setLiveGameData(stored);
 
     console.log(`[LiveGameData] Updated: ${data.arenaName} | ${totalPlayers} total, ${playingPlayers} playing, ${spectators} spectating`);
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const liveGameData = getLiveGameData();
+    const liveGameData = await getLiveGameData();
     // Check if data is stale (older than 2 minutes)
     const isDataStale = liveGameData?.lastUpdated ? 
       (Date.now() - new Date(liveGameData.lastUpdated).getTime()) > 120000 : true;
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
 
 // Additional endpoint for quick server status check
 export async function HEAD(request: NextRequest) {
-  const liveGameData = getLiveGameData();
+  const liveGameData = await getLiveGameData();
   const hasActiveData = liveGameData?.lastUpdated && 
     (Date.now() - new Date(liveGameData.lastUpdated).getTime()) < 120000;
   
