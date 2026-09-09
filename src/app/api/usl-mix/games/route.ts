@@ -25,7 +25,7 @@ const GAME_COLUMNS =
   'id, match_id, zone_name, arena_name, level_file, map_key, game_kind, team_size, started_at, ended_at, duration_seconds, end_reason, ' +
   'team_a_name, team_a_side, team_a_kills, team_a_deaths, team_a_result, team_a_captain, team_a_players, ' +
   'team_b_name, team_b_side, team_b_kills, team_b_deaths, team_b_result, team_b_captain, team_b_players, ' +
-  'winner_side, winner_team, loser_team, unattributed_deaths, elo_applied, rated';
+  'winner_side, winner_team, loser_team, unattributed_deaths, elo_applied, rated, first_pick_team';
 
 export async function GET(request: NextRequest) {
   try {
