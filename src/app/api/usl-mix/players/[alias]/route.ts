@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { clampInt, corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
-import { aliasKey, normalizeWeaponName } from '@/lib/uslMix/types';
+import { aliasKey, normalizeWeaponName, BIO_DART_HEAL, totalHeal } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/players/{alias} - one player: rating, career totals, class breakdown,
@@ -125,6 +125,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ali
               ...career,
               kd_ratio: Number(career.deaths) > 0 ? Math.round((Number(career.kills) / Number(career.deaths)) * 100) / 100 : Number(career.kills),
               accuracy: Number(career.shots_fired) > 0 ? Math.round((Number(career.shots_landed) / Number(career.shots_fired)) * 1000) / 10 : null,
+              // heal_amount is MediKit + bio darts, matching /api/usl-mix/players. The raw view column
+              // counts MediKit repairs only, so it is kept separately as heal_medikit rather than
+              // leaving the same field name meaning two different things on two endpoints.
+              heal_amount: totalHeal(career.heal_amount, career.bio_dart_hits),
+              heal_medikit: Number(career.heal_amount ?? 0),
+              bio_dart_heal: Number(career.bio_dart_hits ?? 0) * BIO_DART_HEAL,
             }
           : null,
         classes: Array.from(classes.values()).sort((a, b) => b.games - a.games),

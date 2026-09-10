@@ -5,13 +5,12 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import UslMixShell, { Panel, StatTile, SideBadge, ResultBadge, fmtDate, fmtDuration, fmtDelta, tooltipStyle, tableCls, ClassName, SortTh, useSortedRows, SHOW_RATINGS, type SortGetters } from '@/components/usl-mix/UslMixShell';
-import { BIO_DART_HEAL, totalHeal } from '@/lib/uslMix/types';
 
 interface PlayerProfile {
   alias: string;
   test_only?: boolean;
   rating: { rating: number; peak_rating: number; games: number; wins: number; losses: number; draws: number; win_rate: number | null; last_game_at: string } | null;
-  career: { games: number; wins: number; losses: number; mix_games: number; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; heal_amount: number; bio_dart_hits: number; play_seconds: number; opening_kills?: number; opening_deaths?: number; opening_fights_won?: number } | null;
+  career: { games: number; wins: number; losses: number; mix_games: number; kills: number; deaths: number; kd_ratio: number; accuracy: number | null; heal_amount: number; heal_medikit: number; bio_dart_heal: number; bio_dart_hits: number; play_seconds: number; opening_kills?: number; opening_deaths?: number; opening_fights_won?: number } | null;
   classes: Array<{ class_name: string; games: number; wins: number; kills: number; deaths: number; seconds: number }>;
   weapons: Array<{ weapon: string; kills: number }>;
   maps: Array<{ map_key: string; games: number; wins: number }>;
@@ -207,15 +206,15 @@ export default function UslMixPlayerPage() {
         </Panel>
         <Panel title="Support" accent="green">
           <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between" title={`${(c?.heal_amount ?? 0).toLocaleString()} hp from MediKit + ${c?.bio_dart_hits ?? 0} bio darts x ${BIO_DART_HEAL} hp`}>
+            <div className="flex justify-between" title={`${(c?.heal_medikit ?? 0).toLocaleString()} hp from MediKit + ${(c?.bio_dart_heal ?? 0).toLocaleString()} hp from ${c?.bio_dart_hits ?? 0} bio darts`}>
               <dt className="text-gray-400">Heal output</dt>
-              <dd className="text-white tabular-nums">{totalHeal(c?.heal_amount, c?.bio_dart_hits).toLocaleString()} hp</dd>
+              <dd className="text-white tabular-nums">{(c?.heal_amount ?? 0).toLocaleString()} hp</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-400">Bio dart hits</dt>
               <dd className="text-white tabular-nums">
                 {c?.bio_dart_hits ?? 0}
-                {c?.bio_dart_hits ? <span className="text-xs text-emerald-300"> (+{(c.bio_dart_hits * BIO_DART_HEAL).toLocaleString()})</span> : null}
+                {c?.bio_dart_hits ? <span className="text-xs text-emerald-300"> (+{(c.bio_dart_heal ?? 0).toLocaleString()})</span> : null}
               </dd>
             </div>
             <div className="flex justify-between"><dt className="text-gray-400">Captained</dt><dd className="text-white tabular-nums">{data.leadership?.captain_games ?? 0} games</dd></div>
