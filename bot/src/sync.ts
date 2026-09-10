@@ -2,7 +2,7 @@ import type { Guild } from 'discord.js';
 import { createHash } from 'crypto';
 import { config } from './config.js';
 import { deleteMapping, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
-import { ensureTeam, postStaff, syncRoleMembers, teardownTeam } from './discord.js';
+import { ensureTeam, findOrphans, postStaff, syncRoleMembers, teardownTeam } from './discord.js';
 
 let lastUnlinkedHash = '';
 let running = false;
@@ -35,8 +35,9 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
     const notInServer: string[] = [];
 
     for (const team of teams) {
-      const mapping = await ensureTeam(guild, team, byId.get(team.squadId) ?? null);
-      if (!config.dryRun) await saveMapping(guild.id, ctx.season.id, mapping);
+      const mapping = await ensureTeam(guild, team, byId.get(team.squadId) ?? null, async (m) => {
+        if (!config.dryRun) await saveMapping(guild.id, ctx.season.id, m);
+      });
       const role = guild.roles.cache.get(mapping.role_id);
       if (role) {
         const r = await syncRoleMembers(guild, role, team);
@@ -53,6 +54,11 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
       await teardownTeam(guild, stale);
       if (!config.dryRun) await deleteMapping(guild.id, ctx.season.id, stale.squad_id);
       lines.push(`removed ${stale.squad_name} (no longer in the season)`);
+    }
+    // Leftovers the bot created but has no record of (crash mid-setup, table reset).
+    for (const orphan of findOrphans(guild, teams, mappings)) {
+      await teardownTeam(guild, orphan);
+      lines.push(`removed leftover ${orphan.squad_name}`);
     }
 
     // Report only when something changed or the unlinked list changed.
