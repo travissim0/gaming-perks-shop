@@ -15,19 +15,11 @@ export async function GET(
   try {
     const { id: match_report_id } = await params;
 
+    // user_id references auth.users, not profiles, so there is no relationship
+    // PostgREST can join on — look the authors up in a second query.
     const { data: comments, error } = await supabaseAdmin
       .from('match_report_comments')
-      .select(`
-        id,
-        match_report_id,
-        user_id,
-        content,
-        created_at,
-        profiles:user_id (
-          in_game_alias,
-          avatar_url
-        )
-      `)
+      .select('id, match_report_id, user_id, content, created_at')
       .eq('match_report_id', match_report_id)
       .order('created_at', { ascending: true });
 
@@ -36,15 +28,20 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Flatten the joined profile data
+    const userIds = Array.from(new Set((comments || []).map((c: any) => c.user_id).filter(Boolean)));
+    const { data: profiles } = userIds.length
+      ? await supabaseAdmin.from('profiles').select('id, in_game_alias, avatar_url').in('id', userIds)
+      : { data: [] as any[] };
+    const byId = new Map((profiles || []).map((p: any) => [p.id, p]));
+
     const formattedComments = (comments || []).map((comment: any) => ({
       id: comment.id,
       match_report_id: comment.match_report_id,
       user_id: comment.user_id,
       content: comment.content,
       created_at: comment.created_at,
-      author_alias: comment.profiles?.in_game_alias || null,
-      author_avatar_url: comment.profiles?.avatar_url || null,
+      author_alias: byId.get(comment.user_id)?.in_game_alias || null,
+      author_avatar_url: byId.get(comment.user_id)?.avatar_url || null,
     }));
 
     return NextResponse.json({ comments: formattedComments });
