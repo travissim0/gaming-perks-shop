@@ -112,6 +112,9 @@ export default function MatchesPage() {
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [showPast, setShowPast] = useState(false);
   const [openStats, setOpenStats] = useState<Set<string>>(new Set());
+  // Timezone label only after mount (server and browser zones differ → hydration mismatch otherwise).
+  const [tz, setTz] = useState('');
+  useEffect(() => { setTz(tzName()); }, []);
 
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [squads, setSquads] = useState<SquadRef[]>([]);
@@ -293,7 +296,7 @@ export default function MatchesPage() {
                 <span className="text-white/20">·</span>
                 <span><span className="text-[#E6EDF7] tabular-nums">{past.length + autoLogged.length}</span> played</span>
                 <span className="text-white/20">·</span>
-                <span>Times in your zone{tzName() ? ` (${tzName()})` : ''}</span>
+                <span>Times in your zone{tz ? ` (${tz})` : ''}</span>
               </div>
               <p className="mt-1.5 text-sm text-[#8B98B0] max-w-xl">Pickups, scrims, squad matches and league fixtures. Sign up on a match to play, cast, record or ref it.</p>
             </div>
@@ -611,7 +614,7 @@ export default function MatchesPage() {
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className={inputCls} style={{ colorScheme: 'dark' }} />
               </div>
               <div>
-                <label className={labelCls}>Time (your zone{tzName() ? `, ${tzName()}` : ''})</label>
+                <label className={labelCls}>Time (your zone{tz ? `, ${tz}` : ''})</label>
                 <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required className={inputCls} style={{ colorScheme: 'dark' }} />
               </div>
             </div>

@@ -1,735 +1,617 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import { getClassColor } from '@/utils/classColors';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-import GameStatsViewer from '@/components/GameStatsViewer';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { toast } from 'react-hot-toast';
+/*
+ * Match detail — where the schedule and the match log land. Crew sign-ups,
+ * the result, the linked game's stats and the video all live here.
+ */
 
-interface MatchParticipant {
-  id: string;
-  player_id: string;
-  in_game_alias: string;
-  role: 'player' | 'commentator' | 'recording' | 'referee';
-  squad_name?: string;
-  joined_at: string;
-}
+type Role = 'player' | 'commentator' | 'recording' | 'referee';
+
+interface Participant { id: string; player_id: string; in_game_alias: string; role: Role }
 
 interface Match {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   scheduled_at: string;
   match_type: 'squad_vs_squad' | 'pickup' | 'tournament';
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-  squad_a_id?: string;
-  squad_b_id?: string;
-  squad_a_name?: string;
-  squad_b_name?: string;
+  status: string;
+  map_name?: string | null;
+  game_mode?: string | null;
+  squad_a_id?: string | null;
+  squad_b_id?: string | null;
+  squad_a_name?: string | null;
+  squad_a_tag?: string | null;
+  squad_b_name?: string | null;
+  squad_b_tag?: string | null;
+  squad_a_score?: number | null;
+  squad_b_score?: number | null;
+  winner_squad_id?: string | null;
+  winner_name?: string | null;
+  game_id?: string | null;
+  vod_url?: string | null;
+  vod_title?: string | null;
+  match_notes?: string | null;
   created_by: string;
   created_by_alias: string;
-  created_at: string;
-  participants: MatchParticipant[];
+  participants: Participant[];
+  league_slug?: string | null;
+  season_number?: number | null;
+  week?: number | null;
+  stage?: string | null;
 }
 
-type SquadInfo = {
-  id: string;
-  name: string;
-  banner_url?: string | null;
-  members: { id: string; alias: string }[];
+interface SquadInfo { id: string; name: string; tag: string | null; banner_url: string | null; members: { id: string; alias: string }[] }
+
+interface GamePlayer { player_name: string; team: string; side?: string; main_class?: string; kills: number; deaths: number; flag_captures?: number; result?: string }
+interface GameData {
+  gameId: string;
+  gameMode: string;
+  mapName: string;
+  gameDate: string;
+  duration: number;
+  winningInfo: { type: string; winner: string } | null;
+  videoInfo?: { has_video?: boolean; youtube_url?: string; vod_url?: string } | null;
+  players: GamePlayer[];
+  teamStats: Record<string, GamePlayer[]>;
+}
+
+interface Candidate { gameId: string; gameDate: string; arena: string; gameMode: string; players: number }
+
+const ROLES: { key: Role; label: string; plural: string }[] = [
+  { key: 'player', label: 'Player', plural: 'Players' },
+  { key: 'commentator', label: 'Commentator', plural: 'Commentators' },
+  { key: 'recording', label: 'Recorder', plural: 'Recorders' },
+  { key: 'referee', label: 'Referee', plural: 'Referees' },
+];
+
+const TYPE_LABEL: Record<Match['match_type'], string> = { squad_vs_squad: 'Squad match', pickup: 'Pickup', tournament: 'League match' };
+
+const inputCls = 'w-full bg-[#0B0F1A] border border-white/10 rounded-md px-3 py-2 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none';
+const labelCls = 'block text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1';
+const btnPrimary = 'px-3.5 py-2 rounded-md text-sm font-medium bg-[#22D3EE] text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50 transition-colors';
+const btnQuiet = 'px-3 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors';
+
+const youTubeId = (url?: string | null) => {
+  const m = url?.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s?#]+)/);
+  return m ? m[1] : null;
 };
 
+function Card({ title, action, children }: { title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+      <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg text-[#E6EDF7]">{title}</h2>
+        {action}
+      </div>
+      <div className="px-4 pb-4">{children}</div>
+    </section>
+  );
+}
+
+function TeamMark({ tag, name, size = 'md' }: { tag?: string | null; name?: string | null; size?: 'md' | 'lg' }) {
+  return (
+    <span className={`${size === 'lg' ? 'w-14 h-14 text-base' : 'w-8 h-8 text-[11px]'} rounded-lg bg-[#1B2438] text-[#22D3EE] font-medium flex items-center justify-center shrink-0`}>
+      {(tag || name || '?').slice(0, 4).toUpperCase()}
+    </span>
+  );
+}
+
 export default function MatchDetailPage() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const params = useParams();
   const matchId = params.id as string;
-  const [match, setMatch] = useState<Match | null>(null);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [showParticipantModal, setShowParticipantModal] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<'player' | 'commentator' | 'recording' | 'referee'>('player');
-  const [isJoining, setIsJoining] = useState(false);
-  const [squadA, setSquadA] = useState<SquadInfo | null>(null);
-  const [squadB, setSquadB] = useState<SquadInfo | null>(null);
 
-  useEffect(() => {
-    if (matchId) {
-      fetchMatchDetails();
+  const [match, setMatch] = useState<Match | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [squads, setSquads] = useState<Record<string, SquadInfo>>({});
+  const [game, setGame] = useState<GameData | null>(null);
+  const [ctfRole, setCtfRole] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Manage panel
+  const [panel, setPanel] = useState<'none' | 'link' | 'video' | 'result'>('none');
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [gameIdInput, setGameIdInput] = useState('');
+  const [vodUrl, setVodUrl] = useState('');
+  const [vodTitle, setVodTitle] = useState('');
+  const [scoreA, setScoreA] = useState('');
+  const [scoreB, setScoreB] = useState('');
+  const [winner, setWinner] = useState('');
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/matches?id=${encodeURIComponent(matchId)}&limit=1`, { cache: 'no-store' });
+      const j = r.ok ? await r.json() : { matches: [] };
+      const m: Match | null = j.matches?.[0] || null;
+      setMatch(m);
+      if (!m) return;
+      setVodUrl(m.vod_url || '');
+      setVodTitle(m.vod_title || '');
+      setScoreA(m.squad_a_score != null ? String(m.squad_a_score) : '');
+      setScoreB(m.squad_b_score != null ? String(m.squad_b_score) : '');
+      setWinner(m.winner_squad_id || '');
+
+      const ids = [m.squad_a_id, m.squad_b_id].filter(Boolean) as string[];
+      if (ids.length) {
+        const [{ data: sq }, { data: mem }] = await Promise.all([
+          supabase.from('squads').select('id, name, tag, banner_url').in('id', ids),
+          supabase.from('squad_members').select('squad_id, player_id, profiles!squad_members_player_id_fkey(in_game_alias)').in('squad_id', ids).eq('status', 'active'),
+        ]);
+        const byId: Record<string, SquadInfo> = {};
+        (sq || []).forEach((s: any) => { byId[s.id] = { id: s.id, name: s.name, tag: s.tag ?? null, banner_url: s.banner_url ?? null, members: [] }; });
+        (mem || []).forEach((r: any) => { byId[r.squad_id]?.members.push({ id: r.player_id, alias: r.profiles?.in_game_alias || 'Unknown' }); });
+        Object.values(byId).forEach((s) => s.members.sort((a, b) => a.alias.localeCompare(b.alias)));
+        setSquads(byId);
+      }
+
+      if (m.game_id) {
+        const gr = await fetch(`/api/player-stats/game/${encodeURIComponent(m.game_id)}`);
+        const gj = gr.ok ? await gr.json() : null;
+        setGame(gj?.success && gj.data ? gj.data : null);
+      } else {
+        setGame(null);
+      }
+    } catch (e) {
+      console.error('match detail load failed', e);
+    } finally {
+      setLoading(false);
     }
   }, [matchId]);
 
-  const fetchMatchDetails = async () => {
-    try {
-      setPageLoading(true);
-      
-      const response = await fetch(`/api/matches?id=${matchId}&limit=1`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.matches && data.matches.length > 0) {
-          setMatch(data.matches[0]);
-          const m = data.matches[0] as Match;
-          console.log('📋 Match data loaded:', { 
-            id: m.id, 
-            title: m.title, 
-            match_type: m.match_type, 
-            squad_a_id: m.squad_a_id, 
-            squad_b_id: m.squad_b_id 
-          });
-          if ((m.match_type === 'squad_vs_squad' || m.match_type === 'tournament') && (m.squad_a_id || m.squad_b_id)) {
-            fetchSquadInfos(m.squad_a_id || null, m.squad_b_id || null).catch(() => {});
-          } else {
-            setSquadA(null);
-            setSquadB(null);
-          }
-        }
-      } else {
-        console.error('Failed to fetch match details:', response.status, response.statusText);
-      }
-    } catch (error) {
-      console.error('Error fetching match details:', error);
-    } finally {
-      setPageLoading(false);
-    }
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!user) { setCtfRole(null); setIsAdmin(false); return; }
+    supabase.from('profiles').select('ctf_role, is_admin').eq('id', user.id).maybeSingle().then(({ data }) => {
+      setCtfRole((data as any)?.ctf_role || null);
+      setIsAdmin(!!(data as any)?.is_admin);
+    });
+  }, [user]);
+
+  // ── Permissions ─────────────────────────────────────────────────────
+  const isStaff = isAdmin || (ctfRole || '').toLowerCase() === 'ctf_admin';
+  const canManage = !!user && !!match && (match.created_by === user.id || isStaff);
+  const canJoinRole = (role: Role) => {
+    const r = (ctfRole || '').toLowerCase();
+    if (role === 'commentator') return r === 'commentator' || r === 'ctf_admin';
+    if (role === 'referee') return r === 'head referee' || r === 'referee' || r === 'ctf_admin';
+    return true;
   };
 
-  const fetchSquadInfos = async (squadAId: string | null, squadBId: string | null) => {
-    try {
-      console.log('🔍 Fetching squad infos for:', { squadAId, squadBId });
-      const ids = [squadAId, squadBId].filter(Boolean) as string[];
-      if (ids.length === 0) return;
-
-      const { data: squadsData, error: squadsError } = await supabase
-        .from('squads')
-        .select('id, name, tag, banner_url')
-        .in('id', ids);
-      if (squadsError) throw squadsError;
-      console.log('🎯 Squads data fetched:', squadsData);
-
-      // Members for both squads
-      const { data: membersData, error: membersError } = await supabase
-        .from('squad_members')
-        .select('id, squad_id, player_id, profiles!squad_members_player_id_fkey(in_game_alias)')
-        .in('squad_id', ids);
-      if (membersError) throw membersError;
-      console.log('👥 Members data fetched:', membersData);
-
-      const membersBySquad = new Map<string, { id: string; alias: string }[]>();
-      (membersData || []).forEach((m: any) => {
-        const arr = membersBySquad.get(m.squad_id) || [];
-        arr.push({ id: m.player_id, alias: m.profiles?.in_game_alias || 'Unknown' });
-        membersBySquad.set(m.squad_id, arr);
-      });
-
-      const makeInfo = (id: string | null): SquadInfo | null => {
-        if (!id) return null;
-        const s = (squadsData || []).find((x: any) => x.id === id);
-        if (!s) return null;
-        const members = (membersBySquad.get(id) || []).sort((a, b) => a.alias.localeCompare(b.alias));
-        return { id: s.id, name: s.name, banner_url: s.banner_url, members };
-      };
-
-      const squadAInfo = makeInfo(squadAId);
-      const squadBInfo = makeInfo(squadBId);
-      console.log('✅ Final squad infos:', { squadAInfo, squadBInfo });
-      setSquadA(squadAInfo);
-      setSquadB(squadBInfo);
-    } catch (error) {
-      console.error('Error fetching squad infos:', error);
-    }
-  };
-
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'player': return '🎮';
-      case 'commentator': return '🎤';
-      case 'recording': return '📹';
-      case 'referee': return '👨‍⚖️';
-      default: return '👤';
-    }
-  };
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'player': return 'text-green-400';
-      case 'commentator': return 'text-blue-400';
-      case 'recording': return 'text-purple-400';
-      case 'referee': return 'text-yellow-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getRoleDisplayName = (role: string) => {
-    switch (role) {
-      case 'player': return 'Players';
-      case 'commentator': return 'Commentators';
-      case 'recording': return 'Recorders';
-      case 'referee': return 'Referees';
-      default: return role;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'text-blue-400';
-      case 'in_progress': return 'text-green-400';
-      case 'completed': return 'text-gray-400';
-      case 'cancelled': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'scheduled': return '📅';
-      case 'in_progress': return '🎮';
-      case 'completed': return '✅';
-      case 'cancelled': return '❌';
-      default: return '❓';
-    }
-  };
-
-  const HeadToHeadPanel = () => {
-    if (!match) return null;
-    const show = (match.match_type === 'squad_vs_squad' || match.match_type === 'tournament') && (squadA || squadB);
-    if (!show) return null;
-
-    const Left = squadA;
-    const Right = squadB;
-
-    return (
-      <div className="relative mb-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-          {/* Left banner */}
-          <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden shadow-lg">
-            <div className="relative h-56 sm:h-64">
-              {Left?.banner_url ? (
-                <img src={Left.banner_url} alt={`${Left.name} banner`} className="absolute inset-0 w-full h-full object-cover object-center opacity-70" />
-              ) : (
-                <div className="absolute inset-0 bg-gray-700/40" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/15 via-transparent to-transparent" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-3xl sm:text-4xl font-extrabold tracking-wide text-white drop-shadow-[0_0_12px_rgba(34,211,238,0.45)]">
-                  {Left?.name || 'TBD'}
-                </div>
-              </div>
-            </div>
-            {/* Members */}
-            <div className="px-4 py-3">
-              <div className="text-xs text-gray-400 mb-2">Projected Lineup</div>
-              <div className="flex flex-wrap gap-2">
-                {(Left?.members || []).slice(0, 12).map((m) => (
-                  <span key={m.id} className="px-2 py-1 rounded-md text-[11px] font-medium border border-cyan-400/30 text-cyan-200 bg-cyan-500/10">
-                    {m.alias}
-                  </span>
-                ))}
-                {(Left?.members?.length || 0) > 12 && (
-                  <span className="px-2 py-1 rounded-md text-[11px] text-gray-300 bg-gray-700/50">+{(Left?.members?.length || 0) - 12} more</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* VS center */}
-          <div className="relative flex items-center justify-center">
-            <div className="relative h-full w-full flex flex-col items-center justify-center">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-48 h-48 rounded-full bg-gradient-to-br from-fuchsia-500/25 via-purple-500/20 to-cyan-500/20 blur-2xl" />
-              </div>
-              <div className="relative z-10 text-5xl sm:text-6xl font-extrabold tracking-widest text-white select-none mb-3">
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-white to-fuchsia-300 drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">VS</span>
-              </div>
-              {/* Enhanced Date & Time */}
-              <div className="relative z-10 flex flex-col items-center text-center">
-                <div className="text-lg sm:text-xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent drop-shadow-lg">
-                  {new Date(match.scheduled_at).toLocaleDateString('en-US', { 
-                    weekday: 'short', 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                  })}
-                </div>
-                <div className="text-sm sm:text-base font-semibold text-cyan-300 mt-1 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/30">
-                  {new Date(match.scheduled_at).toLocaleTimeString('en-US', { 
-                    hour: 'numeric', 
-                    minute: '2-digit',
-                    timeZone: 'America/New_York'
-                  })} EST
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right banner */}
-          <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden shadow-lg">
-            <div className="relative h-56 sm:h-64">
-              {Right?.banner_url ? (
-                <img src={Right.banner_url} alt={`${Right.name} banner`} className="absolute inset-0 w-full h-full object-cover object-center opacity-70" />
-              ) : (
-                <div className="absolute inset-0 bg-gray-700/40" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-tl from-purple-500/15 via-transparent to-transparent" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-3xl sm:text-4xl font-extrabold tracking-wide text-white drop-shadow-[0_0_12px_rgba(168,85,247,0.45)]">
-                  {Right?.name || 'TBD'}
-                </div>
-              </div>
-            </div>
-            {/* Members */}
-            <div className="px-4 py-3">
-              <div className="text-xs text-gray-400 mb-2">Projected Lineup</div>
-              <div className="flex flex-wrap gap-2">
-                {(Right?.members || []).slice(0, 12).map((m) => (
-                  <span key={m.id} className="px-2 py-1 rounded-md text-[11px] font-medium border border-purple-400/30 text-purple-200 bg-purple-500/10">
-                    {m.alias}
-                  </span>
-                ))}
-                {(Right?.members?.length || 0) > 12 && (
-                  <span className="px-2 py-1 rounded-md text-[11px] text-gray-300 bg-gray-700/50">+{(Right?.members?.length || 0) - 12} more</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-
-      </div>
-    );
-  };
-
-  const ActionButtons = () => {
-    const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-    const [isUpdating, setIsUpdating] = useState(false);
-    const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
-
-    const availableRoles = (['player', 'commentator', 'recording', 'referee'] as const).filter(
-      role => !getAllUserParticipations().some(p => p.role === role)
-    );
-
-    const handleMouseEnter = () => {
-      if (hoverTimeout) {
-        clearTimeout(hoverTimeout);
-        setHoverTimeout(null);
-      }
-      setShowRoleDropdown(true);
-    };
-
-    const handleMouseLeave = () => {
-      const timeout = setTimeout(() => {
-        setShowRoleDropdown(false);
-      }, 1000); // 1 second delay for better interaction
-      setHoverTimeout(timeout);
-    };
-
-    const handleRoleToggle = async (role: 'player' | 'commentator' | 'recording' | 'referee') => {
-      if (!user || !match) return;
-      
-      setIsUpdating(true);
-      const isCurrentlyJoined = getAllUserParticipations().some(p => p.role === role);
-      
-      try {
-        if (isCurrentlyJoined) {
-          // Leave this role
-          const participation = getAllUserParticipations().find(p => p.role === role);
-          if (participation) {
-            const { error } = await supabase
-              .from('match_participants')
-              .delete()
-              .eq('id', participation.id);
-            if (error) throw error;
-            toast.success(`Left ${role} role`);
-          }
-        } else {
-          // Join this role
-          const { error } = await supabase
-            .from('match_participants')
-            .insert({
-              match_id: match.id,
-              player_id: user.id,
-              role: role
-            });
-          if (error) throw error;
-          toast.success(`Joined as ${role}!`);
-        }
-        
-        fetchMatchDetails(); // Refresh match data
-      } catch (error: any) {
-        console.error('Error toggling role:', error);
-        toast.error(error.message || 'Failed to update role');
-      } finally {
-        setIsUpdating(false);
-      }
-    };
-
-    if (!user) return null;
-
-    return (
-      <>
-        {/* Join Match Button with Dropdown */}
-        <div className="relative">
-          <button
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            className="group relative bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:via-blue-400 hover:to-cyan-400 text-white px-6 py-3 rounded-xl font-semibold shadow-lg shadow-blue-500/25 transition-all duration-300 transform hover:scale-105 border border-blue-400/30"
-            disabled={!canUserJoin() && getAllUserParticipations().length === 0}
-          >
-            <span className="flex items-center gap-2">
-              🎮 Join Match
-              <span className="text-xs opacity-75">({getAllUserParticipations().length}/4)</span>
-            </span>
-          </button>
-          
-          {/* Dropdown on hover */}
-          <div 
-            className={`absolute top-full left-0 right-0 mt-2 bg-gray-800/95 backdrop-blur-sm border border-gray-600/50 rounded-lg shadow-xl transition-all duration-300 z-50 ${
-              showRoleDropdown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
-            }`}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
-              <div className="p-3 space-y-3">
-                {(['player', 'commentator', 'recording', 'referee'] as const).map(role => {
-                  const isJoined = getAllUserParticipations().some(p => p.role === role);
-                  const isDisabled = match?.status !== 'scheduled' || isUpdating;
-                  const roleParticipants = match?.participants?.filter(p => p.role === role) || [];
-                  
-                  return (
-                    <div key={role} className="border border-gray-600/30 rounded-lg bg-gray-700/30">
-                      {/* Role Toggle Button */}
-                      <button
-                        onClick={() => handleRoleToggle(role)}
-                        disabled={isDisabled}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-t-lg text-sm font-medium transition-all duration-200 ${
-                          isJoined 
-                            ? 'bg-green-600/20 text-green-300 border-b border-green-500/30' 
-                            : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border-b border-gray-600/30'
-                        } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'} ${
-                          roleParticipants.length === 0 ? 'rounded-b-lg border-b-0' : ''
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span>{getRoleIcon(role)}</span>
-                          <span>{getRoleDisplayName(role)}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">({roleParticipants.length})</span>
-                          <span className={`text-xs ${isJoined ? 'text-green-400' : 'text-gray-400'}`}>
-                            {isJoined ? '✓' : '+'}
-                          </span>
-                        </span>
-                      </button>
-                      
-                      {/* Participants List */}
-                      {roleParticipants.length > 0 && (
-                        <div className="px-3 py-2 space-y-1 bg-gray-800/40 rounded-b-lg">
-                          {roleParticipants.map(participant => (
-                            <div key={participant.id} className="text-xs flex items-center justify-between text-gray-300">
-                              <div className="flex-1 min-w-0">
-                                <span className="font-medium">{participant.in_game_alias}</span>
-                                {participant.squad_name && (
-                                  <span className="text-gray-500 ml-1">({participant.squad_name})</span>
-                                )}
-                              </div>
-                              {participant.player_id === user?.id && match?.status === 'scheduled' && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    leaveMatchRole(participant.id, role);
-                                  }}
-                                  className="bg-red-500/20 hover:bg-red-500/40 text-red-400 px-1.5 py-0.5 rounded text-xs ml-2 flex-shrink-0 transition-colors"
-                                  title={`Leave ${role} role`}
-                                >
-                                  ✕
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                
-                {/* Add Video Button in Dropdown */}
-                <button 
-                  onClick={() => {
-                    // TODO: Implement video modal or redirect
-                    toast.success('Video upload functionality coming soon!');
-                  }}
-                  className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 hover:from-purple-500 hover:via-purple-400 hover:to-pink-400 text-white px-3 py-2 rounded-lg font-medium shadow-lg transition-all duration-300 transform hover:scale-[1.02] border border-purple-400/30"
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    📹 Add Video
-                  </span>
-                </button>
-              </div>
-          </div>
-        </div>
-
-
-      </>
-    );
-  };
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return {
-      date: date.toLocaleDateString(),
-      time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-  };
-
-  const isUserParticipant = () => {
-    if (!user || !match) return false;
-    return match.participants.some(p => p.player_id === user.id);
-  };
-
-  const getUserParticipation = () => {
-    if (!user || !match) return null;
-    return match.participants.find(p => p.player_id === user.id);
-  };
-
-  const getAllUserParticipations = () => {
-    if (!user || !match) return [];
-    return match.participants.filter(p => p.player_id === user.id);
-  };
-
-  const canUserJoin = () => {
-    if (!user || !match) return false;
-    if (match.status !== 'scheduled') return false;
-    
-    // For additional roles, check if user can join more roles
-    const userParticipations = getAllUserParticipations();
-    const userRoleSet = new Set(userParticipations.map(p => p.role));
-    const availableRoles = (['player', 'commentator', 'recording', 'referee'] as const).filter(role => !userRoleSet.has(role));
-    
-    return availableRoles.length > 0;
-  };
-
-  const joinMatch = async () => {
+  // ── Actions ─────────────────────────────────────────────────────────
+  const join = async (role: Role) => {
     if (!user || !match) return;
-
-    setIsJoining(true);
+    if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator role required' : 'Referee role required'); return; }
+    setBusy(role);
     try {
-      const { error } = await supabase
-        .from('match_participants')
-        .insert({
-          match_id: match.id,
-          player_id: user.id,
-          role: selectedRole
-        });
-
+      const { error } = await supabase.from('match_participants').insert({ match_id: match.id, player_id: user.id, role });
       if (error) throw error;
-
-      toast.success(`Joined match as ${selectedRole}!`);
-      setShowParticipantModal(false);
-      fetchMatchDetails(); // Refresh match data
-    } catch (error: any) {
-      console.error('Error joining match:', error);
-      toast.error(error.message || 'Failed to join match');
-    } finally {
-      setIsJoining(false);
-    }
+      toast.success(`Signed up as ${role === 'recording' ? 'recorder' : role}`);
+      await load();
+    } catch (e: any) { toast.error(e.message || 'Could not join'); } finally { setBusy(null); }
   };
-
-  const leaveMatch = async () => {
+  const leave = async (p: Participant) => {
+    setBusy(p.id);
+    try {
+      const { error, count } = await supabase.from('match_participants').delete({ count: 'exact' }).eq('id', p.id);
+      if (error) throw error;
+      if (!count) { toast.error('Could not leave that role'); return; }
+      await load();
+    } catch (e: any) { toast.error(e.message || 'Could not leave'); } finally { setBusy(null); }
+  };
+  const put = async (body: Record<string, unknown>) => {
     if (!user || !match) return;
-
-    const allParticipations = getAllUserParticipations();
-    if (allParticipations.length === 0) {
-      toast.error('You are not participating in this match');
-      return;
-    }
-
-    const confirmMessage = allParticipations.length > 1 
-      ? `Are you sure you want to leave this match? You will be removed from all roles: ${allParticipations.map(p => p.role).join(', ')}`
-      : `Are you sure you want to leave this match as ${allParticipations[0].role}?`;
-
-    if (!confirm(confirmMessage)) return;
-
+    const r = await fetch('/api/matches', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matchId: match.id, userId: user.id, ...body }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Update failed');
+  };
+  const saveVideo = async () => {
+    setBusy('video');
     try {
-      console.log('Attempting to delete participations:', {
-        match_id: match.id,
-        player_id: user.id,
-        participationIds: allParticipations.map(p => p.id)
+      await put({ vodUrl: vodUrl.trim() || null, vodTitle: vodTitle.trim() || null });
+      toast.success(vodUrl.trim() ? 'Video saved' : 'Video removed');
+      setPanel('none');
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  const saveResult = async () => {
+    setBusy('result');
+    try {
+      const a = scoreA === '' ? null : Number(scoreA);
+      const b = scoreB === '' ? null : Number(scoreB);
+      const w = winner || (a != null && b != null && a !== b ? (a > b ? match!.squad_a_id : match!.squad_b_id) : null);
+      await put({ squadAScore: a, squadBScore: b, winnerSquadId: w || null, status: a != null || w ? 'completed' : match!.status });
+      toast.success('Result saved');
+      setPanel('none');
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  const openLink = async () => {
+    setPanel('link');
+    if (!match) return;
+    try {
+      const r = await fetch('/api/player-stats/leaderboard?limit=200&sortBy=game_date&sortOrder=desc');
+      const j = r.ok ? await r.json() : null;
+      const map = new Map<string, Candidate>();
+      (j?.players || j?.data || []).forEach((p: any) => {
+        if (!p.game_id) return;
+        const c = map.get(p.game_id) || { gameId: p.game_id, gameDate: p.game_date, arena: p.arena || p.arena_name || '', gameMode: p.game_mode || '', players: 0 };
+        c.players += 1;
+        map.set(p.game_id, c);
       });
-
-      // Delete all participations for this user in this match
-      const { data, error, count } = await supabase
-        .from('match_participants')
-        .delete({ count: 'exact' })
-        .eq('match_id', match.id)
-        .eq('player_id', user.id);
-
-      console.log('Delete result:', { data, error, count });
-
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
-
-      if (count === 0 || count === null) {
-        toast.error('No participations were removed. You may not have permission to leave this match.');
-        return;
-      }
-
-      toast.success(`Left match successfully (removed ${count} participation${count > 1 ? 's' : ''})`);
-      fetchMatchDetails(); // Refresh match data
-    } catch (error: any) {
-      console.error('Error leaving match:', error);
-      toast.error(error.message || 'Failed to leave match');
-    }
+      const t = new Date(match.scheduled_at).getTime();
+      const near = Array.from(map.values())
+        .filter((c) => Math.abs(new Date(c.gameDate).getTime() - t) < 12 * 3600 * 1000)
+        .sort((x, y) => Math.abs(new Date(x.gameDate).getTime() - t) - Math.abs(new Date(y.gameDate).getTime() - t))
+        .slice(0, 12);
+      setCandidates(near);
+    } catch { setCandidates([]); }
+  };
+  const linkGame = async (gameId: string) => {
+    if (!user || !match || !gameId.trim()) return;
+    setBusy('link');
+    try {
+      const r = await fetch('/api/matches/link-game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: gameId.trim(), matchId: match.id, userId: user.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not link game');
+      toast.success('Game linked');
+      setPanel('none');
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  const unlinkGame = async () => {
+    if (!confirm('Unlink the game from this match?')) return;
+    setBusy('unlink');
+    try {
+      await put({ gameId: null, status: 'scheduled' });
+      toast.success('Game unlinked');
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+  const remove = async () => {
+    if (!user || !match || !confirm('Delete this match?')) return;
+    setBusy('delete');
+    try {
+      const r = await fetch(`/api/matches?id=${match.id}&userId=${user.id}`, { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not delete');
+      toast.success('Match deleted');
+      window.location.href = '/matches';
+    } catch (e: any) { toast.error(e.message); setBusy(null); }
   };
 
-  const leaveMatchRole = async (participantId: string, role: string) => {
-    if (!confirm(`Are you sure you want to leave as ${role}?`)) return;
+  // ── Derived ─────────────────────────────────────────────────────────
+  const a = match?.squad_a_id ? squads[match.squad_a_id] : null;
+  const b = match?.squad_b_id ? squads[match.squad_b_id] : null;
+  const hasTeams = !!(match && (match.squad_a_id || match.squad_b_id));
+  const hasScore = match?.squad_a_score != null && match?.squad_b_score != null;
+  const played = !!match && (match.status === 'completed' || !!match.game_id || hasScore);
+  const notPlayed = match?.status === 'expired' || match?.status === 'cancelled';
+  const live = match?.status === 'in_progress';
+  const aWon = !!match && (match.winner_squad_id ? match.winner_squad_id === match.squad_a_id : hasScore && match.squad_a_score! > match.squad_b_score!);
+  const bWon = !!match && (match.winner_squad_id ? match.winner_squad_id === match.squad_b_id : hasScore && match.squad_b_score! > match.squad_a_score!);
+  const when = useMemo(() => {
+    if (!match || !mounted) return { day: '', time: '', tz: '' };
+    const d = new Date(match.scheduled_at);
+    let tz = '';
+    try { tz = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value || ''; } catch { /* ignore */ }
+    return {
+      day: d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      tz,
+    };
+  }, [match, mounted]);
+  const yt = youTubeId(match?.vod_url) || youTubeId(game?.videoInfo?.youtube_url);
+  const videoHref = match?.vod_url || game?.videoInfo?.vod_url || game?.videoInfo?.youtube_url || null;
+  const statusPill = notPlayed
+    ? { label: match!.status === 'cancelled' ? 'Cancelled' : 'Not played', cls: 'bg-white/5 text-[#8B98B0]' }
+    : live
+      ? { label: 'Live', cls: 'bg-[#34D399]/15 text-[#34D399]' }
+      : played
+        ? { label: 'Played', cls: 'bg-white/5 text-[#E6EDF7]' }
+        : { label: 'Scheduled', cls: 'bg-[#22D3EE]/15 text-[#22D3EE]' };
 
-    try {
-      console.log('Attempting to delete individual participation:', {
-        participantId,
-        role,
-        userId: user?.id
-      });
-
-      const { data, error, count } = await supabase
-        .from('match_participants')
-        .delete({ count: 'exact' })
-        .eq('id', participantId);
-
-      console.log('Delete individual role result:', { data, error, count });
-
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
-
-      if (count === 0 || count === null) {
-        toast.error('Role was not removed. You may not have permission to leave this role.');
-        return;
-      }
-
-      toast.success(`Left ${role} role successfully`);
-      fetchMatchDetails(); // Refresh match data
-    } catch (error: any) {
-      console.error('Error leaving match role:', error);
-      toast.error(error.message || 'Failed to leave role');
-    }
-  };
-
-  if (loading || pageLoading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
-        <Navbar user={user} />
-        <div className="flex items-center justify-center pt-20">
-          <div className="text-xl">Loading...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!match) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gray-900 text-white">
-        <Navbar user={user} />
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="text-center py-12">
-            <h1 className="text-2xl font-bold mb-4">Match Not Found</h1>
-            <p className="text-gray-400 mb-6">The match you're looking for doesn't exist or has been deleted.</p>
-            <Link href="/matches" className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded">
-              Back to Matches
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const { date, time } = formatDateTime(match.scheduled_at);
-  const userParticipation = getUserParticipation();
-  const allUserParticipations = getAllUserParticipations();
-  const userRoles = allUserParticipations.map(p => p.role);
-
-  return (
-    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
+  const shell = (children: React.ReactNode) => (
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Back Button */}
-        <div className="mb-6">
-          <Link href="/matches" className="text-cyan-400 hover:text-cyan-300 flex items-center gap-2">
-            ← Back to Matches
-          </Link>
-        </div>
-
-        {/* Action Buttons Above H2H */}
-        <div className="mb-6 flex justify-center gap-4">
-          <ActionButtons />
-        </div>
-
-        {/* Head-to-Head Showcase (for squad vs squad / tournament) */}
-        <HeadToHeadPanel />
-
-
-
-
-
-
-        {/* Game Statistics */}
-        <div className="mt-8">
-          <GameStatsViewer 
-            matchId={match.id} 
-            matchTitle={match.title} 
-            matchStatus={match.status}
-          />
-        </div>
-      </div>
-
-      {/* Join Match Modal */}
-      {showParticipantModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-bold mb-4">
-              {allUserParticipations.length > 0 ? 'Join Additional Role' : 'Join Match'}
-            </h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Select your role:</label>
-              <select
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value as any)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2"
-              >
-                {(['player', 'commentator', 'recording', 'referee'] as const)
-                  .filter(role => !getAllUserParticipations().some(p => p.role === role))
-                  .map(role => (
-                    <option key={role} value={role}>
-                      {role === 'player' && '🎮 Player'}
-                      {role === 'commentator' && '🎤 Commentator'}
-                      {role === 'recording' && '📹 Recorder'}
-                      {role === 'referee' && '👨‍⚖️ Referee'}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowParticipantModal(false)}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={joinMatch}
-                disabled={isJoining}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white px-4 py-2 rounded transition-colors"
-              >
-                {isJoining ? 'Joining...' : 'Join'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <main className="container mx-auto px-4 py-6 max-w-5xl space-y-4">{children}</main>
     </div>
   );
-} 
+
+  if (loading) {
+    return shell(
+      <section className="rounded-xl bg-[#131A2B] px-6 py-8 animate-pulse space-y-3">
+        <div className="h-3 w-40 rounded bg-white/5" />
+        <div className="h-12 w-2/3 rounded bg-white/5" />
+        <div className="h-3 w-56 rounded bg-white/5" />
+      </section>,
+    );
+  }
+  if (!match) {
+    return shell(
+      <section className="rounded-xl bg-[#131A2B] px-6 py-8">
+        <h1 className="font-display text-4xl text-[#E6EDF7]">Match not found</h1>
+        <p className="text-sm text-[#8B98B0] mt-2">It may have been deleted.</p>
+        <Link href="/matches" className="inline-block mt-4 text-sm text-[#22D3EE] hover:text-[#67E8F9]">Back to the match log</Link>
+      </section>,
+    );
+  }
+
+  return shell(
+    <>
+      <Link href={match.league_slug ? `/league/schedule?league=${match.league_slug}` : '/matches'} className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE]">
+        <ChevronLeft className="w-3.5 h-3.5" /> {match.league_slug ? 'League schedule' : 'Match log'}
+      </Link>
+
+      {/* Header strip */}
+      <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+        <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
+              <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.league_slug ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>
+                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ' · Playoffs' : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
+              </span>
+              <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium inline-flex items-center gap-1 ${statusPill.cls}`}>
+                {live && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+                {statusPill.label}
+              </span>
+            </div>
+            <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">
+              {hasTeams ? `${a?.name || match.squad_a_name || 'TBD'} vs ${b?.name || match.squad_b_name || 'TBD'}` : match.title}
+            </h1>
+            <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
+              <span className="text-[#E6EDF7]">{when.day}</span>
+              <span className="text-white/20">·</span>
+              <span className="text-[#E6EDF7]">{when.time}</span>{when.tz && <span>{when.tz}</span>}
+              {(match.map_name || match.game_mode) && (<><span className="text-white/20">·</span><span>{[match.game_mode, match.map_name].filter(Boolean).join(' · ')}</span></>)}
+              <span className="text-white/20">·</span>
+              <span>Created by {match.created_by_alias}</span>
+            </div>
+            {hasTeams && match.title && !match.title.includes(' vs ') && <p className="mt-1 text-sm text-[#8B98B0]">{match.title}</p>}
+            {match.description && <p className="mt-1.5 text-sm text-[#8B98B0] max-w-2xl whitespace-pre-line">{match.description}</p>}
+          </div>
+          {canManage && (
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button type="button" onClick={() => setPanel(panel === 'result' ? 'none' : 'result')} className={btnQuiet} disabled={!hasTeams}>Set result</button>
+              <button type="button" onClick={() => (panel === 'link' ? setPanel('none') : openLink())} className={btnQuiet}>{match.game_id ? 'Change game' : 'Link game'}</button>
+              <button type="button" onClick={() => setPanel(panel === 'video' ? 'none' : 'video')} className={btnQuiet}>{match.vod_url ? 'Edit video' : 'Add video'}</button>
+              {!match.league_slug && <button type="button" onClick={remove} disabled={busy === 'delete'} className="px-3 py-2 rounded-md text-sm text-[#F87171] hover:bg-[#F87171]/10 disabled:opacity-50">Delete</button>}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Manage panels */}
+      {canManage && panel === 'result' && hasTeams && (
+        <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div><label className={labelCls}>{a?.tag || match.squad_a_name || 'A'} score</label><input type="number" min={0} value={scoreA} onChange={(e) => setScoreA(e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>{b?.tag || match.squad_b_name || 'B'} score</label><input type="number" min={0} value={scoreB} onChange={(e) => setScoreB(e.target.value)} className={inputCls} /></div>
+            <div>
+              <label className={labelCls}>Winner</label>
+              <select value={winner} onChange={(e) => setWinner(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
+                <option value="">From the score</option>
+                {match.squad_a_id && <option value={match.squad_a_id}>{a?.name || match.squad_a_name}</option>}
+                {match.squad_b_id && <option value={match.squad_b_id}>{b?.name || match.squad_b_name}</option>}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveResult} disabled={busy === 'result'} className={btnPrimary}>Save</button></div>
+          </div>
+          {match.league_slug && <p className="text-[11px] text-[#8B98B0] mt-2">This records the score on the match. Standings come from the admin match manager, where the official result is entered.</p>}
+        </section>
+      )}
+      {canManage && panel === 'link' && (
+        <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4 space-y-3">
+          <div className="text-sm text-[#E6EDF7]">Link the recorded game so its stats show here.</div>
+          {candidates.length > 0 ? (
+            <ul className="divide-y divide-white/[0.06] rounded-md bg-[#0B0F1A]/60">
+              {candidates.map((c) => (
+                <li key={c.gameId} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="text-[#8B98B0] w-40 shrink-0 tabular-nums">{new Date(c.gameDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                  <span className="min-w-0 flex-1 truncate text-[#E6EDF7]">{[c.gameMode, c.arena].filter(Boolean).join(' · ')} <span className="text-[#8B98B0]">· {c.players} players</span></span>
+                  <button type="button" onClick={() => linkGame(c.gameId)} disabled={busy === 'link'} className="text-xs text-[#22D3EE] hover:text-[#67E8F9] disabled:opacity-50">Link</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[#8B98B0]">No recorded games within 12 hours of the match time. Paste a game id instead.</p>
+          )}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1"><label className={labelCls}>Game id</label><input value={gameIdInput} onChange={(e) => setGameIdInput(e.target.value)} className={inputCls} placeholder="From the stats page URL" /></div>
+            <button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button>
+            <button type="button" onClick={() => linkGame(gameIdInput)} disabled={busy === 'link' || !gameIdInput.trim()} className={btnPrimary}>Link</button>
+          </div>
+          {match.game_id && <button type="button" onClick={unlinkGame} disabled={busy === 'unlink'} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Unlink current game ({match.game_id})</button>}
+        </section>
+      )}
+      {canManage && panel === 'video' && (
+        <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3 items-end">
+            <div><label className={labelCls}>Video URL (YouTube or VOD)</label><input value={vodUrl} onChange={(e) => setVodUrl(e.target.value)} className={inputCls} placeholder="https://youtube.com/watch?v=…" /></div>
+            <div><label className={labelCls}>Title</label><input value={vodTitle} onChange={(e) => setVodTitle(e.target.value)} className={inputCls} /></div>
+            <div className="flex gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveVideo} disabled={busy === 'video'} className={btnPrimary}>Save</button></div>
+          </div>
+        </section>
+      )}
+
+      {/* Face-off */}
+      {hasTeams && (
+        <section className="rounded-xl bg-[#131A2B] px-5 py-5">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+            {[{ s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'right' }, { s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'left' }].map((t, i) => (
+              <div key={i} className={`min-w-0 flex items-center gap-3 ${t.align === 'right' ? 'flex-row-reverse text-right' : ''} ${i === 1 ? 'order-3' : ''}`}>
+                <TeamMark tag={t.s?.tag || t.tag} name={t.s?.name || t.name} size="lg" />
+                <div className="min-w-0">
+                  {t.id ? (
+                    <Link href={`/squads/${t.id}`} className={`block font-display text-2xl leading-tight truncate hover:text-[#22D3EE] ${played && !t.won ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'}`}>{t.s?.name || t.name}</Link>
+                  ) : (
+                    <span className="block font-display text-2xl text-[#8B98B0]">TBD</span>
+                  )}
+                  {t.s && <span className="block text-xs text-[#8B98B0]">{t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}</span>}
+                </div>
+              </div>
+            ))}
+            <div className="order-2 text-center px-2">
+              {hasScore ? (
+                <div className="font-display text-5xl tabular-nums leading-none">
+                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_a_score}</span>
+                  <span className="text-white/20 mx-2">:</span>
+                  <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_b_score}</span>
+                </div>
+              ) : match.winner_name ? (
+                <div className="text-sm text-[#34D399]">{match.winner_name} won</div>
+              ) : (
+                <div className="font-display text-3xl text-white/20">VS</div>
+              )}
+            </div>
+          </div>
+          {(a?.members.length || b?.members.length) ? (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {[a, b].map((s, i) => s && (
+                <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
+                  <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] mb-1">Roster</div>
+                  <div className={`flex flex-wrap gap-1 ${i === 0 ? 'sm:justify-end' : ''}`}>
+                    {s.members.map((m) => <Link key={m.id} href={`/stats/player/${encodeURIComponent(m.alias)}`} className="px-1.5 py-0.5 rounded bg-[#1B2438] text-[#E6EDF7] hover:text-[#22D3EE]">{m.alias}</Link>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Crew */}
+        <div className="lg:col-span-1">
+          <Card title="Crew" action={<span className="text-xs text-[#8B98B0] tabular-nums">{match.participants.length}</span>}>
+            <div className="space-y-2">
+              {ROLES.map((r) => {
+                const people = match.participants.filter((p) => p.role === r.key);
+                const me = people.find((p) => p.player_id === user?.id);
+                const allowed = !!user && canJoinRole(r.key);
+                const open = match.status === 'scheduled' || live;
+                return (
+                  <div key={r.key} className="rounded-md bg-[#1B2438] px-3 py-2">
+                    <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-[#8B98B0]">
+                      <span>{r.plural}</span>
+                      <span className="tabular-nums">{people.length}</span>
+                    </div>
+                    <div className="text-sm text-[#E6EDF7] mt-0.5 flex flex-wrap gap-x-2">
+                      {people.length === 0 ? <span className="text-[#8B98B0]/60">Nobody yet</span> : people.map((p) => (
+                        <Link key={p.id} href={`/stats/player/${encodeURIComponent(p.in_game_alias)}`} className="hover:text-[#22D3EE]">{p.in_game_alias}</Link>
+                      ))}
+                    </div>
+                    {user && open && (
+                      me ? (
+                        <button type="button" onClick={() => leave(me)} disabled={busy === me.id} className="mt-1 text-[11px] text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Leave</button>
+                      ) : (
+                        <button type="button" onClick={() => join(r.key)} disabled={!allowed || busy === r.key} title={allowed ? '' : `${r.label} role required`} className="mt-1 text-[11px] text-[#22D3EE] hover:text-[#67E8F9] disabled:opacity-40 disabled:cursor-not-allowed">+ Join as {r.label.toLowerCase()}</button>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+              {!user && <p className="text-[11px] text-[#8B98B0]"><Link href="/auth/login" className="text-[#22D3EE]">Sign in</Link> to sign up for a role.</p>}
+            </div>
+          </Card>
+        </div>
+
+        {/* Result / recording */}
+        <div className="lg:col-span-2 space-y-4">
+          {(yt || videoHref) && (
+            <Card title={match.vod_title || 'Video'} action={videoHref ? <a href={videoHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE]">Open <ExternalLink className="w-3 h-3" /></a> : undefined}>
+              {yt ? (
+                <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                  <iframe src={`https://www.youtube.com/embed/${yt}`} title={match.vod_title || match.title} className="w-full h-full" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                </div>
+              ) : (
+                <a href={videoHref!} target="_blank" rel="noopener noreferrer" className="text-sm text-[#22D3EE] hover:text-[#67E8F9]">Watch the recording</a>
+              )}
+            </Card>
+          )}
+
+          <Card
+            title="Game stats"
+            action={match.game_id ? <Link href={`/stats/game/${encodeURIComponent(match.game_id)}`} className="text-xs text-[#8B98B0] hover:text-[#22D3EE]">Full stats</Link> : undefined}
+          >
+            {!match.game_id ? (
+              <p className="text-sm text-[#8B98B0]">
+                {notPlayed ? 'This match was not played.' : played ? 'No recorded game is linked to this match yet.' : 'Stats appear here once the game is played and linked.'}
+                {canManage && !notPlayed && <> <button type="button" onClick={openLink} className="text-[#22D3EE] hover:text-[#67E8F9]">Link a game</button></>}
+              </p>
+            ) : !game ? (
+              <p className="text-sm text-[#8B98B0]">Game {match.game_id} is linked, but its stats couldn’t be loaded.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8B98B0]">
+                  <span>{[game.gameMode, game.mapName].filter(Boolean).join(' · ')}</span>
+                  {game.duration > 0 && <span>{Math.round(game.duration / 60)} min</span>}
+                  <span>{game.players.length} players</span>
+                  {game.winningInfo && <span className="text-[#34D399]">{game.winningInfo.winner} won</span>}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(game.teamStats).map(([team, players]) => {
+                    const caps = players.reduce((n, p) => n + (p.flag_captures || 0), 0);
+                    const won = game.winningInfo?.winner === team || players.some((p) => p.result === 'Win');
+                    return (
+                      <div key={team} className="rounded-md bg-[#1B2438] overflow-hidden">
+                        <div className="px-3 py-1.5 flex items-center justify-between text-[11px] uppercase tracking-wide">
+                          <span className={won ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{team}{won ? ' · won' : ''}</span>
+                          <span className="text-[#8B98B0] tabular-nums">{caps} caps</span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <tbody>
+                            {[...players].sort((x, y) => y.kills - x.kills).map((p, i) => (
+                              <tr key={i} className="border-t border-white/[0.06]">
+                                <td className="px-3 py-1.5">
+                                  <Link href={`/stats/player/${encodeURIComponent(p.player_name)}`} className="text-[#E6EDF7] hover:text-[#22D3EE]">{p.player_name}</Link>
+                                  {p.main_class && <span className="ml-2 text-[10px]" style={{ color: getClassColor(p.main_class) }}>{p.main_class}</span>}
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-[#34D399]">{p.kills}</td>
+                                <td className="px-2 py-1.5 text-right tabular-nums text-[#F87171]">{p.deaths}</td>
+                                <td className="px-3 py-1.5 text-right tabular-nums text-[#8B98B0]">{p.flag_captures || 0}c</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {match.match_notes && (
+            <Card title="Notes"><p className="text-sm text-[#E6EDF7] whitespace-pre-line">{match.match_notes}</p></Card>
+          )}
+        </div>
+      </div>
+    </>,
+  );
+}

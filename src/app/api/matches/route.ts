@@ -200,11 +200,11 @@ export async function PUT(req: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, ctf_role')
       .eq('id', userId)
       .single();
 
-    const isAdmin = profile?.is_admin || false;
+    const isAdmin = profile?.is_admin || profile?.ctf_role === 'ctf_admin' || false;
     const isCreator = match.created_by === userId;
 
     if (!isCreator && !isAdmin) {
@@ -266,8 +266,10 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (match.created_by !== userId) {
-      return NextResponse.json({ error: 'Only the match creator can delete this match' }, { status: 403 });
+    const { data: delProfile } = await supabase.from('profiles').select('is_admin, ctf_role').eq('id', userId).maybeSingle();
+    const delAdmin = !!delProfile && (delProfile.is_admin === true || delProfile.ctf_role === 'ctf_admin');
+    if (match.created_by !== userId && !delAdmin) {
+      return NextResponse.json({ error: 'Only the match creator or staff can delete this match' }, { status: 403 });
     }
 
     if (match.status !== 'scheduled') {

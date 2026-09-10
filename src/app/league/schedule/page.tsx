@@ -72,6 +72,9 @@ function SchedulePage() {
   const [mySquads, setMySquads] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('upcoming');
   const [editing, setEditing] = useState<string | null>(null);
+  // Timezone label only after mount (server and browser zones differ → hydration mismatch otherwise).
+  const [tzLabel, setTzLabel] = useState('');
+  useEffect(() => { setTzLabel(tz()); }, []);
 
   const league = useMemo(
     () => (slugParam ? leagues.find((l) => l.slug === slugParam) || null : pickFeatured(leagues)),
@@ -201,7 +204,7 @@ function SchedulePage() {
                     </span>
                     {phase && <span className="text-[#F59E0B] font-medium">{phase.label}</span>}
                     {season.start_date && <span className="text-[#8B98B0]">Starts {formatDateOnly(season.start_date)}</span>}
-                    <span className="text-[#8B98B0]">Times shown in your zone{tz() ? ` (${tz()})` : ''}</span>
+                    <span className="text-[#8B98B0]">Times shown in your zone{tzLabel ? ` (${tzLabel})` : ''}</span>
                   </>
                 ) : (
                   <span className="text-[#8B98B0]">No season yet</span>
