@@ -430,7 +430,9 @@ export default function LeagueHome() {
   const S = featured?.season || null;
   const isDraftLeague = L?.format === 'draft';
   const hasWatch = featuredVideos.length > 0 || recordedGames.length > 0;
-  const showThisWeek = upcoming.length > 0 || (league?.results.length || 0) > 0 || featured?.status === 'active';
+  // A draft league isn't underway until the draft has run, even if the season row is flagged active.
+  const seasonUnderway = featured?.status === 'active' && !(isDraftLeague && league?.draft?.status !== 'complete');
+  const showThisWeek = upcoming.length > 0 || (league?.results.length || 0) > 0 || seasonUnderway;
 
   if (loading) {
     return (
@@ -736,7 +738,7 @@ export default function LeagueHome() {
               >
                 {league!.standings.length === 0 ? (
                   <Empty>
-                    {featured?.status === 'upcoming'
+                    {!seasonUnderway
                       ? isDraftLeague
                         ? 'Standings start once the draft is done and play begins.'
                         : 'Standings start when the season begins.'

@@ -242,7 +242,13 @@ export function seasonPhase(
     return { label: regOpen ? 'Recruiting' : 'Pre-season', milestones };
   }
 
-  // active
+  // active — but a draft league can't be underway until its draft has run
+  // (seasons are often flagged active early so registration and the draft room work).
+  if (isDraft && opts.draftDone === false) {
+    const regOpen = !season.registration_closes_on || days(season.registration_closes_on) <= 0;
+    if (season.draft_on && days(season.draft_on) >= 0) return { label: 'Draft day', milestones };
+    return { label: regOpen ? 'Recruiting' : 'Pre-season', milestones };
+  }
   if (season.start_date && days(season.start_date) < 0) {
     return { label: 'Starts soon', milestones };
   }
