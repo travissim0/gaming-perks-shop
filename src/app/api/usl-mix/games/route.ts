@@ -12,8 +12,10 @@ import { aliasKey, withHealTotals } from '@/lib/uslMix/types';
  *   ?since=2026-09-01        ISO date lower bound on ended_at
  *   ?rated=true|false        only ELO-rated (or only unrated) games
  * Each game carries a compact player list: alias, side, class, K/D, shots fired/landed, accuracy,
- * heals, opening kills, and the captain / shotcaller / vocal flags - enough to build league-wide
- * aggregates without a detail fetch per game.
+ * heals, opening kills, per-weapon kills, and the captain / shotcaller / vocal flags - enough to
+ * build league-wide aggregates without a detail fetch per game. weapon_kills is the same
+ * {"1004": {"name": "LAW", "count": 3}} map served by /games/{id}, so a rated-only weapon
+ * breakdown is one ?rated=true page rather than a fetch per game (Chris, 2026-09-10).
  */
 export const runtime = 'nodejs';
 
@@ -70,7 +72,8 @@ export async function GET(request: NextRequest) {
       // run yet is requested separately, with a fallback to the columns we know exist.
       const BASE_COLS =
         'game_id, alias, side, team_name, result, is_captain, is_shotcaller, primary_class, kills, deaths, ' +
-        'shots_fired, shots_landed, accuracy, heal_amount, bio_dart_hits, opening_kills, opening_deaths, opening_fights_won, rating_delta';
+        'shots_fired, shots_landed, accuracy, heal_amount, bio_dart_hits, opening_kills, opening_deaths, opening_fights_won, rating_delta, ' +
+        'weapon_kills';
       const withVocal = await supabase
         .from('usl_mix_game_players')
         .select(`${BASE_COLS}, is_vocal`)

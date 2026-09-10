@@ -45,7 +45,7 @@ export default function UslMixApiDocsPage() {
             <Endpoint
               method="GET"
               path="/api/usl-mix/games"
-              desc="Recent games newest first, each with a full player list - alias, side, class, kills, deaths, shots fired / landed, accuracy, bio dart hits, the heal split, opening kills, and the captain / shotcaller / vocal flags. Enough to build league-wide aggregates without a detail fetch per game."
+              desc="Recent games newest first, each with a full player list - alias, side, class, kills, deaths, shots fired / landed, accuracy, bio dart hits, the heal split, opening kills, per-weapon kills, and the captain / shotcaller / vocal flags. Enough to build league-wide aggregates without a detail fetch per game."
               params={[
                 ['limit', 'default 25, max 100'],
                 ['offset', 'pagination offset'],
