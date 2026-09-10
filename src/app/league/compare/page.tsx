@@ -1,603 +1,269 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { ArrowLeftRight, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+/*
+ * Squad comparison — two rosters side by side with each player's career
+ * numbers, aggregate bars, and the match reports between the two squads.
+ * Squads from past seasons are included (marked) so old matchups still work.
+ * ?a=<squad id>&b=<squad id> preselects.
+ */
 
-interface Squad {
-  id: string;
-  name: string;
-  tag: string;
-}
+interface Squad { id: string; name: string; tag: string | null; is_active: boolean; is_legacy?: boolean | null }
+interface Member { alias: string; role: string; kills: number; deaths: number; kd: number; captures: number; games: number; elo: number }
+interface Report { id: string; title: string; squad_a_name: string; squad_b_name: string; match_date: string; season_name: string }
 
-interface SquadMember {
-  squad_id: string;
-  player_id: string;
-  in_game_alias: string;
-  role: string;
-}
+const A = '#22D3EE';
+const B = '#F59E0B';
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-interface PlayerStats {
-  player_name: string;
-  total_kills: number;
-  total_deaths: number;
-  kill_death_ratio: number;
-  total_captures: number;
-  total_games: number;
-}
-
-interface EloEntry {
-  player_name: string;
-  weighted_elo: number;
-}
-
-interface MemberWithStats {
-  alias: string;
-  role: string;
-  kills: number;
-  deaths: number;
-  kd: number;
-  captures: number;
-  elo: number;
-}
-
-interface MatchReport {
-  id: string;
-  title: string;
-  squad_a_name: string;
-  squad_b_name: string;
-  match_date: string;
-  season_name: string;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatDate(dateStr: string) {
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-/** Render a horizontal comparison bar for a single stat. */
-function ComparisonBar({
-  label,
-  valueA,
-  valueB,
-  formatValue,
-}: {
-  label: string;
-  valueA: number;
-  valueB: number;
-  formatValue?: (v: number) => string;
-}) {
-  const fmt = formatValue ?? ((v: number) => String(v));
-  const max = Math.max(valueA, valueB, 1);
-  const pctA = (valueA / max) * 100;
-  const pctB = (valueB / max) * 100;
-
+function Bar({ label, a, b, fmt }: { label: string; a: number; b: number; fmt: (v: number) => string }) {
+  const max = Math.max(a, b, 1e-9);
+  const aWins = a > b;
+  const bWins = b > a;
   return (
-    <div className="space-y-1">
-      <div className="text-sm text-gray-400 text-center font-medium">{label}</div>
-      <div className="flex items-center gap-2">
-        {/* Squad A bar (grows right-to-left) */}
-        <span className="w-20 text-right text-sm font-semibold text-cyan-400">
-          {fmt(valueA)}
-        </span>
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] text-center mb-1">{label}</div>
+      <div className="flex items-center gap-3">
+        <span className={`w-16 text-right text-sm tabular-nums ${aWins ? 'text-[#E6EDF7] font-medium' : 'text-[#8B98B0]'}`}>{fmt(a)}</span>
         <div className="flex-1 flex items-center gap-1">
-          <div className="flex-1 flex justify-end">
-            <div
-              className="h-5 rounded-l bg-cyan-500/70 transition-all duration-500"
-              style={{ width: `${pctA}%` }}
-            />
-          </div>
-          <div className="flex-1">
-            <div
-              className="h-5 rounded-r bg-purple-500/70 transition-all duration-500"
-              style={{ width: `${pctB}%` }}
-            />
-          </div>
+          <div className="flex-1 flex justify-end"><div className="h-2 rounded-l-full" style={{ width: `${(a / max) * 100}%`, background: A, opacity: aWins ? 1 : 0.45 }} /></div>
+          <div className="flex-1"><div className="h-2 rounded-r-full" style={{ width: `${(b / max) * 100}%`, background: B, opacity: bWins ? 1 : 0.45 }} /></div>
         </div>
-        <span className="w-20 text-left text-sm font-semibold text-purple-400">
-          {fmt(valueB)}
-        </span>
+        <span className={`w-16 text-left text-sm tabular-nums ${bWins ? 'text-[#E6EDF7] font-medium' : 'text-[#8B98B0]'}`}>{fmt(b)}</span>
       </div>
     </div>
   );
 }
 
-/** Skeleton placeholder while loading. */
-function LoadingSkeleton() {
+function Roster({ squad, members, color }: { squad: Squad; members: Member[]; color: string }) {
   return (
-    <div className="space-y-6 animate-pulse">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[0, 1].map((i) => (
-          <div key={i} className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-            <div className="h-6 bg-gray-700 rounded w-40 mb-4" />
-            {[0, 1, 2].map((j) => (
-              <div key={j} className="h-12 bg-gray-700/50 rounded mb-2" />
+    <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+      <div className="px-4 py-2.5 flex items-center gap-2.5">
+        <span className="w-8 h-8 rounded-md text-[11px] font-medium flex items-center justify-center shrink-0" style={{ background: `${color}22`, color }}>{(squad.tag || squad.name).slice(0, 4).toUpperCase()}</span>
+        <Link href={`/squads/${squad.id}`} className="font-display text-lg text-[#E6EDF7] hover:text-[#22D3EE] truncate">{squad.name}</Link>
+        <span className="ml-auto text-xs text-[#8B98B0] tabular-nums">{members.length} on roster</span>
+      </div>
+      {members.length === 0 ? (
+        <div className="px-4 pb-4 text-sm text-[#8B98B0]">No active members.</div>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-[#8B98B0]">
+              <th className="text-left font-normal px-4 py-1.5">Player</th>
+              <th className="text-right font-normal px-2 py-1.5">Games</th>
+              <th className="text-right font-normal px-2 py-1.5">Kills</th>
+              <th className="text-right font-normal px-2 py-1.5">K/D</th>
+              <th className="text-right font-normal px-2 py-1.5">Caps</th>
+              <th className="text-right font-normal px-4 py-1.5">ELO</th>
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((m) => (
+              <tr key={m.alias} className="border-t border-white/[0.06] hover:bg-white/[0.03]">
+                <td className="px-4 py-1.5">
+                  <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="text-[#E6EDF7] hover:text-[#22D3EE]">{m.alias}</Link>
+                  {m.role !== 'player' && m.role !== 'member' && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">{m.role.replace('_', ' ')}</span>}
+                </td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-[#8B98B0]">{m.games || '–'}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-[#E6EDF7]">{m.games ? m.kills.toLocaleString() : '–'}</td>
+                <td className={`px-2 py-1.5 text-right tabular-nums ${m.games ? (m.kd >= 1 ? 'text-[#34D399]' : 'text-[#F87171]') : 'text-[#8B98B0]'}`}>{m.games ? m.kd.toFixed(2) : '–'}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-[#E6EDF7]">{m.games ? m.captures : '–'}</td>
+                <td className="px-4 py-1.5 text-right tabular-nums text-[#E6EDF7]">{m.elo > 0 ? Math.round(m.elo) : '–'}</td>
+              </tr>
             ))}
-          </div>
-        ))}
-      </div>
-      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-        <div className="h-6 bg-gray-700 rounded w-48 mb-4" />
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-8 bg-gray-700/50 rounded mb-3" />
-        ))}
-      </div>
-    </div>
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page Component
-// ---------------------------------------------------------------------------
-
-export default function SquadComparePage() {
-  // Squad selection
+function ComparePage() {
+  const { user } = useAuth();
+  const params = useSearchParams();
   const [squads, setSquads] = useState<Squad[]>([]);
-  const [squadAId, setSquadAId] = useState('');
-  const [squadBId, setSquadBId] = useState('');
-
-  // Comparison data
-  const [membersA, setMembersA] = useState<MemberWithStats[]>([]);
-  const [membersB, setMembersB] = useState<MemberWithStats[]>([]);
-  const [matches, setMatches] = useState<MatchReport[]>([]);
-
-  // Loading / error
-  const [squadsLoading, setSquadsLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false);
+  const [aId, setAId] = useState(params.get('a') || '');
+  const [bId, setBId] = useState(params.get('b') || '');
+  const [membersA, setMembersA] = useState<Member[]>([]);
+  const [membersB, setMembersB] = useState<Member[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // -----------------------------------------------------------------------
-  // Fetch active squads on mount
-  // -----------------------------------------------------------------------
   useEffect(() => {
-    async function fetchSquads() {
-      try {
-        const { data, error: sqErr } = await supabase
-          .from('squads')
-          .select('id, name, tag')
-          .eq('is_active', true)
-          .order('name');
-
-        if (sqErr) throw sqErr;
-        setSquads(data ?? []);
-      } catch (err) {
-        console.error('Failed to load squads:', err);
-        setError('Failed to load squads.');
-      } finally {
-        setSquadsLoading(false);
-      }
-    }
-    fetchSquads();
+    (async () => {
+      const full = await supabase.from('squads').select('id, name, tag, is_active, is_legacy').order('is_active', { ascending: false }).order('name');
+      const rows = full.error
+        ? (await supabase.from('squads').select('id, name, tag, is_active').order('is_active', { ascending: false }).order('name')).data || []
+        : full.data || [];
+      setSquads(rows as Squad[]);
+    })();
   }, []);
 
-  // -----------------------------------------------------------------------
-  // When both squads are selected, fetch comparison data
-  // -----------------------------------------------------------------------
   useEffect(() => {
-    if (!squadAId || !squadBId || squadAId === squadBId) {
-      setMembersA([]);
-      setMembersB([]);
-      setMatches([]);
-      return;
-    }
-
-    async function fetchComparisonData() {
-      setDataLoading(true);
-      setError(null);
+    if (!aId || !bId || aId === bId) { setMembersA([]); setMembersB([]); setReports([]); return; }
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setError(null);
       try {
-        // 1. Fetch members for both squads
-        const [resA, resB] = await Promise.all([
-          supabase
-            .from('squad_members')
-            .select('squad_id, player_id, in_game_alias, role')
-            .eq('squad_id', squadAId),
-          supabase
-            .from('squad_members')
-            .select('squad_id, player_id, in_game_alias, role')
-            .eq('squad_id', squadBId),
+        const [ra, rb, statsRes, eloRes, { data: reps }] = await Promise.all([
+          supabase.from('squad_members').select('player_id, role, status, profiles!squad_members_player_id_fkey(in_game_alias)').eq('squad_id', aId),
+          supabase.from('squad_members').select('player_id, role, status, profiles!squad_members_player_id_fkey(in_game_alias)').eq('squad_id', bId),
+          fetch('/api/player-stats/leaderboard?limit=1000&sortBy=total_kills&sortOrder=desc').then((r) => r.json()).catch(() => ({})),
+          fetch('/api/player-stats/elo-leaderboard?limit=1000&minGames=1').then((r) => r.json()).catch(() => ({})),
+          supabase.from('match_reports').select('id, title, squad_a_name, squad_b_name, match_date, season_name')
+            .or(`and(squad_a_id.eq.${aId},squad_b_id.eq.${bId}),and(squad_a_id.eq.${bId},squad_b_id.eq.${aId})`)
+            .order('match_date', { ascending: false }).limit(20),
         ]);
-
-        if (resA.error) throw resA.error;
-        if (resB.error) throw resB.error;
-
-        const rawA: SquadMember[] = resA.data ?? [];
-        const rawB: SquadMember[] = resB.data ?? [];
-
-        // 2. Fetch leaderboard stats (large limit to capture all players)
-        const [statsRes, eloRes] = await Promise.all([
-          fetch('/api/player-stats/leaderboard?limit=1000&sortBy=total_kills&sortOrder=desc'),
-          fetch('/api/player-stats/elo-leaderboard?limit=1000&minGames=1'),
-        ]);
-
-        const statsJson = await statsRes.json();
-        const eloJson = await eloRes.json();
-
-        const allStats: PlayerStats[] = statsJson.data ?? [];
-        const allElo: EloEntry[] = eloJson.data ?? [];
-
-        // Build lookup maps (lowercase keys)
-        const statsMap = new Map<string, PlayerStats>();
-        for (const s of allStats) {
-          statsMap.set(s.player_name.toLowerCase(), s);
-        }
-
-        const eloMap = new Map<string, number>();
-        for (const e of allElo) {
-          eloMap.set(e.player_name.toLowerCase(), Number(e.weighted_elo) || 0);
-        }
-
-        // 3. Merge member info with stats
-        const buildMembers = (raw: SquadMember[]): MemberWithStats[] =>
-          raw.map((m) => {
-            const key = m.in_game_alias.toLowerCase();
-            const ps = statsMap.get(key);
-            return {
-              alias: m.in_game_alias,
-              role: m.role,
-              kills: ps?.total_kills ?? 0,
-              deaths: ps?.total_deaths ?? 0,
-              kd: ps ? Number(ps.kill_death_ratio) : 0,
-              captures: ps?.total_captures ?? 0,
-              elo: eloMap.get(key) ?? 0,
-            };
-          });
-
-        setMembersA(buildMembers(rawA));
-        setMembersB(buildMembers(rawB));
-
-        // 4. Head-to-head matches
-        const { data: matchData, error: matchErr } = await supabase
-          .from('match_reports')
-          .select('id, title, squad_a_name, squad_b_name, match_date, season_name')
-          .or(
-            `and(squad_a_id.eq.${squadAId},squad_b_id.eq.${squadBId}),and(squad_a_id.eq.${squadBId},squad_b_id.eq.${squadAId})`
-          )
-          .order('match_date', { ascending: false })
-          .limit(20);
-
-        if (matchErr) throw matchErr;
-        setMatches(matchData ?? []);
-      } catch (err: any) {
-        console.error('Comparison fetch error:', err);
-        setError(err?.message ?? 'Failed to load comparison data.');
+        if (cancelled) return;
+        if (ra.error) throw ra.error;
+        if (rb.error) throw rb.error;
+        const stats = new Map<string, any>();
+        (statsRes.data || []).forEach((s: any) => stats.set(String(s.player_name).toLowerCase(), s));
+        const elo = new Map<string, number>();
+        (eloRes.data || []).forEach((e: any) => elo.set(String(e.player_name).toLowerCase(), Number(e.weighted_elo) || 0));
+        const build = (rows: any[]): Member[] =>
+          rows
+            .filter((r) => !r.status || r.status === 'active')
+            .map((r) => {
+              const alias = r.profiles?.in_game_alias || 'Unknown';
+              const s = stats.get(alias.toLowerCase());
+              return { alias, role: r.role || 'player', kills: s?.total_kills ?? 0, deaths: s?.total_deaths ?? 0, kd: s ? Number(s.kill_death_ratio) : 0, captures: s?.total_captures ?? 0, games: s?.total_games ?? 0, elo: elo.get(alias.toLowerCase()) ?? 0 };
+            })
+            .sort((x, y) => (x.role === 'captain' ? -1 : y.role === 'captain' ? 1 : y.kills - x.kills));
+        setMembersA(build(ra.data || []));
+        setMembersB(build(rb.data || []));
+        setReports((reps || []) as Report[]);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || 'Could not load the comparison');
       } finally {
-        setDataLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
+    })();
+    return () => { cancelled = true; };
+  }, [aId, bId]);
 
-    fetchComparisonData();
-  }, [squadAId, squadBId]);
-
-  // -----------------------------------------------------------------------
-  // Derived aggregates
-  // -----------------------------------------------------------------------
-  const aggregate = (members: MemberWithStats[]) => {
-    if (members.length === 0)
-      return { totalKills: 0, avgKd: 0, totalCaptures: 0, avgElo: 0 };
-    const totalKills = members.reduce((s, m) => s + m.kills, 0);
-    const avgKd =
-      members.reduce((s, m) => s + m.kd, 0) / members.length;
-    const totalCaptures = members.reduce((s, m) => s + m.captures, 0);
-    const eloMembers = members.filter((m) => m.elo > 0);
-    const avgElo =
-      eloMembers.length > 0
-        ? eloMembers.reduce((s, m) => s + m.elo, 0) / eloMembers.length
-        : 0;
-    return { totalKills, avgKd, totalCaptures, avgElo };
+  const squadA = squads.find((s) => s.id === aId);
+  const squadB = squads.find((s) => s.id === bId);
+  const ready = !!(squadA && squadB && aId !== bId);
+  const agg = (ms: Member[]) => {
+    const played = ms.filter((m) => m.games > 0);
+    const rated = ms.filter((m) => m.elo > 0);
+    return {
+      kills: played.reduce((n, m) => n + m.kills, 0),
+      kd: played.length ? played.reduce((n, m) => n + m.kd, 0) / played.length : 0,
+      caps: played.reduce((n, m) => n + m.captures, 0),
+      elo: rated.length ? rated.reduce((n, m) => n + m.elo, 0) / rated.length : 0,
+    };
   };
+  const aggA = useMemo(() => agg(membersA), [membersA]);
+  const aggB = useMemo(() => agg(membersB), [membersB]);
+  const label = (s: Squad) => `${s.tag ? `[${s.tag}] ` : ''}${s.name}${!s.is_active || s.is_legacy ? ' · past' : ''}`;
+  const selectCls = 'bg-[#0B0F1A] border border-white/10 rounded-md px-3 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none';
 
-  const aggA = aggregate(membersA);
-  const aggB = aggregate(membersB);
-
-  const squadA = squads.find((s) => s.id === squadAId);
-  const squadB = squads.find((s) => s.id === squadBId);
-
-  const bothSelected = squadAId && squadBId && squadAId !== squadBId;
-
-  // -----------------------------------------------------------------------
-  // Render
-  // -----------------------------------------------------------------------
   return (
-    <div className="ctf-theme min-h-screen bg-gray-900 text-white">
-      <Navbar />
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Back link */}
-        <Link
-          href="/league"
-          className="inline-flex items-center text-sm text-gray-400 hover:text-cyan-400 transition-colors mb-6"
-        >
-          <svg
-            className="w-4 h-4 mr-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to League
-        </Link>
-
-        {/* Title */}
-        <h1 className="text-3xl md:text-4xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-          Squad Comparison
-        </h1>
-        <p className="text-gray-400 mb-8">Compare squads head-to-head</p>
-
-        {/* ---- Squad Selectors ---- */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          {/* Squad A */}
-          <div>
-            <label className="block text-sm font-medium text-cyan-400 mb-1">
-              Squad A
-            </label>
-            <select
-              value={squadAId}
-              onChange={(e) => setSquadAId(e.target.value)}
-              disabled={squadsLoading}
-              className="w-full bg-gray-800 border border-cyan-500/40 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/60"
-            >
-              <option value="">Select a squad...</option>
-              {squads.map((s) => (
-                <option key={s.id} value={s.id} disabled={s.id === squadBId}>
-                  {s.name} [{s.tag}]
-                </option>
-              ))}
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+      <Navbar user={user} />
+      <main className="container mx-auto px-4 py-6 max-w-6xl space-y-4">
+        <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+          <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80 mb-1">Free Infantry · CTF leagues</div>
+              <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">Compare squads</h1>
+              <p className="mt-2 text-sm text-[#8B98B0] max-w-xl">Two rosters side by side: each player’s career numbers, the squad totals, and every match report between them.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Link href="/league/standings" className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Standings</Link>
+              <Link href="/squads" className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-[#8B98B0] hover:text-[#22D3EE] transition-colors">All squads <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" /></Link>
+            </div>
+          </div>
+          <div className="relative border-t border-white/[0.06] px-3 sm:px-4 py-2 flex flex-wrap items-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: A }} />
+            <select value={aId} onChange={(e) => setAId(e.target.value)} className={selectCls} style={{ colorScheme: 'dark' }}>
+              <option value="">Pick squad A…</option>
+              {squads.map((s) => <option key={s.id} value={s.id} disabled={s.id === bId}>{label(s)}</option>)}
             </select>
-          </div>
-
-          {/* Squad B */}
-          <div>
-            <label className="block text-sm font-medium text-purple-400 mb-1">
-              Squad B
-            </label>
-            <select
-              value={squadBId}
-              onChange={(e) => setSquadBId(e.target.value)}
-              disabled={squadsLoading}
-              className="w-full bg-gray-800 border border-purple-500/40 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500/60"
-            >
-              <option value="">Select a squad...</option>
-              {squads.map((s) => (
-                <option key={s.id} value={s.id} disabled={s.id === squadAId}>
-                  {s.name} [{s.tag}]
-                </option>
-              ))}
+            <button type="button" onClick={() => { setAId(bId); setBId(aId); }} disabled={!aId && !bId} className="p-1.5 rounded-md text-[#8B98B0] hover:text-[#E6EDF7] hover:bg-white/5 disabled:opacity-30" title="Swap sides"><ArrowLeftRight className="w-4 h-4" /></button>
+            <select value={bId} onChange={(e) => setBId(e.target.value)} className={selectCls} style={{ colorScheme: 'dark' }}>
+              <option value="">Pick squad B…</option>
+              {squads.map((s) => <option key={s.id} value={s.id} disabled={s.id === aId}>{label(s)}</option>)}
             </select>
+            <span className="w-2 h-2 rounded-full" style={{ background: B }} />
+            {squads.some((s) => !s.is_active || s.is_legacy) && <span className="text-[11px] text-[#8B98B0] ml-2">“past” = a squad from an earlier season</span>}
           </div>
-        </div>
+        </section>
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6 text-red-400 text-sm">
-            {error}
-          </div>
-        )}
-
-        {/* Prompt to select */}
-        {!bothSelected && !dataLoading && (
-          <div className="text-center text-gray-500 py-16">
-            <svg
-              className="w-16 h-16 mx-auto mb-4 text-gray-700"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-              />
-            </svg>
-            <p className="text-lg">Select two different squads to compare</p>
-          </div>
-        )}
-
-        {/* Loading skeleton */}
-        {dataLoading && <LoadingSkeleton />}
-
-        {/* ---- Comparison Content ---- */}
-        {bothSelected && !dataLoading && (
-          <div className="space-y-8">
-            {/* Roster comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Squad A Roster */}
-              <div className="bg-gray-800/50 border border-cyan-500/20 rounded-lg p-5">
-                <h2 className="text-lg font-bold text-cyan-400 mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                  {squadA?.name}{' '}
-                  <span className="text-gray-500 font-normal">[{squadA?.tag}]</span>
-                  <span className="ml-auto text-xs text-gray-500 font-normal">
-                    {membersA.length} members
-                  </span>
-                </h2>
-                {membersA.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No members found.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {membersA.map((m) => (
-                      <Link
-                        key={m.alias}
-                        href={`/stats/player/${encodeURIComponent(m.alias)}`}
-                        className="block bg-gray-900/60 border border-gray-700/50 rounded-lg px-4 py-3 hover:border-cyan-500/40 transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white">{m.alias}</span>
-                          <span className="text-xs text-gray-500 capitalize">{m.role.replace('_', ' ')}</span>
-                        </div>
-                        <div className="flex gap-4 text-xs text-gray-400">
-                          <span>
-                            Kills:{' '}
-                            <span className="text-cyan-300">{m.kills.toLocaleString()}</span>
-                          </span>
-                          <span>
-                            K/D:{' '}
-                            <span className="text-cyan-300">{m.kd.toFixed(2)}</span>
-                          </span>
-                          <span>
-                            Caps:{' '}
-                            <span className="text-cyan-300">{m.captures.toLocaleString()}</span>
-                          </span>
-                          <span>
-                            ELO:{' '}
-                            <span className="text-cyan-300">
-                              {m.elo > 0 ? Math.round(m.elo) : '---'}
-                            </span>
-                          </span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Squad B Roster */}
-              <div className="bg-gray-800/50 border border-purple-500/20 rounded-lg p-5">
-                <h2 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                  {squadB?.name}{' '}
-                  <span className="text-gray-500 font-normal">[{squadB?.tag}]</span>
-                  <span className="ml-auto text-xs text-gray-500 font-normal">
-                    {membersB.length} members
-                  </span>
-                </h2>
-                {membersB.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No members found.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {membersB.map((m) => (
-                      <Link
-                        key={m.alias}
-                        href={`/stats/player/${encodeURIComponent(m.alias)}`}
-                        className="block bg-gray-900/60 border border-gray-700/50 rounded-lg px-4 py-3 hover:border-purple-500/40 transition-colors"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-white">{m.alias}</span>
-                          <span className="text-xs text-gray-500 capitalize">{m.role.replace('_', ' ')}</span>
-                        </div>
-                        <div className="flex gap-4 text-xs text-gray-400">
-                          <span>
-                            Kills:{' '}
-                            <span className="text-purple-300">{m.kills.toLocaleString()}</span>
-                          </span>
-                          <span>
-                            K/D:{' '}
-                            <span className="text-purple-300">{m.kd.toFixed(2)}</span>
-                          </span>
-                          <span>
-                            Caps:{' '}
-                            <span className="text-purple-300">{m.captures.toLocaleString()}</span>
-                          </span>
-                          <span>
-                            ELO:{' '}
-                            <span className="text-purple-300">
-                              {m.elo > 0 ? Math.round(m.elo) : '---'}
-                            </span>
-                          </span>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+        {error ? (
+          <section className="rounded-xl bg-[#131A2B] px-5 py-5 text-sm text-[#F87171]">{error}</section>
+        ) : !ready ? (
+          <section className="rounded-xl bg-[#131A2B] px-6 py-10 text-center">
+            <ArrowLeftRight className="w-8 h-8 mx-auto text-white/20" aria-hidden="true" />
+            <p className="mt-3 text-sm text-[#8B98B0]">Pick two squads above. You’ll get both rosters with games, kills, K/D, caps and ELO per player, the squad totals compared, and any match reports between them.</p>
+          </section>
+        ) : loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">{[0, 1].map((i) => <div key={i} className="h-48 rounded-xl bg-[#131A2B]" />)}</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Roster squad={squadA!} members={membersA} color={A} />
+              <Roster squad={squadB!} members={membersB} color={B} />
             </div>
 
-            {/* ---- Aggregate Stats ---- */}
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-              <h2 className="text-lg font-bold text-white mb-1">Aggregate Comparison</h2>
-              <p className="text-xs text-gray-500 mb-5">
-                <span className="text-cyan-400">{squadA?.tag}</span>
-                {' vs '}
-                <span className="text-purple-400">{squadB?.tag}</span>
-              </p>
-              <div className="space-y-5">
-                <ComparisonBar
-                  label="Total Kills"
-                  valueA={aggA.totalKills}
-                  valueB={aggB.totalKills}
-                  formatValue={(v) => v.toLocaleString()}
-                />
-                <ComparisonBar
-                  label="Avg K/D"
-                  valueA={aggA.avgKd}
-                  valueB={aggB.avgKd}
-                  formatValue={(v) => v.toFixed(2)}
-                />
-                <ComparisonBar
-                  label="Total Captures"
-                  valueA={aggA.totalCaptures}
-                  valueB={aggB.totalCaptures}
-                  formatValue={(v) => v.toLocaleString()}
-                />
-                <ComparisonBar
-                  label="Avg ELO"
-                  valueA={aggA.avgElo}
-                  valueB={aggB.avgElo}
-                  formatValue={(v) => (v > 0 ? Math.round(v).toLocaleString() : '---')}
-                />
+            <section className="rounded-xl bg-[#131A2B] px-5 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-display text-lg text-[#E6EDF7]">Squad totals</h2>
+                <span className="text-xs text-[#8B98B0]"><span style={{ color: A }}>{squadA!.tag || squadA!.name}</span> vs <span style={{ color: B }}>{squadB!.tag || squadB!.name}</span> · players with recorded games only</span>
               </div>
-            </div>
+              <div className="space-y-4">
+                <Bar label="Total kills" a={aggA.kills} b={aggB.kills} fmt={(v) => v.toLocaleString()} />
+                <Bar label="Average K/D" a={aggA.kd} b={aggB.kd} fmt={(v) => v.toFixed(2)} />
+                <Bar label="Total caps" a={aggA.caps} b={aggB.caps} fmt={(v) => v.toLocaleString()} />
+                <Bar label="Average ELO" a={aggA.elo} b={aggB.elo} fmt={(v) => (v > 0 ? String(Math.round(v)) : '–')} />
+              </div>
+            </section>
 
-            {/* ---- Head-to-Head Match History ---- */}
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-              <h2 className="text-lg font-bold text-white mb-4">Head-to-Head Match History</h2>
-              {matches.length === 0 ? (
-                <p className="text-gray-500 text-sm py-4 text-center">
-                  No matches found between these squads.
-                </p>
+            <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+              <div className="px-4 py-2.5 flex items-center justify-between">
+                <h2 className="font-display text-lg text-[#E6EDF7]">Head to head</h2>
+                <span className="text-xs text-[#8B98B0] tabular-nums">{reports.length} report{reports.length === 1 ? '' : 's'}</span>
+              </div>
+              {reports.length === 0 ? (
+                <div className="px-4 pb-4 text-sm text-[#8B98B0]">No match reports between these two yet.</div>
               ) : (
-                <div className="space-y-2">
-                  {matches.map((match) => (
-                    <Link
-                      key={match.id}
-                      href={`/league/match-reports/${match.id}`}
-                      className="block bg-gray-900/60 border border-gray-700/50 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <span className="font-medium text-white">{match.title}</span>
-                        <div className="flex items-center gap-3 text-xs text-gray-400">
-                          {match.season_name && (
-                            <span className="bg-gray-700/50 px-2 py-0.5 rounded">
-                              {match.season_name}
-                            </span>
-                          )}
-                          <span>{formatDate(match.match_date)}</span>
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        <span className="text-cyan-400">{match.squad_a_name}</span>
-                        {' vs '}
-                        <span className="text-purple-400">{match.squad_b_name}</span>
-                      </div>
-                    </Link>
+                <ul className="divide-y divide-white/[0.06]">
+                  {reports.map((r) => (
+                    <li key={r.id}>
+                      <Link href={`/league/match-reports/${r.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.03]">
+                        <span className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums">{fmtDate(r.match_date)}</span>
+                        <span className="min-w-0 flex-1 text-sm text-[#E6EDF7] truncate">{r.title}</span>
+                        {r.season_name && <span className="text-[11px] text-[#8B98B0] shrink-0">{r.season_name}</span>}
+                        <ChevronRight className="w-4 h-4 text-[#8B98B0] shrink-0" aria-hidden="true" />
+                      </Link>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
-            </div>
-          </div>
+            </section>
+          </>
         )}
-      </div>
+      </main>
     </div>
+  );
+}
+
+export default function SquadComparePage() {
+  return (
+    <Suspense fallback={<div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}><Navbar user={null} /></div>}>
+      <ComparePage />
+    </Suspense>
   );
 }
