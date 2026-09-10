@@ -177,7 +177,7 @@ export default function NewsPage() {
                 <div className="flex flex-col md:flex-row">
                   {lead.featured_image_url && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={lead.featured_image_url} alt="" className="md:w-72 h-44 md:h-auto object-cover shrink-0" />
+                    <img src={lead.featured_image_url} alt="" className="w-full md:w-80 aspect-video object-cover shrink-0 md:self-start md:m-4 md:rounded-lg" />
                   )}
                   <div className="p-5 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap text-[11px] mb-2">
