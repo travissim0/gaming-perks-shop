@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { CLASS_OPTIONS } from '@/lib/constants';
+import { displayFont, bodyFont } from '@/lib/fonts';
 import { useDraft } from '@/components/ctfdl/useDraft';
 import DraftPlayerCard from '@/components/ctfdl/DraftPlayerCard';
 import DraftChat from '@/components/ctfdl/DraftChat';
@@ -211,7 +212,7 @@ export default function CtfdlDraftLobbyPage() {
   }, [draft, teams, total, myTeamId]);
 
   const shell = (children: React.ReactNode) => (
-    <div className="ctf-theme min-h-screen">
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
       <main className="mx-auto max-w-[1400px] px-4 py-5">{children}</main>
     </div>
@@ -223,7 +224,7 @@ export default function CtfdlDraftLobbyPage() {
   if (!draft) {
     return shell(
       <div className="rounded-xl bg-[#131A2B] p-8 text-center">
-        <div className="mb-2 text-[11px] uppercase tracking-[0.2em] text-[#8B98B0]">CTFDL draft</div>
+        <div className="mb-2 text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80">Free Infantry · CTFDL draft</div>
         <h1 className="font-display text-4xl text-[#E6EDF7]">No draft scheduled yet</h1>
         <p className="mx-auto mt-3 max-w-md text-[#8B98B0]">Register for the season so you're in the pool when the draft opens.</p>
         <div className="mt-6 flex justify-center gap-2">
@@ -247,10 +248,11 @@ export default function CtfdlDraftLobbyPage() {
   return shell(
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[#131A2B] p-4 md:p-5">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-[0.2em] text-[#8B98B0]">{seasonLabel} · Draft</span>
+      <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-xl bg-[#131A2B] p-4 md:p-5">
+        <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+        <div className="relative">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80">{seasonLabel} · Draft</span>
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusPill[1]}`}>{statusPill[0]}</span>
             {viewers > 0 && <span className="text-[11px] text-[#8B98B0]">{viewers} in the lobby</span>}
           </div>
@@ -263,7 +265,7 @@ export default function CtfdlDraftLobbyPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex flex-wrap items-center gap-2">
           {onClock && (
             <div className={`rounded-md px-3 py-2 ${iAmOnClock ? 'bg-[#22D3EE] text-[#0B0F1A]' : 'bg-[#22D3EE]/10 text-[#E6EDF7]'}`}>
               <div className="text-[10px] uppercase tracking-wide opacity-80">{iAmOnClock ? 'You are on the clock' : 'On the clock'}</div>

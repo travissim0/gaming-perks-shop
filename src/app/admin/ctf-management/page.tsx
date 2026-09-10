@@ -21,6 +21,7 @@ import {
 } from '@/lib/leagues';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { inputCls, labelCls, btnPrimary, btnQuiet, btnDanger } from '@/components/ctf/FormBits';
+import { Chip, Panel, Modal, Spinner, Empty, th, td, pill } from '@/components/ctf/AdminBits';
 import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
@@ -81,62 +82,6 @@ interface BannedPlayer {
 
 type Tab = 'squads' | 'pool' | 'season' | 'discord' | 'tournament' | 'bans';
 const TAB_ALIASES: Record<string, Tab> = { squads: 'squads', pool: 'pool', 'free-agents': 'pool', season: 'season', discord: 'discord', tournament: 'tournament', tournaments: 'tournament', bans: 'bans' };
-
-// ---- Small UI bits (same look as the other CTF pages) -----------------------
-
-function Chip({ active, onClick, children, tone = 'accent', title }: { active: boolean; onClick: () => void; children: React.ReactNode; tone?: 'accent' | 'warn'; title?: string }) {
-  const on = tone === 'warn' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]';
-  return (
-    <button type="button" onClick={onClick} title={title} className={`rounded-md px-3 py-1.5 text-sm transition-colors ${active ? on : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
-      {children}
-    </button>
-  );
-}
-
-function Panel({ title, hint, actions, children, className = '' }: { title?: React.ReactNode; hint?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return (
-    <section className={`rounded-xl bg-[#131A2B] ${className}`}>
-      {(title || actions) && (
-        <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06]">
-          <div>
-            {title && <h2 className="font-display text-lg text-[#E6EDF7]">{title}</h2>}
-            {hint && <div className="text-xs text-[#8B98B0]">{hint}</div>}
-          </div>
-          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-        </div>
-      )}
-      {children}
-    </section>
-  );
-}
-
-function Modal({ title, children, onClose }: { title: React.ReactNode; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#131A2B] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-display text-xl text-[#E6EDF7] mb-2">{title}</h3>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-const th = 'py-2 px-4 text-left text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]';
-const td = 'py-2.5 px-4 text-sm';
-const pill = (on: boolean, onCls: string) => `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${on ? onCls : 'bg-white/5 text-[#8B98B0] hover:bg-white/10'}`;
-
-function Spinner({ label }: { label: string }) {
-  return (
-    <div className="p-8 text-center">
-      <div className="mx-auto h-7 w-7 animate-spin rounded-full border-b-2 border-[#22D3EE]" />
-      <p className="mt-3 text-sm text-[#8B98B0]">{label}</p>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="p-8 text-center text-sm text-[#8B98B0]">{children}</div>;
-}
 
 // ---- Page ---------------------------------------------------------------------
 
