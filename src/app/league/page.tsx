@@ -99,7 +99,20 @@ interface Team {
   member_count: number;
 }
 
-interface StaffMember { id: string; in_game_alias: string; avatar_url?: string | null }
+interface StaffMember { id: string; in_game_alias: string; avatar_url?: string | null; ctf_role?: string | null }
+
+/** Staff roles shown in the league page community box, in display order, with their label. */
+const STAFF_ROLES: Record<string, string> = {
+  ctf_admin: 'Admin',
+  ctf_head_referee: 'Head referee',
+  ctf_referee: 'Referee',
+  ctf_analyst_referee: 'Referee',
+  ctf_analyst_commentator_referee: 'Referee · Commentator',
+  ctf_commentator: 'Commentator',
+  ctf_analyst_commentator: 'Commentator',
+  ctf_recorder: 'Recorder',
+};
+const STAFF_ORDER = Object.keys(STAFF_ROLES);
 
 interface LeagueView {
   status: LeagueStatusData;
@@ -384,13 +397,17 @@ export default function LeagueHome() {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('id, in_game_alias, avatar_url')
-          .eq('ctf_role', 'ctf_admin')
+          .select('id, in_game_alias, avatar_url, ctf_role')
+          .in('ctf_role', STAFF_ORDER)
           .not('in_game_alias', 'is', null)
           .order('in_game_alias')
-          .limit(8);
-        // "System" is the site's service account, not a person.
-        setStaff(((data || []) as StaffMember[]).filter((s) => s.in_game_alias?.toLowerCase() !== 'system').slice(0, 6));
+          .limit(40);
+        // "System" is the site's service account, not a person. Admins first, then head ref, refs, commentators, recorders.
+        setStaff(
+          ((data || []) as StaffMember[])
+            .filter((s) => s.in_game_alias?.toLowerCase() !== 'system')
+            .sort((a, b) => STAFF_ORDER.indexOf(a.ctf_role || '') - STAFF_ORDER.indexOf(b.ctf_role || '') || a.in_game_alias.localeCompare(b.in_game_alias)),
+        );
       } catch { /* ignore */ }
     };
 
@@ -889,7 +906,9 @@ export default function LeagueHome() {
                         <Link href={`/stats/player/${encodeURIComponent(s.in_game_alias)}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/5 transition-colors">
                           <UserAvatar user={{ avatar_url: s.avatar_url ?? null, in_game_alias: s.in_game_alias, email: null }} size="sm" />
                           <span className="text-sm text-[#E6EDF7] truncate">{s.in_game_alias}</span>
-                          <span className="ml-auto text-[10px] uppercase tracking-wide text-[#22D3EE]">Admin</span>
+                          <span className={`ml-auto shrink-0 text-[10px] uppercase tracking-wide ${s.ctf_role === 'ctf_admin' ? 'text-[#22D3EE]' : s.ctf_role === 'ctf_head_referee' ? 'text-[#F59E0B]' : 'text-[#8B98B0]'}`}>
+                            {STAFF_ROLES[s.ctf_role || ''] || 'Staff'}
+                          </span>
                         </Link>
                       </li>
                     ))}

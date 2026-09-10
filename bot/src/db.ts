@@ -23,8 +23,10 @@ export interface TeamRoster {
   tag: string | null;
   captainId: string | null;
   captainDiscordId: string | null;
+  /** Discord ids of everyone who runs the squad: captain + co-captains (linked ones only). */
+  leadDiscordIds: string[];
   /** Every active member incl. captain: site alias + Discord id (null when not linked). */
-  members: { playerId: string; alias: string; discordId: string | null }[];
+  members: { playerId: string; alias: string; discordId: string | null; role: 'captain' | 'co_captain' | 'player' }[];
 }
 
 export interface ChannelMapping {
@@ -69,7 +71,7 @@ export async function getSeasonTeams(ctx: SeasonContext): Promise<TeamRoster[]> 
 
   const [{ data: squads }, { data: members }] = await Promise.all([
     db.from('squads').select('id, name, tag, captain_id').in('id', squadIds),
-    db.from('squad_members').select('squad_id, player_id').in('squad_id', squadIds).eq('status', 'active'),
+    db.from('squad_members').select('squad_id, player_id, role').in('squad_id', squadIds).eq('status', 'active'),
   ]);
 
   const playerIds = new Set<string>();
@@ -82,15 +84,19 @@ export async function getSeasonTeams(ctx: SeasonContext): Promise<TeamRoster[]> 
   (profiles || []).forEach((p: any) => prof.set(p.id, { alias: p.in_game_alias || 'Unknown', discordId: p.discord_id || null }));
 
   return (squads || []).map((s: any) => {
-    const ids = new Set<string>((members || []).filter((m: any) => m.squad_id === s.id).map((m: any) => m.player_id));
-    if (s.captain_id) ids.add(s.captain_id);
+    const rows = (members || []).filter((m: any) => m.squad_id === s.id);
+    const roleOf = new Map<string, 'captain' | 'co_captain' | 'player'>();
+    rows.forEach((m: any) => roleOf.set(m.player_id, m.role === 'co_captain' ? 'co_captain' : m.role === 'captain' ? 'captain' : 'player'));
+    if (s.captain_id) roleOf.set(s.captain_id, 'captain'); // squads.captain_id is the source of truth
+    const list = Array.from(roleOf.entries()).map(([id, role]) => ({ playerId: id, alias: prof.get(id)?.alias || 'Unknown', discordId: prof.get(id)?.discordId ?? null, role }));
     return {
       squadId: s.id,
       name: s.name,
       tag: s.tag ?? null,
       captainId: s.captain_id ?? null,
       captainDiscordId: s.captain_id ? prof.get(s.captain_id)?.discordId ?? null : null,
-      members: Array.from(ids).map((id) => ({ playerId: id, alias: prof.get(id)?.alias || 'Unknown', discordId: prof.get(id)?.discordId ?? null })),
+      leadDiscordIds: list.filter((m) => m.role !== 'player' && m.discordId).map((m) => m.discordId as string),
+      members: list,
     };
   });
 }

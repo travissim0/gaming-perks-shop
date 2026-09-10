@@ -13,7 +13,7 @@ interface ChannelRow { squad_id: string; squad_name: string; season_id: string; 
 interface Person {
   id: string;
   alias: string;
-  role: 'captain' | 'member' | 'pool';
+  role: 'captain' | 'co_captain' | 'member' | 'pool';
   squad: string | null;
   discord: { username: string; in_guild: boolean; nick: string | null; linked_at: string | null } | null;
 }
@@ -95,7 +95,7 @@ export default function DiscordBotPanel() {
   const inServer = linked.filter((p) => p.discord!.in_guild);
   const missing = people.filter((p) => !p.discord || !p.discord.in_guild);
   const shown = rosterFilter === 'missing' ? missing : people;
-  const captainsMissing = people.filter((p) => p.role === 'captain' && (!p.discord || !p.discord.in_guild));
+  const captainsMissing = people.filter((p) => (p.role === 'captain' || p.role === 'co_captain') && (!p.discord || !p.discord.in_guild));
 
   const status = (p: Person) => {
     if (!p.discord) return <span className="text-[#F87171]">Not connected</span>;
@@ -148,7 +148,7 @@ export default function DiscordBotPanel() {
               <span>
                 {people.length === 0
                   ? 'Nobody on a season team or in the pool yet.'
-                  : <><span className="text-[#E6EDF7] tabular-nums">{inServer.length}</span> of {people.length} ready{linked.length !== inServer.length && ` · ${linked.length - inServer.length} linked but not in the server`}{captainsMissing.length > 0 && <span className="text-[#F59E0B]"> · {captainsMissing.length} captain{captainsMissing.length === 1 ? '' : 's'} missing</span>}</>}
+                  : <><span className="text-[#E6EDF7] tabular-nums">{inServer.length}</span> of {people.length} ready{linked.length !== inServer.length && ` · ${linked.length - inServer.length} linked but not in the server`}{captainsMissing.length > 0 && <span className="text-[#F59E0B]"> · {captainsMissing.length} captain{captainsMissing.length === 1 ? '' : 's'}/co-captain{captainsMissing.length === 1 ? '' : 's'} missing</span>}</>}
               </span>
               {rosterOpen && people.length > 0 && (
                 <span className="flex gap-1.5">
@@ -178,7 +178,7 @@ export default function DiscordBotPanel() {
                       <tr key={p.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
                         <td className="py-2 px-4 text-sm font-medium text-[#E6EDF7] whitespace-nowrap">{p.alias}</td>
                         <td className="py-2 px-4 text-sm text-[#8B98B0] whitespace-nowrap">
-                          {p.role === 'pool' ? 'Pool' : <>{p.role === 'captain' ? 'Captain' : 'Player'} · <span className="text-[#E6EDF7]">{p.squad}</span></>}
+                          {p.role === 'pool' ? 'Pool' : <>{p.role === 'captain' ? 'Captain' : p.role === 'co_captain' ? 'Co-captain' : 'Player'} · <span className="text-[#E6EDF7]">{p.squad}</span></>}
                         </td>
                         <td className="py-2 px-4 text-sm whitespace-nowrap">{status(p)}</td>
                       </tr>

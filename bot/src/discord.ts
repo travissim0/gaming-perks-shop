@@ -60,7 +60,8 @@ function grantable(guild: Guild, wanted: bigint[]): bigint[] {
   return wanted.filter((p) => me.permissions.has(p));
 }
 
-export function overwritesFor(guild: Guild, role: Role, captainDiscordId: string | null): OverwriteResolvable[] {
+/** Category permissions: hidden from everyone, members via the squad role, captain + co-captains get the extras. */
+export function overwritesFor(guild: Guild, role: Role, leadDiscordIds: string[]): OverwriteResolvable[] {
   const list: OverwriteResolvable[] = [
     { id: guild.roles.everyone.id, type: OverwriteType.Role, deny: [PermissionFlagsBits.ViewChannel] },
     // The bot itself, or the @everyone deny locks it out of what it just built.
@@ -68,8 +69,8 @@ export function overwritesFor(guild: Guild, role: Role, captainDiscordId: string
     { id: role.id, type: OverwriteType.Role, allow: grantable(guild, MEMBER_ALLOW) },
   ];
   if (config.staffRoleId) list.push({ id: config.staffRoleId, type: OverwriteType.Role, allow: grantable(guild, MEMBER_ALLOW) });
-  if (captainDiscordId && guild.members.cache.has(captainDiscordId)) {
-    list.push({ id: captainDiscordId, type: OverwriteType.Member, allow: grantable(guild, CAPTAIN_ALLOW) });
+  for (const id of new Set(leadDiscordIds)) {
+    if (guild.members.cache.has(id)) list.push({ id, type: OverwriteType.Member, allow: grantable(guild, CAPTAIN_ALLOW) });
   }
   return list;
 }
@@ -94,7 +95,7 @@ async function ensureCategory(guild: Guild, team: TeamRoster, role: Role, existi
   if (!cat || cat.type !== ChannelType.GuildCategory) {
     cat = (guild.channels.cache.find((c) => c.type === ChannelType.GuildCategory && c.name === wanted) as CategoryChannel | undefined) ?? null;
   }
-  const overwrites = overwritesFor(guild, role, team.captainDiscordId);
+  const overwrites = overwritesFor(guild, role, team.leadDiscordIds);
   if (!cat) {
     if (config.dryRun) { console.log(`[dry] create category ${wanted}`); return { id: 'dry', name: wanted, children: { cache: new Map() } } as unknown as CategoryChannel; }
     cat = await guild.channels.create({ name: wanted, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: 'freeinf.org squad' });
