@@ -6,6 +6,7 @@ name: Deploy CTF bot
 #   BOT_SSH_USER   e.g. ctfbot
 #   BOT_SSH_KEY    private key whose public half is in ~/.ssh/authorized_keys on the server
 #   BOT_DIR        e.g. /home/ctfbot/gaming-perks-shop  (the clone on the server)
+# Until those exist the job skips instead of failing.
 
 on:
   push:
@@ -16,8 +17,15 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_HOST: ${{ secrets.BOT_SSH_HOST }}
     steps:
+      - name: Skip until deploy secrets are set
+        if: env.HAS_HOST == ''
+        run: echo "BOT_SSH_HOST is not set — nothing to deploy yet."
+
       - name: Pull, build and restart on the server
+        if: env.HAS_HOST != ''
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.BOT_SSH_HOST }}
@@ -29,7 +37,7 @@ jobs:
             git fetch --quiet origin main
             git reset --hard origin/main
             cd bot
-            npm ci --omit=dev=false
+            npm ci
             npm run build
             pm2 startOrRestart ecosystem.config.cjs --update-env
             pm2 save
