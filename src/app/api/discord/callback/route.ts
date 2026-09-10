@@ -56,6 +56,20 @@ export async function GET(request: NextRequest) {
     return fail(/column .*does not exist/i.test(error.message) ? 'sql-pending' : 'save', returnTo);
   }
 
+  // No site picture yet? Use their Discord avatar so they show up everywhere
+  // avatars do. Uploading a picture later replaces it; unlinking clears it.
+  if (me.avatar) {
+    const { data: prof } = await supabaseAdmin.from('profiles').select('avatar_url').eq('id', userId).maybeSingle();
+    const current = (prof as any)?.avatar_url as string | null | undefined;
+    if (!current || current.startsWith('https://cdn.discordapp.com/avatars/')) {
+      const ext = me.avatar.startsWith('a_') ? 'gif' : 'png';
+      await supabaseAdmin
+        .from('profiles')
+        .update({ avatar_url: `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.${ext}?size=256` })
+        .eq('id', userId);
+    }
+  }
+
   // Fill the Discord field on any current registration that's still blank.
   await supabaseAdmin
     .from('free_agents')

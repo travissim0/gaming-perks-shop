@@ -15,9 +15,14 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser(authHeader.slice(7));
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // A profile picture that came from Discord goes with the link.
+  const { data: prof } = await supabaseAdmin.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
+  const avatarFromDiscord = typeof (prof as any)?.avatar_url === 'string' && (prof as any).avatar_url.startsWith('https://cdn.discordapp.com/avatars/');
+
   const { error: updErr } = await supabaseAdmin
     .from('profiles')
     .update({
+      ...(avatarFromDiscord ? { avatar_url: null } : {}),
       discord_id: null,
       discord_username: null,
       discord_global_name: null,
