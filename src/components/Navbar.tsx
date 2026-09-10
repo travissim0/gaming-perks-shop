@@ -3,9 +3,14 @@
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment, type ReactNode } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X } from 'lucide-react';
+import {
+  Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X,
+  House, Trophy, Wrench, Shield, Target, Swords, Sword, ClipboardCheck, ScrollText, Calendar, Newspaper,
+  Table2, ListOrdered, Star, ThumbsUp, FileText, ClipboardList, Crown, Globe, Activity, Monitor, Palette, ShoppingBag,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
 import { toast } from 'react-hot-toast';
@@ -13,7 +18,7 @@ import { toast } from 'react-hot-toast';
 type NavItem = {
   href: string;
   label: string;
-  icon?: string;
+  icon?: ReactNode;
   /** Indented child entry (no icon) */
   sub?: boolean;
   /** Draw a separator above this entry */
@@ -489,45 +494,45 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
 
   // Navigation groups
   
-  const squadsNavItems = [
-    { href: '/squads', label: 'Squads', icon: '🛡️' },
-    { href: '/squads/players', label: 'Players', icon: '👥' },
-    { href: '/free-agents', label: 'Free Agents', icon: '🎯' },
-    { href: '/matches', label: 'Match Log', icon: '⚔️' },
+  const squadsNavItems: NavItem[] = [
+    { href: '/squads', label: 'Squads', icon: <Shield className="w-4 h-4" /> },
+    { href: '/squads/players', label: 'Players', icon: <Users className="w-4 h-4" /> },
+    { href: '/free-agents', label: 'Player pool', icon: <Target className="w-4 h-4" /> },
+    { href: '/matches', label: 'Match Log', icon: <Swords className="w-4 h-4" /> },
   ];
 
   const statsNavItems: NavItem[] = [
-    { href: '/stats', label: 'Player Stats', icon: '📊' },
-    { href: '/stats/elo', label: 'ELO Leaderboard', icon: '🏆' },
-    { href: '/dueling', label: 'Dueling', icon: '🗡️' },
+    { href: '/stats', label: 'Player Stats', icon: <BarChart3 className="w-4 h-4" /> },
+    { href: '/stats/elo', label: 'ELO Leaderboard', icon: <Trophy className="w-4 h-4" /> },
+    { href: '/dueling', label: 'Dueling', icon: <Sword className="w-4 h-4" /> },
   ];
 
-  // CTFPL and OVDL are omitted while those leagues are inactive - they are
-  // still reachable from the league switcher on /league/standings.
+  // This season first (register → standings → draft → schedule → rules → news),
+  // then the reference pages. CTFPL and OVDL are reachable from the league
+  // switcher on /league/standings while they're inactive.
   const leagueNavItems: NavItem[] = [
-    { href: '/league/register', label: 'Register', icon: '🎯' },
-    { href: '/rules', label: 'Rules', icon: '📜' },
-    { href: '/tournament-matches', label: 'Schedule', icon: '🏆' },
-    { href: '/news', label: 'News', icon: '📰' },
-    { href: '/league/standings', label: 'Standings', icon: '⚔️', divider: true },
-    { href: '/league/standings?league=ctfdl', label: 'CTFDL Standings', icon: '🛡️' },
-    { href: '/league/ctfdl/draft', label: 'CTFDL draft', sub: true },
-    { href: '/league/ratings', label: 'Squad Ratings', icon: '📊' },
-    { href: '/league/community-ratings', label: 'Community Ratings', icon: '⚔️' },
-    { href: '/league/match-reports', label: 'Match Reports', icon: '📝' },
-    { href: '/event-log', label: 'Player Event Log', icon: '📋' },
-    { href: '/champions', label: 'Hall of Champions', icon: '👑' },
+    { href: '/league/register', label: 'Register', icon: <ClipboardCheck className="w-4 h-4" /> },
+    { href: '/league/standings', label: 'Standings', icon: <Table2 className="w-4 h-4" /> },
+    { href: '/league/ctfdl/draft', label: 'CTFDL draft', icon: <ListOrdered className="w-4 h-4" /> },
+    { href: '/tournament-matches', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
+    { href: '/rules', label: 'Rules', icon: <ScrollText className="w-4 h-4" /> },
+    { href: '/news', label: 'News', icon: <Newspaper className="w-4 h-4" /> },
+    { href: '/league/ratings', label: 'Squad Ratings', icon: <Star className="w-4 h-4" />, divider: true },
+    { href: '/league/community-ratings', label: 'Community Ratings', icon: <ThumbsUp className="w-4 h-4" /> },
+    { href: '/league/match-reports', label: 'Match Reports', icon: <FileText className="w-4 h-4" /> },
+    { href: '/event-log', label: 'Player Event Log', icon: <ClipboardList className="w-4 h-4" /> },
+    { href: '/champions', label: 'Hall of Champions', icon: <Crown className="w-4 h-4" /> },
   ];
 
-  const communityNavItems = [
-    { href: '/affiliate-sites', label: 'Community Sites', icon: '🌐' },
-    { href: '/community/zone-activity', label: 'Zone Activity', icon: '📊' },
+  const communityNavItems: NavItem[] = [
+    { href: '/affiliate-sites', label: 'Community Sites', icon: <Globe className="w-4 h-4" /> },
+    { href: '/community/zone-activity', label: 'Zone Activity', icon: <Activity className="w-4 h-4" /> },
   ];
 
-  const toolsNavItems = [
-    { href: '/tools', label: 'Infantry v2 Client', icon: '🖥️' },
-    { href: '/editors', label: 'Web Editors', icon: '🎨' },
-    { href: '/perks', label: 'Perks Shop', icon: '🛍️' },
+  const toolsNavItems: NavItem[] = [
+    { href: '/tools', label: 'Infantry v2 Client', icon: <Monitor className="w-4 h-4" /> },
+    { href: '/editors', label: 'Web Editors', icon: <Palette className="w-4 h-4" /> },
+    { href: '/perks', label: 'Perks Shop', icon: <ShoppingBag className="w-4 h-4" /> },
   ];
 
   if (!user) {
@@ -587,7 +592,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 href="/league"
                 className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700/50 transition-all duration-300 rounded"
               >
-                <span className="text-sm">🏠</span>
+                <House className="w-4 h-4" />
                 <span className="font-medium">Home</span>
               </Link>
 
@@ -598,7 +603,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 onMouseLeave={() => setShowLeagueDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
-                  <span className="text-sm">🏆</span>
+                  <Trophy className="w-4 h-4" />
                   <span className="font-medium">League</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -619,7 +624,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                             href={item.href}
                             className={`flex items-center hover:text-cyan-400 hover:bg-gray-700 transition-colors ${item.sub ? 'px-4 py-1 pl-11 text-gray-400 text-xs' : 'px-4 py-1.5 text-gray-300 text-sm'}`}
                           >
-                            {item.icon && <span className="mr-3">{item.icon}</span>}
+                            {item.icon && <span className="mr-3 inline-flex">{item.icon}</span>}
                             {item.label}
                           </Link>
                         </Fragment>
@@ -636,7 +641,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 onMouseLeave={() => setShowSquadsDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
-                  <span className="text-sm">🛡️</span>
+                  <Gamepad2 className="w-4 h-4" />
                   <span className="font-medium">Squads</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -656,7 +661,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           href={item.href}
                           className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -672,7 +677,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 onMouseLeave={() => setShowStatsDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
-                  <span className="text-sm">📊</span>
+                  <BarChart3 className="w-4 h-4" />
                   <span className="font-medium">Stats</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -692,7 +697,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           href={item.href}
                           className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -708,7 +713,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 onMouseLeave={() => setShowCommunityDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
-                  <span className="text-sm">💬</span>
+                  <Users className="w-4 h-4" />
                   <span className="font-medium">Community</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -728,7 +733,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           href={item.href}
                           className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -744,7 +749,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 onMouseLeave={() => setShowToolsDropdown(false)}
               >
                 <button className="flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700/50 transition-all duration-300 rounded">
-                  <span className="text-sm">🔧</span>
+                  <Wrench className="w-4 h-4" />
                   <span className="font-medium">Tools</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -764,7 +769,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           href={item.href}
                           className="flex items-center px-4 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 transition-colors"
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -786,7 +791,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <span className="mr-3">🏠</span>
+                  <House className="w-4 h-4 mr-3" />
                   Home
                 </Link>
                 {/* League Section */}
@@ -796,7 +801,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
-                      <span className="mr-3">🏆</span>
+                      <Trophy className="w-4 h-4 mr-3" />
                       League
                     </div>
                     <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'league' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -816,7 +821,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                               setIsMobileMenuOpen(false);
                             }}
                           >
-                            {item.icon && <span className="mr-3">{item.icon}</span>}
+                            {item.icon && <span className="mr-3 inline-flex">{item.icon}</span>}
                             {item.label}
                           </Link>
                         </Fragment>
@@ -832,7 +837,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
-                      <span className="mr-3">🛡️</span>
+                      <Gamepad2 className="w-4 h-4 mr-3" />
                       Squads
                     </div>
                     <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'squads' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -851,7 +856,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -866,7 +871,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
-                      <span className="mr-3">📊</span>
+                      <BarChart3 className="w-4 h-4 mr-3" />
                       Stats
                     </div>
                     <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'stats' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -885,7 +890,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -900,7 +905,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
-                      <span className="mr-3">💬</span>
+                      <Users className="w-4 h-4 mr-3" />
                       Community
                     </div>
                     <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'community' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -919,7 +924,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -934,7 +939,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     className="flex items-center justify-between w-full px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                   >
                     <div className="flex items-center">
-                      <span className="mr-3">🔧</span>
+                      <Wrench className="w-4 h-4 mr-3" />
                       Tools
                     </div>
                     <svg className={`w-4 h-4 transition-transform ${activeMobileDropdown === 'tools' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -953,7 +958,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                             setIsMobileMenuOpen(false);
                           }}
                         >
-                          <span className="mr-3">{item.icon}</span>
+                          <span className="mr-3 inline-flex">{item.icon}</span>
                           {item.label}
                         </Link>
                       ))}
@@ -994,7 +999,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     setIsMobileMenuOpen(false);
                   }}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="mr-3 inline-flex">{item.icon}</span>
                   <span className="font-medium">{item.label}</span>
                 </Link>
               ))}
@@ -1008,7 +1013,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     setIsMobileMenuOpen(false);
                   }}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="mr-3 inline-flex">{item.icon}</span>
                   <span className="font-medium">{item.label}</span>
                 </Link>
               ))}
@@ -1022,7 +1027,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     setIsMobileMenuOpen(false);
                   }}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="mr-3 inline-flex">{item.icon}</span>
                   <span className="font-medium">{item.label}</span>
                 </Link>
               ))}
@@ -1036,7 +1041,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                     setIsMobileMenuOpen(false);
                   }}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="mr-3 inline-flex">{item.icon}</span>
                   <span className="font-medium">{item.label}</span>
                 </Link>
               ))}
@@ -1439,7 +1444,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <span className="text-sm">🏠</span>
+              <House className="w-4 h-4" />
               <span className="font-medium">Home</span>
             </Link>
 
@@ -1448,7 +1453,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               href="/league/standings"
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
             >
-              <span className="text-sm">🏆</span>
+              <Trophy className="w-4 h-4" />
               <span className="font-medium">League</span>
             </Link>
 
@@ -1458,7 +1463,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               className="flex items-center space-x-1 px-2 py-1.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-purple-600/20 hover:to-pink-600/20 transition-all duration-300 rounded text-xs whitespace-nowrap"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <span className="text-sm">🔧</span>
+              <Wrench className="w-4 h-4" />
               <span className="font-medium">Tools</span>
             </Link>
 
@@ -1519,7 +1524,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   : 'hover:from-orange-600/20 hover:to-red-600/20'
               }`}
             >
-              <span className="text-sm">🔧</span>
+              <Wrench className="w-4 h-4" />
               <span className="font-medium">Tools</span>
               <svg className={`w-2 h-2 transition-transform duration-300 ${activeMobileDropdown === 'tools' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -1539,7 +1544,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                 href="/league"
                 className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-yellow-600/20 hover:to-amber-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-yellow-500/30 hover:shadow-lg hover:shadow-yellow-500/20"
               >
-                <span className="text-lg">🏠</span>
+                <House className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-semibold">Home</span>
               </Link>
             </div>
@@ -1547,7 +1552,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             {/* League Section */}
             <div className="group relative">
               <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-cyan-600/20 hover:to-blue-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-cyan-500/30 group-hover:shadow-lg group-hover:shadow-cyan-500/20">
-                <span className="text-lg">🏆</span>
+                <Trophy className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-semibold">League</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -1563,7 +1568,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         href={item.href}
                         className={`flex items-center hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400 ${item.sub ? 'px-4 py-1 pl-12 text-gray-400 text-xs' : 'px-4 py-1.5 text-gray-300'}`}
                       >
-                        {item.icon && <span className="mr-3 text-base">{item.icon}</span>}
+                        {item.icon && <span className="mr-3 inline-flex">{item.icon}</span>}
                         <span className="font-medium text-sm">{item.label}</span>
                       </Link>
                     </Fragment>
@@ -1590,7 +1595,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       href={item.href}
                       className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="mr-3 inline-flex">{item.icon}</span>
                       <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
@@ -1616,7 +1621,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       href={item.href}
                       className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="mr-3 inline-flex">{item.icon}</span>
                       <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
@@ -1642,7 +1647,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       href={item.href}
                       className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="mr-3 inline-flex">{item.icon}</span>
                       <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
@@ -1653,7 +1658,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
             {/* Tools Section */}
             <div className="group relative">
               <button className="flex items-center space-x-2 px-4 py-2.5 text-gray-300 hover:text-white bg-gradient-to-r hover:from-orange-600/20 hover:to-red-600/20 transition-all duration-300 rounded-lg border border-transparent hover:border-orange-500/30 group-hover:shadow-lg group-hover:shadow-orange-500/20">
-                <span className="text-lg">🔧</span>
+                <Wrench className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 <span className="font-semibold">Tools</span>
                 <svg className="w-3 h-3 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -1668,7 +1673,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       href={item.href}
                       className="flex items-center px-4 py-3 text-gray-300 hover:text-cyan-400 hover:bg-gradient-to-r hover:from-cyan-600/10 hover:to-blue-600/10 transition-all duration-200 border-l-2 border-transparent hover:border-cyan-400"
                     >
-                      <span className="mr-3 text-lg">{item.icon}</span>
+                      <span className="mr-3 inline-flex">{item.icon}</span>
                       <span className="font-medium">{item.label}</span>
                     </Link>
                   ))}
@@ -1704,7 +1709,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <span className="mr-3">🏠</span>
+                      <House className="w-4 h-4 mr-3" />
                       Home
                     </Link>
                   </div>
@@ -1720,7 +1725,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         className={`flex items-center px-3 py-2 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors ${item.sub ? 'pl-10 text-gray-400 text-sm' : 'text-gray-300'}`}
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        {item.icon && <span className="mr-3">{item.icon}</span>}
+                        {item.icon && <span className="mr-3 inline-flex">{item.icon}</span>}
                         {item.label}
                       </Link>
                     ))}
@@ -1737,7 +1742,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        <span className="mr-3">{item.icon}</span>
+                        <span className="mr-3 inline-flex">{item.icon}</span>
                         {item.label}
                       </Link>
                     ))}
@@ -1754,7 +1759,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        <span className="mr-3">{item.icon}</span>
+                        <span className="mr-3 inline-flex">{item.icon}</span>
                         {item.label}
                       </Link>
                     ))}
@@ -1771,7 +1776,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         className="flex items-center px-3 py-2 text-gray-300 hover:text-cyan-400 hover:bg-gray-700 rounded transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        <span className="mr-3">{item.icon}</span>
+                        <span className="mr-3 inline-flex">{item.icon}</span>
                         {item.label}
                       </Link>
                     ))}
@@ -1789,7 +1794,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                         className="flex items-center px-3 py-2 text-gray-300 hover:text-orange-400 hover:bg-gray-700 rounded transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        <span className="mr-3">{item.icon}</span>
+                        <span className="mr-3 inline-flex">{item.icon}</span>
                         {item.label}
                       </Link>
                     ))}
@@ -1804,7 +1809,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <span className="mr-3">🔧</span>
+                      <Wrench className="w-4 h-4 mr-3" />
                       Infantry Tools
                     </Link>
                     <Link
@@ -1812,7 +1817,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <span className="mr-3">🖼️</span>
+                      <ImageIcon className="w-4 h-4 mr-3" />
                       Sprite Animator
                     </Link>
                   </div>
@@ -1826,7 +1831,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="flex items-center px-3 py-2 text-gray-300 hover:text-purple-400 hover:bg-gray-700 rounded transition-colors"
                     >
-                      <span className="mr-3">🛍️</span>
+                      <ShoppingBag className="w-4 h-4 mr-3" />
                       Perks
                     </Link>
                     <Link 
