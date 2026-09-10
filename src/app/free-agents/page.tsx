@@ -422,6 +422,12 @@ export default function FreeAgentsPage() {
 
   const baseAgentsForCharts: FreeAgent[] = useMemo(() => freeAgents, [freeAgents]);
 
+  // Registered players who already sit on a squad roster — hidden unless the box is ticked.
+  const inSquadCount = useMemo(
+    () => freeAgents.filter((a) => activeSquadMemberIds.has(a.player_id)).length,
+    [freeAgents, activeSquadMemberIds],
+  );
+
   const visibleAgents = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return freeAgents
@@ -586,7 +592,7 @@ export default function FreeAgentsPage() {
           </select>
           <label className="flex cursor-pointer items-center gap-1.5 text-sm text-[#E6EDF7]">
             <input type="checkbox" checked={includeInSquadPlayers} onChange={(e) => setIncludeInSquadPlayers(e.target.checked)} className="text-[#22D3EE]" />
-            Include players in squads
+            Include players in squads{inSquadCount > 0 && <span className="text-[#8B98B0]">({inSquadCount})</span>}
           </label>
           {isStaff && (
             <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-[#F59E0B]/10 px-2 py-1 text-sm text-[#F59E0B]" title="Staff only — players who ticked 'interested in captaining'">
@@ -601,7 +607,10 @@ export default function FreeAgentsPage() {
           >
             Class breakdown
           </button>
-          <span className="text-xs text-[#8B98B0]">{visibleAgents.length} shown</span>
+          <span className="text-xs text-[#8B98B0]">
+            {visibleAgents.length} shown
+            {!includeInSquadPlayers && inSquadCount > 0 && ` · ${inSquadCount} in ${inSquadCount === 1 ? 'a squad' : 'squads'} hidden`}
+          </span>
         </div>
 
         {showClassDistribution && (
