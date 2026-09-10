@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import UserAvatar from '@/components/UserAvatar';
 import { toast } from 'react-hot-toast';
 import { getFreeAgents } from '@/utils/supabaseHelpers';
 import ClassDistributionView from '@/components/ClassDistributionView';
@@ -31,6 +32,7 @@ interface FreeAgent {
   id: string;
   player_id: string;
   player_alias: string;
+  avatar_url?: string | null;
   preferred_roles: string[];
   secondary_roles?: string[];
   availability: string;
@@ -187,6 +189,7 @@ export default function FreeAgentsPage() {
         id: agent.id,
         player_id: agent.player_id,
         player_alias: agent.profiles?.in_game_alias || 'Unknown Player',
+        avatar_url: agent.profiles?.avatar_url || null,
         preferred_roles: agent.preferred_roles || [],
         secondary_roles: agent.secondary_roles || [],
         availability: agent.availability || '',
@@ -653,9 +656,13 @@ export default function FreeAgentsPage() {
                 <article key={agent.id} className={`flex flex-col rounded-xl bg-[#131A2B] p-4 ${isMe ? 'ring-1 ring-[#22D3EE]/40' : ''}`}>
                   {/* Identity */}
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1B2438] font-display text-lg text-[#22D3EE]">
-                      {agent.player_alias.charAt(0).toUpperCase()}
-                    </div>
+                    {agent.avatar_url ? (
+                      <UserAvatar user={{ avatar_url: agent.avatar_url, in_game_alias: agent.player_alias, email: null }} size="md" className="shrink-0" />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1B2438] font-display text-lg text-[#22D3EE]">
+                        {agent.player_alias.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate font-display text-lg leading-tight text-[#E6EDF7]">
