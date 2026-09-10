@@ -1,730 +1,281 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ChevronLeft, ExternalLink, Play, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails, MatchPlayerRating, MatchReportComment } from '@/types/database';
-import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
+import { getRatingColor, getStarDisplay } from '@/utils/ratingUtils';
 import Navbar from '@/components/Navbar';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-// Expandable Video Player Component
-const ExpandableVideoPlayer = ({ embedUrl, playerRating, isLeft }: { 
-  embedUrl: string; 
-  playerRating: MatchPlayerRating; 
-  isLeft: boolean;
-}) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+/** One match report: highlights, the write-up, each rated player with their clip, and comments. */
 
-  const handleVideoClick = () => {
-    setIsExpanded(true);
-  };
+type Report = MatchReportWithDetails & { league_slug?: string | null; squad_a_id?: string | null; squad_b_id?: string | null };
 
-  const handleClose = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsExpanded(false);
-  };
+const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
+/** iframe src from an embed snippet or a YouTube URL. */
+function embedSrc(input?: string | null): string | null {
+  if (!input) return null;
+  const iframe = input.match(/<iframe[^>]*src="([^"]*)"/i);
+  if (iframe) return iframe[1];
+  const m = input.match(/(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*)/);
+  if (m && m[1].length === 11) return `https://www.youtube.com/embed/${m[1]}?controls=1&modestbranding=1&rel=0`;
+  return null;
+}
+
+function TeamMark({ name, banner, size = 'md' }: { name: string; banner?: string | null; size?: 'md' | 'lg' }) {
+  const cls = size === 'lg' ? 'w-14 h-14 text-base' : 'w-8 h-8 text-[11px]';
+  if (banner) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={banner} alt="" className={`${cls} rounded-lg object-cover shrink-0`} />;
+  }
+  return <span className={`${cls} rounded-lg bg-[#1B2438] text-[#22D3EE] font-medium flex items-center justify-center shrink-0`}>{name.slice(0, 4).toUpperCase()}</span>;
+}
+
+function Card({ title, action, children }: { title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <>
-      {/* Original Video Container */}
-      <div 
-        className={`relative aspect-video rounded-lg overflow-hidden border border-gray-700 shadow-lg cursor-pointer transition-transform hover:scale-105 ${!isExpanded ? '' : 'opacity-0 pointer-events-none'}`}
-        onClick={handleVideoClick}
-      >
-        <iframe
-          src={embedUrl}
-          className="w-full h-full"
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
-          title={`${playerRating.player_alias} highlight clip`}
-          loading="lazy"
-        />
-        {/* Play overlay */}
-        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-          <div className="bg-black/70 rounded-full p-4">
-            <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
-        </div>
+    <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+      <div className="px-4 sm:px-5 py-2.5 flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg text-[#E6EDF7]">{title}</h2>
+        {action}
       </div>
-
-      {/* Expanded Video Overlay */}
-      {isExpanded && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div 
-            className="relative w-[80vw] h-[80vh] transform transition-all duration-2000 ease-out scale-100"
-            style={{
-              animation: 'expandIn 2s ease-out forwards'
-            }}
-          >
-            {/* Close button */}
-            <button
-              onClick={handleClose}
-              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors z-10"
-            >
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            {/* Expanded video */}
-            <iframe
-              src={`${embedUrl}&autoplay=1`}
-              className="w-full h-full rounded-lg"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              referrerPolicy="strict-origin-when-cross-origin"
-              title={`${playerRating.player_alias} highlight clip - Expanded`}
-            />
-            
-            {/* Player info overlay */}
-            <div className="absolute bottom-4 left-4 bg-black/70 rounded-lg p-3">
-              <h4 className="text-white font-bold">{playerRating.player_alias}</h4>
-              <p className="text-gray-300 text-sm">{playerRating.class_position}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CSS for animation */}
-      <style jsx>{`
-        @keyframes expandIn {
-          from {
-            transform: scale(0.3);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
-    </>
+      <div className="px-4 sm:px-5 pb-4">{children}</div>
+    </section>
   );
-};
+}
 
-export default function MatchReportDetailPage() {
+export default function MatchReportPage() {
   const params = useParams();
-  const router = useRouter();
   const { user } = useAuth();
-  const [report, setReport] = useState<MatchReportWithDetails | null>(null);
-  const [playerRatings, setPlayerRatings] = useState<MatchPlayerRating[]>([]);
+  const [report, setReport] = useState<Report | null>(null);
+  const [players, setPlayers] = useState<MatchPlayerRating[]>([]);
+  const [comments, setComments] = useState<MatchReportComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasPermission, setHasPermission] = useState(false);
-  const [comments, setComments] = useState<MatchReportComment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [loadingComments, setLoadingComments] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [clip, setClip] = useState<{ src: string; title: string } | null>(null);
 
   useEffect(() => {
-    if (params.id) {
-      fetchReportDetails();
-      checkPermissions();
-      fetchComments();
-    }
-  }, [params.id, user]);
-
-  const checkPermissions = async () => {
-    if (!user) {
-      setHasPermission(false);
-      return;
-    }
-
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('is_admin, ctf_role')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && profile) {
-        setHasPermission(
-          profile?.is_admin || 
-          profile?.ctf_role === 'ctf_admin' || 
-          (profile?.ctf_role && profile?.ctf_role.includes('analyst'))
-        );
+    if (!params.id) return;
+    (async () => {
+      try {
+        const [r, c] = await Promise.all([fetch(`/api/match-reports/${params.id}`), fetch(`/api/match-reports/${params.id}/comments`)]);
+        const rj = await r.json();
+        if (!r.ok) throw new Error(rj.error || 'Could not load this report');
+        setReport(rj.report);
+        setPlayers((rj.playerRatings || []).sort((a: MatchPlayerRating, b: MatchPlayerRating) => a.display_order - b.display_order));
+        if (c.ok) setComments((await c.json()).comments || []);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error checking permissions:', error);
-    }
-  };
+    })();
+  }, [params.id]);
 
-  const fetchReportDetails = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/match-reports/${params.id}`);
-      const data = await response.json();
+  useEffect(() => {
+    if (!user) { setCanEdit(false); return; }
+    supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle().then(({ data: p }) => {
+      const role = (p as any)?.ctf_role || '';
+      setCanEdit(!!p && ((p as any).is_admin === true || role === 'ctf_admin' || role.includes('analyst')));
+    });
+  }, [user]);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch match report');
-      }
+  useEffect(() => {
+    if (!clip) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setClip(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [clip]);
 
-      setReport(data.report);
-      setPlayerRatings(data.playerRatings || []);
-    } catch (err) {
-      console.error('Error fetching match report:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch match report');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchComments = async () => {
-    try {
-      setLoadingComments(true);
-      const response = await fetch(`/api/match-reports/${params.id}/comments`);
-      const data = await response.json();
-      if (response.ok) {
-        setComments(data.comments || []);
-      }
-    } catch (err) {
-      console.error('Error fetching comments:', err);
-    } finally {
-      setLoadingComments(false);
-    }
-  };
-
-  const submitComment = async () => {
-    if (!newComment.trim() || submittingComment) return;
-
-    try {
-      setSubmittingComment(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error('No session found');
-        return;
-      }
-
-      const response = await fetch(`/api/match-reports/${params.id}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ content: newComment.trim() }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setComments(prev => [...prev, data.comment]);
-        setNewComment('');
-      } else {
-        console.error('Error posting comment:', data.error);
-      }
-    } catch (err) {
-      console.error('Error submitting comment:', err);
-    } finally {
-      setSubmittingComment(false);
-    }
-  };
-
-  const deleteComment = async (commentId: string) => {
+  const postComment = async () => {
+    if (!draft.trim() || posting) return;
+    setPosting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
-      const response = await fetch(`/api/match-reports/${params.id}/comments?commentId=${commentId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+      const res = await fetch(`/api/match-reports/${params.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ content: draft.trim() }),
       });
-      if (response.ok) {
-        setComments(prev => prev.filter(c => c.id !== commentId));
-      }
-    } catch (err) {
-      console.error('Error deleting comment:', err);
+      const j = await res.json();
+      if (res.ok) { setComments((c) => [...c, j.comment]); setDraft(''); }
+    } finally {
+      setPosting(false);
     }
   };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  const deleteComment = async (id: string) => {
+    if (!confirm('Delete your comment?')) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const res = await fetch(`/api/match-reports/${params.id}/comments?commentId=${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } });
+    if (res.ok) setComments((c) => c.filter((x) => x.id !== id));
   };
 
-  // Rating utilities imported from @/utils/ratingUtils
-
-  // Extract embed code or create embed URL
-  const getEmbedCode = (embedCodeOrUrl: string) => {
-    if (!embedCodeOrUrl) return null;
-    
-    // If it's already an iframe embed code, extract the src
-    const iframeMatch = embedCodeOrUrl.match(/<iframe[^>]*src="([^"]*)"[^>]*>/i);
-    if (iframeMatch) {
-      return iframeMatch[1]; // Return the src URL from the iframe
-    }
-    
-    // If it's just a URL, try to convert it to embed format
-    if (embedCodeOrUrl.includes('youtube.com') || embedCodeOrUrl.includes('youtu.be')) {
-      // Extract video ID from various YouTube URL formats
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const match = embedCodeOrUrl.match(regExp);
-      
-      if (match && match[2].length === 11) {
-        return `https://www.youtube.com/embed/${match[2]}?autoplay=0&controls=1&modestbranding=1&rel=0`;
-      }
-    }
-    
-    return null;
-  };
-
-  // Render rating adjustment display with individual backgrounds
-  const renderRatingAdjustment = (playerRating: MatchPlayerRating) => {
-    const { rating_before, rating_adjustment, rating_after } = playerRating;
-    const adjustmentColor = rating_adjustment >= 0 ? 'text-green-400' : 'text-red-400';
-    const adjustmentBg = rating_adjustment > 0 ? 'bg-green-500/20' : rating_adjustment < 0 ? 'bg-red-500/20' : 'bg-gray-500/20';
-    
-    return (
-      <div className="flex items-center space-x-3">
-        {/* Before Rating */}
-        <div className="flex flex-col items-center space-y-1">
-          <div className={`px-3 py-1 rounded-lg font-semibold text-sm ${getRatingBgColor(rating_before)} ${getRatingColor(rating_before)}`}>
-            {rating_before.toFixed(1)}
-          </div>
-          <div className="flex items-center">
-            {getStarDisplay(rating_before)}
-          </div>
-        </div>
-
-        {/* Adjustment */}
-        <div className="flex flex-col items-center space-y-1">
-          <div className={`px-3 py-1 rounded-lg font-bold text-sm ${adjustmentBg} ${adjustmentColor} border border-current/30`}>
-            {rating_adjustment >= 0 ? '+' : ''}{rating_adjustment.toFixed(1)}
-          </div>
-          <div className="text-gray-400 text-lg">→</div>
-        </div>
-
-        {/* After Rating */}
-        <div className="flex flex-col items-center space-y-1">
-          <div className={`px-3 py-1 rounded-lg font-semibold text-sm ${getRatingBgColor(rating_after)} ${getRatingColor(rating_after)}`}>
-            {rating_after.toFixed(1)}
-          </div>
-          <div className="flex items-center">
-            {getStarDisplay(rating_after)}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-20 bg-gray-700 rounded mb-8"></div>
-            <div className="h-64 bg-gray-700 rounded mb-8"></div>
-            <div className="space-y-6">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-48 bg-gray-700 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !report) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">❌</div>
-            <h2 className="text-2xl font-bold text-red-400 mb-4">Error Loading Match Report</h2>
-            <p className="text-gray-400 mb-6">{error || 'Match report not found'}</p>
-            <Link 
-              href="/league/match-reports"
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
-            >
-              Back to Match Reports
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <Link 
-              href="/league/match-reports"
-              className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-2 transition-colors"
-            >
-              <span>←</span>
-              <span>Back to Match Reports</span>
-            </Link>
-            
-            {hasPermission && (
-              <Link 
-                href={`/league/match-reports/${report.id}/edit`}
-                className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
-              >
-                ✏️ Edit Report
-              </Link>
-            )}
-          </div>
-
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-            {report.title}
-          </h1>
-        </div>
-
-        {/* Main Content: Video + Squad Info & Summary */}
-        <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Half: Highlights Video */}
-            <div className="space-y-4">
-              <h3 className="text-2xl font-bold text-cyan-400 flex items-center">
-                <span className="mr-2">🎬</span>
-                Match Highlights
-              </h3>
-              {report.match_highlights_video_url && getEmbedCode(report.match_highlights_video_url) ? (
-                <div className="aspect-video rounded-lg overflow-hidden border border-gray-600 shadow-lg">
-                  <iframe
-                    src={getEmbedCode(report.match_highlights_video_url)}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title="Match Highlights"
-                  />
-                </div>
-              ) : (
-                <div className="aspect-video rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
-                  <div className="text-center text-gray-400">
-                    <div className="text-6xl mb-4">🎥</div>
-                    <div className="text-lg">No highlights video available</div>
-                    <div className="text-sm text-gray-500 mt-2">Video will appear here when added</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Half: Squad vs Squad + Match Summary */}
-            <div className="space-y-6">
-              {/* Squad vs Squad Section */}
-              <div className="bg-gray-900/30 border border-gray-600 rounded-lg p-6">
-                <div className="grid grid-cols-3 gap-4 items-center">
-                  {/* Squad A */}
-                  <div className="text-center">
-                    <div className="aspect-square w-20 mx-auto rounded-lg border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-3 shadow-lg">
-                      {report.squad_a_banner_url ? (
-                        <img 
-                          src={report.squad_a_banner_url} 
-                          alt={`${report.squad_a_name} banner`} 
-                          className="w-full h-full object-cover opacity-70" 
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
-                          <span className="text-2xl text-gray-500">🛡️</span>
-                        </div>
-                      )}
-                    </div>
-                    <h2 className="text-lg font-bold text-cyan-400">
-                      {report.squad_a_name}
-                    </h2>
-                  </div>
-
-                  {/* VS Center */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-400 mb-1">VS</div>
-                    <div className="w-16 h-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 mx-auto rounded"></div>
-                  </div>
-
-                  {/* Squad B */}
-                  <div className="text-center">
-                    <div className="aspect-square w-20 mx-auto rounded-lg border border-purple-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-3 shadow-lg">
-                      {report.squad_b_banner_url ? (
-                        <img 
-                          src={report.squad_b_banner_url} 
-                          alt={`${report.squad_b_name} banner`} 
-                          className="w-full h-full object-cover opacity-70" 
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-700/40 flex items-center justify-center">
-                          <span className="text-2xl text-gray-500">🛡️</span>
-                        </div>
-                      )}
-                    </div>
-                    <h2 className="text-lg font-bold text-purple-400">
-                      {report.squad_b_name}
-                    </h2>
-                  </div>
-                </div>
-              </div>
-
-              {/* Match Analysis */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-bold text-white flex items-center">
-                  <span className="mr-2">📋</span>
-                  Match Analysis
-                </h3>
-                <div className="bg-gray-900/50 border border-gray-600 rounded-lg p-6">
-                  <div className="text-lg text-gray-300 leading-relaxed mb-6">
-                    "{report.match_summary}"
-                  </div>
-                  
-                  {/* Match Metadata */}
-                  <div className="pt-4 border-t border-gray-600">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                      <div className="flex items-center space-x-2 text-gray-400">
-                        <span>📅</span>
-                        <span>{formatDate(report.match_date)}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-gray-400">
-                        <span>🏆</span>
-                        <span>{report.season_name}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-gray-400">
-                        <span>📊</span>
-                        <span>By {report.creator_alias}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-gray-400">
-                        <span>🕒</span>
-                        <span>{formatRelativeTime(report.created_at, { addSuffix: true })}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Player Ratings */}
-        {playerRatings.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-3xl font-bold text-white mb-8 text-center">Player Performance Analysis</h3>
-            
-            <div className="space-y-12">
-              {playerRatings.map((playerRating, index) => {
-                const isLeft = index % 2 === 0;
-                const embedUrl = playerRating.highlight_clip_url ? getEmbedCode(playerRating.highlight_clip_url) : null;
-                
-                return (
-                  <div key={playerRating.id} className={`grid grid-cols-1 lg:grid-cols-2 gap-8 items-center ${!isLeft ? 'lg:grid-flow-col-dense' : ''}`}>
-                    {/* Video/Clip Section */}
-                    <div className={`${!isLeft ? 'lg:col-start-2' : ''}`}>
-                      {playerRating.highlight_clip_url ? (
-                        embedUrl ? (
-                          <ExpandableVideoPlayer 
-                            embedUrl={embedUrl} 
-                            playerRating={playerRating} 
-                            isLeft={isLeft}
-                          />
-                        ) : (
-                          <div className="aspect-video rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
-                            <div className="text-center text-gray-400">
-                              <div className="text-4xl mb-2">🎬</div>
-                              <div className="mb-4">Clip available on YouTube</div>
-                              <a
-                                href={playerRating.highlight_clip_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg inline-flex items-center space-x-2 transition-colors"
-                              >
-                                <span>📺</span>
-                                <span>Watch on YouTube</span>
-                              </a>
-                            </div>
-                          </div>
-                        )
-                      ) : (
-                        <div className="aspect-video rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
-                          <div className="text-center text-gray-400">
-                            <div className="text-6xl mb-4">🎥</div>
-                            <div>No clip available</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Content Section */}
-                    <div className={`bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-6 ${!isLeft ? 'lg:col-start-1' : ''}`}>
-                      {/* Player Header */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <h4 className="text-2xl font-bold text-white">{playerRating.player_alias}</h4>
-                          <p className="text-cyan-400 font-semibold">{playerRating.class_position}</p>
-                        </div>
-                        <div className="px-4 py-2 rounded-lg border border-gray-600 bg-gray-800/50">
-                          <div className="text-center">
-                            {renderRatingAdjustment(playerRating)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Stats Row */}
-                      <div className="grid grid-cols-3 gap-4 mb-4">
-                        <div className="text-center bg-gray-900/50 rounded-lg p-3">
-                          <div className="text-xl font-bold text-green-400">{playerRating.kills}</div>
-                          <div className="text-xs text-gray-400">Kills</div>
-                        </div>
-                        <div className="text-center bg-gray-900/50 rounded-lg p-3">
-                          <div className="text-xl font-bold text-red-400">{playerRating.deaths}</div>
-                          <div className="text-xs text-gray-400">Deaths</div>
-                        </div>
-                        {playerRating.turret_damage && (
-                          <div className="text-center bg-gray-900/50 rounded-lg p-3">
-                            <div className="text-xl font-bold text-orange-400">{playerRating.turret_damage}</div>
-                            <div className="text-xs text-gray-400">Turret Dmg</div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Performance Description */}
-                      <div className="text-gray-300 leading-relaxed">
-                        {playerRating.performance_description}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Add Player Rating Button for Admins */}
-        {hasPermission && (
-          <div className="text-center mt-12">
-            <Link href={`/league/match-reports/${report.id}/add-player`}>
-              <button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg">
-                ➕ Add Player Rating
-              </button>
-            </Link>
-          </div>
-        )}
-
-        {/* Comments Section */}
-        <div className="mt-12 bg-gradient-to-br from-gray-800/50 to-gray-900/50 border border-gray-700 rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <h3 className="text-2xl font-bold text-white">Comments</h3>
-            <span className="bg-gray-700 text-gray-300 text-sm font-medium px-2.5 py-0.5 rounded-full">
-              {comments.length}
-            </span>
-          </div>
-
-          {/* Comment Form */}
-          {user ? (
-            <div className="mb-6">
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write a comment..."
-                maxLength={2000}
-                rows={3}
-                className="w-full bg-gray-900/50 border border-gray-600 rounded-lg p-3 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none"
-              />
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-xs text-gray-500">
-                  {newComment.length}/2000
-                </span>
-                <button
-                  onClick={submitComment}
-                  disabled={!newComment.trim() || submittingComment}
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300"
-                >
-                  {submittingComment ? 'Posting...' : 'Post Comment'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-6 text-center py-4 bg-gray-900/30 border border-gray-700 rounded-lg">
-              <p className="text-gray-400">
-                <Link href="/login" className="text-cyan-400 hover:text-cyan-300 transition-colors">Log in</Link> to comment
-              </p>
-            </div>
-          )}
-
-          {/* Comment List */}
-          {loadingComments ? (
-            <div className="space-y-4">
-              {[...Array(2)].map((_, i) => (
-                <div key={i} className="animate-pulse flex space-x-3">
-                  <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-                    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : comments.length > 0 ? (
-            <div className="space-y-4">
-              {comments.map((comment) => (
-                <div key={comment.id} className="flex space-x-3 bg-gray-900/30 border border-gray-700/50 rounded-lg p-4">
-                  {/* Avatar */}
-                  <div className="flex-shrink-0">
-                    {comment.author_avatar_url ? (
-                      <img
-                        src={comment.author_avatar_url}
-                        alt={comment.author_alias || 'Anonymous'}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
-                        <span className="text-gray-400 text-sm font-bold">
-                          {(comment.author_alias || 'A').charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-sm font-semibold text-cyan-400">
-                        {comment.author_alias || 'Anonymous'}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {formatRelativeTime(comment.created_at, { addSuffix: true })}
-                      </span>
-                    </div>
-                    <p className="text-gray-300 text-sm whitespace-pre-wrap break-words">
-                      {comment.content}
-                    </p>
-                  </div>
-
-                  {/* Delete Button */}
-                  {user && user.id === comment.user_id && (
-                    <button
-                      onClick={() => deleteComment(comment.id)}
-                      className="flex-shrink-0 text-gray-500 hover:text-red-400 transition-colors p-1"
-                      title="Delete comment"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Be the first to comment</p>
-            </div>
-          )}
-        </div>
-      </div>
+  const shell = (children: React.ReactNode) => (
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+      <Navbar user={user} />
+      <main className="container mx-auto px-4 py-6 max-w-5xl space-y-4">
+        <Link href="/league/match-reports" className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE]"><ChevronLeft className="w-3.5 h-3.5" /> Match reports</Link>
+        {children}
+      </main>
     </div>
+  );
+
+  if (loading) return shell(<section className="rounded-xl bg-[#131A2B] px-6 py-8 animate-pulse space-y-3"><div className="h-3 w-40 rounded bg-white/5" /><div className="h-12 w-2/3 rounded bg-white/5" /><div className="h-40 rounded bg-white/5" /></section>);
+  if (error || !report) return shell(<section className="rounded-xl bg-[#131A2B] px-6 py-8"><h1 className="font-display text-4xl text-[#E6EDF7]">Report not found</h1><p className="text-sm text-[#8B98B0] mt-2">{error || 'It may have been removed.'}</p></section>);
+
+  const highlights = embedSrc(report.match_highlights_video_url);
+
+  return shell(
+    <>
+      {/* Header strip */}
+      <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+        <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
+              <span className="px-1.5 py-0.5 rounded bg-[#F59E0B]/15 text-[#F59E0B] uppercase tracking-wide font-medium">Match report</span>
+              {report.league_slug && <span className="px-1.5 py-0.5 rounded bg-white/5 text-[#8B98B0] uppercase tracking-wide">{report.league_slug}</span>}
+              {report.season_name && <span className="text-[#8B98B0]">{report.season_name}</span>}
+            </div>
+            <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">{report.title}</h1>
+            <div className="mt-2 text-sm text-[#8B98B0]">
+              {fmt(report.match_date)} · by <span className="text-[#E6EDF7]">{report.creator_alias}</span> · written {formatRelativeTime(report.created_at, { addSuffix: true })}
+            </div>
+          </div>
+          {canEdit && (
+            <div className="flex gap-2 lg:justify-end">
+              <Link href={`/league/match-reports/${report.id}/add-player`} className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Add player</Link>
+              <Link href={`/league/match-reports/${report.id}/edit`} className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Edit report</Link>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Face-off + summary */}
+      <section className="rounded-xl bg-[#131A2B] px-5 sm:px-6 py-5">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div className="flex items-center gap-3 flex-row-reverse text-right min-w-0">
+            <TeamMark name={report.squad_a_name} banner={report.squad_a_banner_url} size="lg" />
+            {report.squad_a_id ? <Link href={`/squads/${report.squad_a_id}`} className="font-display text-2xl leading-tight text-[#E6EDF7] hover:text-[#22D3EE] truncate">{report.squad_a_name}</Link> : <span className="font-display text-2xl leading-tight text-[#E6EDF7] truncate">{report.squad_a_name}</span>}
+          </div>
+          <span className="font-display text-3xl text-white/20">VS</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <TeamMark name={report.squad_b_name} banner={report.squad_b_banner_url} size="lg" />
+            {report.squad_b_id ? <Link href={`/squads/${report.squad_b_id}`} className="font-display text-2xl leading-tight text-[#E6EDF7] hover:text-[#22D3EE] truncate">{report.squad_b_name}</Link> : <span className="font-display text-2xl leading-tight text-[#E6EDF7] truncate">{report.squad_b_name}</span>}
+          </div>
+        </div>
+        {report.match_summary && <div className="rules-prose mt-4 whitespace-pre-line">{report.match_summary}</div>}
+      </section>
+
+      {highlights && (
+        <Card title="Highlights">
+          <div className="aspect-video rounded-lg overflow-hidden bg-black">
+            <iframe src={highlights} className="w-full h-full" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Match highlights" />
+          </div>
+        </Card>
+      )}
+
+      {players.length > 0 && (
+        <Card title="Players" action={<span className="text-xs text-[#8B98B0]">Rating before → after · out of 6</span>}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {players.map((p) => {
+              const src = embedSrc(p.highlight_clip_url);
+              const up = p.rating_adjustment > 0;
+              const down = p.rating_adjustment < 0;
+              return (
+                <article key={p.id} className="rounded-lg bg-[#1B2438] overflow-hidden flex flex-col">
+                  {src ? (
+                    <button type="button" onClick={() => setClip({ src, title: `${p.player_alias} · ${p.class_position}` })} className="relative aspect-video bg-black group">
+                      <iframe src={src} className="w-full h-full pointer-events-none" title={`${p.player_alias} clip`} loading="lazy" />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
+                        <span className="w-10 h-10 rounded-full bg-[#22D3EE] text-[#0B0F1A] flex items-center justify-center"><Play className="w-4 h-4 ml-0.5" /></span>
+                      </span>
+                    </button>
+                  ) : p.highlight_clip_url ? (
+                    <a href={p.highlight_clip_url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 text-xs text-[#22D3EE] hover:text-[#67E8F9] inline-flex items-center gap-1">Watch clip <ExternalLink className="w-3 h-3" /></a>
+                  ) : null}
+                  <div className="p-3 flex flex-col gap-2 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <Link href={`/stats/player/${encodeURIComponent(p.player_alias)}`} className="font-display text-xl leading-tight text-[#E6EDF7] hover:text-[#22D3EE]">{p.player_alias}</Link>
+                        <div className="text-xs text-[#8B98B0]">{p.class_position}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center gap-1.5 justify-end text-sm tabular-nums">
+                          <span className="text-[#8B98B0]">{p.rating_before.toFixed(1)}</span>
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${up ? 'bg-[#34D399]/15 text-[#34D399]' : down ? 'bg-[#F87171]/15 text-[#F87171]' : 'bg-white/5 text-[#8B98B0]'}`}>{up ? '+' : ''}{p.rating_adjustment.toFixed(1)}</span>
+                          <span className={`font-medium ${getRatingColor(p.rating_after)}`}>{p.rating_after.toFixed(1)}</span>
+                        </div>
+                        <div className="flex justify-end mt-0.5">{getStarDisplay(p.rating_after)}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 text-xs text-[#8B98B0]">
+                      <span><span className="text-[#34D399] tabular-nums">{p.kills}</span> kills</span>
+                      <span><span className="text-[#F87171] tabular-nums">{p.deaths}</span> deaths</span>
+                      {p.turret_damage != null && p.turret_damage > 0 && <span><span className="text-[#E6EDF7] tabular-nums">{p.turret_damage}</span> turret</span>}
+                    </div>
+                    {p.performance_description && <p className="text-sm text-[#E6EDF7]/90 leading-snug whitespace-pre-line">{p.performance_description}</p>}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Card title={<>Comments <span className="text-sm font-body text-[#8B98B0]">· {comments.length}</span></>}>
+        {user ? (
+          <div className="mb-3">
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={2000} rows={3} placeholder="Write a comment…" className="w-full bg-[#0B0F1A] border border-white/10 rounded-md px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none resize-none" />
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="text-[11px] text-[#8B98B0]">{draft.length}/2000</span>
+              <button type="button" onClick={postComment} disabled={!draft.trim() || posting} className="px-3.5 py-1.5 rounded-md text-sm font-medium bg-[#22D3EE] text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50">{posting ? 'Posting…' : 'Post'}</button>
+            </div>
+          </div>
+        ) : (
+          <p className="mb-3 text-sm text-[#8B98B0]"><Link href="/auth/login" className="text-[#22D3EE]">Sign in</Link> to comment.</p>
+        )}
+        {comments.length === 0 ? (
+          <p className="text-sm text-[#8B98B0]">No comments yet.</p>
+        ) : (
+          <ul className="divide-y divide-white/[0.06]">
+            {comments.map((c) => (
+              <li key={c.id} className="py-2.5 flex gap-3">
+                {c.author_avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.author_avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="w-8 h-8 rounded-full bg-[#1B2438] text-[#8B98B0] text-xs font-medium flex items-center justify-center shrink-0">{(c.author_alias || 'A').slice(0, 1).toUpperCase()}</span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs"><span className="text-[#E6EDF7] font-medium">{c.author_alias || 'Anonymous'}</span> <span className="text-[#8B98B0]">· {formatRelativeTime(c.created_at, { addSuffix: true })}</span></div>
+                  <p className="text-sm text-[#E6EDF7]/90 whitespace-pre-wrap break-words mt-0.5">{c.content}</p>
+                </div>
+                {user?.id === c.user_id && <button type="button" onClick={() => deleteComment(c.id)} className="text-[#8B98B0] hover:text-[#F87171] shrink-0" aria-label="Delete comment"><X className="w-4 h-4" /></button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {clip && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setClip(null); }}>
+          <div className="w-full max-w-5xl">
+            <div className="flex items-center justify-between mb-2 text-sm text-[#E6EDF7]"><span>{clip.title}</span><button type="button" onClick={() => setClip(null)} className="text-[#8B98B0] hover:text-[#E6EDF7]">Close</button></div>
+            <div className="aspect-video rounded-xl overflow-hidden bg-black"><iframe src={`${clip.src}&autoplay=1`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={clip.title} /></div>
+          </div>
+        </div>
+      )}
+    </>,
   );
 }

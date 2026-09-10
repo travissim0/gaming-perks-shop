@@ -1,378 +1,192 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { ChevronRight, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
-import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { MatchReportWithDetails } from '@/types/database';
-import Pagination from '@/components/Pagination';
 import Navbar from '@/components/Navbar';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-interface League {
-  id: string;
-  slug: string;
-  name: string;
+/*
+ * Match reports — analyst write-ups on played matches with per-player ratings.
+ * Data from /api/match-reports, unchanged. Analysts, CTF admins and site admins
+ * get a "Write a report" button.
+ */
+
+interface League { id: string; slug: string; name: string }
+type Report = MatchReportWithDetails & { league_slug?: string | null };
+
+const PAGE = 12;
+const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={`px-3 py-1.5 rounded-md text-sm transition-colors ${active ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#8B98B0] hover:text-[#E6EDF7] hover:bg-white/5'}`}>
+      {children}
+    </button>
+  );
+}
+
+function TeamMark({ name, tag, banner }: { name: string; tag?: string | null; banner?: string | null }) {
+  if (banner) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={banner} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />;
+  }
+  return <span className="w-10 h-10 rounded-lg bg-[#1B2438] text-[#22D3EE] text-xs font-medium flex items-center justify-center shrink-0">{(tag || name).slice(0, 4).toUpperCase()}</span>;
 }
 
 export default function MatchReportsPage() {
   const { user } = useAuth();
-  const [reports, setReports] = useState<MatchReportWithDetails[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [leagues, setLeagues] = useState<League[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [seasonFilter, setSeasonFilter] = useState<string>('all');
-  const [leagueFilter, setLeagueFilter] = useState<string>('all');
-  const [leagues, setLeagues] = useState<League[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [hasPermission, setHasPermission] = useState(false);
-  const [permissionLoading, setPermissionLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 12;
+  const [canWrite, setCanWrite] = useState(false);
+  const [search, setSearch] = useState('');
+  const [season, setSeason] = useState('all');
+  const [league, setLeague] = useState('all');
+  const [shown, setShown] = useState(PAGE);
 
   useEffect(() => {
-    fetchReports();
-    checkPermissions();
-    fetchLeagues();
+    (async () => {
+      try {
+        const [res, { data: ls }] = await Promise.all([
+          fetch('/api/match-reports'),
+          supabase.from('leagues').select('id, slug, name').order('display_order').order('slug'),
+        ]);
+        if (!res.ok) throw new Error('Could not load match reports');
+        setReports(((await res.json()).reports || []) as Report[]);
+        setLeagues((ls || []) as League[]);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!user) { setCanWrite(false); return; }
+    supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle().then(({ data: p }) => {
+      const role = (p as any)?.ctf_role || '';
+      setCanWrite(!!p && ((p as any).is_admin === true || role === 'ctf_admin' || role.includes('analyst')));
+    });
   }, [user]);
 
-  const fetchLeagues = async () => {
-    const { data } = await supabase
-      .from('leagues')
-      .select('id, slug, name')
-      .order('slug');
-    if (data) setLeagues(data);
-  };
+  useEffect(() => { setShown(PAGE); }, [search, season, league]);
 
-  const checkPermissions = async () => {
-    if (!user) {
-      setHasPermission(false);
-      setPermissionLoading(false);
-      return;
-    }
-
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('is_admin, ctf_role')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && profile) {
-        setHasPermission(
-          profile?.is_admin || 
-          profile?.ctf_role === 'ctf_admin' || 
-          (profile?.ctf_role && profile?.ctf_role.includes('analyst'))
-        );
-      }
-    } catch (error) {
-      console.error('Error checking permissions:', error);
-    } finally {
-      setPermissionLoading(false);
-    }
-  };
-
-  const fetchReports = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/match-reports');
-      
-      if (response.ok) {
-        const data = await response.json();
-        setReports(data.reports || []);
-      } else {
-        setError('Failed to load match reports');
-      }
-    } catch (error) {
-      console.error('Error fetching match reports:', error);
-      setError('Failed to load match reports');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getSeasons = () => {
-    const seasons = Array.from(new Set(reports.map(r => r.season_name)));
-    return seasons.sort().reverse();
-  };
-
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, seasonFilter, leagueFilter]);
-
-  const filteredReports = reports.filter(report => {
-    const matchesSearch = searchTerm === '' ||
-      report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      report.squad_a_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      report.squad_b_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      report.creator_alias.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesSeason = seasonFilter === 'all' || report.season_name === seasonFilter;
-
-    const matchesLeague = leagueFilter === 'all' || (report as any).league_slug === leagueFilter;
-
-    return matchesSearch && matchesSeason && matchesLeague;
-  });
-
-  const totalPages = Math.ceil(filteredReports.length / ITEMS_PER_PAGE);
-  const paginatedReports = filteredReports.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+  const seasons = useMemo(() => Array.from(new Set(reports.map((r) => r.season_name).filter(Boolean))).sort().reverse(), [reports]);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return reports.filter((r) => {
+      if (season !== 'all' && r.season_name !== season) return false;
+      if (league !== 'all' && r.league_slug !== league) return false;
+      if (q && ![r.title, r.squad_a_name, r.squad_b_name, r.creator_alias].some((s) => (s || '').toLowerCase().includes(q))) return false;
+      return true;
     });
-  };
-
-  if (loading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-20 bg-gray-700 rounded mb-8"></div>
-            <div className="h-12 bg-gray-700 rounded mb-6"></div>
-            <div className="space-y-6">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-gray-700 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  }, [reports, search, season, league]);
+  const analysts = useMemo(() => new Set(reports.map((r) => r.creator_alias)).size, [reports]);
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-12">
-          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between mb-8">
-            <div>
-              <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-4">
-                Match Reports
-              </h1>
-              <p className="text-xl text-gray-300 max-w-3xl">
-                Detailed analysis and player performance ratings from competitive matches
-              </p>
-            </div>
-            
-            {!permissionLoading && hasPermission && (
-              <Link href="/league/match-reports/create">
-                <button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-cyan-500/20">
-                  📝 Create Match Report
-                </button>
-              </Link>
-            )}
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-              <div className="text-2xl font-bold text-cyan-400">{reports.length}</div>
-              <div className="text-gray-400">Total Reports</div>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-400">{getSeasons().length}</div>
-              <div className="text-gray-400">Seasons Covered</div>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-400">
-                {Array.from(new Set(reports.map(r => r.creator_alias))).length}
+      <main className="container mx-auto px-4 py-6 max-w-6xl space-y-4">
+        <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+          <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80 mb-1">Free Infantry · CTF leagues</div>
+              <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">Match reports</h1>
+              <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
+                {!loading && (
+                  <>
+                    <span><span className="text-[#E6EDF7] tabular-nums">{reports.length}</span> report{reports.length === 1 ? '' : 's'}</span>
+                    <span className="text-white/20">·</span>
+                    <span><span className="text-[#E6EDF7] tabular-nums">{seasons.length}</span> season{seasons.length === 1 ? '' : 's'}</span>
+                    <span className="text-white/20">·</span>
+                    <span><span className="text-[#E6EDF7] tabular-nums">{analysts}</span> analyst{analysts === 1 ? '' : 's'}</span>
+                  </>
+                )}
               </div>
-              <div className="text-gray-400">Contributing Analysts</div>
+              <p className="mt-1.5 text-sm text-[#8B98B0] max-w-xl">Write-ups on played matches with a rating for each player who featured.</p>
             </div>
-          </div>
-        </div>
-
-        {/* League Filter */}
-        <div className="mb-4">
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setLeagueFilter('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                leagueFilter === 'all'
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              All Leagues
-            </button>
-            {leagues.map(league => (
-              <button
-                key={league.slug}
-                onClick={() => setLeagueFilter(league.slug)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  leagueFilter === league.slug
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                {league.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Search Reports
-              </label>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by title, squads, or analyst..."
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Filter by Season
-              </label>
-              <select
-                value={seasonFilter}
-                onChange={(e) => setSeasonFilter(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              >
-                <option value="all">All Seasons</option>
-                {getSeasons().map(season => (
-                  <option key={season} value={season}>{season}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Error State */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-8">
-            <div className="text-red-400">{error}</div>
-          </div>
-        )}
-
-        {/* Reports List */}
-        {filteredReports.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-xl font-semibold text-gray-300 mb-2">
-              {searchTerm || seasonFilter !== 'all' ? 'No matches found' : 'No match reports yet'}
-            </h3>
-            <p className="text-gray-400 mb-6">
-              {searchTerm || seasonFilter !== 'all' 
-                ? 'Try adjusting your search filters' 
-                : 'Match reports will appear here once analysts create them'}
-            </p>
-            {!permissionLoading && hasPermission && (
-              <Link href="/league/match-reports/create">
-                <button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300">
-                  Create First Report
-                </button>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              {canWrite && <Link href="/league/match-reports/create" className="px-3.5 py-2 rounded-md text-sm font-medium bg-[#22D3EE] text-[#0B0F1A] hover:bg-[#67E8F9] transition-colors">Write a report</Link>}
+              <Link href="/league/schedule" className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Schedule</Link>
+              <Link href="/league/ratings" className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-[#8B98B0] hover:text-[#22D3EE] transition-colors">
+                Squad ratings <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
               </Link>
+            </div>
+          </div>
+          <div className="relative border-t border-white/[0.06] px-3 sm:px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex gap-1 flex-wrap">
+              <Chip active={league === 'all'} onClick={() => setLeague('all')}>All leagues</Chip>
+              {leagues.map((l) => <Chip key={l.slug} active={league === l.slug} onClick={() => setLeague(l.slug)}>{l.name}</Chip>)}
+            </div>
+            {seasons.length > 0 && (
+              <>
+                <span className="hidden sm:block w-px h-5 bg-white/10" />
+                <select value={season} onChange={(e) => setSeason(e.target.value)} className="bg-transparent text-sm text-[#E6EDF7] py-1.5 focus:outline-none" style={{ colorScheme: 'dark' }}>
+                  <option value="all" className="bg-[#131A2B]">All seasons</option>
+                  {seasons.map((s) => <option key={s} value={s} className="bg-[#131A2B]">{s}</option>)}
+                </select>
+              </>
             )}
+            <div className="ml-auto relative">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, squad or analyst…" className="w-56 bg-[#0B0F1A] border border-white/10 rounded-md px-3 py-1.5 pr-7 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none" />
+              {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Clear"><X className="w-3.5 h-3.5" /></button>}
+            </div>
           </div>
+        </section>
+
+        {error ? (
+          <section className="rounded-xl bg-[#131A2B] px-5 py-5 text-sm text-[#F87171]">{error}</section>
+        ) : loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{[0, 1, 2, 3].map((i) => <div key={i} className="h-36 rounded-xl bg-[#131A2B] animate-pulse" />)}</div>
+        ) : filtered.length === 0 ? (
+          <section className="rounded-xl bg-[#131A2B] px-5 py-6 text-sm text-[#8B98B0]">
+            {reports.length === 0 ? 'No match reports yet. They appear here as analysts write them.' : 'Nothing matches those filters.'}
+          </section>
         ) : (
-          <div className="space-y-6">
-            {paginatedReports.map((report) => (
-              <Link key={report.id} href={`/league/match-reports/${report.id}`}>
-                <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-lg p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 cursor-pointer">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors">
-                      {report.title}
-                    </h3>
-                    <div className="text-sm text-gray-400">
-                      {formatDate(report.match_date)}
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filtered.slice(0, shown).map((r) => (
+                <Link key={r.id} href={`/league/match-reports/${r.id}`} className="group rounded-xl bg-[#131A2B] p-4 hover:bg-[#161e31] transition-colors flex flex-col">
+                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-[#8B98B0]">
+                    {r.league_slug && <span className="px-1.5 py-0.5 rounded bg-white/5 text-[#E6EDF7] uppercase tracking-wide">{r.league_slug}</span>}
+                    {r.season_name && <span>{r.season_name}</span>}
+                    <span className="ml-auto">{fmt(r.match_date)}</span>
+                  </div>
+                  <h2 className="mt-1.5 font-display text-2xl leading-tight text-[#E6EDF7] group-hover:text-[#22D3EE] transition-colors">{r.title}</h2>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <TeamMark name={r.squad_a_name} banner={r.squad_a_banner_url} />
+                      <span className="text-sm text-[#E6EDF7] truncate">{r.squad_a_name}</span>
+                    </div>
+                    <span className="text-xs text-white/30">vs</span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 justify-end text-right">
+                      <span className="text-sm text-[#E6EDF7] truncate">{r.squad_b_name}</span>
+                      <TeamMark name={r.squad_b_name} banner={r.squad_b_banner_url} />
                     </div>
                   </div>
-
-                  {/* Squad vs Squad */}
-                  <div className="grid grid-cols-3 gap-4 items-center mb-4">
-                    {/* Squad A */}
-                    <div className="text-center">
-                      <div className="aspect-square w-20 mx-auto rounded-lg border border-cyan-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-2">
-                        {report.squad_a_banner_url ? (
-                          <img 
-                            src={report.squad_a_banner_url} 
-                            alt={`${report.squad_a_name} banner`} 
-                            className="w-full h-full object-cover opacity-70" 
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-700/40" />
-                        )}
-                      </div>
-                      <div className="text-cyan-400 font-semibold text-sm">
-                        {report.squad_a_name}
-                      </div>
-                    </div>
-
-                    {/* VS */}
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-gray-400">VS</div>
-                    </div>
-
-                    {/* Squad B */}
-                    <div className="text-center">
-                      <div className="aspect-square w-20 mx-auto rounded-lg border border-purple-500/20 bg-gradient-to-br from-gray-800/70 to-gray-900/70 overflow-hidden mb-2">
-                        {report.squad_b_banner_url ? (
-                          <img 
-                            src={report.squad_b_banner_url} 
-                            alt={`${report.squad_b_name} banner`} 
-                            className="w-full h-full object-cover opacity-70" 
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-700/40" />
-                        )}
-                      </div>
-                      <div className="text-purple-400 font-semibold text-sm">
-                        {report.squad_b_name}
-                      </div>
-                    </div>
+                  {r.match_summary && <p className="mt-3 text-sm text-[#8B98B0] leading-snug line-clamp-3">{r.match_summary}</p>}
+                  <div className="mt-auto pt-3 flex items-center justify-between text-[11px] text-[#8B98B0]">
+                    <span>By {r.creator_alias}</span>
+                    <span className="inline-flex items-center gap-1 text-[#22D3EE]">Read <ChevronRight className="w-3 h-3" aria-hidden="true" /></span>
                   </div>
-
-                  {/* Summary Preview */}
-                  <p className="text-gray-300 mb-4 line-clamp-2">
-                    {report.match_summary}
-                  </p>
-
-                  {/* Metadata */}
-                  <div className="flex items-center justify-between text-sm text-gray-400">
-                    <div className="flex items-center space-x-4">
-                      <span>📊 By {report.creator_alias}</span>
-                      <span>🏆 {report.season_name}</span>
-                      {(report as any).league_slug && (
-                        <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300 text-xs font-medium uppercase">
-                          {(report as any).league_slug}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      {formatRelativeTime(report.created_at, { addSuffix: true })}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              totalItems={filteredReports.length}
-              itemsPerPage={ITEMS_PER_PAGE}
-            />
-          </div>
+                </Link>
+              ))}
+            </div>
+            {filtered.length > shown && (
+              <div className="flex justify-center">
+                <button type="button" onClick={() => setShown((n) => n + PAGE)} className="px-4 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Show more ({filtered.length - shown} left)</button>
+              </div>
+            )}
+          </>
         )}
-      </div>
+      </main>
     </div>
   );
 }
