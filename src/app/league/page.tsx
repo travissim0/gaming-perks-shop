@@ -388,8 +388,9 @@ export default function LeagueHome() {
           .eq('ctf_role', 'ctf_admin')
           .not('in_game_alias', 'is', null)
           .order('in_game_alias')
-          .limit(6);
-        setStaff((data || []) as StaffMember[]);
+          .limit(8);
+        // "System" is the site's service account, not a person.
+        setStaff(((data || []) as StaffMember[]).filter((s) => s.in_game_alias?.toLowerCase() !== 'system').slice(0, 6));
       } catch { /* ignore */ }
     };
 
