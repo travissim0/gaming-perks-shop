@@ -12,8 +12,9 @@ export const dynamic = 'force-dynamic';
  * Who sees what:
  *   - staff, or the game client (header `X-Client-Key: <MATCH_CLIENT_KEY>`): everything, incl. the `client` block
  *   - home captain/co-captain: the side + the home lineup
- *   - away captain/co-captain: the away lineup only (the side is hidden until the match)
- *   - everyone else: just whether the side and each lineup have been submitted
+ *   - away captain/co-captain: the away lineup; the side once it is released
+ *   - everyone else: whether the side and each lineup have been submitted; the side once released
+ *   The side is released to everyone 5 minutes before the scheduled time. Lineups stay private.
  *
  * GET  /api/matches/[id]/setup
  * POST /api/matches/[id]/setup  (Bearer)
@@ -97,6 +98,11 @@ const leads = (sq: Squad | null | undefined, userId: string | null) =>
 const isLocked = (match: any) =>
   match.status === 'completed' || match.status === 'cancelled' || match.status === 'expired' || Date.now() >= new Date(match.scheduled_at).getTime();
 
+/** The home side is released to the away squad and the public this long before the scheduled time. */
+const SIDE_REVEAL_MS = 5 * 60 * 1000;
+const sideRevealAt = (match: any) => new Date(new Date(match.scheduled_at).getTime() - SIDE_REVEAL_MS).toISOString();
+const sideReleased = (match: any) => Date.now() >= new Date(match.scheduled_at).getTime() - SIDE_REVEAL_MS;
+
 function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, lineupRows: any[], viewer: Viewer) {
   const home = match.squad_a_id ? squads[match.squad_a_id] : null;
   const away = match.squad_b_id ? squads[match.squad_b_id] : null;
@@ -131,7 +137,8 @@ function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, 
   const full = viewer.staff || viewer.client;
   const leadsHome = leads(home, viewer.id);
   const leadsAway = leads(away, viewer.id);
-  const seeSide = full || leadsHome;
+  const released = sideReleased(match);
+  const seeSide = full || leadsHome || released;
   const seeHome = full || leadsHome;
   const seeAway = full || leadsAway;
 
@@ -168,6 +175,9 @@ function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, 
     /** Public progress flags — no values. */
     progress: { side_picked: !!side, home_lineup_set: homeSet, away_lineup_set: awaySet, ready },
     side_chosen_at: seeSide ? setupRow?.side_chosen_at || null : null,
+    /** When the home side becomes visible to the away squad and the public (5 min before the match). */
+    side_reveal_at: sideRevealAt(match),
+    side_released: released,
     client: full
       ? { ready, teams: side && home && away ? [homeNames.starting, homeNames.bench, awayNames.starting, awayNames.bench] : [], players }
       : null,

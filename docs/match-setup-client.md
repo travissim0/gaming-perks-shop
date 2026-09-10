@@ -7,7 +7,10 @@ reads one JSON document per match and places players accordingly.
 Sides and lineups are **private** on the site: a squad's captain and
 co-captains see only their own lineup, the home team's leads see the side,
 and staff see everything. The public sees only whether things have been
-submitted. The game client gets the full view by presenting a shared key.
+submitted. The home side is **released to everyone five minutes before the
+scheduled time** (`side_reveal_at` / `side_released` in the response);
+lineups are never public. The game client gets the full view at any time by
+presenting a shared key.
 
 ## Key
 

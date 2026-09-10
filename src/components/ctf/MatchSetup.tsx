@@ -32,6 +32,8 @@ interface Setup {
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
+  side_reveal_at: string;
+  side_released: boolean;
   viewer: { is_staff: boolean; leads_home: boolean; leads_away: boolean; can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean } | null;
 }
 
@@ -126,8 +128,10 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const { home, away, viewer, match, progress } = setup;
   const locked = match.locked;
   const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away);
+  const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const sidesLine = home.side ? `${home.tag} · ${SIDE_LABEL[home.side]}  ·  ${away.tag} · ${SIDE_LABEL[away.side!]}` : null;
 
-  // Public / uninvolved view: progress only.
+  // Public / uninvolved view: progress flags, plus the sides once released.
   if (!involved) {
     return (
       <section className="rounded-xl overflow-hidden bg-[#131A2B]">
@@ -139,17 +143,28 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
             <Flag on={progress.away_lineup_set} label={`${away.tag} lineup`} />
           </div>
         </div>
-        <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">Sides and lineups stay private to each squad's captains and league staff.</p>
+        {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
+        <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
+          {setup.side_released ? 'Sides are out. ' : `Sides are released at ${revealTime}, five minutes before the match. `}
+          Lineups stay private to each squad's captains and league staff.
+        </p>
       </section>
     );
   }
 
   const sideText = (() => {
-    if (home.side) return `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
-    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side.`;
+    if (home.side) {
+      const base = `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
+      if (viewer?.is_staff) return base;
+      if (viewer?.leads_home) return setup.side_released ? `${base} ${away.tag} can see this now.` : `${base} Hidden from ${away.tag} and the public until ${revealTime}, five minutes before the match.`;
+      return base; // away leads, after release
+    }
+    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side. Your pick stays hidden from ${away.tag} and the public until ${revealTime}, five minutes before the match.`;
     if (viewer?.leads_home) return `${home.tag} is home and picks the side.`;
-    // Away leads: the pick itself is hidden from them.
-    return progress.side_picked ? `${home.tag} (home) has picked a side. It is revealed at match time.` : `Waiting on ${home.name} (home) to pick a side.`;
+    // Away leads before release: the pick itself is hidden from them.
+    return progress.side_picked
+      ? `${home.tag} (home) has picked a side. It is released to you at ${revealTime}, five minutes before the match.`
+      : `Waiting on ${home.name} (home) to pick a side. It is released to you at ${revealTime}, five minutes before the match.`;
   })();
 
   const renderTeam = (team: Team, canEdit: boolean) => {
@@ -286,7 +301,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Only your own captains and league staff can see your side and lineup. Captains and co-captains can change them until the scheduled time; staff any time.
+          Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           When the game client is connected, starters are placed on their team and unspecced, and the bench stays in spec on the other team name.
         </p>
       </div>
