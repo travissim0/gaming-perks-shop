@@ -1,40 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 import type { Squad } from '@/types/database';
-import Navbar from '@/components/Navbar';
+import { FormPage, FormSection, Denied, inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
-interface League {
-  id: string;
-  slug: string;
-  name: string;
-}
+interface League { id: string; slug: string; name: string; is_featured?: boolean }
+interface SeasonOption { id: string; season_number: number; season_name: string | null; status: string }
 
-interface SeasonOption {
-  id: string;
-  season_number: number;
-  season_name: string | null;
-  status: string;
-}
+const isAnalyst = (p: any) => !!p && (p.is_admin === true || p.ctf_role === 'ctf_admin' || String(p.ctf_role || '').includes('analyst'));
 
 export default function CreateMatchReportPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
   const [squads, setSquads] = useState<Squad[]>([]);
-  const [hasPermission, setHasPermission] = useState(false);
-  const [permissionLoading, setPermissionLoading] = useState(true);
   const [leagues, setLeagues] = useState<League[]>([]);
-  const [selectedLeague, setSelectedLeague] = useState('ctfpl');
-  const [seasonOptions, setSeasonOptions] = useState<SeasonOption[]>([]);
-
-  // Form state
-  const [formData, setFormData] = useState({
+  const [seasons, setSeasons] = useState<SeasonOption[]>([]);
+  const [form, setForm] = useState({
     title: '',
     squad_a_id: '',
     squad_b_id: '',
@@ -42,448 +30,137 @@ export default function CreateMatchReportPage() {
     squad_b_name: '',
     match_summary: '',
     match_highlights_video_url: '',
-    match_date: new Date().toISOString().split('T')[0],
+    match_date: new Date().toISOString().slice(0, 10),
     season_name: '',
-    league_slug: 'ctfpl'
+    league_slug: '',
   });
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
-    checkPermissions();
-    fetchSquads();
-    fetchLeagues();
+    if (!user) { setAllowed(false); return; }
+    supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle().then(({ data }) => setAllowed(isAnalyst(data)));
   }, [user]);
 
-  // Fetch seasons when league changes
   useEffect(() => {
-    fetchSeasons(selectedLeague);
-  }, [selectedLeague, leagues]);
+    (async () => {
+      const [{ data: ls }, sq] = await Promise.all([
+        supabase.from('leagues').select('id, slug, name, is_featured').order('display_order').order('slug'),
+        fetch('/api/squads').then((r) => (r.ok ? r.json() : { squads: [] })).catch(() => ({ squads: [] })),
+      ]);
+      const list = (ls || []) as League[];
+      setLeagues(list);
+      setSquads(sq.squads || []);
+      if (!form.league_slug && list.length) set('league_slug', (list.find((l) => l.is_featured) || list[0]).slug);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const fetchLeagues = async () => {
-    const { data } = await supabase
-      .from('leagues')
-      .select('id, slug, name')
-      .order('slug');
-    if (data) setLeagues(data);
-  };
-
-  const fetchSeasons = async (leagueSlug: string) => {
-    if (leagueSlug === 'ctfpl') {
-      const { data } = await supabase
-        .from('ctfpl_seasons')
-        .select('id, season_number, season_name, status')
-        .order('season_number', { ascending: false });
-      if (data) {
-        setSeasonOptions(data);
-        const active = data.find((s: SeasonOption) => s.status === 'active');
-        if (active) {
-          const name = active.season_name || `Season ${active.season_number}`;
-          setFormData(prev => ({ ...prev, season_name: name }));
-        }
-      }
-    } else {
-      const league = leagues.find(l => l.slug === leagueSlug);
-      if (!league) return;
-      const { data } = await supabase
-        .from('league_seasons')
-        .select('id, season_number, season_name, status')
-        .eq('league_id', league.id)
-        .order('season_number', { ascending: false });
-      if (data) {
-        setSeasonOptions(data);
-        const active = data.find((s: SeasonOption) => s.status === 'active');
-        if (active) {
-          const name = active.season_name || `Season ${active.season_number}`;
-          setFormData(prev => ({ ...prev, season_name: name }));
-        }
-      }
-    }
-  };
-
-  const handleLeagueChange = (slug: string) => {
-    setSelectedLeague(slug);
-    setFormData(prev => ({ ...prev, league_slug: slug, season_name: '' }));
-  };
-
-  const checkPermissions = async () => {
-    if (!user) {
-      setHasPermission(false);
-      setPermissionLoading(false);
-      return;
-    }
-
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('is_admin, ctf_role')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && profile) {
-        const permission = profile?.is_admin || 
-                          profile?.ctf_role === 'ctf_admin' || 
-                          (profile?.ctf_role && profile?.ctf_role.includes('analyst'));
-        setHasPermission(permission);
-        
-        if (!permission) {
-          toast.error('You do not have permission to create match reports');
-          router.push('/league/match-reports');
-        }
-      }
-    } catch (error) {
-      console.error('Error checking permissions:', error);
-      setHasPermission(false);
-    } finally {
-      setPermissionLoading(false);
-    }
-  };
-
-  const fetchSquads = async () => {
-    try {
-      const response = await fetch('/api/squads');
-      if (response.ok) {
-        const data = await response.json();
-        setSquads(data.squads || []);
-      }
-    } catch (error) {
-      console.error('Error fetching squads:', error);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-
-    // Auto-populate squad names when squad IDs are selected
-    if (name === 'squad_a_id' || name === 'squad_b_id') {
-      const selectedSquad = squads.find(squad => squad.id === value);
-      if (selectedSquad) {
-        const nameField = name === 'squad_a_id' ? 'squad_a_name' : 'squad_b_name';
-        setFormData(prev => ({ ...prev, [nameField]: selectedSquad.name }));
-      }
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.title || !formData.squad_a_name || !formData.squad_b_name || !formData.match_summary || !formData.season_name) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // Get the user's session token
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await fetch('/api/match-reports', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success('Match report created successfully!');
-        router.push(`/league/match-reports/${data.report.id}`);
+  useEffect(() => {
+    if (!form.league_slug) return;
+    (async () => {
+      let data: SeasonOption[] = [];
+      if (form.league_slug === 'ctfpl') {
+        data = ((await supabase.from('ctfpl_seasons').select('id, season_number, season_name, status').order('season_number', { ascending: false })).data || []) as SeasonOption[];
       } else {
-        toast.error(data.error || 'Failed to create match report');
+        const L = leagues.find((l) => l.slug === form.league_slug);
+        if (L) data = ((await supabase.from('league_seasons').select('id, season_number, season_name, status').eq('league_id', L.id).order('season_number', { ascending: false })).data || []) as SeasonOption[];
       }
-    } catch (error) {
-      console.error('Error creating match report:', error);
-      toast.error('Failed to create match report');
+      setSeasons(data);
+      const active = data.find((s) => s.status === 'active') || data.find((s) => s.status === 'upcoming');
+      set('season_name', active ? active.season_name || `Season ${active.season_number}` : '');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.league_slug, leagues]);
+
+  const pickSquad = (side: 'a' | 'b', id: string) => {
+    const s = squads.find((x) => x.id === id);
+    setForm((f) => ({ ...f, [`squad_${side}_id`]: id, [`squad_${side}_name`]: s ? s.name : f[`squad_${side}_name`] }));
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title || !form.squad_a_name || !form.squad_b_name || !form.match_summary || !form.season_name) { toast.error('Title, both squads, season and summary are required'); return; }
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/match-reports', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify(form) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Could not create the report');
+      toast.success('Report created. Now add the players.');
+      router.push(`/league/match-reports/${j.report.id}/add-player`);
+    } catch (e: any) {
+      toast.error(e.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  if (permissionLoading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-20 bg-gray-700 rounded mb-8"></div>
-            <div className="h-64 bg-gray-700 rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!hasPermission) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🚫</div>
-            <h2 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h2>
-            <p className="text-gray-400 mb-6">You do not have permission to create match reports</p>
-            <Link 
-              href="/league/match-reports"
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 inline-flex items-center"
-            >
-              Back to Match Reports
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (allowed === false) return <Denied user={user} back="/league/match-reports" backLabel="Match reports" what="write match reports" />;
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Link 
-            href="/league/match-reports"
-            className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-2 transition-colors mb-6"
-          >
-            <span>←</span>
-            <span>Back to Match Reports</span>
-          </Link>
-          
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-4">
-            Create Match Report
-          </h1>
-          <p className="text-xl text-gray-300">
-            Create a detailed analysis of a competitive match with player performance ratings
-          </p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8">
-            {/* League Selection */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">League</h3>
-              <div className="flex flex-wrap gap-2">
-                {leagues.map(league => (
-                  <button
-                    key={league.slug}
-                    type="button"
-                    onClick={() => handleLeagueChange(league.slug)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      selectedLeague === league.slug
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {league.name}
-                  </button>
+    <FormPage user={user} back="/league/match-reports" backLabel="Match reports" title="Write a match report" subtitle="Cover the match first. Player ratings and clips come on the next screen.">
+      <form onSubmit={submit} className="space-y-4">
+        <FormSection n="01" title="Match" hint="Required">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="md:col-span-2">
+              <label className={labelCls}>League</label>
+              <div className="flex gap-1 flex-wrap">
+                {leagues.map((l) => (
+                  <button key={l.slug} type="button" onClick={() => set('league_slug', l.slug)} className={`px-3 py-1.5 rounded-md text-sm transition-colors ${form.league_slug === l.slug ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#8B98B0] hover:text-[#E6EDF7] hover:bg-white/5'}`}>{l.name}</button>
                 ))}
               </div>
             </div>
-
-            {/* Basic Information */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Basic Information</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Match Title *
-                  </label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    placeholder={`e.g., ${selectedLeague.toUpperCase()} Week 3: Team A vs Team B`}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Match Date *
-                  </label>
-                  <input
-                    type="date"
-                    name="match_date"
-                    value={formData.match_date}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Season *
-                  </label>
-                  <select
-                    name="season_name"
-                    value={formData.season_name}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Select a season...</option>
-                    {seasonOptions.map(season => (
-                      <option key={season.id} value={season.season_name || `Season ${season.season_number}`}>
-                        {season.season_name || `Season ${season.season_number}`}
-                        {season.status === 'active' ? ' (Active)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            <div>
+              <label className={labelCls}>Season</label>
+              <select value={form.season_name} onChange={(e) => set('season_name', e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} required>
+                <option value="">Pick…</option>
+                {seasons.map((s) => { const n = s.season_name || `Season ${s.season_number}`; return <option key={s.id} value={n}>{n}{s.status === 'active' ? ' · current' : ''}</option>; })}
+              </select>
             </div>
-
-            {/* Squad Selection */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Teams</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Squad A */}
-                <div>
-                  <label className="block text-sm font-medium text-cyan-400 mb-2">
-                    Squad A *
-                  </label>
-                  <select
-                    name="squad_a_id"
-                    value={formData.squad_a_id}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent mb-2"
-                  >
-                    <option value="">Select Squad A</option>
-                    {squads.map(squad => (
-                      <option key={squad.id} value={squad.id}>
-                        {squad.name} ({squad.tag})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    name="squad_a_name"
-                    value={formData.squad_a_name}
-                    onChange={handleInputChange}
-                    placeholder="Or enter squad name manually"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                {/* Squad B */}
-                <div>
-                  <label className="block text-sm font-medium text-purple-400 mb-2">
-                    Squad B *
-                  </label>
-                  <select
-                    name="squad_b_id"
-                    value={formData.squad_b_id}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent mb-2"
-                  >
-                    <option value="">Select Squad B</option>
-                    {squads.map(squad => (
-                      <option key={squad.id} value={squad.id}>
-                        {squad.name} ({squad.tag})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    name="squad_b_name"
-                    value={formData.squad_b_name}
-                    onChange={handleInputChange}
-                    placeholder="Or enter squad name manually"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
+            <div>
+              <label className={labelCls}>Match date</label>
+              <input type="date" value={form.match_date} onChange={(e) => set('match_date', e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} required />
             </div>
-
-            {/* Match Content */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Match Analysis</h3>
-              
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Match Summary *
-                  </label>
-                  <textarea
-                    name="match_summary"
-                    value={formData.match_summary}
-                    onChange={handleInputChange}
-                    rows={6}
-                    placeholder="Provide a detailed summary of the match, including key moments, strategies, and overall performance..."
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-vertical"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Match Highlights Video URL
-                  </label>
-                  <input
-                    type="url"
-                    name="match_highlights_video_url"
-                    value={formData.match_highlights_video_url}
-                    onChange={handleInputChange}
-                    placeholder="https://youtube.com/watch?v=..."
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                  <p className="text-sm text-gray-400 mt-1">
-                    Optional YouTube video URL for match highlights
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex items-center justify-end space-x-4">
-              <Link href="/league/match-reports">
-                <button
-                  type="button"
-                  className="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold transition-all duration-300"
-                >
-                  Cancel
-                </button>
-              </Link>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
-                  loading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {loading ? (
-                  <span className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating...</span>
-                  </span>
-                ) : (
-                  'Create Match Report'
-                )}
-              </button>
+            <div className="md:col-span-4">
+              <label className={labelCls}>Title</label>
+              <input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder={`${(form.league_slug || 'ctfdl').toUpperCase()} S5 Week 3 · AE vs PT`} className={inputCls} required />
             </div>
           </div>
-        </form>
+        </FormSection>
 
-        {/* Info Box */}
-        <div className="max-w-4xl mx-auto mt-8">
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-            <h4 className="text-blue-400 font-semibold mb-2">Next Steps</h4>
-            <p className="text-gray-300 text-sm">
-              After creating the match report, you'll be able to add individual player performance ratings and clips. 
-              Each player rating can include their class/position, performance description, stats, and an optional highlight clip.
-            </p>
+        <FormSection n="02" title="Squads" hint="Pick from the list, or type a name for a squad that isn't on the site">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(['a', 'b'] as const).map((side) => (
+              <div key={side} className="space-y-2">
+                <label className={labelCls}>Squad {side.toUpperCase()}</label>
+                <select value={form[`squad_${side}_id`]} onChange={(e) => pickSquad(side, e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
+                  <option value="">Pick a squad…</option>
+                  {squads.map((s) => <option key={s.id} value={s.id}>{s.tag ? `[${s.tag}] ` : ''}{s.name}</option>)}
+                </select>
+                <input value={form[`squad_${side}_name`]} onChange={(e) => set(`squad_${side}_name`, e.target.value)} placeholder="Squad name" className={inputCls} required />
+              </div>
+            ))}
           </div>
+        </FormSection>
+
+        <FormSection n="03" title="Write-up">
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls}>Match summary</label>
+              <textarea value={form.match_summary} onChange={(e) => set('match_summary', e.target.value)} rows={8} placeholder="How the match went: key moments, what decided it, who stood out…" className={`${inputCls} resize-y`} required />
+            </div>
+            <div>
+              <label className={labelCls}>Highlights video (optional)</label>
+              <input type="url" value={form.match_highlights_video_url} onChange={(e) => set('match_highlights_video_url', e.target.value)} placeholder="https://youtube.com/watch?v=…" className={inputCls} />
+            </div>
+          </div>
+        </FormSection>
+
+        <div className="flex justify-end gap-2">
+          <Link href="/league/match-reports" className={btnQuiet}>Cancel</Link>
+          <button type="submit" disabled={saving} className={btnPrimary}>{saving ? 'Creating…' : 'Create and add players'}</button>
         </div>
-      </div>
-    </div>
+      </form>
+    </FormPage>
   );
 }

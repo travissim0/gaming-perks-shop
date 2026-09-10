@@ -1,525 +1,187 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
-import type { MatchReportWithDetails, Profile } from '@/types/database';
+import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
+import type { MatchReportWithDetails, MatchPlayerRating, Profile } from '@/types/database';
 import { getRatingColor, getStarDisplay } from '@/utils/ratingUtils';
-import Navbar from '@/components/Navbar';
+import { CLASS_OPTIONS } from '@/lib/constants';
+import { FormPage, FormSection, Denied, inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
+const isAnalyst = (p: any) => !!p && (p.is_admin === true || p.ctf_role === 'ctf_admin' || String(p.ctf_role || '').includes('analyst'));
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Add one player's rating to a report. Stays on the page after saving so several players can be added in a row. */
 export default function AddPlayerRatingPage() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const [loading, setLoading] = useState(false);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [hasPermission, setHasPermission] = useState(false);
+  const id = params.id as string;
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [report, setReport] = useState<MatchReportWithDetails | null>(null);
+  const [existing, setExisting] = useState<MatchPlayerRating[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    player_alias: '',
-    player_id: '',
-    class_position: '',
-    performance_description: '',
-    highlight_clip_url: '',
-    kills: 0,
-    deaths: 0,
-    turret_damage: '',
-    rating_before: 3.0,
-    rating_adjustment: 0.0,
-    rating_after: 3.0,
-    display_order: 0
-  });
+  const [saving, setSaving] = useState(false);
+  const [alias, setAlias] = useState('');
+  const [playerId, setPlayerId] = useState('');
+  const [cls, setCls] = useState('');
+  const [desc, setDesc] = useState('');
+  const [clip, setClip] = useState('');
+  const [kills, setKills] = useState('0');
+  const [deaths, setDeaths] = useState('0');
+  const [turret, setTurret] = useState('');
+  const [before, setBefore] = useState(3.0);
+  const [adjust, setAdjust] = useState(0.0);
+
+  const after = useMemo(() => r1(clamp(before + adjust, 0, 6)), [before, adjust]);
 
   useEffect(() => {
-    if (params.id) {
-      fetchReport();
-      checkPermissions();
-      fetchPlayers();
-    }
-  }, [params.id, user]);
+    if (!user) { setAllowed(false); return; }
+    supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle().then(({ data }) => setAllowed(isAnalyst(data)));
+  }, [user]);
 
-  // Simple manual selection without complex calculations
+  const load = async () => {
+    const r = await fetch(`/api/match-reports/${id}`);
+    if (!r.ok) { toast.error('Could not load the report'); router.push('/league/match-reports'); return; }
+    const j = await r.json();
+    setReport(j.report);
+    setExisting(j.playerRatings || []);
+  };
+  useEffect(() => {
+    if (!id) return;
+    load();
+    fetch('/api/profile/all').then((r) => (r.ok ? r.json() : { profiles: [] })).then((j) => setPlayers(j.profiles || [])).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  const fetchReport = async () => {
-    try {
-      const response = await fetch(`/api/match-reports/${params.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setReport(data.report);
-        
-        // Set next display order
-        const nextOrder = (data.playerRatings?.length || 0);
-        setFormData(prev => ({ ...prev, display_order: nextOrder }));
-      } else {
-        toast.error('Failed to load match report');
-        router.push('/league/match-reports');
-      }
-    } catch (error) {
-      console.error('Error fetching match report:', error);
-      toast.error('Failed to load match report');
-      router.push('/league/match-reports');
-    } finally {
-      setPageLoading(false);
-    }
+  const pickPlayer = (pid: string) => {
+    setPlayerId(pid);
+    const p = players.find((x) => x.id === pid);
+    if (p?.in_game_alias) setAlias(p.in_game_alias);
   };
 
-  const checkPermissions = async () => {
-    if (!user) {
-      setHasPermission(false);
-      return;
-    }
-
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('is_admin, ctf_role')
-        .eq('id', user.id)
-        .single();
-
-      if (!error && profile) {
-        const permission = profile?.is_admin || 
-                          profile?.ctf_role === 'ctf_admin' || 
-                          profile?.ctf_role === 'ctf_analyst' ||
-                          profile?.ctf_role === 'ctf_analyst_commentator' ||
-                          profile?.ctf_role === 'ctf_analyst_commentator_referee' ||
-                          profile?.ctf_role === 'ctf_analyst_referee';
-        setHasPermission(permission);
-        
-        if (!permission) {
-          toast.error('You do not have permission to add player ratings');
-          router.push(`/league/match-reports/${params.id}`);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking permissions:', error);
-      setHasPermission(false);
-    }
-  };
-
-  const fetchPlayers = async () => {
-    try {
-      const response = await fetch('/api/profile/all');
-      if (response.ok) {
-        const data = await response.json();
-        setPlayers(data.profiles || []);
-      }
-    } catch (error) {
-      console.error('Error fetching players:', error);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    
-    if (type === 'number' || name === 'rating_before' || name === 'rating_adjustment' || name === 'rating_after') {
-      const numValue = parseFloat(value);
-      setFormData(prev => ({ ...prev, [name]: isNaN(numValue) ? 3.0 : numValue }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-
-    // Auto-populate player alias when player ID is selected
-    if (name === 'player_id') {
-      const selectedPlayer = players.find(player => player.id === value);
-      if (selectedPlayer) {
-        setFormData(prev => ({ ...prev, player_alias: selectedPlayer.in_game_alias || '' }));
-      }
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent, addAnother: boolean) => {
     e.preventDefault();
-    
-    if (!formData.player_alias || !formData.class_position || !formData.performance_description) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    setLoading(true);
-
+    if (!alias.trim() || !cls || !desc.trim()) { toast.error('Player, class and notes are required'); return; }
+    setSaving(true);
     try {
-      const submitData = {
-        ...formData,
-        turret_damage: formData.turret_damage ? parseInt(formData.turret_damage) : null,
-        player_id: formData.player_id || null
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sign in again');
+      const body = {
+        player_alias: alias.trim(),
+        player_id: playerId || null,
+        class_position: cls,
+        performance_description: desc.trim(),
+        highlight_clip_url: clip.trim() || null,
+        kills: Number(kills) || 0,
+        deaths: Number(deaths) || 0,
+        turret_damage: turret.trim() ? Number(turret) : null,
+        rating_before: before,
+        rating_adjustment: adjust,
+        rating_after: after,
+        display_order: existing.length,
       };
-
-      // Get fresh session to ensure we have access_token
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
-      console.log('🚀 Submitting player rating:', {
-        hasSession: !!session,
-        hasCurrentSession: !!currentSession,
-        hasAccessToken: !!currentSession?.access_token,
-        tokenLength: currentSession?.access_token?.length,
-        userId: user?.id,
-        submitData
-      });
-
-      if (!currentSession?.access_token) {
-        toast.error('Please log in again to continue');
-        return;
-      }
-
-      const response = await fetch(`/api/match-reports/${params.id}/player-ratings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentSession.access_token}`,
-        },
-        body: JSON.stringify(submitData),
-      });
-
-      const data = await response.json();
-
-      console.log('📝 Player rating response:', {
-        status: response.status,
-        ok: response.ok,
-        data
-      });
-
-      if (response.ok) {
-        toast.success('Player rating added successfully!');
-        router.push(`/league/match-reports/${params.id}`);
+      const res = await fetch(`/api/match-reports/${id}/player-ratings`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || 'Could not add the player');
+      toast.success(`${alias.trim()} added`);
+      if (addAnother) {
+        setAlias(''); setPlayerId(''); setCls(''); setDesc(''); setClip(''); setKills('0'); setDeaths('0'); setTurret(''); setBefore(3.0); setAdjust(0);
+        await load();
       } else {
-        console.error('❌ Player rating failed:', data);
-        toast.error(data.error || 'Failed to add player rating');
+        router.push(`/league/match-reports/${id}`);
       }
-    } catch (error) {
-      console.error('Error adding player rating:', error);
-      toast.error('Failed to add player rating');
+    } catch (e: any) {
+      toast.error(e.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  // Rating utilities imported from @/utils/ratingUtils
+  if (allowed === false) return <Denied user={user} back={`/league/match-reports/${id}`} backLabel="Back to the report" what="rate players" />;
 
-  if (pageLoading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-20 bg-gray-700 rounded mb-8"></div>
-            <div className="h-64 bg-gray-700 rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!hasPermission || !report) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <Navbar user={user} />
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🚫</div>
-            <h2 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h2>
-            <p className="text-gray-400 mb-6">You do not have permission to add player ratings</p>
-            <Link 
-              href={`/league/match-reports/${params.id}`}
-              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 inline-block"
-            >
-              Back to Report
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const sorted = [...players].sort((a, b) => (a.in_game_alias || '').localeCompare(b.in_game_alias || ''));
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Link 
-            href={`/league/match-reports/${params.id}`}
-            className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-2 transition-colors mb-6"
-          >
-            <span>←</span>
-            <span>Back to Report</span>
-          </Link>
-          
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent mb-4">
-            Add Player Rating
-          </h1>
-          <p className="text-xl text-gray-300 mb-2">
-            {report?.title}
-          </p>
-          <p className="text-gray-400">
-            Rate a player's performance in this match
-          </p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-xl p-8">
-            {/* Player Information */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Player Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Select Player
-                  </label>
-                  <select
-                    name="player_id"
-                    value={formData.player_id}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent mb-2"
-                  >
-                    <option value="">Select from registered players</option>
-                    {players.map(player => (
-                      <option key={player.id} value={player.id}>
-                        {player.in_game_alias || player.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Player Alias *
-                  </label>
-                  <input
-                    type="text"
-                    name="player_alias"
-                    value={formData.player_alias}
-                    onChange={handleInputChange}
-                    placeholder="Enter player alias/name"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Class/Position *
-                  </label>
-                  <input
-                    type="text"
-                    name="class_position"
-                    value={formData.class_position}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Defense, Offense, Captain"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Highlight Clip Embed Code
-                  </label>
-                  <textarea
-                    name="highlight_clip_url"
-                    value={formData.highlight_clip_url}
-                    onChange={handleInputChange}
-                    rows={4}
-                    placeholder='Paste YouTube embed code here...'
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-vertical"
-                  />
-                         <div className="mt-2 text-sm text-gray-400 space-y-2">
-         <div>💡 <strong>Best method for clips with start/end times:</strong></div>
-         <div className="pl-4 space-y-1">
-           <div>1. Copy your YouTube video URL (with or without timestamp)</div>
-           <div>2. Go to <a href="https://iframely.com/domains/youtube" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 underline">Iframely YouTube Embed Generator</a></div>
-           <div>3. Paste URL, set start/end times, copy the embed code</div>
-         </div>
-         <div className="border-t border-gray-600 pt-2 mt-3">
-           <div>⚡ <strong>Alternative methods:</strong></div>
-           <div className="pl-4 space-y-1">
-             <div>• Right-click on video at start time → "Copy video URL at current time"</div>
-             <div>• Right-click anywhere on video → "Copy embed code" for full video</div>
-           </div>
-         </div>
-       </div>
-                </div>
-              </div>
+    <FormPage
+      user={user}
+      back={`/league/match-reports/${id}`}
+      backLabel="Back to the report"
+      title="Rate a player"
+      subtitle={report ? <>{report.title} · {existing.length} player{existing.length === 1 ? '' : 's'} rated so far{existing.length > 0 && <>: {existing.map((p) => p.player_alias).join(', ')}</>}</> : 'Loading…'}
+    >
+      <form onSubmit={(e) => submit(e, false)} className="space-y-4">
+        <FormSection n="01" title="Who" hint="Pick a site account so the rating links to their profile, or type a name">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Site account</label>
+              <select value={playerId} onChange={(e) => pickPlayer(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
+                <option value="">Not on the site / type a name</option>
+                {sorted.filter((p) => p.in_game_alias).map((p) => <option key={p.id} value={p.id}>{p.in_game_alias}</option>)}
+              </select>
             </div>
-
-            {/* Stats */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Match Statistics</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Kills
-                  </label>
-                  <input
-                    type="number"
-                    name="kills"
-                    value={formData.kills}
-                    onChange={handleInputChange}
-                    min="0"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Deaths
-                  </label>
-                  <input
-                    type="number"
-                    name="deaths"
-                    value={formData.deaths}
-                    onChange={handleInputChange}
-                    min="0"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Turret Damage (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    name="turret_damage"
-                    value={formData.turret_damage}
-                    onChange={handleInputChange}
-                    min="0"
-                    placeholder="Enter damage amount"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
+            <div>
+              <label className={labelCls}>Alias as it should appear</label>
+              <input value={alias} onChange={(e) => setAlias(e.target.value)} className={inputCls} required />
             </div>
-
-            {/* Performance Description */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Performance Analysis</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Performance Description *
-                </label>
-                <textarea
-                  name="performance_description"
-                  value={formData.performance_description}
-                  onChange={handleInputChange}
-                  rows={4}
-                  placeholder="Describe the player's performance in this match, including key plays, strengths, areas for improvement..."
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-vertical"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Player Rating */}
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Player Rating</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Previous Rating
-                  </label>
-                  <select
-                    name="rating_before"
-                    value={formData.rating_before}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  >
-                    {[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0].map(rating => (
-                      <option key={rating} value={rating}>{rating.toFixed(1)}</option>
-                    ))}
-                  </select>
-                  <div className="mt-2 flex justify-center">
-                    {getStarDisplay(parseFloat(formData.rating_before))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Rating Change
-                  </label>
-                  <select
-                    name="rating_adjustment"
-                    value={formData.rating_adjustment}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  >
-                    <option value={-2.0}>-2.0 (Major Drop)</option>
-                    <option value={-1.5}>-1.5 (Large Drop)</option>
-                    <option value={-1.0}>-1.0 (Drop)</option>
-                    <option value={-0.5}>-0.5 (Small Drop)</option>
-                    <option value={0.0}>+0.0 (No Change)</option>
-                    <option value={0.5}>+0.5 (Small Improvement)</option>
-                    <option value={1.0}>+1.0 (Improvement)</option>
-                    <option value={1.5}>+1.5 (Large Improvement)</option>
-                    <option value={2.0}>+2.0 (Major Improvement)</option>
-                  </select>
-                  <div className="mt-2 text-center">
-                    <span className={`text-lg font-bold ${formData.rating_adjustment >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {formData.rating_adjustment >= 0 ? '+' : ''}{parseFloat(formData.rating_adjustment).toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    New Rating
-                  </label>
-                  <select
-                    name="rating_after"
-                    value={formData.rating_after}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  >
-                    {[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0].map(rating => (
-                      <option key={rating} value={rating}>{rating.toFixed(1)}</option>
-                    ))}
-                  </select>
-                  <div className="mt-2 flex justify-center">
-                    {getStarDisplay(parseFloat(formData.rating_after))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex items-center justify-end space-x-4">
-              <Link href={`/league/match-reports/${params.id}`}>
-                <button
-                  type="button"
-                  className="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold transition-all duration-300"
-                >
-                  Cancel
-                </button>
-              </Link>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg ${
-                  loading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {loading ? (
-                  <span className="flex items-center space-x-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Adding...</span>
-                  </span>
-                ) : (
-                  'Add Player Rating'
-                )}
-              </button>
+            <div>
+              <label className={labelCls}>Class / position</label>
+              <select value={cls} onChange={(e) => setCls(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} required>
+                <option value="">Pick…</option>
+                {CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="Captain">Captain</option>
+                <option value="Flex">Flex</option>
+              </select>
             </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </FormSection>
+
+        <FormSection n="02" title="Rating" hint="Out of 6">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+            <div>
+              <label className={labelCls}>Rating before · {before.toFixed(1)}</label>
+              <input type="range" min={0} max={6} step={0.1} value={before} onChange={(e) => setBefore(Number(e.target.value))} className="w-full accent-[#22D3EE]" />
+            </div>
+            <div>
+              <label className={labelCls}>Adjustment · {adjust >= 0 ? '+' : ''}{adjust.toFixed(1)}</label>
+              <input type="range" min={-2} max={2} step={0.1} value={adjust} onChange={(e) => setAdjust(Number(e.target.value))} className="w-full accent-[#F59E0B]" />
+            </div>
+            <div className="rounded-lg bg-[#1B2438] px-4 py-3 text-center min-w-[9rem]">
+              <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">After</div>
+              <div className={`font-display text-4xl leading-none ${getRatingColor(after)}`}>{after.toFixed(1)}</div>
+              <div className="flex justify-center mt-1">{getStarDisplay(after)}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <div><label className={labelCls}>Kills</label><input type="number" min={0} value={kills} onChange={(e) => setKills(e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>Deaths</label><input type="number" min={0} value={deaths} onChange={(e) => setDeaths(e.target.value)} className={inputCls} /></div>
+            <div><label className={labelCls}>Turret damage (optional)</label><input type="number" min={0} value={turret} onChange={(e) => setTurret(e.target.value)} className={inputCls} /></div>
+          </div>
+        </FormSection>
+
+        <FormSection n="03" title="Notes">
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls}>How they played</label>
+              <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={5} placeholder="What they did well, what cost the team, what to watch next week…" className={`${inputCls} resize-y`} required />
+            </div>
+            <div>
+              <label className={labelCls}>Highlight clip (optional)</label>
+              <input value={clip} onChange={(e) => setClip(e.target.value)} placeholder="YouTube link or embed code" className={inputCls} />
+            </div>
+          </div>
+        </FormSection>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link href={`/league/match-reports/${id}`} className={btnQuiet}>Done</Link>
+          <button type="button" onClick={(e) => submit(e as any, true)} disabled={saving} className={btnQuiet}>{saving ? 'Saving…' : 'Save and add another'}</button>
+          <button type="submit" disabled={saving} className={btnPrimary}>{saving ? 'Saving…' : 'Save and view report'}</button>
+        </div>
+      </form>
+    </FormPage>
   );
 }
