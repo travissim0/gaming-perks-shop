@@ -725,6 +725,17 @@ export default function AdminDashboard() {
               </Link>
 
               <Link
+                href="/admin/ctf-raters"
+                className="flex items-center gap-4 px-4 py-3 bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/30 text-cyan-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20"
+              >
+                <span className="text-3xl">🎫</span>
+                <div>
+                  <div className="font-semibold">CTF Raters</div>
+                  <div className="text-xs text-cyan-400">Grant Community Ratings access</div>
+                </div>
+              </Link>
+
+              <Link
                 href="/admin/roster-lock"
                 className="flex items-center gap-4 px-4 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 rounded-lg transition-all hover:scale-105 hover:shadow-lg hover:shadow-red-500/20"
               >

@@ -84,6 +84,9 @@ export default function CommunityRatingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [canVote, setCanVote] = useState(false);
+  // The API already tells us this (CTF admins count, not just site admins); the page just never
+  // read it, which left /admin/ctf-raters reachable only by typing the URL.
+  const [isRatingsAdmin, setIsRatingsAdmin] = useState(false);
   const [search, setSearch] = useState('');
 
   const authHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -107,6 +110,7 @@ export default function CommunityRatingsPage() {
           setLoadError(null);
           setForbidden(false);
           setCanVote(!!json.canVote);
+          setIsRatingsAdmin(!!json.isAdmin);
         } else if (json.forbidden) {
           setForbidden(true);
         } else {
@@ -243,6 +247,15 @@ export default function CommunityRatingsPage() {
           <p className="text-gray-400 text-sm mt-1">
             Choose the better player in head-to-head voting. Community-driven CTF player rankings.
           </p>
+
+          {isRatingsAdmin && (
+            <Link
+              href="/admin/ctf-raters"
+              className="inline-flex items-center gap-1.5 mt-3 text-sm text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 hover:border-cyan-400/60 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <span>🎫</span> Manage rater access
+            </Link>
+          )}
 
           <div className="flex flex-wrap gap-2 mt-4">
             <Chip
