@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { patchSquads } from '@/lib/admin-squads';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import TransitionalPlayerManager from '@/components/admin/TransitionalPlayerManager';
@@ -108,12 +109,7 @@ export default function AdminSquads() {
 
   const toggleSquadStatus = async (squadId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('squads')
-        .update({ is_active: !currentStatus })
-        .eq('id', squadId);
-
-      if (error) throw error;
+      await patchSquads(squadId, { is_active: !currentStatus });
 
       // Update local state
       setSquads(prev => prev.map(squad => 
@@ -131,12 +127,7 @@ export default function AdminSquads() {
 
   const toggleLegacyStatus = async (squadId: string, currentLegacyStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('squads')
-        .update({ is_legacy: !currentLegacyStatus })
-        .eq('id', squadId);
-
-      if (error) throw error;
+      await patchSquads(squadId, { is_legacy: !currentLegacyStatus });
 
       // Update local state
       setSquads(prev => prev.map(squad => 

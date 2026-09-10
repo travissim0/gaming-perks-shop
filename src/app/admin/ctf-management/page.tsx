@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { patchSquads } from '@/lib/admin-squads';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
@@ -432,8 +433,7 @@ export default function CTFManagementPage() {
     try {
       // Inactive + legacy: the site already lets players hold legacy memberships
       // alongside one current squad, so this frees them to create/join next season.
-      const { error } = await supabase.from('squads').update({ is_active: false, is_legacy: true }).in('id', ids);
-      if (error) throw error;
+      await patchSquads(ids, { is_active: false, is_legacy: true });
       setSquads((prev) => prev.map((s) => (ids.includes(s.id) ? { ...s, is_active: false } : s)));
       toast.success(`Archived ${ids.length} squad${ids.length === 1 ? '' : 's'} from ${rollover.league.name} Season ${rollover.season.season_number}`);
       setShowArchiveConfirm(false);
@@ -449,8 +449,7 @@ export default function CTFManagementPage() {
   const setSquadLeague = async (squadId: string, leagueSlug: string) => {
     const value = leagueSlug || null;
     try {
-      const { error } = await supabase.from('squads').update({ league_slug: value }).eq('id', squadId);
-      if (error) throw error;
+      await patchSquads(squadId, { league_slug: value });
       setSquads((prev) => prev.map((s) => (s.id === squadId ? { ...s, league_slug: value } : s)));
       toast.success(value ? `Squad set to ${value.toUpperCase()}` : 'Squad league cleared');
     } catch (error) {
@@ -461,24 +460,19 @@ export default function CTFManagementPage() {
 
   const toggleSquadStatus = async (squadId: string, field: 'is_active' | 'tournament_eligible', currentValue: boolean) => {
     try {
-      const { error } = await supabase
-        .from('squads')
-        .update({ [field]: !currentValue })
-        .eq('id', squadId);
+      await patchSquads(squadId, { [field]: !currentValue });
 
-      if (error) throw error;
-
-      setSquads(prev => prev.map(squad => 
-        squad.id === squadId 
+      setSquads(prev => prev.map(squad =>
+        squad.id === squadId
           ? { ...squad, [field]: !currentValue }
           : squad
       ));
 
       const fieldName = field === 'is_active' ? 'squad status' : 'tournament eligibility';
       toast.success(`Updated ${fieldName} successfully`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error updating ${field}:`, error);
-      toast.error(`Failed to update ${field}`);
+      toast.error(error?.message || `Failed to update ${field}`);
     }
   };
 
