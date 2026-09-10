@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, type Guild } from 'discord.js';
 import { config } from './config.js';
 import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
+import { postStaff } from './discord.js';
 
 /**
  * FreeInf CTF bot.
@@ -50,7 +51,8 @@ client.once('ready', async () => {
   console.log(`Serving ${guild.name}`);
 
   await runCommands();
-  await reconcile(guild, 'startup');
+  const first = await reconcile(guild, 'startup');
+  await postStaff(guild, `**FreeInf CTF bot online** · ${first}`);
   setInterval(() => reconcile(guild!, 'scheduled'), config.syncIntervalMs);
   setInterval(runCommands, 20_000); // belt and braces if Realtime drops
 

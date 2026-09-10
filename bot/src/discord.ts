@@ -2,6 +2,7 @@ import {
   ChannelType,
   Guild,
   GuildMember,
+  MessageFlags,
   OverwriteType,
   PermissionFlagsBits,
   Role,
@@ -236,8 +237,14 @@ export async function teardownTeam(guild: Guild, m: ChannelMapping) {
   console.log(`- removed ${m.squad_name}`);
 }
 
+/** Reports go to the staff channel as silent messages (no pings, no badges). */
 export async function postStaff(guild: Guild, text: string) {
-  if (!config.staffChannelId || config.dryRun) { console.log(`[staff] ${text}`); return; }
+  console.log(`[staff] ${text}`);
+  if (!config.staffChannelId || config.dryRun) return;
   const ch = guild.channels.cache.get(config.staffChannelId) ?? (await guild.channels.fetch(config.staffChannelId).catch(() => null));
-  if (ch && ch.isTextBased()) await ch.send(text.slice(0, 1900)).catch((e) => console.warn('staff post failed:', e.message));
+  if (ch && ch.isTextBased() && 'send' in ch) {
+    await ch.send({ content: text.slice(0, 1900), flags: MessageFlags.SuppressNotifications }).catch((e) => console.warn('staff post failed:', e.message));
+  } else {
+    console.warn(`staff channel ${config.staffChannelId} not found or not a text channel`);
+  }
 }
