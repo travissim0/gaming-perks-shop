@@ -473,7 +473,16 @@ export default function MatchDetailPage() {
                   ) : (
                     <span className="block font-display text-2xl text-[#8B98B0]">TBD</span>
                   )}
-                  {t.s && <span className="block text-xs text-[#8B98B0]">{t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}</span>}
+                  {t.s && (
+                    <span className="block text-xs text-[#8B98B0]">
+                      {match.squad_a_id && match.squad_b_id && (
+                        <span className={`mr-1.5 text-[10px] uppercase tracking-wide ${i === 0 ? 'text-[#F59E0B]/80' : 'text-[#8B98B0]/70'}`} title={i === 0 ? 'Home team picks the side' : undefined}>
+                          {i === 0 ? 'Home' : 'Away'}
+                        </span>
+                      )}
+                      {t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
