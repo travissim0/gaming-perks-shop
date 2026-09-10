@@ -240,27 +240,17 @@ export default function GameStatsPage() {
     const status = getPlayerWinStatus(player);
     switch (status) {
       case 'win':
-        return 'bg-green-500/30 border-green-500/40';
+        return 'bg-emerald-400/[0.06] border-l-2 border-l-emerald-400/70';
       case 'loss':
-        return 'bg-red-500/30 border-red-500/40';
+        return 'bg-rose-400/[0.045] border-l-2 border-l-rose-400/50';
       default:
-        return 'bg-transparent';
+        return 'bg-transparent border-l-2 border-l-transparent';
     }
   };
 
-  // Get player name style based on win/loss status
-  const getPlayerNameStyle = (player: PlayerGameStats): string => {
-    const status = getPlayerWinStatus(player);
-    const baseClass = 'hover:border-cyan-400 transition-all';
-    switch (status) {
-      case 'win':
-        return `${baseClass} !lowercase`; // Winners in lowercase
-      case 'loss':
-        return `${baseClass} !uppercase`; // Losers in UPPERCASE
-      default:
-        return baseClass;
-    }
-  };
+  // Aliases are shown exactly as their owner spells them; the row tint carries win/loss.
+  const getPlayerNameStyle = (_player: PlayerGameStats): string =>
+    'hover:border-cyan-400/60 transition-colors';
 
   // Get team name display based on win/loss
   const getTeamDisplay = (team: string, players: PlayerGameStats[]): { text: string, style: string } => {
@@ -268,9 +258,9 @@ export default function GameStatsPage() {
     const status = getPlayerWinStatus(players[0]);
     switch (status) {
       case 'win':
-        return { text: `🏆 ${team} - WIN`, style: 'text-green-400' };
+        return { text: `${team} · WIN`, style: 'text-emerald-400' };
       case 'loss':
-        return { text: `💀 ${team} - LOSS`, style: 'text-red-400' };
+        return { text: `${team} · LOSS`, style: 'text-rose-400' };
       default:
         return { text: team, style: '' };
     }
@@ -356,7 +346,7 @@ export default function GameStatsPage() {
 
   if (loading) {
     return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
           <p className="text-blue-200">Loading game statistics...</p>
@@ -367,7 +357,7 @@ export default function GameStatsPage() {
 
   if (error || !gameData) {
     return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
+      <div className="ctf-theme min-h-screen text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading Game</h1>
           <p className="text-blue-200 mb-4">{error || 'Game not found'}</p>
@@ -380,7 +370,7 @@ export default function GameStatsPage() {
   }
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white">
+    <div className="ctf-theme min-h-screen text-white">
       <div className="container mx-auto px-2 py-4">
         {/* Header */}
         <motion.div
@@ -482,7 +472,7 @@ export default function GameStatsPage() {
             >
               <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
                 {/* Video Header */}
-                <div className="p-4 bg-white/20 border-b border-white/20 flex items-center justify-between">
+                <div className="px-4 py-3 bg-white/[0.03] border-b border-white/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <h2 className="text-2xl font-bold text-blue-200">Match recording</h2>
                     {gameData.videoInfo.video_title && (
@@ -646,7 +636,7 @@ export default function GameStatsPage() {
                             <div key={player.id} className="bg-blue-500/10 rounded p-1">
                               <div className="flex items-center justify-between">
                                 <span 
-                                  className="inline-block font-bold text-lg px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md truncate"
+                                  className="inline-block text-sm font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 truncate"
                                   style={{
                                     ...getClassColorStyle(player.main_class || ''),
                                     textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -686,7 +676,7 @@ export default function GameStatsPage() {
                             <div key={player.id} className="bg-red-500/10 rounded p-1">
                               <div className="flex items-center justify-between">
                                 <span 
-                                  className="inline-block font-bold text-lg px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md truncate"
+                                  className="inline-block text-sm font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 truncate"
                                   style={{
                                     ...getClassColorStyle(player.main_class || ''),
                                     textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -720,9 +710,9 @@ export default function GameStatsPage() {
             >
             <div className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20">
               {/* Video Header */}
-              <div className="p-4 bg-white/20 border-b border-white/20 flex items-center justify-between">
+              <div className="px-4 py-3 bg-white/[0.03] border-b border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-blue-200">Match Video</h2>
+                  <h2 className="font-display text-lg font-semibold tracking-wide text-slate-100">Match Video</h2>
                   {gameData.videoInfo.video_title && (
                     <span className="text-sm text-gray-300">• {gameData.videoInfo.video_title}</span>
                   )}
@@ -885,35 +875,35 @@ export default function GameStatsPage() {
               gameData.videoInfo?.has_video && isVideoExpanded ? 'xl:col-span-2' : ''
             }`}
           >
-          <div className="p-4 bg-white/20 border-b border-white/20">
-            <h2 className="text-xl font-bold text-blue-200">Player Performance</h2>
+          <div className="px-4 py-3 bg-white/[0.03] border-b border-white/10">
+            <h2 className="font-display text-lg font-semibold tracking-wide text-slate-100">Player Performance</h2>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/20">
+              <thead className="bg-white/[0.04]">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FlagCap</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CK</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CarryTime</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ClassSwaps</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TurDmg</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ACC</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Player</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Class</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">K</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">D</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">K/D</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">FlagCap</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">CK</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">CarryTime</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">ClassSwaps</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">EB</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">TurDmg</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">ACC</th>
                 </tr>
               </thead>
               <tbody>
                                  {Object.entries(getGroupedPlayers()).map(([team, { defense, offense }]) => (
                    <React.Fragment key={team}>
-                                         <tr className="bg-white/30">
+                                         <tr className="bg-white/[0.05]">
                        <td colSpan={12} className="px-3 py-2 text-center text-sm font-bold">
                          <span 
-                           className={`font-bold text-xl ${getTeamDisplay(team, [...defense, ...offense]).style}`}
+                           className={`font-display text-base font-semibold tracking-wide ${getTeamDisplay(team, [...defense, ...offense]).style}`}
                          >
                            {getTeamDisplay(team, [...defense, ...offense]).text}
                          </span>
@@ -922,15 +912,15 @@ export default function GameStatsPage() {
                          </span>
                          {/* Display base at team level */}
                          {(defense[0]?.base_used || offense[0]?.base_used) && (
-                           <span className="ml-4 bg-white/20 px-3 py-1 rounded text-sm">
+                           <span className="ml-3 bg-white/[0.06] text-slate-300 px-2.5 py-0.5 rounded-md text-xs">
                              Base: {defense[0]?.base_used || offense[0]?.base_used}
                            </span>
                          )}
                                               </td>
                      </tr>
                      {defense.length > 0 && (
-                       <tr className="bg-blue-500/20">
-                         <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                       <tr className="bg-sky-400/[0.07]">
+                         <td colSpan={12} className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider text-sky-300/80">
                            🛡️ DEFENSE ({defense.length})
                          </td>
                        </tr>
@@ -948,7 +938,7 @@ export default function GameStatsPage() {
                             href={`/stats/player/${encodeURIComponent(player.player_name)}`}
                           >
                             <span
-                              className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                              className={`inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 ${getPlayerNameStyle(player)}`}
                               style={{
                                 ...getClassColorStyle(player.main_class || ''),
                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -960,7 +950,7 @@ export default function GameStatsPage() {
                         </td>
                         <td className="px-3 py-2">
                           <span 
-                            className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                            className="inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10"
                             style={{
                               ...getClassColorStyle(player.main_class || ''),
                               textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -986,8 +976,8 @@ export default function GameStatsPage() {
                                              </motion.tr>
                      ))}
                      {offense.length > 0 && (
-                       <tr className="bg-red-500/20">
-                         <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                       <tr className="bg-amber-400/[0.07]">
+                         <td colSpan={12} className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">
                            ⚔️ OFFENSE ({offense.length})
                          </td>
                        </tr>
@@ -1005,7 +995,7 @@ export default function GameStatsPage() {
                             href={`/stats/player/${encodeURIComponent(player.player_name)}`}
                           >
                             <span
-                              className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                              className={`inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 ${getPlayerNameStyle(player)}`}
                               style={{
                                 ...getClassColorStyle(player.main_class || ''),
                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -1017,7 +1007,7 @@ export default function GameStatsPage() {
                         </td>
                         <td className="px-3 py-2">
                           <span 
-                            className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                            className="inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10"
                             style={{
                               ...getClassColorStyle(player.main_class || ''),
                               textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -1056,26 +1046,26 @@ export default function GameStatsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white/10 backdrop-blur-lg rounded-xl overflow-hidden border border-white/20"
           >
-            <div className="p-4 bg-white/20 border-b border-white/20">
-              <h2 className="text-xl font-bold text-blue-200">Player Performance</h2>
+            <div className="px-4 py-3 bg-white/[0.03] border-b border-white/10">
+              <h2 className="font-display text-lg font-semibold tracking-wide text-slate-100">Player Performance</h2>
             </div>
             
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-white/20">
+                <thead className="bg-white/[0.04]">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Player</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-blue-200">Class</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">D</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">K/D</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">FlagCap</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CK</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">CarryTime</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ClassSwaps</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">EB</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">TurDmg</th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-200">ACC</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Player</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Class</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">K</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">D</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">K/D</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">FlagCap</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">CK</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">CarryTime</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">ClassSwaps</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">EB</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">TurDmg</th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">ACC</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1084,7 +1074,7 @@ export default function GameStatsPage() {
                       <tr className="bg-white/20">
                         <td colSpan={12} className="px-3 py-2 text-center text-sm font-bold">
                           <span 
-                            className={`font-bold text-xl ${getTeamDisplay(team, [...defense, ...offense]).style}`}
+                            className={`font-display text-base font-semibold tracking-wide ${getTeamDisplay(team, [...defense, ...offense]).style}`}
                           >
                             {getTeamDisplay(team, [...defense, ...offense]).text}
                           </span>
@@ -1093,15 +1083,15 @@ export default function GameStatsPage() {
                           </span>
                           {/* Display base at team level */}
                           {(defense[0]?.base_used || offense[0]?.base_used) && (
-                            <span className="ml-4 bg-white/20 px-3 py-1 rounded text-sm">
+                            <span className="ml-3 bg-white/[0.06] text-slate-300 px-2.5 py-0.5 rounded-md text-xs">
                               Base: {defense[0]?.base_used || offense[0]?.base_used}
                             </span>
                           )}
                         </td>
                       </tr>
                       {defense.length > 0 && (
-                        <tr className="bg-blue-500/20">
-                          <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-blue-300">
+                        <tr className="bg-sky-400/[0.07]">
+                          <td colSpan={12} className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider text-sky-300/80">
                             🛡️ DEFENSE ({defense.length})
                           </td>
                         </tr>
@@ -1119,7 +1109,7 @@ export default function GameStatsPage() {
                               href={`/stats/player/${encodeURIComponent(player.player_name)}`}
                             >
                               <span
-                                className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                                className={`inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 ${getPlayerNameStyle(player)}`}
                                 style={{
                                   ...getClassColorStyle(player.main_class || ''),
                                   textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -1131,7 +1121,7 @@ export default function GameStatsPage() {
                           </td>
                           <td className="px-3 py-2">
                             <span 
-                              className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                              className="inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10"
                               style={{
                                 ...getClassColorStyle(player.main_class || ''),
                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -1157,8 +1147,8 @@ export default function GameStatsPage() {
                         </motion.tr>
                       ))}
                       {offense.length > 0 && (
-                        <tr className="bg-red-500/20">
-                          <td colSpan={12} className="px-3 py-1 text-center text-xs font-semibold text-red-300">
+                        <tr className="bg-amber-400/[0.07]">
+                          <td colSpan={12} className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">
                             ⚔️ OFFENSE ({offense.length})
                           </td>
                         </tr>
@@ -1176,7 +1166,7 @@ export default function GameStatsPage() {
                               href={`/stats/player/${encodeURIComponent(player.player_name)}`}
                             >
                               <span
-                                className={`inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md ${getPlayerNameStyle(player)}`}
+                                className={`inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10 ${getPlayerNameStyle(player)}`}
                                 style={{
                                   ...getClassColorStyle(player.main_class || ''),
                                   textShadow: '0 1px 2px rgba(0,0,0,0.8)'
@@ -1188,7 +1178,7 @@ export default function GameStatsPage() {
                           </td>
                           <td className="px-3 py-2">
                             <span 
-                              className="inline-block font-bold text-xs px-2 py-1 rounded bg-gray-900 border border-gray-500 shadow-md"
+                              className="inline-block text-[13px] font-semibold px-2 py-0.5 rounded-md bg-black/25 border border-white/10"
                               style={{
                                 ...getClassColorStyle(player.main_class || ''),
                                 textShadow: '0 1px 2px rgba(0,0,0,0.8)'
