@@ -25,6 +25,7 @@ import { Chip, Panel, Modal, Spinner, Empty, th, td, pill } from '@/components/c
 import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
+import GameClientPanel from '@/components/admin/GameClientPanel';
 
 interface Squad {
   id: string;
@@ -944,6 +945,7 @@ export default function CTFManagementPage() {
       {activeTab === 'season' && (
         <>
           <SeasonSettingsPanel />
+          <GameClientPanel />
           {rollover && (
             <Panel
               title={`Season rollover · ${rollover.league.name} Season ${rollover.season.season_number}`}

@@ -1,28 +1,37 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
- * Collective, both teams set their starting lineup and bench. Writes go
- * through /api/matches/[id]/setup; the same data feeds the game client.
+ * Collective, both teams set their starting lineup and bench.
+ *
+ * Private: a squad's captain/co-captains see and edit their own lineup; the
+ * home team's leads see the side; staff see everything. Everyone else sees
+ * only whether each piece has been submitted. Writes go through
+ * /api/matches/[id]/setup; the same route feeds the game client.
  */
 
 type Side = 'titan' | 'collective';
 type Slot = 'starting' | 'bench' | 'out';
 
 interface Member { player_id: string; alias: string; role: 'captain' | 'co_captain' | 'player' }
-interface Team { squad_id: string; name: string; tag: string; side: Side | null; team_starting: string | null; team_bench: string | null; roster: Member[] }
+interface Entry { player_id: string; alias: string }
+interface Team {
+  squad_id: string; name: string; tag: string;
+  side: Side | null; team_starting: string | null; team_bench: string | null;
+  roster: Member[];
+  /** Only present when the viewer may see this squad's lineup. */
+  lineup: { starting: Entry[]; bench: Entry[] } | null;
+}
 interface Setup {
   pending_sql?: boolean;
   match: { id: string; scheduled_at: string; status: string; locked: boolean };
   home: Team | null;
   away: Team | null;
-  side_chosen_at: string | null;
-  lineups: Record<string, { starting: { player_id: string; alias: string }[]; bench: { player_id: string; alias: string }[] }>;
-  client: { ready: boolean; teams: string[]; players: { alias: string; team: string; spec: boolean }[] };
+  progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
   viewer: { is_staff: boolean; leads_home: boolean; leads_away: boolean; can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean } | null;
 }
 
@@ -30,11 +39,17 @@ const SIDE_LABEL: Record<Side, string> = { titan: 'Titan', collective: 'Collecti
 const btnQuiet = 'px-3 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors disabled:opacity-50';
 const btnPrimary = 'px-3.5 py-2 rounded-md text-sm font-medium bg-[#22D3EE] text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50 transition-colors';
 
+const Flag = ({ on, label }: { on: boolean; label: string }) => (
+  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${on ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-white/5 text-[#8B98B0]'}`}>
+    <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-[#34D399]' : 'bg-[#8B98B0]/50'}`} />{label}
+  </span>
+);
+
 export default function MatchSetup({ matchId, user }: { matchId: string; user: any }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  // Local edits per squad: player_id → slot. Null until the user touches a lineup.
+  // Local edits per squad: player_id → slot. Absent until the user touches a lineup.
   const [draft, setDraft] = useState<Record<string, Record<string, Slot>>>({});
 
   const headers = useCallback(async (): Promise<Record<string, string>> => {
@@ -79,17 +94,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
 
   const slotsFor = (team: Team): Record<string, Slot> => {
     if (draft[team.squad_id]) return draft[team.squad_id];
-    const l = setup?.lineups[team.squad_id];
     const out: Record<string, Slot> = {};
     team.roster.forEach((m) => { out[m.player_id] = 'out'; });
-    l?.starting.forEach((p) => { out[p.player_id] = 'starting'; });
-    l?.bench.forEach((p) => { out[p.player_id] = 'bench'; });
+    team.lineup?.starting.forEach((p) => { out[p.player_id] = 'starting'; });
+    team.lineup?.bench.forEach((p) => { out[p.player_id] = 'bench'; });
     return out;
   };
 
-  const setSlot = (team: Team, playerId: string, slot: Slot) => {
+  const setSlot = (team: Team, playerId: string, slot: Slot) =>
     setDraft((d) => ({ ...d, [team.squad_id]: { ...slotsFor(team), [playerId]: slot } }));
-  };
 
   const saveLineup = (team: Team) => {
     const slots = slotsFor(team);
@@ -102,16 +115,6 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     }, `${team.tag} lineup saved`);
   };
 
-  const summary = useMemo(() => {
-    if (!setup?.home || !setup.away) return null;
-    const { home, away, viewer } = setup;
-    if (!home.side) {
-      if (viewer?.can_pick_side) return `${home.tag} is home: pick your side below.`;
-      return `Waiting on ${home.name} (home) to pick a side.`;
-    }
-    return `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
-  }, [setup]);
-
   if (loading) return null;
   if (!setup || !setup.home || !setup.away) return null;
   if (setup.pending_sql) {
@@ -120,15 +123,44 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     ) : null;
   }
 
-  const { home, away, viewer, match } = setup;
+  const { home, away, viewer, match, progress } = setup;
   const locked = match.locked;
+  const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away);
+
+  // Public / uninvolved view: progress only.
+  if (!involved) {
+    return (
+      <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+        <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg text-[#E6EDF7]">Match setup</h2>
+          <div className="flex flex-wrap gap-1.5">
+            <Flag on={progress.side_picked} label={`${home.tag} side`} />
+            <Flag on={progress.home_lineup_set} label={`${home.tag} lineup`} />
+            <Flag on={progress.away_lineup_set} label={`${away.tag} lineup`} />
+          </div>
+        </div>
+        <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">Sides and lineups stay private to each squad's captains and league staff.</p>
+      </section>
+    );
+  }
+
+  const sideText = (() => {
+    if (home.side) return `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
+    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side.`;
+    if (viewer?.leads_home) return `${home.tag} is home and picks the side.`;
+    // Away leads: the pick itself is hidden from them.
+    return progress.side_picked ? `${home.tag} (home) has picked a side. It is revealed at match time.` : `Waiting on ${home.name} (home) to pick a side.`;
+  })();
 
   const renderTeam = (team: Team, canEdit: boolean) => {
-    const slots = slotsFor(team);
+    const isHome = team.squad_id === home.squad_id;
+    const canSee = !!team.lineup;
+    const slots = canSee ? slotsFor(team) : {};
     const starting = team.roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = team.roster.filter((m) => slots[m.player_id] === 'bench');
     const dirty = !!draft[team.squad_id];
-    const isHome = team.squad_id === home.squad_id;
+    const submitted = isHome ? progress.home_lineup_set : progress.away_lineup_set;
+
     return (
       <div className="rounded-md bg-[#1B2438] overflow-hidden">
         <div className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06]">
@@ -139,15 +171,19 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
             <div className="text-[11px] text-[#8B98B0]">
               {team.team_starting
                 ? <>Starters on <span className="text-[#34D399]">{team.team_starting}</span> · bench in spec on <span className="text-[#E6EDF7]">{team.team_bench}</span></>
-                : 'Team names are set once the side is picked.'}
+                : canSee ? 'Team names are set once the side is known.' : null}
             </div>
           </div>
-          <div className="text-xs tabular-nums text-[#8B98B0]">
-            <span className="text-[#34D399]">{starting.length}</span> starting · {bench.length} bench
-          </div>
+          {canSee ? (
+            <div className="text-xs tabular-nums text-[#8B98B0]"><span className="text-[#34D399]">{starting.length}</span> starting · {bench.length} bench</div>
+          ) : (
+            <Flag on={submitted} label={submitted ? 'Lineup submitted' : 'No lineup yet'} />
+          )}
         </div>
 
-        {team.roster.length === 0 ? (
+        {!canSee ? (
+          <p className="px-3 py-3 text-xs text-[#8B98B0]">{team.tag}&apos;s lineup is private to their captains and staff.</p>
+        ) : team.roster.length === 0 ? (
           <p className="px-3 py-3 text-sm text-[#8B98B0]">No players on the roster yet.</p>
         ) : canEdit ? (
           <ul className="divide-y divide-white/[0.04]">
@@ -194,9 +230,9 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
           </div>
         )}
 
-        {canEdit && team.roster.length > 0 && (
+        {canEdit && canSee && team.roster.length > 0 && (
           <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-white/[0.06]">
-            <span className="text-[11px] text-[#8B98B0]">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+            <span className="text-[11px] text-[#8B98B0]">{dirty ? 'Unsaved changes' : submitted ? 'Saved' : 'Not submitted yet'}</span>
             <div className="flex gap-2">
               {dirty && <button type="button" onClick={() => setDraft((d) => { const n = { ...d }; delete n[team.squad_id]; return n; })} className={btnQuiet}>Discard</button>}
               <button type="button" onClick={() => saveLineup(team)} disabled={!dirty || busy !== null} className={btnPrimary}>Save lineup</button>
@@ -212,7 +248,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-lg text-[#E6EDF7]">Match setup</h2>
         <div className="flex items-center gap-3 text-xs text-[#8B98B0]">
-          {locked ? <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">Locked</span> : setup.client.ready ? <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 uppercase tracking-wide text-[#34D399]">Ready</span> : null}
+          {locked ? <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">Locked</span> : progress.ready ? <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 uppercase tracking-wide text-[#34D399]">Ready</span> : null}
           {viewer?.is_staff && (
             <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
           )}
@@ -222,7 +258,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
       <div className="px-4 pb-4 space-y-3">
         {/* Side */}
         <div className="rounded-md bg-[#1B2438] px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-[#E6EDF7]">{summary}</div>
+          <div className="text-sm text-[#E6EDF7]">{sideText}</div>
           {viewer?.can_pick_side && (
             <div className="flex gap-1.5">
               {(['titan', 'collective'] as Side[]).map((s) => (
@@ -250,7 +286,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Captains and co-captains set their side and lineup until the scheduled time; staff can change them any time.
+          Only your own captains and league staff can see your side and lineup. Captains and co-captains can change them until the scheduled time; staff any time.
           When the game client is connected, starters are placed on their team and unspecced, and the bench stays in spec on the other team name.
         </p>
       </div>
