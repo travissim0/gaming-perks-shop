@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { discordEnv, exchangeCode, fetchGuildNick, fetchUser, verifyState } from '@/lib/discord-server';
+import { getDiscordConfig, exchangeCode, fetchGuildNick, fetchUser, verifyState } from '@/lib/discord-server';
 
 /**
  * GET /api/discord/callback?code&state
@@ -27,12 +27,13 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
   if (!code) return fail('missing-code', returnTo);
 
-  const token = await exchangeCode(code, `${origin}/api/discord/callback`);
+  const cfg = await getDiscordConfig();
+  const token = await exchangeCode(cfg, code, `${origin}/api/discord/callback`);
   if (!token?.access_token) return fail('exchange', returnTo);
 
   const me = await fetchUser(token.access_token);
   if (!me?.id) return fail('profile', returnTo);
-  const guild = await fetchGuildNick(token.access_token, discordEnv().guildId);
+  const guild = await fetchGuildNick(token.access_token, cfg.guildId);
 
   // One Discord account per site account.
   const { data: taken } = await supabaseAdmin.from('profiles').select('id').eq('discord_id', me.id).neq('id', userId).maybeSingle();

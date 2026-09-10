@@ -1,21 +1,29 @@
 import { createHmac, timingSafeEqual } from 'crypto';
+import { getSetting } from './site-settings';
 
 /**
  * Server-side helpers for the Discord account link (our own OAuth flow —
  * sign-in is untouched). Scopes are the minimum needed: `identify` for the
  * account, `guilds.members.read` for the player's nickname in the CTFPL server.
+ *
+ * Settings come from environment variables or, when those aren't set, from the
+ * site_settings table that staff edit in CTF management.
  */
 
 export const DISCORD_SCOPES = 'identify guilds.members.read';
 
-export function discordEnv() {
-  const clientId = process.env.DISCORD_CLIENT_ID || '';
-  const clientSecret = process.env.DISCORD_CLIENT_SECRET || '';
-  const guildId = process.env.DISCORD_GUILD_ID || '';
+export interface DiscordConfig { clientId: string; clientSecret: string; guildId: string; configured: boolean }
+
+export async function getDiscordConfig(): Promise<DiscordConfig> {
+  const [clientId, clientSecret, guildId] = await Promise.all([
+    getSetting('DISCORD_CLIENT_ID'),
+    getSetting('DISCORD_CLIENT_SECRET'),
+    getSetting('DISCORD_GUILD_ID'),
+  ]);
   return { clientId, clientSecret, guildId, configured: !!(clientId && clientSecret) };
 }
 
-const stateSecret = () => process.env.DISCORD_CLIENT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev';
+const stateSecret = () => process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev';
 const b64u = (s: string) => Buffer.from(s).toString('base64url');
 const unb64u = (s: string) => Buffer.from(s, 'base64url').toString();
 
@@ -43,10 +51,9 @@ export function verifyState(state: string | null): { userId: string; returnTo: s
   }
 }
 
-export function authorizeUrl(redirectUri: string, state: string): string {
-  const { clientId } = discordEnv();
+export function authorizeUrl(cfg: DiscordConfig, redirectUri: string, state: string): string {
   const q = new URLSearchParams({
-    client_id: clientId,
+    client_id: cfg.clientId,
     response_type: 'code',
     redirect_uri: redirectUri,
     scope: DISCORD_SCOPES,
@@ -56,12 +63,11 @@ export function authorizeUrl(redirectUri: string, state: string): string {
   return `https://discord.com/oauth2/authorize?${q}`;
 }
 
-export async function exchangeCode(code: string, redirectUri: string): Promise<{ access_token: string } | null> {
-  const { clientId, clientSecret } = discordEnv();
+export async function exchangeCode(cfg: DiscordConfig, code: string, redirectUri: string): Promise<{ access_token: string } | null> {
   const res = await fetch('https://discord.com/api/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'authorization_code', code, redirect_uri: redirectUri }),
+    body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: 'authorization_code', code, redirect_uri: redirectUri }),
   });
   if (!res.ok) {
     console.error('discord token exchange failed', res.status, await res.text().catch(() => ''));
@@ -86,6 +92,3 @@ export async function fetchGuildNick(token: string, guildId: string): Promise<{ 
   const m = await res.json();
   return { inGuild: true, nick: m?.nick ?? null };
 }
-
-export const discordAvatarUrl = (id: string, hash: string | null) =>
-  hash ? `https://cdn.discordapp.com/avatars/${id}/${hash}.${hash.startsWith('a_') ? 'gif' : 'png'}?size=128` : null;

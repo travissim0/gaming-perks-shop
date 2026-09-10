@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { getLeagues, pickFeatured, getOpenSeason, getLatestSeason, type LeagueInfo, type LeagueSeason } from '@/lib/leagues';
 import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
+import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 
 interface Squad {
   id: string;
@@ -828,6 +829,9 @@ export default function CTFManagementPage() {
 
             {/* Season dates + Discord invite (feeds the /league hero) */}
             <SeasonSettingsPanel />
+
+            {/* Discord application settings (account link) */}
+            <DiscordAppPanel />
 
             {/* FreeInf CTF Discord bot: heartbeat, sync, season teardown */}
             <DiscordBotPanel />
