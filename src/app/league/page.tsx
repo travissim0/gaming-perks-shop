@@ -630,7 +630,7 @@ export default function LeagueHome() {
           {/* ── CENTER: the season ───────────────────────────────────── */}
           <div className="xl:col-span-6 space-y-4">
             {showThisWeek && (
-              <Card title="This week" action={<MoreLink href="/matches">All matches</MoreLink>}>
+              <Card title="This week" action={<MoreLink href={L ? `/league/schedule?league=${L.slug}` : '/league/schedule'}>Full schedule</MoreLink>}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1.5 px-1">Upcoming</div>

@@ -139,6 +139,12 @@ export default function SeasonHero({
           >
             Standings
           </Link>
+          <Link
+            href={`/league/schedule?league=${league.slug}`}
+            className="px-3.5 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors"
+          >
+            Schedule
+          </Link>
           {draftHref && (
             <Link
               href={draftHref}

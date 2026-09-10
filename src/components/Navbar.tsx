@@ -514,7 +514,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/league/register', label: 'Register', icon: <ClipboardCheck className="w-4 h-4" /> },
     { href: '/league/standings', label: 'Standings', icon: <Table2 className="w-4 h-4" /> },
     { href: '/league/ctfdl/draft', label: 'CTFDL draft', icon: <ListOrdered className="w-4 h-4" /> },
-    { href: '/tournament-matches', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
+    { href: '/league/schedule', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
     { href: '/rules', label: 'Rules', icon: <ScrollText className="w-4 h-4" /> },
     { href: '/news', label: 'News', icon: <Newspaper className="w-4 h-4" /> },
     { href: '/league/ratings', label: 'Squad Ratings', icon: <Star className="w-4 h-4" />, divider: true },
