@@ -40,10 +40,9 @@ const CAPTAIN_ALLOW = [
   PermissionFlagsBits.PrioritySpeaker,
 ];
 
-const BOT_ALLOW = [
-  ...CAPTAIN_ALLOW,
-  PermissionFlagsBits.ManageRoles,
-];
+// Never ManageRoles here: Discord rejects granting "Manage Permissions" inside
+// an overwrite (50013) even when the bot holds it guild-wide.
+const BOT_ALLOW = [...CAPTAIN_ALLOW];
 
 /**
  * Discord rejects an overwrite that grants a permission the bot itself lacks
