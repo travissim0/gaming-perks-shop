@@ -147,6 +147,25 @@ export default function ScheduleStaffTools({
     .map((s) => ({ id: s.squad_id, name: s.squad_name, tag: s.squad_tag }));
   const fieldSize = Math.min(Number(field), seeded.length);
   const canSeed = currentRound === 0 && fieldSize >= 2 && (fieldSize & (fieldSize - 1)) === 0;
+  // Seed number by squad (1 = top of the standings). Higher seed is home in every round.
+  const seedOf = (id: string) => { const i = seeded.findIndex((s) => s.id === id); return i < 0 ? 999 : i + 1; };
+  const round1Pairs: [TeamRef, TeamRef][] = canSeed ? seedBracket(seeded.slice(0, fieldSize)) : [];
+  const nextPairs: [TeamRef, TeamRef][] = [];
+  for (let i = 0; i + 1 < winners.length; i += 2) {
+    const [x, y] = [winners[i], winners[i + 1]];
+    nextPairs.push(seedOf(x.id) <= seedOf(y.id) ? [x, y] : [y, x]);
+  }
+  const PairList = ({ pairs }: { pairs: [TeamRef, TeamRef][] }) => (
+    <ul className="text-sm text-[#E6EDF7] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
+      {pairs.map(([a, b], i) => (
+        <li key={i}>
+          <span className="text-[#8B98B0] tabular-nums">{seedOf(a.id)}.</span> {a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
+          <span className="text-[#8B98B0]"> vs </span>
+          <span className="text-[#8B98B0] tabular-nums">{seedOf(b.id)}.</span> {b.name}
+        </li>
+      ))}
+    </ul>
+  );
 
   const submitPlayoffs = async (pairs: [TeamRef, TeamRef][], round: number, label: string) => {
     setBusy(true);
@@ -323,7 +342,7 @@ export default function ScheduleStaffTools({
                       <button
                         type="button"
                         disabled={busy || !canSeed}
-                        onClick={() => submitPlayoffs(seedBracket(seeded.slice(0, fieldSize)), 1, playoffRoundLabel(fieldSize))}
+                        onClick={() => submitPlayoffs(round1Pairs, 1, playoffRoundLabel(fieldSize))}
                         className={btnPrimary}
                       >
                         {busy ? 'Creating…' : `Seed ${playoffRoundLabel(fieldSize).toLowerCase()}`}
@@ -332,12 +351,13 @@ export default function ScheduleStaffTools({
                   </div>
                   {seeded.length === 0 ? (
                     <p className="text-sm text-[#8B98B0]">Seeding uses the standings. Report regular-season results first.</p>
+                  ) : canSeed ? (
+                    <>
+                      <PairList pairs={round1Pairs} />
+                      <p className="text-[11px] text-[#8B98B0]">Seeds come from the standings. The higher seed is home and picks the side, in every round.</p>
+                    </>
                   ) : (
-                    <ol className="text-sm text-[#E6EDF7] grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-                      {seeded.slice(0, fieldSize).map((t, i) => (
-                        <li key={t.id}><span className="text-[#8B98B0] tabular-nums mr-2">{i + 1}.</span>{t.name}</li>
-                      ))}
-                    </ol>
+                    <p className="text-sm text-[#8B98B0]">Pick a field of 2, 4, 8 or 16 teams.</p>
                   )}
                 </>
               ) : (
@@ -348,6 +368,8 @@ export default function ScheduleStaffTools({
                   {roundFixtures.length === 1 && roundDone ? (
                     <p className="text-sm text-[#F59E0B]">Final played. Champion: {winners[0]?.name}. Record it on the season in Supabase or the admin season tools.</p>
                   ) : roundDone ? (
+                    <>
+                    <PairList pairs={nextPairs} />
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
                       <div>
                         <label className={labelCls}>Next round date</label>
@@ -361,17 +383,15 @@ export default function ScheduleStaffTools({
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => {
-                            const pairs: [TeamRef, TeamRef][] = [];
-                            for (let i = 0; i < winners.length; i += 2) pairs.push([winners[i], winners[i + 1]]);
-                            submitPlayoffs(pairs, currentRound + 1, playoffRoundLabel(winners.length));
-                          }}
+                          onClick={() => submitPlayoffs(nextPairs, currentRound + 1, playoffRoundLabel(winners.length))}
                           className={btnPrimary}
                         >
                           Create {playoffRoundLabel(winners.length).toLowerCase()}
                         </button>
                       </div>
                     </div>
+                    <p className="text-[11px] text-[#8B98B0]">The higher seed is home and picks the side.</p>
+                    </>
                   ) : (
                     <p className="text-sm text-[#8B98B0]">The next round unlocks once every result in this round is reported.</p>
                   )}
