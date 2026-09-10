@@ -8,6 +8,7 @@ import {
   pickFeatured,
   getOpenSeason,
   getLatestSeason,
+  getSeasonDraft,
   seasonPhase,
   type LeagueInfo,
   type LeagueSeason,
@@ -37,6 +38,8 @@ export default function SeasonSettingsPanel() {
   const [discord, setDiscord] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<'dates' | 'discord' | null>(null);
+  // Draft leagues read "Recruiting" until the draft has run, same as the public strip.
+  const [draftDone, setDraftDone] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     (async () => {
@@ -47,6 +50,10 @@ export default function SeasonSettingsPanel() {
         setDiscord(L.discord_url || '');
         const S = (await getOpenSeason(L)) || (await getLatestSeason(L));
         setSeason(S);
+        if (S && L.format === 'draft') {
+          const d = await getSeasonDraft(S.id).catch(() => null);
+          setDraftDone(d?.status === 'complete');
+        }
         if (S) {
           setDates({
             registration_closes_on: S.registration_closes_on || '',
@@ -113,6 +120,7 @@ export default function SeasonSettingsPanel() {
         league,
         { ...season, ...Object.fromEntries(Object.entries(dates).map(([k, v]) => [k, v || null])) },
         season.status === 'active' ? 'active' : season.status === 'upcoming' ? 'upcoming' : 'off-season',
+        { draftDone },
       )
     : null;
   const isDraft = league.format === 'draft';
