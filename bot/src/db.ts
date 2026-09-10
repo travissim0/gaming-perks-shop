@@ -101,11 +101,15 @@ export async function getMappings(guildId: string, seasonId: string): Promise<Ch
 }
 
 export async function saveMapping(guildId: string, seasonId: string, m: ChannelMapping) {
-  await db.from('discord_squad_channels').upsert({ guild_id: guildId, season_id: seasonId, ...m, updated_at: new Date().toISOString() }, { onConflict: 'guild_id,season_id,squad_id' });
+  const { error } = await db
+    .from('discord_squad_channels')
+    .upsert({ guild_id: guildId, season_id: seasonId, ...m, updated_at: new Date().toISOString() }, { onConflict: 'guild_id,season_id,squad_id' });
+  if (error) throw new Error(`could not record ${m.squad_name} in discord_squad_channels: ${error.message}`);
 }
 
 export async function deleteMapping(guildId: string, seasonId: string, squadId: string) {
-  await db.from('discord_squad_channels').delete().eq('guild_id', guildId).eq('season_id', seasonId).eq('squad_id', squadId);
+  const { error } = await db.from('discord_squad_channels').delete().eq('guild_id', guildId).eq('season_id', seasonId).eq('squad_id', squadId);
+  if (error) console.error(`could not delete mapping ${squadId}: ${error.message}`);
 }
 
 export interface BotCommand { id: string; action: 'sync' | 'teardown'; season_id: string | null; requested_by: string | null }
@@ -120,5 +124,6 @@ export async function finishCommand(id: string, result: string) {
 }
 
 export async function writeState(patch: Record<string, unknown>) {
-  await db.from('discord_bot_state').upsert({ id: 1, ...patch, updated_at: new Date().toISOString() });
+  const { error } = await db.from('discord_bot_state').upsert({ id: 1, ...patch, updated_at: new Date().toISOString() });
+  if (error) console.error(`could not write discord_bot_state: ${error.message}`);
 }
