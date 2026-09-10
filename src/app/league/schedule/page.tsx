@@ -93,7 +93,7 @@ function SchedulePage() {
     (async () => {
       const [{ data: p }, { data: m }] = await Promise.all([
         supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle(),
-        supabase.from('squad_members').select('squad_id').eq('user_id', user.id).eq('status', 'active'),
+        supabase.from('squad_members').select('squad_id').eq('player_id', user.id).eq('status', 'active'),
       ]);
       setIsStaff(!!p && (p.is_admin === true || p.ctf_role === 'ctf_admin'));
       setMySquads(new Set((m || []).map((r: any) => r.squad_id)));

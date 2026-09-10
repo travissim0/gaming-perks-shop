@@ -1,0 +1,35 @@
+name: Deploy CTF bot
+
+# Pushes to main that touch bot/ get pulled and restarted on John's server.
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   BOT_SSH_HOST   e.g. 203.0.113.10
+#   BOT_SSH_USER   e.g. ctfbot
+#   BOT_SSH_KEY    private key whose public half is in ~/.ssh/authorized_keys on the server
+#   BOT_DIR        e.g. /home/ctfbot/gaming-perks-shop  (the clone on the server)
+
+on:
+  push:
+    branches: [main]
+    paths: ['bot/**', '.github/workflows/deploy-bot.yml']
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull, build and restart on the server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BOT_SSH_HOST }}
+          username: ${{ secrets.BOT_SSH_USER }}
+          key: ${{ secrets.BOT_SSH_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.BOT_DIR }}"
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            cd bot
+            npm ci --omit=dev=false
+            npm run build
+            pm2 startOrRestart ecosystem.config.cjs --update-env
+            pm2 save
