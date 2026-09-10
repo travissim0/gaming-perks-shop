@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import DiscordLinkCard from '@/components/ctf/DiscordLinkCard';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import AvatarSelector from '@/components/AvatarSelector';
@@ -676,6 +677,9 @@ export default function ProfilePage() {
                   </div>
                 )}
               </form>
+
+              {/* Discord link (feeds registration + the CTFPL server automation) */}
+              {user && <DiscordLinkCard userId={user.id} />}
 
               {/* Recorded games */}
               <div className="rounded-xl bg-[#131A2B] p-4 md:p-5">

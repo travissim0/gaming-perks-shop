@@ -32,6 +32,14 @@ interface FreeAgentJoinFormProps {
   /** Optional header content rendered above the sections (league/season context). */
   header?: ReactNode;
   submitting?: boolean;
+  /**
+   * The player's linked Discord account (from their profile). When present the
+   * Discord field is filled in and read-only; when null a Connect button is
+   * offered next to the plain text field.
+   */
+  discord?: { username: string; nick: string | null; inGuild: boolean } | null;
+  /** Starts the Discord link flow (returns to the registration page). */
+  onConnectDiscord?: () => void;
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -61,6 +69,8 @@ export default function FreeAgentJoinForm({
   showCaptainInterest = false,
   header,
   submitting = false,
+  discord = null,
+  onConnectDiscord,
 }: FreeAgentJoinFormProps) {
   const isEditMode = !!initialData;
   const buttonText = submitLabel || (isEditMode ? 'Save changes' : 'Register');
@@ -413,17 +423,42 @@ export default function FreeAgentJoinForm({
       <div className="rounded-xl bg-[#131A2B]">
         {sectionHead('03', 'Contact & notes', 'Optional')}
         <div className="grid gap-4 p-5 md:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#8B98B0]">Discord username</span>
-            <input
-              type="text"
-              value={formData.contact_info}
-              onChange={(e) => setFormData((prev) => ({ ...prev, contact_info: e.target.value }))}
-              placeholder="e.g. soup#0001 or soup"
-              className="w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
-            />
-            <span className="mt-1 block text-xs text-[#8B98B0]">Makes it easier for captains to reach you. Leave blank to use site messages only.</span>
-          </label>
+          {discord ? (
+            <div className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#8B98B0]">Discord</span>
+              <div className="flex items-center gap-2 rounded-md bg-[#0B0F1A] px-3 py-2 text-sm">
+                <span className="text-[#E6EDF7]">@{discord.username}</span>
+                {discord.inGuild ? (
+                  <span className="text-xs text-[#8B98B0]">in the CTFPL server{discord.nick ? ` as ${discord.nick}` : ''}</span>
+                ) : (
+                  <span className="text-xs text-[#F59E0B]">not in the CTFPL server yet</span>
+                )}
+                <span className="ml-auto rounded bg-[#5865F2]/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#5865F2]">Linked</span>
+              </div>
+              <span className="mt-1 block text-xs text-[#8B98B0]">Taken from your connected Discord account. Captains reach you here, and the CTFPL server sets up your squad’s channels automatically.</span>
+            </div>
+          ) : (
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#8B98B0]">Discord username</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.contact_info}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, contact_info: e.target.value }))}
+                  placeholder="e.g. soup"
+                  className="w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
+                />
+                {onConnectDiscord && (
+                  <button type="button" onClick={onConnectDiscord} className="shrink-0 rounded-md bg-[#5865F2] px-3 py-2 text-sm font-medium text-white hover:bg-[#6B76F5]">
+                    Connect Discord
+                  </button>
+                )}
+              </div>
+              <span className="mt-1 block text-xs text-[#8B98B0]">
+                Connect Discord so captains can reach you and the CTFPL server gives you your squad’s channels automatically. Or type your username; leave blank to use site messages only.
+              </span>
+            </label>
+          )}
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-[#8B98B0]">Notes for captains</span>
             <textarea

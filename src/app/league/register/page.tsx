@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import FreeAgentJoinForm, { type FreeAgentFormData } from '@/components/FreeAgentJoinForm';
+import { DISCORD_COLS, startDiscordLink } from '@/components/ctf/DiscordLinkCard';
 import {
   getLeagues,
   pickFeatured,
@@ -34,6 +35,7 @@ export default function LeagueRegisterPage() {
 
   const [banned, setBanned] = useState(false);
   const [existing, setExisting] = useState<Partial<FreeAgentFormData> | null>(null);
+  const [discord, setDiscord] = useState<{ username: string; nick: string | null; inGuild: boolean } | null>(null);
   const [loadingMine, setLoadingMine] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,6 +73,13 @@ export default function LeagueRegisterPage() {
         ]);
         if (cancelled) return;
         setBanned(!!profile?.is_league_banned);
+
+        // Linked Discord (columns arrive with add-discord-link.sql; ignore if missing).
+        const { data: dc } = await supabase.from('profiles').select(DISCORD_COLS).eq('id', user.id).maybeSingle();
+        if (!cancelled && dc && (dc as any).discord_id) {
+          const d = dc as any;
+          setDiscord({ username: d.discord_username, nick: d.discord_guild_nick ?? null, inGuild: !!d.discord_in_guild });
+        }
 
         if (session) {
           const res = await fetch('/api/league/register', {
@@ -228,10 +237,12 @@ export default function LeagueRegisterPage() {
       inline
       showCaptainInterest
       header={contextHeader}
-      initialData={existing || undefined}
+      initialData={existing ? { ...existing, contact_info: discord ? discord.username : existing.contact_info } : discord ? { contact_info: discord.username } : undefined}
+      discord={discord}
+      onConnectDiscord={() => startDiscordLink('/league/register')}
       submitLabel={isEdit ? 'Save changes' : `Register for ${league.name}`}
       submitting={submitting}
-      onSubmit={handleSubmit}
+      onSubmit={(data) => handleSubmit(discord ? { ...data, contact_info: discord.username } : data)}
       onCancel={() => router.push('/free-agents')}
     />,
   );
