@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { clampInt, corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
-import { aliasKey } from '@/lib/uslMix/types';
+import { aliasKey, withHealTotals } from '@/lib/uslMix/types';
 
 /**
  * GET /api/usl-mix/games - recent games, newest first.
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       // run yet is requested separately, with a fallback to the columns we know exist.
       const BASE_COLS =
         'game_id, alias, side, team_name, result, is_captain, is_shotcaller, primary_class, kills, deaths, ' +
-        'shots_fired, shots_landed, accuracy, heal_amount, opening_kills, opening_deaths, opening_fights_won, rating_delta';
+        'shots_fired, shots_landed, accuracy, heal_amount, bio_dart_hits, opening_kills, opening_deaths, opening_fights_won, rating_delta';
       const withVocal = await supabase
         .from('usl_mix_game_players')
         .select(`${BASE_COLS}, is_vocal`)
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       const players: any[] = ((withVocal.error ? fallback?.data : withVocal.data) ?? []) as any[];
       for (const p of players ?? []) {
         const list = playersByGame.get(p.game_id) ?? [];
-        list.push(p);
+        list.push(withHealTotals(p));
         playersByGame.set(p.game_id, list);
       }
     }

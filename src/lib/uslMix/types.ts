@@ -163,6 +163,22 @@ export function totalHeal(healAmount: number | null | undefined, bioDartHits: nu
   return Number(healAmount ?? 0) + Number(bioDartHits ?? 0) * BIO_DART_HEAL;
 }
 
+/**
+ * Normalises a stored player row so `heal_amount` means the SAME thing on every endpoint: MediKit
+ * repairs plus bio dart healing. The raw table column counts MediKit only, so it is preserved as
+ * `heal_medikit`. Without this the same field name meant different things depending on which route
+ * you asked, which is exactly the bug that sent Chris hunting for bio_dart_heal.
+ */
+export function withHealTotals<T extends { heal_amount?: number | null; bio_dart_hits?: number | null }>(row: T) {
+  const darts = Number(row.bio_dart_hits ?? 0);
+  return {
+    ...row,
+    heal_amount: totalHeal(row.heal_amount, darts),
+    heal_medikit: Number(row.heal_amount ?? 0),
+    bio_dart_heal: darts * BIO_DART_HEAL,
+  };
+}
+
 export function aliasKey(alias: string): string {
   return (alias || '').trim().toLowerCase();
 }

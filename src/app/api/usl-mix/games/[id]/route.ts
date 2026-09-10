@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { corsError, corsJson, corsPreflight } from '@/lib/uslMix/cors';
-import { aliasKey, normalizeWeaponName } from '@/lib/uslMix/types';
+import { aliasKey, normalizeWeaponName, withHealTotals } from '@/lib/uslMix/types';
 import { splitFights, openingStatsByPlayer, OPENING_LULL_MS } from '@/lib/uslMix/fights';
 
 /**
@@ -73,7 +73,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
       {
         success: true,
         game,
-        players: (players ?? []).map((p: any) => ({ ...p, ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING) })),
+        players: (players ?? []).map((p: any) => ({ ...withHealTotals(p), ...(openingByKey.get(aliasKey(p.alias)) ?? NO_OPENING) })),
         kill_events: tagged.map((e: any) => ({ ...e, weapon_name: normalizeWeaponName(e.weapon_name), root_weapon_name: normalizeWeaponName(e.root_weapon_name) })),
         fights,
         opening_lull_seconds: OPENING_LULL_MS / 1000,
