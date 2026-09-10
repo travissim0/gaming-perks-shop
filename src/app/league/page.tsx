@@ -18,6 +18,7 @@ import {
   getSeasonStatus,
   getStandings,
   getRecentChampions,
+  getSeasonDraft,
   seasonPhase,
   formatDateOnly,
   leagueStandingsHref,
@@ -270,10 +271,7 @@ export default function LeagueHome() {
 
       // Draft leagues: the only official teams are the ones staff added to the draft.
       // Squads people create on their own don't count until then.
-      const draftRow =
-        L.format === 'draft' && S
-          ? (await supabase.from('ctfdl_drafts').select('id, status').eq('league_season_id', S.id).maybeSingle()).data
-          : null;
+      const seasonDraft = L.format === 'draft' && S ? await getSeasonDraft(S.id) : null;
 
       const [standings, registered, teams, results, champions] = await Promise.all([
         S ? getStandings(L, S, 50) : Promise.resolve([] as StandingRow[]),
@@ -286,12 +284,12 @@ export default function LeagueHome() {
               .eq('season_number', S.season_number)
               .then((r) => (r.error ? null : r.count))
           : Promise.resolve(null),
-        L.format === 'draft' ? (draftRow ? loadDraftTeams((draftRow as any).id) : Promise.resolve([] as Team[])) : loadTeams(L.slug),
+        L.format === 'draft' ? Promise.resolve((seasonDraft?.teams || []) as Team[]) : loadTeams(L.slug),
         S && featured.status !== 'off-season' ? loadResults(L.slug, S.season_number) : Promise.resolve([] as LeagueResult[]),
         getRecentChampions(L, 3).catch(() => [] as SeasonChampions[]),
       ]);
 
-      const draft = draftRow ? { id: (draftRow as any).id, status: (draftRow as any).status } : null;
+      const draft = seasonDraft ? { id: seasonDraft.id, status: seasonDraft.status } : null;
       const phase = seasonPhase(L, S, featured.status, { draftDone: draft?.status === 'complete' });
 
       setLeague({
@@ -957,29 +955,6 @@ async function loadTeams(slug: string): Promise<Team[]> {
       member_count: counts.get(s.id) || 0,
     }))
     .sort((a, b) => b.member_count - a.member_count || a.name.localeCompare(b.name));
-}
-
-/** Teams staff added to a CTFDL draft, in pick order. */
-async function loadDraftTeams(draftId: string): Promise<Team[]> {
-  const { data, error } = await supabase
-    .from('ctfdl_draft_teams')
-    .select('squad_id, pick_order, squads(id, name, tag, captain_id, profiles!squads_captain_id_fkey(in_game_alias))')
-    .eq('draft_id', draftId)
-    .order('pick_order', { ascending: true });
-  if (error || !data || data.length === 0) return [];
-  const ids = (data as any[]).map((t) => t.squad_id);
-  const { data: members } = await supabase.from('squad_members').select('squad_id').in('squad_id', ids).eq('status', 'active');
-  const counts = new Map<string, number>();
-  (members || []).forEach((m: any) => counts.set(m.squad_id, (counts.get(m.squad_id) || 0) + 1));
-  return (data as any[])
-    .filter((t) => t.squads)
-    .map((t) => ({
-      id: t.squads.id,
-      name: t.squads.name,
-      tag: t.squads.tag ?? null,
-      captain_alias: t.squads.profiles?.in_game_alias || 'Unknown',
-      member_count: counts.get(t.squad_id) || 0,
-    }));
 }
 
 async function loadResults(slug: string, seasonNumber: number): Promise<LeagueResult[]> {

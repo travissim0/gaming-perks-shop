@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Trophy, Users, BarChart3, Shield, Crown, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crown } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import {
+  getSeasonDraft,
+  formatDateOnly,
+  leagueRulesHref,
+  type LeagueInfo,
+  type SeasonDraft,
+} from '@/lib/leagues';
+
+/*
+ * Standings for one league. Data paths are unchanged from the original
+ * CTFPL-only version: CTFPL reads ctfpl_seasons / ctfpl_standings_with_rankings /
+ * ctfpl_matches, every other league reads league_seasons /
+ * league_standings_with_rankings / league_matches by league_season_id.
+ */
 
 interface Standing {
   id: string;
-  season_number: number;
   squad_id: string;
   matches_played: number;
   wins: number;
@@ -17,31 +29,29 @@ interface Standing {
   overtime_wins: number;
   overtime_losses: number;
   points: number;
-  kills_for: number;
-  deaths_against: number;
   kill_death_difference: number;
   win_percentage: number;
   regulation_wins: number;
   rank: number;
   points_behind: number;
   squad_name: string;
-  squad_tag: string;
+  squad_tag: string | null;
   banner_url?: string | null;
-  captain_alias: string;
+  captain_alias: string | null;
 }
 
 interface Season {
+  id?: string;
   season_number: number;
-  season_name: string;
+  season_name: string | null;
   status: string;
-  start_date: string;
+  start_date: string | null;
   end_date: string | null;
   champion_squad_ids?: string[];
   runner_up_squad_ids?: string[];
-  third_place_squad_ids?: string[];
 }
 
-interface PlayoffMatch {
+interface MatchRow {
   id: string;
   match_type: string;
   team_a_name: string;
@@ -53,860 +63,545 @@ interface PlayoffMatch {
   match_date: string;
 }
 
-interface LeagueStandingsProps {
-  leagueSlug?: string;
-  leagueName?: string;
+const MATCH_COLS =
+  'id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date';
+
+/** Scoring footnotes. Only leagues whose wording has been confirmed are listed. */
+const SCORING: Record<string, string[]> = {
+  ctfpl: [
+    '3 points for a win (regulation or overtime)',
+    '1 point for participation (loss)',
+    '0 points for a no-show',
+    'Tiebreakers: points, win %, regulation wins, overtime wins, K/D',
+  ],
+};
+
+const seasonTitle = (s: Season | null) => {
+  if (!s) return '';
+  const name = s.season_name?.trim();
+  const generic = `Season ${s.season_number}`;
+  return name && name.toLowerCase() !== generic.toLowerCase() ? `${generic} · ${name}` : generic;
+};
+
+const STATUS_PILL: Record<string, string> = {
+  active: 'bg-[#34D399]/15 text-[#34D399]',
+  upcoming: 'bg-[#F59E0B]/15 text-[#F59E0B]',
+  completed: 'bg-white/5 text-[#8B98B0]',
+};
+
+function TeamMark({ tag, name, banner }: { tag: string | null; name: string; banner?: string | null }) {
+  if (banner) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={banner} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />;
+  }
+  return (
+    <span className="w-8 h-8 rounded-md bg-[#1B2438] text-[#22D3EE] text-[11px] font-medium flex items-center justify-center shrink-0">
+      {(tag || name).slice(0, 4).toUpperCase()}
+    </span>
+  );
 }
 
-export function CTFPLStandingsContent({ leagueSlug = 'ctfpl', leagueName = 'CTFPL' }: LeagueStandingsProps) {
-  const isCTFPL = leagueSlug === 'ctfpl';
-  const [leagueId, setLeagueId] = useState<string | null>(null);
-  const [standings, setStandings] = useState<Standing[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
-  const [currentSeason, setCurrentSeason] = useState<number | null>(null);
-  const [seasonInfo, setSeasonInfo] = useState<Season | null>(null);
-  const [allSeasons, setAllSeasons] = useState<Season[]>([]);
-  const [allSquads, setAllSquads] = useState<{ id: string; name: string; tag: string }[]>([]);
-  const [playoffMatches, setPlayoffMatches] = useState<PlayoffMatch[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [seasonsLoading, setSeasonsLoading] = useState(true);
-  const [navbarMobileMenuOpen, setNavbarMobileMenuOpen] = useState(false);
-  const [seasonStats, setSeasonStats] = useState({
-    totalMatches: 0,
-    totalSquads: 0,
-    topWinRate: 0,
-    totalRegulationGames: 0,
-    totalOvertimeGames: 0,
-    averagePointsPerSquad: 0,
-  });
-
-  const loadAllSeasons = useCallback(async () => {
-    try {
-      setSeasonsLoading(true);
-
-      if (isCTFPL) {
-        const { data: seasonsData, error: seasonsError } = await supabase
-          .from('ctfpl_seasons')
-          .select('*')
-          .order('season_number', { ascending: false });
-
-        if (seasonsError) {
-          console.error('Error loading seasons:', seasonsError);
-          return;
-        }
-
-        if (seasonsData) {
-          setAllSeasons(seasonsData);
-          const activeSeason = seasonsData.find((season) => season.status === 'active');
-          if (activeSeason) {
-            setCurrentSeason(activeSeason.season_number);
-            if (selectedSeason === null) {
-              setSelectedSeason(activeSeason.season_number);
-            }
-          } else if (selectedSeason === null && seasonsData.length > 0) {
-            // No active season — default to most recent
-            setSelectedSeason(seasonsData[0].season_number);
-          }
-        }
-      } else {
-        // Look up league ID first
-        const { data: leagueData } = await supabase
-          .from('leagues')
-          .select('id')
-          .eq('slug', leagueSlug)
-          .single();
-
-        if (!leagueData) {
-          console.error('League not found:', leagueSlug);
-          return;
-        }
-        setLeagueId(leagueData.id);
-
-        const { data: seasonsData, error: seasonsError } = await supabase
-          .from('league_seasons')
-          .select('*')
-          .eq('league_id', leagueData.id)
-          .order('season_number', { ascending: false });
-
-        if (seasonsError) {
-          console.error('Error loading seasons:', seasonsError);
-          return;
-        }
-
-        if (seasonsData) {
-          setAllSeasons(seasonsData);
-          const activeSeason = seasonsData.find((season: any) => season.status === 'active');
-          if (activeSeason) {
-            setCurrentSeason(activeSeason.season_number);
-            if (selectedSeason === null) {
-              setSelectedSeason(activeSeason.season_number);
-            }
-          } else if (selectedSeason === null && seasonsData.length > 0) {
-            // No active season — default to most recent
-            setSelectedSeason(seasonsData[0].season_number);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading seasons:', error);
-    } finally {
-      setSeasonsLoading(false);
-    }
-  }, [selectedSeason, isCTFPL, leagueSlug]);
-
-  const loadAllSquads = useCallback(async () => {
-    try {
-      const { data: squadsData, error: squadsError } = await supabase
-        .from('squads')
-        .select('id, name, tag')
-        .order('name');
-
-      if (squadsError) {
-        console.error('Error loading squads:', squadsError);
-        return;
-      }
-
-      if (squadsData) {
-        setAllSquads(squadsData);
-      }
-    } catch (error) {
-      console.error('Error loading squads:', error);
-    }
-  }, []);
-
-  const loadStandingsData = useCallback(
-    async (seasonNumber: number) => {
-      try {
-        setDataLoading(true);
-        const seasonData = allSeasons.find((s: any) => s.season_number === seasonNumber);
-        if (seasonData) {
-          setSeasonInfo(seasonData);
-        }
-
-        let standingsData: any[] | null = null;
-        let standingsError: any = null;
-
-        if (isCTFPL) {
-          const result = await supabase
-            .from('ctfpl_standings_with_rankings')
-            .select('*')
-            .eq('season_number', seasonNumber)
-            .order('rank', { ascending: true });
-          standingsData = result.data;
-          standingsError = result.error;
-        } else {
-          // For generic leagues, find the league_season_id for this season_number
-          const matchingSeason = allSeasons.find((s: any) => s.season_number === seasonNumber);
-          if (matchingSeason) {
-            const result = await supabase
-              .from('league_standings_with_rankings')
-              .select('*')
-              .eq('league_season_id', (matchingSeason as any).id)
-              .order('rank', { ascending: true });
-            standingsData = result.data;
-            standingsError = result.error;
-          }
-        }
-
-        if (standingsError) {
-          console.error('Error loading standings:', standingsError);
-          return;
-        }
-
-        if (!standingsData) return;
-
-        setStandings(standingsData);
-
-        const totalSquads = standingsData.length;
-        const totalMatches = standingsData.reduce((sum, team) => sum + team.matches_played, 0);
-        const topWinRate = standingsData.length > 0 ? standingsData[0].win_percentage : 0;
-        const totalRegulationGames = standingsData.reduce((sum, team) => sum + team.regulation_wins, 0);
-        const totalOvertimeGames = standingsData.reduce(
-          (sum, team) => sum + team.overtime_wins + team.overtime_losses,
-          0
-        );
-        const totalPoints = standingsData.reduce((sum, team) => sum + team.points, 0);
-        const averagePoints = totalSquads > 0 ? totalPoints / totalSquads : 0;
-
-        setSeasonStats({
-          totalMatches: Math.floor(totalMatches / 2),
-          totalSquads,
-          topWinRate: Math.round(topWinRate * 10) / 10,
-          totalRegulationGames,
-          totalOvertimeGames,
-          averagePointsPerSquad: Math.round(averagePoints * 10) / 10,
-        });
-
-        // Fetch playoff/finals matches for bracket display. CTFPL reads its own
-        // table; generic leagues read league_matches by league_season_id — so a
-        // CTFDL season never shows CTFPL's bracket.
-        const bracketCols =
-          'id, match_type, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, match_date';
-        let playoffData: any[] | null = null;
-        if (isCTFPL) {
-          const res = await supabase
-            .from('ctfpl_matches')
-            .select(bracketCols)
-            .eq('season_number', seasonNumber)
-            .in('match_type', ['Playoffs', 'Finals'])
-            .order('match_date', { ascending: true });
-          playoffData = res.data;
-        } else {
-          const genericSeason = allSeasons.find((s: any) => s.season_number === seasonNumber);
-          if (genericSeason) {
-            const res = await supabase
-              .from('league_matches')
-              .select(bracketCols)
-              .eq('league_season_id', (genericSeason as any).id)
-              .in('match_type', ['Playoffs', 'Finals'])
-              .order('match_date', { ascending: true });
-            playoffData = res.data;
-          }
-        }
-        setPlayoffMatches(playoffData || []);
-      } catch (error) {
-        console.error('Error loading standings data:', error);
-      } finally {
-        setDataLoading(false);
-      }
-    },
-    [allSeasons, isCTFPL]
+function Tile({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div className="rounded-xl bg-[#131A2B] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">{label}</div>
+      <div className="font-display text-3xl leading-none text-[#E6EDF7] mt-1 truncate">{value}</div>
+      {sub && <div className="text-xs text-[#8B98B0] mt-1 truncate">{sub}</div>}
+    </div>
   );
+}
+
+export function CTFPLStandingsContent({
+  league,
+  leagues,
+}: {
+  league: LeagueInfo;
+  /** Every league, for the switcher. */
+  leagues: LeagueInfo[];
+}) {
+  const isCTFPL = league.data_source === 'ctfpl';
+  const isDraft = league.format === 'draft';
+
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [seasonsLoading, setSeasonsLoading] = useState(true);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [matches, setMatches] = useState<MatchRow[]>([]);
+  const [draft, setDraft] = useState<SeasonDraft | null>(null);
+  const [squadNames, setSquadNames] = useState<Map<string, { name: string; tag: string | null }>>(new Map());
+  const [dataLoading, setDataLoading] = useState(false);
+
+  // Reset when the league changes.
+  useEffect(() => {
+    setSeasons([]);
+    setSelected(null);
+    setStandings([]);
+    setMatches([]);
+    setDraft(null);
+  }, [league.id]);
 
   useEffect(() => {
-    loadAllSeasons();
-    loadAllSquads();
-  }, [loadAllSeasons, loadAllSquads]);
+    let cancelled = false;
+    (async () => {
+      setSeasonsLoading(true);
+      try {
+        const q = isCTFPL
+          ? supabase.from('ctfpl_seasons').select('*')
+          : supabase.from('league_seasons').select('*').eq('league_id', league.id);
+        const { data, error } = await q.order('season_number', { ascending: false });
+        if (error) throw error;
+        if (cancelled) return;
+        const list = (data || []) as Season[];
+        setSeasons(list);
+        const active = list.find((s) => s.status === 'active') || list.find((s) => s.status === 'upcoming') || list[0];
+        setSelected(active ? active.season_number : null);
+      } catch (e) {
+        console.error('Error loading seasons:', e);
+      } finally {
+        if (!cancelled) setSeasonsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [league.id, isCTFPL]);
 
-  useEffect(() => {
-    if (selectedSeason !== null) {
-      loadStandingsData(selectedSeason);
+  const season = useMemo(() => seasons.find((s) => s.season_number === selected) || null, [seasons, selected]);
+  const current = useMemo(() => seasons.find((s) => s.status === 'active') || null, [seasons]);
+
+  const load = useCallback(async () => {
+    if (!season) return;
+    setDataLoading(true);
+    try {
+      let standingsRows: any[] = [];
+      let matchRows: any[] = [];
+      if (isCTFPL) {
+        const [s, m] = await Promise.all([
+          supabase.from('ctfpl_standings_with_rankings').select('*').eq('season_number', season.season_number).order('rank'),
+          supabase.from('ctfpl_matches').select(MATCH_COLS).eq('season_number', season.season_number).order('match_date', { ascending: true }),
+        ]);
+        standingsRows = s.data || [];
+        matchRows = m.data || [];
+      } else if (season.id) {
+        const [s, m] = await Promise.all([
+          supabase.from('league_standings_with_rankings').select('*').eq('league_season_id', season.id).order('rank'),
+          supabase.from('league_matches').select(MATCH_COLS).eq('league_season_id', season.id).order('match_date', { ascending: true }),
+        ]);
+        standingsRows = s.data || [];
+        matchRows = m.data || [];
+      }
+      setStandings(standingsRows as Standing[]);
+      setMatches(matchRows as MatchRow[]);
+      setDraft(isDraft && season.id ? await getSeasonDraft(season.id) : null);
+
+      // Names for champion ids on completed seasons that pre-date the standings view.
+      const ids = [...(season.champion_squad_ids || []), ...(season.runner_up_squad_ids || [])];
+      if (ids.length) {
+        const { data } = await supabase.from('squads').select('id, name, tag').in('id', ids);
+        setSquadNames(new Map((data || []).map((s: any) => [s.id, { name: s.name, tag: s.tag ?? null }])));
+      }
+    } catch (e) {
+      console.error('Error loading standings:', e);
+    } finally {
+      setDataLoading(false);
     }
-  }, [selectedSeason, loadStandingsData]);
+  }, [season, isCTFPL, isDraft]);
 
-  const handleSeasonSelect = (seasonNumber: number) => {
-    setSelectedSeason(seasonNumber);
-    setSidebarOpen(false);
+  useEffect(() => { load(); }, [load]);
+
+  // ── Derived ─────────────────────────────────────────────────────────
+  const idx = seasons.findIndex((s) => s.season_number === selected);
+  const older = idx >= 0 && idx < seasons.length - 1 ? seasons[idx + 1] : null;
+  const newer = idx > 0 ? seasons[idx - 1] : null;
+
+  const played = matches.filter((m) => m.match_date && (m.team_a_result || m.team_b_result));
+  const lastMatch = played.length ? played[played.length - 1] : null;
+  const leader = standings.find((s) => s.matches_played > 0) || null;
+
+  /** Last five results per team name, oldest → newest. */
+  const form = useMemo(() => {
+    const map = new Map<string, ('W' | 'L')[]>();
+    for (const m of played) {
+      const push = (team: string, r: string) => {
+        const arr = map.get(team) || [];
+        arr.push(/win/i.test(r) ? 'W' : 'L');
+        map.set(team, arr);
+      };
+      if (m.team_a_name) push(m.team_a_name, m.team_a_result || '');
+      if (m.team_b_name) push(m.team_b_name, m.team_b_result || '');
+    }
+    map.forEach((v, k) => map.set(k, v.slice(-5)));
+    return map;
+  }, [played]);
+
+  const semis = played.filter((m) => m.match_type === 'Playoffs');
+  const finals = played.filter((m) => m.match_type === 'Finals');
+  const showBracket = season?.status === 'completed' && (semis.length > 0 || finals.length > 0);
+  const showChampionCard = season?.status === 'completed' && !showBracket && !!season.champion_squad_ids?.length;
+  const nameOf = (id: string) => {
+    const s = standings.find((r) => r.squad_id === id);
+    if (s) return `${s.squad_tag ? `[${s.squad_tag}] ` : ''}${s.squad_name}`;
+    const q = squadNames.get(id);
+    return q ? `${q.tag ? `[${q.tag}] ` : ''}${q.name}` : 'Unknown squad';
   };
 
-  const getSquadDisplayName = (squadId: string) => {
-    const standingSquad = standings.find((s) => s.squad_id === squadId);
-    if (standingSquad) {
-      return `${standingSquad.squad_name} [${standingSquad.squad_tag}]`;
-    }
-    const allSquad = allSquads.find((s) => s.id === squadId);
-    if (allSquad) {
-      return `${allSquad.name} [${allSquad.tag}]`;
-    }
-    return `Unknown Squad (${squadId.slice(0, 8)})`;
-  };
+  const hasStandings = standings.length > 0;
+  const scoring = SCORING[league.slug];
 
-  const getRankIcon = (position: number) => {
-    switch (position) {
-      case 1:
-        return <Crown className="w-5 h-5 text-yellow-400" />;
-      case 2:
-        return <Trophy className="w-5 h-5 text-gray-400" />;
-      case 3:
-        return <Trophy className="w-5 h-5 text-amber-600" />;
-      default:
-        return <Shield className="w-5 h-5 text-gray-500" />;
-    }
-  };
-
-  const getRankBadgeColor = (position: number) => {
-    switch (position) {
-      case 1:
-        return 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black';
-      case 2:
-        return 'bg-gradient-to-r from-gray-400 to-gray-500 text-white';
-      case 3:
-        return 'bg-gradient-to-r from-amber-600 to-amber-700 text-white';
-      default:
-        return 'bg-gradient-to-r from-gray-600 to-gray-700 text-white';
-    }
-  };
-
-  if ((selectedSeason === null && seasonsLoading) || (dataLoading && standings.length === 0 && selectedSeason !== null)) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-              <p className="text-gray-400">Loading {leagueName} Standings...</p>
+  // ── Render ──────────────────────────────────────────────────────────
+  return (
+    <main className="container mx-auto px-4 py-6 space-y-4">
+      {/* Header strip: league, season, actions */}
+      <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }}
+        />
+        <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80 mb-1">Free Infantry · CTF leagues</div>
+            <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">{league.name} standings</h1>
+            <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm">
+              {season ? (
+                <>
+                  <span className="text-[#E6EDF7]">{seasonTitle(season)}</span>
+                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_PILL[season.status] || STATUS_PILL.completed}`}>
+                    {season.status === 'active' && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+                    {season.status === 'active' ? 'Active' : season.status === 'upcoming' ? 'Upcoming' : 'Completed'}
+                  </span>
+                  {(season.start_date || season.end_date) && (
+                    <span className="text-[#8B98B0]">
+                      {season.start_date ? formatDateOnly(season.start_date) : '…'} – {season.end_date ? formatDateOnly(season.end_date) : 'present'}
+                    </span>
+                  )}
+                </>
+              ) : seasonsLoading ? (
+                <span className="text-[#8B98B0]">Loading seasons…</span>
+              ) : (
+                <span className="text-[#8B98B0]">No seasons yet</span>
+              )}
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {!sidebarOpen && !navbarMobileMenuOpen && (
-        <div className="lg:hidden fixed top-44 left-4 z-50">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="bg-gray-800/90 hover:bg-gray-700 text-white p-3 rounded-lg shadow-xl border border-cyan-500/50 backdrop-blur-sm"
-          >
-            <Menu className="w-5 h-5 text-cyan-400" />
-          </button>
-        </div>
-      )}
-
-      <div
-        className={`lg:hidden fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 border-r border-gray-700 transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ WebkitOverflowScrolling: 'touch' }}
-      >
-        <div className="p-6 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white mb-2">Seasons</h2>
-          <p className="text-gray-400 text-sm">Select a season to view standings</p>
-        </div>
-        <div className="overflow-y-auto h-full pb-20">
-          {seasonsLoading ? (
-            <div className="p-4 text-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500 mx-auto mb-2"></div>
-              <p className="text-gray-400 text-sm">Loading seasons...</p>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            {/* League switcher */}
+            <div className="flex rounded-md bg-white/5 p-0.5">
+              {leagues.map((l) => (
+                <Link
+                  key={l.id}
+                  href={`/league/standings?league=${encodeURIComponent(l.slug)}`}
+                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                    l.id === league.id ? 'bg-[#22D3EE] text-[#0B0F1A] font-medium' : 'text-[#E6EDF7] hover:bg-white/10'
+                  }`}
+                >
+                  {l.name}
+                </Link>
+              ))}
             </div>
-          ) : allSeasons.length === 0 ? (
-            <div className="p-4 text-center">
-              <p className="text-gray-400 text-sm">No seasons found</p>
-            </div>
-          ) : (
-            allSeasons.map((season) => (
-              <button
-                key={season.season_number}
-                onClick={() => handleSeasonSelect(season.season_number)}
-                disabled={dataLoading}
-                className={`w-full text-left p-4 border-b border-gray-700/50 hover:bg-gray-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  selectedSeason === season.season_number ? 'bg-cyan-600/20 border-l-4 border-l-cyan-500' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-white font-medium">Season {season.season_number}</div>
-                    <div className="text-gray-400 text-xs">{season.season_name}</div>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    {season.status === 'active' && (
-                      <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">Active</span>
-                    )}
-                    {season.status === 'completed' && (
-                      <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">Completed</span>
-                    )}
-                    {dataLoading && selectedSeason === season.season_number && (
-                      <div className="animate-spin rounded-full h-3 w-3 border border-cyan-500 border-t-transparent mt-1"></div>
-                    )}
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-
-      {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="hidden lg:block mb-8">
-          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700/50">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-bold text-white">Season Selection</h2>
-                <p className="text-gray-400 text-sm">Choose a season to view standings</p>
-              </div>
-              {seasonsLoading && (
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500"></div>
-              )}
-            </div>
-            <div className="flex items-center space-x-4">
-              {seasonInfo && (
-                <div className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 border border-cyan-500/50 rounded-lg p-4 min-w-0 flex-shrink-0">
-                  <div className="text-center">
-                    <div className="text-cyan-400 font-bold text-lg">Season {selectedSeason}</div>
-                    <div className="text-gray-300 text-sm truncate">{seasonInfo.season_name}</div>
-                    {currentSeason === selectedSeason && (
-                      <div className="mt-1">
-                        <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">Current</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="relative">
-                  <select
-                    value={selectedSeason || ''}
-                    onChange={(e) => handleSeasonSelect(Number(e.target.value))}
-                    disabled={dataLoading || seasonsLoading}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
-                  >
-                    <option value="" disabled>Select a season...</option>
-                    {allSeasons.map((season) => (
-                      <option key={season.season_number} value={season.season_number}>
-                        Season {season.season_number} - {season.season_name}{' '}
-                        {season.status === 'active' ? '(Active)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronLeft className="absolute right-3 top-1/2 transform -translate-y-1/2 rotate-90 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="flex space-x-2 flex-shrink-0">
+            {/* Season picker */}
+            {seasons.length > 0 && (
+              <div className="flex items-center rounded-md bg-white/5">
                 <button
-                  onClick={() => {
-                    const currentIndex = allSeasons.findIndex((s) => s.season_number === selectedSeason);
-                    if (currentIndex < allSeasons.length - 1) {
-                      handleSeasonSelect(allSeasons[currentIndex + 1].season_number);
-                    }
-                  }}
-                  disabled={
-                    dataLoading ||
-                    !selectedSeason ||
-                    allSeasons.findIndex((s) => s.season_number === selectedSeason) >= allSeasons.length - 1
-                  }
-                  className="p-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Previous Season"
+                  type="button"
+                  onClick={() => older && setSelected(older.season_number)}
+                  disabled={!older || dataLoading}
+                  className="p-2 text-[#8B98B0] hover:text-[#E6EDF7] disabled:opacity-30"
+                  aria-label="Older season"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
+                <select
+                  value={selected ?? ''}
+                  onChange={(e) => setSelected(Number(e.target.value))}
+                  disabled={dataLoading}
+                  className="bg-transparent text-sm text-[#E6EDF7] py-1.5 pr-2 focus:outline-none"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  {seasons.map((s) => (
+                    <option key={s.season_number} value={s.season_number} className="bg-[#131A2B]">
+                      {seasonTitle(s)}{s.status === 'active' ? ' · current' : ''}
+                    </option>
+                  ))}
+                </select>
                 <button
-                  onClick={() => {
-                    const currentIndex = allSeasons.findIndex((s) => s.season_number === selectedSeason);
-                    if (currentIndex > 0) {
-                      handleSeasonSelect(allSeasons[currentIndex - 1].season_number);
-                    }
-                  }}
-                  disabled={
-                    dataLoading ||
-                    !selectedSeason ||
-                    allSeasons.findIndex((s) => s.season_number === selectedSeason) <= 0
-                  }
-                  className="p-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-gray-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Next Season"
+                  type="button"
+                  onClick={() => newer && setSelected(newer.season_number)}
+                  disabled={!newer || dataLoading}
+                  className="p-2 text-[#8B98B0] hover:text-[#E6EDF7] disabled:opacity-30"
+                  aria-label="Newer season"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
-              {dataLoading && (
-                <div className="flex-shrink-0">
-                  <div className="animate-spin rounded-full h-6 w-6 border border-cyan-500 border-t-transparent"></div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Trophy className="w-8 h-8 text-cyan-400 mr-3" />
-            <h1 className="text-4xl md:text-5xl font-bold text-white">{leagueName} Standings</h1>
-          </div>
-          <p className="text-gray-400 text-lg">
-            {leagueName} - Season {selectedSeason || 'Loading...'}
-            {seasonInfo && <span className="text-cyan-400 ml-2">({seasonInfo.season_name})</span>}
-            {currentSeason === selectedSeason && (
-              <span className="text-green-400 ml-2 text-sm">(Current)</span>
             )}
-          </p>
-        </div>
-
-        {/* Playoff Bracket */}
-        {(() => {
-          const currentSeasonData = allSeasons.find((s) => s.season_number === selectedSeason);
-          if (currentSeasonData?.status !== 'completed') return null;
-
-          const semiFinals = playoffMatches.filter(m => m.match_type === 'Playoffs');
-          const finals = playoffMatches.filter(m => m.match_type === 'Finals');
-
-          // If no playoff matches, fall back to champion/runner-up from season data
-          if (semiFinals.length === 0 && finals.length === 0) {
-            if (!currentSeasonData.champion_squad_ids?.length) return null;
-            return (
-              <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-xl shadow-2xl border border-yellow-500/30 overflow-hidden mb-8">
-                <div className="p-6 text-center">
-                  <Crown className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
-                  <h2 className="text-2xl font-bold text-yellow-400 mb-2">Season Champion</h2>
-                  <div className="text-xl text-white font-bold">
-                    {currentSeasonData.champion_squad_ids.map((id: string, i: number) => (
-                      <div key={i}>{getSquadDisplayName(id)}</div>
-                    ))}
-                  </div>
-                  {currentSeasonData.runner_up_squad_ids?.length > 0 && (
-                    <div className="mt-3 text-gray-400">
-                      <span className="text-sm">Runner-up: </span>
-                      <span className="text-gray-200">
-                        {currentSeasonData.runner_up_squad_ids.map((id: string) => getSquadDisplayName(id)).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          }
-
-          const getWinner = (match: PlayoffMatch) =>
-            match.team_a_result === 'Win' ? match.team_a_name : match.team_b_name;
-          const getLoser = (match: PlayoffMatch) =>
-            match.team_a_result === 'Win' ? match.team_b_name : match.team_a_name;
-
-          const finalsMatch = finals[0] || null;
-          const champion = finalsMatch ? getWinner(finalsMatch) : null;
-
-          const MatchupCard = ({ match, label, highlight }: { match: PlayoffMatch | null; label: string; highlight?: boolean }) => {
-            if (!match) {
-              return (
-                <div className={`rounded-lg border border-gray-600/50 bg-gray-800/50 p-3 ${highlight ? 'min-w-[200px]' : 'min-w-[180px]'}`}>
-                  <div className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">{label}</div>
-                  <div className="text-gray-500 italic text-sm text-center py-2">TBD</div>
-                </div>
-              );
-            }
-            const aWon = match.team_a_result === 'Win';
-            const bWon = match.team_b_result === 'Win';
-            return (
-              <div className={`rounded-lg border ${highlight ? 'border-yellow-500/50 bg-gradient-to-b from-yellow-900/20 to-gray-800' : 'border-gray-600/50 bg-gray-800/80'} p-3 ${highlight ? 'min-w-[200px]' : 'min-w-[180px]'}`}>
-                <div className={`text-xs mb-2 font-medium uppercase tracking-wider ${highlight ? 'text-yellow-400' : 'text-gray-500'}`}>{label}</div>
-                <div className={`flex items-center justify-between py-1.5 px-2 rounded ${aWon ? 'bg-green-500/10' : 'bg-gray-700/30'}`}>
-                  <span className={`font-medium text-sm truncate mr-2 ${aWon ? 'text-green-300' : 'text-gray-400'}`}>
-                    {aWon && <span className="mr-1">{'>'}</span>}{match.team_a_name}
-                  </span>
-                  <span className={`font-mono font-bold text-sm ${aWon ? 'text-green-300' : 'text-gray-500'}`}>{match.team_a_kills}</span>
-                </div>
-                <div className={`flex items-center justify-between py-1.5 px-2 rounded mt-1 ${bWon ? 'bg-green-500/10' : 'bg-gray-700/30'}`}>
-                  <span className={`font-medium text-sm truncate mr-2 ${bWon ? 'text-green-300' : 'text-gray-400'}`}>
-                    {bWon && <span className="mr-1">{'>'}</span>}{match.team_b_name}
-                  </span>
-                  <span className={`font-mono font-bold text-sm ${bWon ? 'text-green-300' : 'text-gray-500'}`}>{match.team_b_kills}</span>
-                </div>
-              </div>
-            );
-          };
-
-          return (
-            <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 rounded-xl shadow-2xl border border-yellow-500/30 overflow-hidden mb-8">
-              <div className="p-6">
-                <h2 className="text-2xl font-bold text-yellow-400 flex items-center mb-6">
-                  <Crown className="w-6 h-6 text-yellow-400 mr-3" />
-                  Playoff Bracket
-                </h2>
-
-                {/* Desktop bracket layout */}
-                <div className="hidden md:flex items-center justify-center gap-4">
-                  {/* Semi-Finals Column */}
-                  {semiFinals.length > 0 && (
-                    <div className="flex flex-col gap-6 justify-center">
-                      {semiFinals.map((match, i) => (
-                        <MatchupCard key={match.id} match={match} label={`Semi-Final ${i + 1}`} />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Connector lines */}
-                  {semiFinals.length > 0 && (
-                    <div className="flex flex-col items-center justify-center w-8">
-                      <div className="w-full border-t border-gray-500/50"></div>
-                      {semiFinals.length > 1 && (
-                        <>
-                          <div className="h-16 border-r border-gray-500/50"></div>
-                          <div className="w-full border-t border-gray-500/50"></div>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Finals Column */}
-                  <div className="flex flex-col gap-4 justify-center">
-                    <MatchupCard match={finalsMatch} label="Finals" highlight />
-                  </div>
-
-                  {/* Champion connector + display */}
-                  {champion && (
-                    <>
-                      <div className="flex items-center w-8">
-                        <div className="w-full border-t border-yellow-500/50"></div>
-                      </div>
-                      <div className="bg-gradient-to-b from-yellow-600/30 to-yellow-800/20 border-2 border-yellow-500/60 rounded-xl p-4 text-center min-w-[160px]">
-                        <Crown className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-                        <div className="text-xs text-yellow-400 font-medium uppercase tracking-wider mb-1">Champion</div>
-                        <div className="text-lg font-bold text-yellow-200">{champion}</div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Mobile stacked layout */}
-                <div className="md:hidden space-y-4">
-                  {/* Champion at top on mobile */}
-                  {champion && (
-                    <div className="bg-gradient-to-b from-yellow-600/30 to-yellow-800/20 border-2 border-yellow-500/60 rounded-xl p-4 text-center">
-                      <Crown className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-                      <div className="text-xs text-yellow-400 font-medium uppercase tracking-wider mb-1">Champion</div>
-                      <div className="text-lg font-bold text-yellow-200">{champion}</div>
-                    </div>
-                  )}
-                  <MatchupCard match={finalsMatch} label="Finals" highlight />
-                  {semiFinals.map((match, i) => (
-                    <MatchupCard key={match.id} match={match} label={`Semi-Final ${i + 1}`} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <div className="bg-gradient-to-r from-cyan-600/20 to-blue-600/20 rounded-xl p-4 border border-cyan-500/30">
-            <div className="text-center">
-              <Users className="w-6 h-6 text-cyan-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">Total Squads</p>
-              <p className="text-xl font-bold text-white">{seasonStats.totalSquads}</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 rounded-xl p-4 border border-green-500/30">
-            <div className="text-center">
-              <BarChart3 className="w-6 h-6 text-green-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">Total Matches</p>
-              <p className="text-xl font-bold text-white">{seasonStats.totalMatches}</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 rounded-xl p-4 border border-yellow-500/30">
-            <div className="text-center">
-              <Crown className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">Top Win Rate</p>
-              <p className="text-xl font-bold text-white">{seasonStats.topWinRate}%</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-xl p-4 border border-purple-500/30">
-            <div className="text-center">
-              <Shield className="w-6 h-6 text-purple-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">RW Games</p>
-              <p className="text-xl font-bold text-white">{seasonStats.totalRegulationGames}</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-xl p-4 border border-orange-500/30">
-            <div className="text-center">
-              <Trophy className="w-6 h-6 text-orange-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">OT Games</p>
-              <p className="text-xl font-bold text-white">{seasonStats.totalOvertimeGames}</p>
-            </div>
-          </div>
-          <div className="bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-xl p-4 border border-indigo-500/30">
-            <div className="text-center">
-              <BarChart3 className="w-6 h-6 text-indigo-400 mx-auto mb-2" />
-              <p className="text-gray-400 text-xs">Avg Points</p>
-              <p className="text-xl font-bold text-white">{seasonStats.averagePointsPerSquad}</p>
-            </div>
+            <Link href="/league/compare" className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">
+              Compare squads
+            </Link>
+            <Link href={leagueRulesHref(league)} className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">
+              Rules
+            </Link>
           </div>
         </div>
+      </section>
 
-        <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl shadow-2xl border border-gray-700/50 overflow-hidden">
-          <div className="p-6 border-b border-gray-700/50">
-            <h2 className="text-2xl font-bold text-white flex items-center">
-              <Trophy className="w-6 h-6 text-cyan-400 mr-3" />
-              {leagueName} Season Standings
-            </h2>
+      {/* Champion / bracket for completed seasons */}
+      {showChampionCard && season && (
+        <section className="rounded-xl bg-[#131A2B] px-5 py-4 flex items-center gap-4">
+          <Crown className="w-8 h-8 text-[#F59E0B] shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <div className="text-[11px] uppercase tracking-wide text-[#F59E0B]">Champion</div>
+            <div className="font-display text-2xl text-[#E6EDF7] leading-tight">
+              {season.champion_squad_ids!.map(nameOf).join(' & ')}
+            </div>
+            {!!season.runner_up_squad_ids?.length && (
+              <div className="text-sm text-[#8B98B0]">Runner-up · {season.runner_up_squad_ids.map(nameOf).join(', ')}</div>
+            )}
           </div>
+        </section>
+      )}
+
+      {showBracket && <Bracket semis={semis} finals={finals} />}
+
+      {/* Tiles */}
+      {hasStandings && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Tile label="Teams" value={standings.length} />
+          <Tile label="Matches played" value={played.length || Math.floor(standings.reduce((n, s) => n + s.matches_played, 0) / 2)} />
+          <Tile
+            label="Leader"
+            value={leader ? leader.squad_tag || leader.squad_name : '—'}
+            sub={leader ? `${leader.squad_name} · ${leader.wins}-${leader.losses} · ${leader.points} pts` : 'No matches yet'}
+          />
+          <Tile
+            label="Last match"
+            value={lastMatch ? formatDateOnly(lastMatch.match_date.slice(0, 10)) : '—'}
+            sub={lastMatch ? `${lastMatch.team_a_name} ${lastMatch.team_a_kills} : ${lastMatch.team_b_kills} ${lastMatch.team_b_name}` : undefined}
+          />
+        </div>
+      )}
+
+      {/* Standings table */}
+      <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+        <div className="px-4 py-3 flex items-center justify-between gap-3">
+          <h2 className="font-display text-xl text-[#E6EDF7]">{season ? seasonTitle(season) : 'Standings'}</h2>
+          {dataLoading && <span className="text-xs text-[#8B98B0]">Updating…</span>}
+        </div>
+
+        {hasStandings ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-700 to-gray-800">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Rank
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Squad
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    MP
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    W
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    L
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    NS
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    RW
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    OTW
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Win %
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Points
-                  </th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    K/D
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    Captain
-                  </th>
+            <table className="w-full text-sm min-w-[640px]">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wide text-[#8B98B0]">
+                  <th className="text-left font-normal px-4 py-2 w-10">#</th>
+                  <th className="text-left font-normal px-2 py-2">Team</th>
+                  <th className="text-left font-normal px-2 py-2 hidden md:table-cell">Captain</th>
+                  <th className="text-center font-normal px-2 py-2">MP</th>
+                  <th className="text-center font-normal px-2 py-2">W</th>
+                  <th className="text-center font-normal px-2 py-2">L</th>
+                  {isCTFPL && <th className="text-center font-normal px-2 py-2">NS</th>}
+                  {isCTFPL && <th className="text-center font-normal px-2 py-2">RW</th>}
+                  {isCTFPL && <th className="text-center font-normal px-2 py-2">OTW</th>}
+                  <th className="text-center font-normal px-2 py-2">Win %</th>
+                  <th className="text-right font-normal px-2 py-2">Pts</th>
+                  {isCTFPL && <th className="text-right font-normal px-2 py-2">K/D</th>}
+                  <th className="text-left font-normal px-4 py-2">Form</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {standings.map((standing) => (
-                  <tr
-                    key={standing.id}
-                    className="hover:bg-gray-700/30 transition-colors duration-200"
-                  >
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {standing.matches_played > 0 ? (
-                          <>
-                            <span
-                              className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold mr-2 ${getRankBadgeColor(standing.rank)}`}
-                            >
-                              {standing.rank}
-                            </span>
-                            {getRankIcon(standing.rank)}
-                          </>
-                        ) : (
-                          <div className="flex items-center">
-                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold mr-2 bg-gray-600 text-gray-400">
-                              -
-                            </span>
-                            <Shield className="w-5 h-5 text-gray-500" />
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Link
-                        href={`/squads/${standing.squad_id}`}
-                        className="flex items-center hover:bg-gray-600/30 transition-colors duration-200 rounded-lg p-1 -m-1"
-                      >
-                        {standing.banner_url ? (
-                          <Image
-                            src={standing.banner_url}
-                            alt={`${standing.squad_name} banner`}
-                            width={32}
-                            height={32}
-                            className="rounded-lg mr-3 object-cover"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center mr-3">
-                            <Shield className="w-4 h-4 text-white" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="text-sm font-medium text-white hover:text-cyan-400 transition-colors">
-                            {standing.squad_name}
-                          </div>
-                          <div className="text-xs text-gray-400">[{standing.squad_tag}]</div>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm text-gray-300">
-                      {standing.matches_played}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm font-medium text-green-400">
-                      {standing.wins}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm font-medium text-red-400">
-                      {standing.losses}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm font-medium text-orange-400">
-                      {standing.no_shows}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm text-gray-300">
-                      {standing.regulation_wins}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm text-purple-400">
-                      {standing.overtime_wins}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm text-gray-300">
-                      {standing.matches_played > 0 ? `${Math.round(standing.win_percentage)}%` : '-'}
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-center">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">
-                        {standing.points}
-                        {standing.points_behind > 0 && (
-                          <span className="ml-1 text-gray-600">(-{standing.points_behind})</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap text-center text-sm">
-                      <span
-                        className={
-                          standing.kill_death_difference >= 0 ? 'text-green-400' : 'text-red-400'
-                        }
-                      >
-                        {standing.kill_death_difference >= 0 ? '+' : ''}
-                        {standing.kill_death_difference}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-300">{standing.captain_alias}</div>
-                    </td>
-                  </tr>
-                ))}
+              <tbody>
+                {standings.map((s) => {
+                  const playedAny = s.matches_played > 0;
+                  const f = form.get(s.squad_name) || [];
+                  return (
+                    <tr key={s.id} className="border-t border-white/[0.06] hover:bg-white/[0.03]">
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-medium tabular-nums ${
+                            !playedAny
+                              ? 'text-[#8B98B0]'
+                              : s.rank === 1
+                                ? 'bg-[#F59E0B]/20 text-[#F59E0B]'
+                                : s.rank <= 3
+                                  ? 'bg-[#22D3EE]/15 text-[#22D3EE]'
+                                  : 'text-[#E6EDF7]'
+                          }`}
+                        >
+                          {playedAny ? s.rank : '–'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <Link href={`/squads/${s.squad_id}`} className="flex items-center gap-2.5 min-w-0 hover:text-[#22D3EE] transition-colors">
+                          <TeamMark tag={s.squad_tag} name={s.squad_name} banner={s.banner_url} />
+                          <span className="min-w-0">
+                            <span className="block text-[#E6EDF7] truncate">{s.squad_name}</span>
+                            {s.squad_tag && <span className="block text-[11px] text-[#8B98B0]">[{s.squad_tag}]</span>}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-2 py-2.5 text-[#8B98B0] hidden md:table-cell truncate max-w-[140px]">{s.captain_alias || '—'}</td>
+                      <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.matches_played}</td>
+                      <td className="px-2 py-2.5 text-center tabular-nums text-[#34D399]">{s.wins}</td>
+                      <td className="px-2 py-2.5 text-center tabular-nums text-[#F87171]">{s.losses}</td>
+                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#F59E0B]">{s.no_shows}</td>}
+                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.regulation_wins}</td>}
+                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.overtime_wins}</td>}
+                      <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{playedAny ? `${Math.round(s.win_percentage)}%` : '–'}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums">
+                        <span className="text-[#F59E0B] font-medium">{s.points}</span>
+                        {s.points_behind > 0 && <span className="text-[11px] text-[#8B98B0] ml-1">−{s.points_behind}</span>}
+                      </td>
+                      {isCTFPL && (
+                        <td className={`px-2 py-2.5 text-right tabular-nums ${s.kill_death_difference >= 0 ? 'text-[#34D399]' : 'text-[#F87171]'}`}>
+                          {s.kill_death_difference >= 0 ? '+' : ''}{s.kill_death_difference}
+                        </td>
+                      )}
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex gap-1">
+                          {f.length === 0 ? (
+                            <span className="text-[#8B98B0] text-xs">–</span>
+                          ) : (
+                            f.map((r, i) => (
+                              <span
+                                key={i}
+                                className={`w-4 h-4 rounded-sm text-[10px] font-medium flex items-center justify-center ${
+                                  r === 'W' ? 'bg-[#34D399]/20 text-[#34D399]' : 'bg-[#F87171]/20 text-[#F87171]'
+                                }`}
+                              >
+                                {r}
+                              </span>
+                            ))
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          {standings.length === 0 && (
-            <div className="text-center py-12">
-              <Trophy className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-400 text-lg">No standings data found for season {selectedSeason}</p>
-              <p className="text-gray-500 text-sm">Standings will appear here once matches begin</p>
+        ) : dataLoading || seasonsLoading ? (
+          <div className="px-4 pb-4 space-y-2 animate-pulse">
+            {[0, 1, 2].map((i) => <div key={i} className="h-10 rounded-md bg-white/5" />)}
+          </div>
+        ) : isDraft && draft && draft.teams.length > 0 ? (
+          <div className="px-4 pb-4">
+            <p className="text-sm text-[#8B98B0] mb-3">
+              {draft.status === 'complete'
+                ? 'Teams are drafted. Standings fill in as matches are reported.'
+                : 'Standings start once the draft is done and play begins. These are the captains so far.'}
+            </p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {draft.teams.map((t) => (
+                <li key={t.id}>
+                  <Link href={`/squads/${t.id}`} className="flex items-center gap-3 rounded-lg bg-[#1B2438] px-3 py-2.5 hover:bg-[#222d45] transition-colors">
+                    <TeamMark tag={t.tag} name={t.name} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm text-[#E6EDF7] truncate">{t.name}</span>
+                      <span className="block text-[11px] text-[#8B98B0] truncate">
+                        Captain {t.captain_alias}{draft.status === 'complete' ? ` · ${t.member_count} players` : ''}
+                      </span>
+                    </span>
+                    <span className="text-[11px] text-[#8B98B0] tabular-nums">Pick {t.pick_order}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {draft.status === 'complete' && (
+              <Link href="/league/ctfdl/draft/recap" className="inline-block mt-3 text-xs text-[#22D3EE] hover:text-[#67E8F9]">Draft recap</Link>
+            )}
+          </div>
+        ) : (
+          <div className="px-4 pb-6 pt-2 text-sm text-[#8B98B0]">
+            {!season
+              ? 'No seasons have been created for this league yet.'
+              : season.status === 'completed'
+                ? 'No standings were recorded for this season.'
+                : isDraft
+                  ? 'Standings start once the draft is done and play begins. Captains are announced when the draft is set up.'
+                  : 'Standings appear once matches are reported.'}
+            {season && season.status !== 'completed' && (
+              <>
+                {' '}
+                <Link href="/league/register" className="text-[#22D3EE] hover:text-[#67E8F9]">Register for the season</Link>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Footnote */}
+      {hasStandings && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#8B98B0]">
+          <div className="rounded-xl bg-[#131A2B] px-4 py-3">
+            <div className="text-[11px] uppercase tracking-wide mb-1.5">Columns</div>
+            <p>
+              MP matches played · W wins · L losses
+              {isCTFPL && ' · NS no-shows · RW regulation wins · OTW overtime wins · K/D kill/death difference'}
+              {' · Form last five results, oldest first'}
+            </p>
+          </div>
+          {scoring && (
+            <div className="rounded-xl bg-[#131A2B] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide mb-1.5">Scoring</div>
+              <ul className="space-y-0.5">
+                {scoring.map((line) => <li key={line}>{line}</li>)}
+              </ul>
             </div>
           )}
         </div>
+      )}
+    </main>
+  );
+}
 
-        <div className="mt-8 text-center text-gray-400 text-sm space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-white font-medium mb-2">Column legend</h4>
-              <div className="text-xs space-y-1">
-                <p>
-                  <span className="text-cyan-400">MP:</span> Matches Played
-                </p>
-                <p>
-                  <span className="text-green-400">W:</span> Wins <span className="text-red-400">L:</span> Losses{' '}
-                  <span className="text-orange-400">NS:</span> No Shows
-                </p>
-                <p>
-                  <span className="text-gray-300">RW:</span> Regulation Wins{' '}
-                  <span className="text-purple-400">OTW:</span> Overtime Wins
-                </p>
-                <p>
-                  <span className="text-gray-300">K/D:</span> Kill/Death Difference
-                </p>
-              </div>
-            </div>
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-white font-medium mb-2">Scoring system</h4>
-              <div className="text-xs space-y-1">
-                <p>
-                  <span className="text-green-400">3 points</span> for a win (regulation or overtime)
-                </p>
-                <p>
-                  <span className="text-yellow-400">1 point</span> for participation (loss)
-                </p>
-                <p>
-                  <span className="text-red-400">0 points</span> for no-show
-                </p>
-                <p className="text-gray-300">Tiebreakers: Points → Win% → RW → OTW → K/D</p>
-              </div>
-            </div>
+// ── Playoff bracket (completed seasons with playoff/finals matches) ────────
+
+function Bracket({ semis, finals }: { semis: MatchRow[]; finals: MatchRow[] }) {
+  const final = finals[0] || null;
+  const winner = (m: MatchRow) => (/win/i.test(m.team_a_result) ? m.team_a_name : m.team_b_name);
+  const champion = final ? winner(final) : null;
+
+  const Card = ({ match, label, highlight }: { match: MatchRow | null; label: string; highlight?: boolean }) => (
+    <div className={`rounded-lg p-3 min-w-[190px] ${highlight ? 'bg-[#F59E0B]/10 ring-1 ring-[#F59E0B]/40' : 'bg-[#1B2438]'}`}>
+      <div className={`text-[11px] uppercase tracking-wide mb-2 ${highlight ? 'text-[#F59E0B]' : 'text-[#8B98B0]'}`}>{label}</div>
+      {!match ? (
+        <div className="text-sm text-[#8B98B0] text-center py-2">TBD</div>
+      ) : (
+        [
+          { name: match.team_a_name, score: match.team_a_kills, won: /win/i.test(match.team_a_result) },
+          { name: match.team_b_name, score: match.team_b_kills, won: /win/i.test(match.team_b_result) },
+        ].map((t) => (
+          <div key={t.name} className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${t.won ? 'bg-[#34D399]/10' : ''}`}>
+            <span className={`text-sm truncate ${t.won ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{t.name}</span>
+            <span className={`text-sm tabular-nums ${t.won ? 'text-[#34D399]' : 'text-[#8B98B0]'}`}>{t.score}</span>
           </div>
-          <p className="mt-4">
-            Season {selectedSeason} • Last updated: {new Date().toLocaleDateString()}
-          </p>
-        </div>
-      </div>
+        ))
+      )}
     </div>
+  );
+
+  return (
+    <section className="rounded-xl bg-[#131A2B] px-5 py-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Crown className="w-5 h-5 text-[#F59E0B]" aria-hidden="true" />
+        <h2 className="font-display text-xl text-[#E6EDF7]">Playoffs</h2>
+      </div>
+      <div className="flex flex-col md:flex-row md:items-center gap-4">
+        {semis.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {semis.map((m, i) => <Card key={m.id} match={m} label={`Semi-final ${i + 1}`} />)}
+          </div>
+        )}
+        {semis.length > 0 && <div className="hidden md:block w-6 border-t border-white/10" />}
+        <Card match={final} label="Final" highlight />
+        {champion && (
+          <>
+            <div className="hidden md:block w-6 border-t border-[#F59E0B]/40" />
+            <div className="rounded-lg bg-[#F59E0B]/10 ring-1 ring-[#F59E0B]/40 px-5 py-4 text-center min-w-[170px]">
+              <Crown className="w-6 h-6 text-[#F59E0B] mx-auto mb-1" aria-hidden="true" />
+              <div className="text-[11px] uppercase tracking-wide text-[#F59E0B]">Champion</div>
+              <div className="font-display text-2xl text-[#E6EDF7] leading-tight">{champion}</div>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

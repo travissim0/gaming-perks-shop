@@ -2,98 +2,64 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import { getLeagues, pickFeatured, type LeagueInfo } from '@/lib/leagues';
 import { CTFPLStandingsContent } from '@/components/league/CTFPLStandingsContent';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-function LeagueStandingsHubContent() {
-  const { user, loading } = useAuth();
+function StandingsHub() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
-  // No ?league= param → default to the FEATURED league (the one running now),
-  // rather than a hardcoded CTFPL.
-  const leagueSlugParam = searchParams.get('league');
+  // No ?league= → the featured league (the one running now).
+  const slugParam = searchParams.get('league');
 
   const [leagues, setLeagues] = useState<LeagueInfo[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState<string>(leagueSlugParam || '');
-  const [loadingLeagues, setLoadingLeagues] = useState(true);
-
-  useEffect(() => {
-    if (leagueSlugParam) setSelectedSlug(leagueSlugParam);
-  }, [leagueSlugParam]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
-      setLoadingLeagues(true);
-      const list = await getLeagues();
-      setLeagues(list);
-      if (!leagueSlugParam) {
-        setSelectedSlug(pickFeatured(list)?.slug || 'ctfpl');
-      }
-      setLoadingLeagues(false);
+      setLeagues(await getLeagues());
+      setLoaded(true);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const league = slugParam ? leagues.find((l) => l.slug === slugParam) || null : pickFeatured(leagues);
+
   return (
-    <div className="ctf-theme min-h-screen bg-gray-950 text-gray-100">
-      <Navbar />
-      {/* League selector — shown for all leagues */}
-      {loadingLeagues ? (
-        <div className="border-b border-gray-800 px-4 py-4 text-gray-400">Loading leagues…</div>
-      ) : (
-        <div className="border-b border-gray-800 px-4 py-3">
-          <div className="max-w-4xl mx-auto">
-            <p className="text-gray-400 text-sm mb-2">League</p>
-            <div className="flex flex-wrap gap-2">
-              {leagues.map((league) => (
-                <Link
-                  key={league.id}
-                  href={`/league/standings?league=${encodeURIComponent(league.slug)}`}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    selectedSlug === league.slug
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  }`}
-                >
-                  {league.name}
-                </Link>
-              ))}
-            </div>
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+      <Navbar user={user} />
+      {!loaded ? (
+        <main className="container mx-auto px-4 py-6">
+          <div className="rounded-xl bg-[#131A2B] px-6 py-8 animate-pulse space-y-3">
+            <div className="h-3 w-40 rounded bg-white/5" />
+            <div className="h-12 w-72 rounded bg-white/5" />
           </div>
-        </div>
-      )}
-
-      {/* Head-to-head squad comparison (was orphaned — now reachable from here) */}
-      <div className="px-4 py-2 border-b border-gray-800">
-        <div className="max-w-4xl mx-auto text-sm">
-          <Link href="/league/compare" className="text-[#22D3EE] hover:underline">
-            Compare two squads head-to-head →
-          </Link>
-        </div>
-      </div>
-
-      {/* Show standings for all leagues using the generic component */}
-      {selectedSlug && (
-        <CTFPLStandingsContent
-          leagueSlug={selectedSlug}
-          leagueName={leagues.find((l) => l.slug === selectedSlug)?.name || selectedSlug.toUpperCase()}
-        />
+        </main>
+      ) : !league ? (
+        <main className="container mx-auto px-4 py-6">
+          <div className="rounded-xl bg-[#131A2B] px-6 py-8">
+            <h1 className="font-display text-4xl text-[#E6EDF7]">League not found</h1>
+            <p className="text-sm text-[#8B98B0] mt-2">Pick a league from the menu.</p>
+          </div>
+        </main>
+      ) : (
+        <CTFPLStandingsContent league={league} leagues={leagues} />
       )}
     </div>
   );
 }
 
-export default function LeagueStandingsHubPage() {
+export default function LeagueStandingsPage() {
   return (
-    <Suspense fallback={
-      <div className="ctf-theme min-h-screen bg-gray-950 text-gray-100">
-        <Navbar />
-        <div className="border-b border-gray-800 px-4 py-8 text-center text-gray-400">Loading standings…</div>
-      </div>
-    }>
-      <LeagueStandingsHubContent />
+    <Suspense
+      fallback={
+        <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+          <Navbar user={null} />
+        </div>
+      }
+    >
+      <StandingsHub />
     </Suspense>
   );
 }

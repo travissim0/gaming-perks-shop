@@ -366,5 +366,68 @@ export async function getRecentChampions(league: LeagueInfo, limit = 5): Promise
   }));
 }
 
+// ---- Draft teams ------------------------------------------------------------
+
+export interface DraftTeamRef {
+  id: string;
+  name: string;
+  tag: string | null;
+  captain_alias: string;
+  member_count: number;
+  pick_order: number;
+}
+
+export interface SeasonDraft {
+  id: string;
+  status: 'setup' | 'live' | 'paused' | 'complete';
+  teams: DraftTeamRef[];
+}
+
+/**
+ * The CTFDL draft for a season (if staff created one) and the teams they added
+ * to it, in pick order. These are the only "official" teams before standings
+ * exist; squads people create on their own don't count until staff add them.
+ */
+export async function getSeasonDraft(seasonId: string): Promise<SeasonDraft | null> {
+  const { data: draft } = await supabase
+    .from('ctfdl_drafts')
+    .select('id, status')
+    .eq('league_season_id', seasonId)
+    .maybeSingle();
+  if (!draft) return null;
+
+  const { data, error } = await supabase
+    .from('ctfdl_draft_teams')
+    .select('squad_id, pick_order, squads(id, name, tag, captain_id, profiles!squads_captain_id_fkey(in_game_alias))')
+    .eq('draft_id', draft.id)
+    .order('pick_order', { ascending: true });
+  const rows = (error ? [] : data || []) as any[];
+
+  const counts = new Map<string, number>();
+  if (rows.length) {
+    const { data: members } = await supabase
+      .from('squad_members')
+      .select('squad_id')
+      .in('squad_id', rows.map((t) => t.squad_id))
+      .eq('status', 'active');
+    (members || []).forEach((m: any) => counts.set(m.squad_id, (counts.get(m.squad_id) || 0) + 1));
+  }
+
+  return {
+    id: draft.id,
+    status: draft.status,
+    teams: rows
+      .filter((t) => t.squads)
+      .map((t) => ({
+        id: t.squads.id,
+        name: t.squads.name,
+        tag: t.squads.tag ?? null,
+        captain_alias: t.squads.profiles?.in_game_alias || 'Unknown',
+        member_count: counts.get(t.squad_id) || 0,
+        pick_order: t.pick_order,
+      })),
+  };
+}
+
 export const leagueStandingsHref = (l: LeagueInfo) => `/league/standings?league=${l.slug}`;
 export const leagueRulesHref = (l: LeagueInfo) => `/rules?league=${l.slug}`;
