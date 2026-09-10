@@ -487,26 +487,41 @@ export default function LeagueHome() {
               }
               action={serverData.lastUpdated ? <span className="text-[11px] text-[#8B98B0]">{relTime(serverData.lastUpdated)}</span> : undefined}
             >
-              <div className="rounded-lg bg-[#1B2438] px-3 py-3 flex items-baseline justify-between">
+              <div
+                className="rounded-lg px-3 py-3 flex items-baseline justify-between"
+                style={{ background: 'linear-gradient(135deg, rgba(34,211,238,0.16), rgba(27,36,56,1) 55%, rgba(245,158,11,0.10))' }}
+              >
                 <div>
-                  <div className="font-display text-4xl leading-none text-[#E6EDF7] tabular-nums">{ctfPlayers}</div>
-                  <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mt-1">
+                  <div className={`font-display text-4xl leading-none tabular-nums ${ctfPlayers > 0 ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>
+                    {ctfPlayers}
+                  </div>
+                  <div className="text-[11px] uppercase tracking-wide text-[#22D3EE]/70 mt-1">
                     {ctfZones.length === 1 ? `in ${ctfZones[0].title}` : 'in CTF'}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-display text-2xl leading-none text-[#8B98B0] tabular-nums">{serverData.stats.totalPlayers}</div>
-                  <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mt-1">online in game</div>
+                  <div className="font-display text-2xl leading-none text-[#F59E0B] tabular-nums">{serverData.stats.totalPlayers}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-[#F59E0B]/70 mt-1">online in game</div>
                 </div>
               </div>
               {(ctfZones.length > 1 || otherZones.length > 0) && (
-                <ul className="mt-2 space-y-1">
-                  {[...(ctfZones.length > 1 ? ctfZones : []), ...otherZones].map((z) => (
-                    <li key={z.title} className="flex items-center justify-between text-xs px-1">
-                      <span className={`truncate ${isCtfZone(z.title) ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{z.title}</span>
-                      <span className="tabular-nums text-[#E6EDF7]">{z.playerCount}</span>
-                    </li>
-                  ))}
+                <ul className="mt-2 space-y-1.5">
+                  {[...(ctfZones.length > 1 ? ctfZones : []), ...otherZones].map((z) => {
+                    const max = Math.max(1, ...serverData.zones.map((x) => x.playerCount));
+                    const pct = Math.round((z.playerCount / max) * 100);
+                    const tone = z.playerCount === 0 ? '#4b5563' : isCtfZone(z.title) ? '#22D3EE' : z.playerCount >= 10 ? '#34D399' : '#F59E0B';
+                    return (
+                      <li key={z.title} className="px-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={`truncate ${isCtfZone(z.title) ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{z.title}</span>
+                          <span className="tabular-nums font-medium" style={{ color: tone }}>{z.playerCount}</span>
+                        </div>
+                        <div className="mt-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                          <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: tone, opacity: 0.85 }} />
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Card>

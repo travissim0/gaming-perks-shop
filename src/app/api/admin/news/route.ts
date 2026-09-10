@@ -24,13 +24,15 @@ async function gate(request: NextRequest) {
   if (!authHeader?.startsWith('Bearer ')) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(authHeader.slice(7));
   if (error || !user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  const { data: profile } = await supabaseAdmin.from('profiles').select('is_admin, is_media_manager, ctf_role').eq('id', user.id).maybeSingle();
+  const { data: profile } = await supabaseAdmin.from('profiles').select('is_admin, is_media_manager, ctf_role, in_game_alias').eq('id', user.id).maybeSingle();
   const ok = !!profile && (profile.is_admin === true || profile.is_media_manager === true || profile.ctf_role === 'ctf_admin');
   if (!ok) return { error: NextResponse.json({ error: 'Content management privileges required' }, { status: 403 }) };
-  return { user };
+  // Posts are bylined with the in-game alias only — never the account's real name or email.
+  return { user, alias: (profile!.in_game_alias as string | null)?.trim() || 'Staff' };
 }
 
-const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'author_name', 'author_id', 'status', 'featured', 'priority', 'tags', 'published_at', 'metadata'] as const;
+// author_name / author_id are set by the server (alias of the signed-in poster), never taken from the client.
+const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'status', 'featured', 'priority', 'tags', 'published_at', 'metadata'] as const;
 
 function pick(post: any) {
   const out: Record<string, any> = {};
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
   const g = await gate(request);
   if ('error' in g) return g.error;
   const body = await request.json().catch(() => null);
-  const post = pick(body?.post);
+  const post: Record<string, any> = { ...pick(body?.post), author_name: g.alias, author_id: g.user.id };
   if (!post.title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
   const { data, error } = await supabaseAdmin.from('news_posts').insert([post]).select('id').single();
   if (error) return NextResponse.json({ error: `${error.message}${error.details ? ` (${error.details})` : ''}` }, { status: 500 });

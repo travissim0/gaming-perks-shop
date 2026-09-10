@@ -12,6 +12,8 @@ interface Post {
   subtitle: string | null;
   content: any;
   author_name: string | null;
+  /** Poster's in-game alias (from the news RPC); preferred over author_name. */
+  author_alias?: string | null;
   featured: boolean;
   published_at: string;
   created_at: string;
@@ -97,7 +99,7 @@ export default function CtfNewsFeed({ limit = 4 }: { limit?: number }) {
                   <span className="px-1.5 py-0.5 rounded bg-[#22D3EE]/15 text-[#22D3EE] font-medium uppercase tracking-wide">CTF</span>
                 )}
                 <span>{relDate(open.published_at || open.created_at)}</span>
-                {open.author_name && <span>· {open.author_name}</span>}
+                {(open.author_alias || open.author_name) && <span>· {open.author_alias || open.author_name}</span>}
               </div>
               <h4 className="font-display text-2xl leading-tight text-[#E6EDF7]">{open.title}</h4>
               {open.subtitle && <p className="text-sm text-[#8B98B0] mt-0.5">{open.subtitle}</p>}

@@ -130,8 +130,7 @@ export default function AdminNewsPage() {
         subtitle: formData.subtitle,
         content: richContent,
         featured_image_url: formData.featured_image_url || null,
-        author_name: user?.user_metadata?.full_name || user?.email || 'Admin',
-        author_id: user?.id,
+        // Byline is set server-side from the poster's in-game alias (never the account's real name).
         status: formData.status,
         featured: formData.featured,
         priority: formData.priority,
