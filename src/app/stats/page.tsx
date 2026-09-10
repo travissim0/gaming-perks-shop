@@ -132,7 +132,8 @@ export default function PlayerStatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [visible, setVisible] = useState<Set<string>>(() => new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)));
   const [showCols, setShowCols] = useState(false);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Keyed by player name: combined-mode rows have no unique id.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [games, setGames] = useState<any[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
 
@@ -290,15 +291,15 @@ export default function PlayerStatsPage() {
                   <tbody>
                     {rows.map((r, i) => {
                       const aliases = aliasesOf(r);
-                      const open = expanded.has(r.id);
+                      const open = expanded.has(r.player_name);
                       return (
-                        <React.Fragment key={`${r.id}-${i}`}>
+                        <React.Fragment key={`${r.player_name}-${i}`}>
                           <tr className={`border-t border-white/[0.06] hover:bg-white/[0.03] ${open ? 'bg-[#22D3EE]/[0.04]' : ''}`}>
                             <td className="px-3 py-2 text-[#8B98B0] tabular-nums">{pagination.offset === 0 ? i + 1 : i + 1}</td>
                             <td className="px-2 py-2">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {aliases.length > 1 ? (
-                                  <button type="button" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} className="text-[#8B98B0] hover:text-[#22D3EE] shrink-0" title={`${aliases.length - 1} other alias${aliases.length > 2 ? 'es' : ''}`}>
+                                  <button type="button" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(r.player_name) ? n.delete(r.player_name) : n.add(r.player_name); return n; })} className="text-[#8B98B0] hover:text-[#22D3EE] shrink-0" title={`${aliases.length - 1} other alias${aliases.length > 2 ? 'es' : ''}`}>
                                     <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
                                   </button>
                                 ) : <span className="w-3.5 shrink-0" />}
