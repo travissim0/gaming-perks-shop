@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin, userFromRequest, resolveDraft, loadTeams, loadQueue } from '@/lib/ctfdl-draft-server';
+import { leadsTeam } from '@/lib/ctfdl-draft';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +15,8 @@ async function myTeam(request: NextRequest, draftId: string) {
   if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   const draft = await resolveDraft(draftId);
   if (!draft) return { error: NextResponse.json({ error: 'Draft not found' }, { status: 404 }) };
-  const team = (await loadTeams(draft.id)).find((t) => t.captain_id === user.id);
-  if (!team) return { error: NextResponse.json({ error: 'You are not a captain in this draft' }, { status: 403 }) };
+  const team = (await loadTeams(draft.id)).find((t) => leadsTeam(t, user.id));
+  if (!team) return { error: NextResponse.json({ error: 'You are not a captain or co-captain in this draft' }, { status: 403 }) };
   return { user, draft, team };
 }
 

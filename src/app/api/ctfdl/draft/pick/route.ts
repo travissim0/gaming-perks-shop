@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { userFromRequest, isStaff, resolveDraft, loadTeams, loadBundle, makePick, postSystemMessage } from '@/lib/ctfdl-draft-server';
-import { teamOnClock } from '@/lib/ctfdl-draft';
+import { teamOnClock, leadsTeam } from '@/lib/ctfdl-draft';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   if (!onClock) return NextResponse.json({ error: 'No team is on the clock' }, { status: 409 });
 
   const staff = await isStaff(user.id);
-  const isCaptain = onClock.captain_id === user.id;
+  const isCaptain = leadsTeam(onClock, user.id); // captain or co-captain
   if (!staff && !isCaptain) {
     return NextResponse.json({ error: `It's ${onClock.squad_name}'s pick` }, { status: 403 });
   }

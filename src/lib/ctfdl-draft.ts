@@ -32,7 +32,13 @@ export interface DraftTeam {
   squad_tag: string | null;
   captain_id: string | null;
   captain_alias: string | null;
+  /** Co-captains run the draft for their squad too (pick, queue, chat). */
+  co_captain_ids: string[];
 }
+
+/** Captain or co-captain of this team? */
+export const leadsTeam = (t: DraftTeam, userId: string | null | undefined) =>
+  !!userId && (t.captain_id === userId || t.co_captain_ids.includes(userId));
 
 export interface DraftPick {
   id: string;

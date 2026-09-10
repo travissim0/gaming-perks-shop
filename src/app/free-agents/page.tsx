@@ -221,7 +221,8 @@ export default function FreeAgentsPage() {
         .limit(5);
 
       if (!error && data && data.length > 0) {
-        const captainRow = data.find((m: any) => m.role === 'captain');
+        // Captains and co-captains can both invite from the pool.
+        const captainRow = data.find((m: any) => m.role === 'captain') || data.find((m: any) => m.role === 'co_captain');
         if (captainRow) {
           const squad = captainRow.squads as any;
           setIsCaptain(true);

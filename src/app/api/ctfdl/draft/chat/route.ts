@@ -28,7 +28,10 @@ async function decorate(draftId: string, rows: any[]): Promise<DraftChatMessage[
   const byId: Record<string, any> = {};
   (profs || []).forEach((p: any) => { byId[p.id] = p; });
   const tagByCaptain: Record<string, string | null> = {};
-  teams.forEach((t) => { if (t.captain_id) tagByCaptain[t.captain_id] = t.squad_tag; });
+  teams.forEach((t) => {
+    if (t.captain_id) tagByCaptain[t.captain_id] = t.squad_tag;
+    t.co_captain_ids.forEach((id) => { tagByCaptain[id] = t.squad_tag; });
+  });
   return rows.map((r) => {
     const p = r.sender_id ? byId[r.sender_id] : null;
     return {

@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getLeagues, getOpenSeason, getLatestSeason } from '@/lib/leagues';
-import type { DraftBundle, DraftPick, DraftPlayer, DraftRow, DraftTeam } from '@/lib/ctfdl-draft';
+import { leadsTeam, type DraftBundle, type DraftPick, type DraftPlayer, type DraftRow, type DraftTeam } from '@/lib/ctfdl-draft';
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,6 +67,17 @@ export async function loadTeams(draftId: string): Promise<DraftTeam[]> {
     const { data: profs } = await supabaseAdmin.from('profiles').select('id, in_game_alias').in('id', captainIds);
     (profs || []).forEach((p: any) => { aliasById[p.id] = p.in_game_alias; });
   }
+  // Co-captains share the captain's draft powers.
+  const coBySquad: Record<string, string[]> = {};
+  if (rows.length > 0) {
+    const { data: cos } = await supabaseAdmin
+      .from('squad_members')
+      .select('squad_id, player_id')
+      .in('squad_id', rows.map((r) => r.squad_id))
+      .eq('status', 'active')
+      .eq('role', 'co_captain');
+    (cos || []).forEach((m: any) => { (coBySquad[m.squad_id] ||= []).push(m.player_id); });
+  }
   return rows.map((r) => ({
     id: r.id,
     squad_id: r.squad_id,
@@ -75,6 +86,7 @@ export async function loadTeams(draftId: string): Promise<DraftTeam[]> {
     squad_tag: r.squads?.tag || null,
     captain_id: r.squads?.captain_id || null,
     captain_alias: r.squads?.captain_id ? aliasById[r.squads.captain_id] || null : null,
+    co_captain_ids: coBySquad[r.squad_id] || [],
   }));
 }
 
@@ -89,7 +101,7 @@ export async function loadPicks(draftId: string): Promise<DraftPick[]> {
 
 /** Everyone registered for the season, minus participating captains; picked ones flagged. */
 export async function loadPlayers(draftId: string, seasonNumber: number, teams: DraftTeam[], picks: DraftPick[]): Promise<DraftPlayer[]> {
-  const captainIds = new Set(teams.map((t) => t.captain_id).filter(Boolean) as string[]);
+  const captainIds = new Set([...teams.map((t) => t.captain_id).filter(Boolean), ...teams.flatMap((t) => t.co_captain_ids)] as string[]);
   const pickByPlayer: Record<string, DraftPick> = {};
   picks.forEach((p) => { if (p.player_id) pickByPlayer[p.player_id] = p; });
   const pickedIds = Object.keys(pickByPlayer);
@@ -185,7 +197,7 @@ export async function loadBundle(draft: DraftRow | null, viewerId: string | null
   const players = season ? await loadPlayers(draft.id, season.season_number, teams, picks) : [];
 
   if (viewerId) {
-    const mine = teams.find((t) => t.captain_id === viewerId);
+    const mine = teams.find((t) => leadsTeam(t, viewerId));
     if (mine) viewer.my_team_id = mine.id;
   }
   const bundle: DraftBundle = {
@@ -202,11 +214,11 @@ export async function loadBundle(draft: DraftRow | null, viewerId: string | null
   return bundle;
 }
 
-/** Can this user see the private draft chat? Staff, or captain of a team in the draft. */
+/** Can this user see the private draft chat? Staff, or captain / co-captain of a team in the draft. */
 export async function canUseChat(draftId: string, userId: string): Promise<boolean> {
   if (await isStaff(userId)) return true;
   const teams = await loadTeams(draftId);
-  return teams.some((t) => t.captain_id === userId);
+  return teams.some((t) => leadsTeam(t, userId));
 }
 
 /** Drop a system line into the draft chat (picks, pauses, undo…). Never throws. */
