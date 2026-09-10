@@ -229,11 +229,11 @@ export default function ScheduleStaffTools({
                 <input type="number" min={1} max={52} value={addWeek} onChange={(e) => setAddWeek(e.target.value)} className={inputCls} />
               </div>
               <div className="col-span-2 md:col-span-1">
-                <label className={labelCls}>Team A</label>
+                <label className={labelCls}>Home team <span className="normal-case tracking-normal text-[#8B98B0]/70">picks the side</span></label>
                 <TeamSelect value={addA} onChange={setAddA} exclude={addB} />
               </div>
               <div className="col-span-2 md:col-span-1">
-                <label className={labelCls}>Team B</label>
+                <label className={labelCls}>Away team</label>
                 <TeamSelect value={addB} onChange={setAddB} exclude={addA} />
               </div>
               <div>
@@ -259,7 +259,7 @@ export default function ScheduleStaffTools({
                   <label className={labelCls}>Weeks</label>
                   <input type="number" min={1} max={52} value={weeks} onChange={(e) => setWeeks(e.target.value)} className={inputCls} />
                   <div className="text-[11px] text-[#8B98B0] mt-1">
-                    {teams.length - 1} weeks = everyone plays everyone once{teams.length % 2 === 1 ? ' (one bye per week)' : ''}.
+                    {teams.length - 1} weeks = everyone plays everyone once{teams.length % 2 === 1 ? ' (one bye per week)' : ''}. First-listed is home; a second cycle flips home and away.
                   </div>
                 </div>
                 <div>
@@ -429,13 +429,13 @@ export function FixtureEditor({ fixture, teams, onDone }: { fixture: Fixture; te
         <input type="number" min={1} max={52} value={week} onChange={(e) => setWeek(e.target.value)} className={inputCls} />
       </div>
       <div className="col-span-2 md:col-span-1">
-        <label className={labelCls}>Team A</label>
+        <label className={labelCls}>Home team <button type="button" onClick={() => { setA(b); setB(a); }} className="ml-1 normal-case tracking-normal text-[#22D3EE] hover:text-[#67E8F9]" title="Make the other team home">swap</button></label>
         <select value={a} onChange={(e) => setA(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
       <div className="col-span-2 md:col-span-1">
-        <label className={labelCls}>Team B</label>
+        <label className={labelCls}>Away team</label>
         <select value={b} onChange={(e) => setB(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>

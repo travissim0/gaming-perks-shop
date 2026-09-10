@@ -250,7 +250,7 @@ function SchedulePage() {
           <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#22D3EE]/40 px-4 py-3 flex items-center gap-3 flex-wrap">
             <span className="text-[11px] uppercase tracking-wide text-[#22D3EE]">Your next match</span>
             <span className="text-sm text-[#E6EDF7]">
-              {myNext.squad_a_name} <span className="text-[#8B98B0]">vs</span> {myNext.squad_b_name}
+              {myNext.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {myNext.squad_b_name}
             </span>
             <span className="text-sm text-[#8B98B0]">{dayLabel(myNext.scheduled_at)} · {timeLabel(myNext.scheduled_at)}</span>
             <Link href={`/matches/${myNext.id}`} className="ml-auto text-xs text-[#22D3EE] hover:text-[#67E8F9]">Details</Link>
@@ -315,7 +315,10 @@ function SchedulePage() {
                           <div className="text-[#E6EDF7]">{timeLabel(f.scheduled_at)}</div>
                         </div>
                         <Link href={f.squad_a_id ? `/squads/${f.squad_a_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${aWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
-                          <span className="text-sm truncate">{f.squad_a_name || 'TBD'}</span>
+                          <span className="min-w-0">
+                            <span className="block text-sm truncate">{f.squad_a_name || 'TBD'}</span>
+                            {f.squad_a_id && <span className="block text-[10px] uppercase tracking-wide text-[#F59E0B]/80" title="Home team picks the side">Home</span>}
+                          </span>
                           <TeamMark tag={f.squad_a_tag} name={f.squad_a_name} />
                         </Link>
                         <div className="w-24 shrink-0 text-center">
@@ -339,7 +342,10 @@ function SchedulePage() {
                         </div>
                         <Link href={f.squad_b_id ? `/squads/${f.squad_b_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 ${bWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
                           <TeamMark tag={f.squad_b_tag} name={f.squad_b_name} />
-                          <span className="text-sm truncate">{f.squad_b_name || 'TBD'}</span>
+                          <span className="min-w-0">
+                            <span className="block text-sm truncate">{f.squad_b_name || 'TBD'}</span>
+                            {f.squad_b_id && <span className="block text-[10px] uppercase tracking-wide text-[#8B98B0]/70">Away</span>}
+                          </span>
                         </Link>
                         <div className="hidden md:flex w-28 shrink-0 items-center justify-end gap-2 text-[11px] text-[#8B98B0]">
                           {crew.length > 0 && <span title={crew.map((c) => `${c.role}: ${c.alias}`).join('\n')}>{crew.length} crew</span>}
