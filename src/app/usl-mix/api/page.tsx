@@ -45,7 +45,7 @@ export default function UslMixApiDocsPage() {
             <Endpoint
               method="GET"
               path="/api/usl-mix/games"
-              desc="Recent games newest first, each with a compact player list."
+              desc="Recent games newest first, each with a full player list - alias, side, class, kills, deaths, shots fired / landed, accuracy, bio dart hits, the heal split, opening kills, and the captain / shotcaller / vocal flags. Enough to build league-wide aggregates without a detail fetch per game."
               params={[
                 ['limit', 'default 25, max 100'],
                 ['offset', 'pagination offset'],
@@ -53,9 +53,9 @@ export default function UslMixApiDocsPage() {
                 ['map', 'map key, e.g. els, kp, apollo'],
                 ['alias', 'only games this player was in'],
                 ['since', 'ISO date lower bound'],
-                ['rated', 'true | false - only ELO-rated (or only unrated) games'],
+                ['rated', 'legacy. Every mix is rated now, so kind=mix is the filter you want - rated=true additionally drops the handful of mixes played before the opt-in was retired'],
               ]}
-              example={`curl "${BASE}/api/usl-mix/games?kind=mix&rated=true&limit=5"`}
+              example={`curl "${BASE}/api/usl-mix/games?kind=mix&limit=5"`}
             />
             <Endpoint
               method="GET"
@@ -131,15 +131,16 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
   "action": "game_result", "schema_version": 1, "script_version": "1.0.0",
   "match_id": "9d1f...", "zone_name": "USL - Megamaps", "arena_name": "Arena 1",
   "level_file": "uslMegamap2.lvl", "map_key": "els",
-  "game_kind": "mix", "team_size": 8, "rated": true,
+  "game_kind": "mix", "team_size": 8, "rated": true, "first_pick_team": "Bes - T",
   "started_at": "2026-09-05T20:00:00Z", "ended_at": "2026-09-05T20:18:12Z",
   "duration_seconds": 1092, "end_reason": "mercy",
   "teams": [
-    { "name": "Bes - T", "side": "T", "kills": 61, "deaths": 31, "result": "win", "captain": "Bes", "player_count": 8 },
-    { "name": "Axi - C", "side": "C", "kills": 31, "deaths": 61, "result": "loss", "captain": "Axidus", "player_count": 8 }
+    { "name": "Bes - T", "side": "T", "kills": 61, "deaths": 31, "result": "win", "captain": "Bes", "shotcaller": "Bes", "player_count": 8 },
+    { "name": "Axi - C", "side": "C", "kills": 31, "deaths": 61, "result": "loss", "captain": "Axidus", "shotcaller": null, "player_count": 8 }
   ],
   "players": [
-    { "alias": "Bes", "side": "T", "team_name": "Bes - T", "result": "win", "is_captain": true,
+    { "alias": "Bes", "side": "T", "team_name": "Bes - T", "result": "win",
+      "is_captain": true, "is_shotcaller": true, "is_vocal": true,
       "primary_class": "Marine", "classes": { "Marine": 1080 },
       "kills": 12, "deaths": 3, "team_kills": 0, "kills_scoreboard": 12, "deaths_scoreboard": 3,
       "shots_fired": 240, "shots_landed": 96, "accuracy": 40.0, "bio_dart_hits": 0,
@@ -161,9 +162,10 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
         <div className="space-y-6">
           <Panel title="How the rating works">
             <ol className="text-sm text-gray-300 space-y-2 list-decimal list-inside">
-              <li>Everyone starts at <b>1200</b>. Only <b>mix</b> games where both captains typed <code>?rated</code> (<code>rated: true</code>) move ratings. Unrated mixes, casual games and test snapshots are stored for stats but leave ratings alone.</li>
+              <li>Everyone starts at <b>1200</b>. <b>Every mix counts</b> - the old per-game captain opt-in is retired, because letting captains choose made the record self-selected rather than merely thin. Casual (pub) games and test snapshots are stored for stats but never move ratings, and a ref can still exclude a one-off with <code>*mix scrim</code>.</li>
               <li>Team strength = mean rating of its players. Expected score E = 1 / (1 + 10^((R<sub>opp</sub> − R<sub>team</sub>) / 400)).</li>
-              <li>Base change = K × (S − E) × margin, K = 48 for a player&apos;s first 10 games, 32 after. The margin multiplier grows to 1.5× at a 40-kill blowout.</li>
+              <li>Base change = K × (S − E) × margin, K = 48 for a player&apos;s first 10 games, 32 after. The margin multiplier reaches 1.5× at a 40-kill blowout <b>between evenly matched teams</b>, and fades to nothing as the winner&apos;s expected score rises - a favourite stomping an underdog earns no bonus, so stacking a team gains you nothing and nobody ever profits by killing less.</li>
+              <li>Each captain gets a flat <b>+1</b> on a rated mix, win or lose. Deliberately negligible - a thank-you for stepping up, not a reason to captain.</li>
               <li>
                 <b>Fairness adjustment.</b> In 8v8 the weakest player often decides the game, so each player&apos;s change is scaled by their impact
                 (kills − deaths + heals/150) measured against what their class time normally produces: a medic is judged as a medic, a marine as a marine, and a
@@ -172,18 +174,28 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
               </li>
               <li>Every change is logged with E, K and the performance multiplier, and the whole history can be replayed after the constants are tuned.</li>
             </ol>
+            <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+              <p className="text-sm text-amber-200">
+                <b>Individual ratings are not published.</b> The API still returns <code>rating</code>, <code>rating_delta</code> and friends, but a
+                public ladder was pushing mixes toward slow, play-not-to-lose games in a scene that logs on for casual organised play. If you are
+                building on this data, <b>please don&apos;t render per-player ratings</b> - everything else (kills, classes, accuracy, heals, opening
+                kills, hits) is fair game. Ratings exist to balance drafts, and nobody is ranked.
+              </p>
+            </div>
             <p className="text-xs text-gray-500 mt-3">Constants live in <code>src/lib/uslMix/elo.ts</code>. GET <code>/api/usl-mix/admin/recompute</code> returns the live values.</p>
           </Panel>
 
           <Panel title="Field notes">
             <ul className="text-sm text-gray-300 space-y-2">
-              <li><b>rated</b> is the per-mix ELO opt-in: off by default, on once both captains type <code>?rated</code> in the zone (a ref can force it with <code>*mix rated on|off</code>). Zone admins can flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings.</li>
+              <li><b>rated</b> is now true for every mix. It survives as a per-game escape hatch for scrims (<code>*mix scrim</code> in the zone), and zone admins can still flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings. Filter on <code>kind=mix</code> rather than <code>rated</code>.</li>
+              <li><b>first_pick_team</b> is the team that won the coin flip and drafted first, recorded so first-vs-second-pick win rate is finally measurable. Null on games played before 2026-09-09.</li>
               <li><b>Side</b> is read from the team name: &quot;- T&quot; / Titan vs &quot;- C&quot; / Collective.</li>
               <li><b>map_key</b> is the megamap sub-map the zone had active (<code>*setmap</code>), else the level file name.</li>
               <li><b>kills</b> come from death events (enemy kills only, team kills separate); <b>kills_scoreboard</b> is the server&apos;s own counter for cross-checking.</li>
               <li><b>weapon_id</b> is the item that actually exploded (may be shrapnel); <b>root_weapon_id</b> walks the item chain back to the launcher, so LAW shrapnel counts as LAW.</li>
               <li><b>attribution</b>: matched = a shot by the killer landed near the victim in time and space; fallback = the killer&apos;s most recent shot; unknown = no shot found.</li>
-              <li><b>heal_amount</b> is the HP that was missing on nearby team-mates when a heal fired (the same metric the league stats use).</li>
+              <li><b>heal_amount</b> is total healing: MediKit repairs <i>plus</i> bio darts, which heal a flat 30 hp each and were previously counted as zero. <code>heal_medikit</code> and <code>bio_dart_heal</code> carry the split, and <code>bio_dart_hits</code> the raw count. The MediKit half is the HP that was missing on nearby team-mates when a heal fired, so it is a potential figure; the dart half is exact. <b>The same field means the same thing on every endpoint</b> - don&apos;t add darts on again yourself.</li>
+              <li><b>is_captain</b> / <b>is_shotcaller</b> / <b>is_vocal</b> are per-player-per-game flags. Shotcaller (<code>?sc</code>) and vocal (<code>?v</code>) are self-declared in the zone and are badges only - they never touch ratings.</li>
               <li>GET responses are cached for 30–60 seconds.</li>
             </ul>
           </Panel>
