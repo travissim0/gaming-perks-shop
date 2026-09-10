@@ -7,6 +7,14 @@ import { supabase } from '@/lib/supabase';
 interface BotState { guild_id: string | null; season_id: string | null; last_sync_at: string | null; last_result: string | null; last_error: string | null; updated_at: string }
 interface Pending { id: string; action: string; created_at: string }
 interface ChannelRow { squad_id: string; squad_name: string; season_id: string; updated_at: string }
+interface Person {
+  id: string;
+  alias: string;
+  role: 'captain' | 'member' | 'pool';
+  squad: string | null;
+  discord: { username: string; in_guild: boolean; nick: string | null; linked_at: string | null } | null;
+}
+interface Roster { season: string | null; people: Person[] }
 
 const rel = (iso: string) => {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -24,6 +32,9 @@ export default function DiscordBotPanel() {
   const [state, setState] = useState<BotState | null>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const [channels, setChannels] = useState<ChannelRow[]>([]);
+  const [roster, setRoster] = useState<Roster>({ season: null, people: [] });
+  const [rosterFilter, setRosterFilter] = useState<'all' | 'missing'>('all');
+  const [rosterOpen, setRosterOpen] = useState(true);
   const [pendingSql, setPendingSql] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -39,6 +50,7 @@ export default function DiscordBotPanel() {
       setState(json.state || null);
       setPending(json.pending || []);
       setChannels(json.channels || []);
+      setRoster(json.roster || { season: null, people: [] });
     } catch (e) {
       console.error('bot panel load failed', e);
     } finally {
@@ -75,6 +87,19 @@ export default function DiscordBotPanel() {
 
   const online = !!state?.updated_at && Date.now() - new Date(state.updated_at).getTime() < 20 * 60 * 1000;
 
+  const people = roster.people;
+  const linked = people.filter((p) => p.discord);
+  const inServer = linked.filter((p) => p.discord!.in_guild);
+  const missing = people.filter((p) => !p.discord || !p.discord.in_guild);
+  const shown = rosterFilter === 'missing' ? missing : people;
+  const captainsMissing = people.filter((p) => p.role === 'captain' && (!p.discord || !p.discord.in_guild));
+
+  const status = (p: Person) => {
+    if (!p.discord) return <span className="text-red-300">Not connected</span>;
+    if (!p.discord.in_guild) return <span className="text-amber-300">@{p.discord.username} · not in CTFPL server</span>;
+    return <span className="text-green-300">@{p.discord.username}{p.discord.nick && p.discord.nick !== p.discord.username ? ` (${p.discord.nick})` : ''}</span>;
+  };
+
   return (
     <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-4 py-3 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -110,6 +135,66 @@ export default function DiscordBotPanel() {
         <div className="text-xs text-gray-300">
           <span className="text-gray-400">Set up in Discord:</span>{' '}
           {channels.map((c) => c.squad_name).sort().join(' · ')}
+        </div>
+      )}
+
+      {!pendingSql && !loading && (
+        <div className="border-t border-indigo-500/20 pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button onClick={() => setRosterOpen((o) => !o)} className="text-sm font-medium text-indigo-200 flex items-center gap-2">
+              <span className="text-gray-500 text-xs">{rosterOpen ? '▼' : '▶'}</span>
+              Who&apos;s connected{roster.season ? <span className="text-gray-400 font-normal"> · {roster.season}</span> : null}
+            </button>
+            <div className="text-xs text-gray-400">
+              {people.length === 0
+                ? 'Nobody on a season team or in the pool yet.'
+                : <>{inServer.length} of {people.length} ready{linked.length !== inServer.length && ` · ${linked.length - inServer.length} linked but not in the server`}{captainsMissing.length > 0 && <span className="text-amber-300"> · {captainsMissing.length} captain{captainsMissing.length === 1 ? '' : 's'} missing</span>}</>}
+            </div>
+          </div>
+
+          {rosterOpen && people.length > 0 && (
+            <>
+              <div className="flex gap-1.5 mt-2 text-xs">
+                {([['all', `All (${people.length})`], ['missing', `Not ready (${missing.length})`]] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setRosterFilter(k)}
+                    className={`px-2.5 py-1 rounded-md border ${rosterFilter === k ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100' : 'border-gray-700 text-gray-400 hover:text-gray-200'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wide text-gray-500 text-left">
+                      <th className="py-1 pr-3 font-medium">Player</th>
+                      <th className="py-1 pr-3 font-medium">Role</th>
+                      <th className="py-1 font-medium">Discord</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((p) => (
+                      <tr key={p.id} className="border-t border-gray-800/80">
+                        <td className="py-1.5 pr-3 text-gray-100 font-medium whitespace-nowrap">{p.alias}</td>
+                        <td className="py-1.5 pr-3 text-gray-400 whitespace-nowrap">
+                          {p.role === 'pool' ? 'Pool' : <>{p.role === 'captain' ? 'Captain' : 'Player'} · <span className="text-gray-300">{p.squad}</span></>}
+                        </td>
+                        <td className="py-1.5 whitespace-nowrap">{status(p)}</td>
+                      </tr>
+                    ))}
+                    {shown.length === 0 && (
+                      <tr><td colSpan={3} className="py-2 text-gray-500">Everyone is connected and in the server.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500">
+                Players connect from their profile page or the league registration form. &ldquo;Not in CTFPL server&rdquo; means they linked Discord but have not joined the server, so the bot cannot give them a role yet.
+              </p>
+            </>
+          )}
         </div>
       )}
 
