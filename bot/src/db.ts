@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { config } from './config.js';
 
 /**
  * Everything the bot reads from and writes to the site's database.
  * Uses the service-role key: RLS does not apply.
+ * Node 20 has no global WebSocket, so Realtime gets the `ws` implementation.
  */
 export const db = createClient(config.supabaseUrl, config.supabaseKey, {
   auth: { persistSession: false, autoRefreshToken: false },
-  realtime: { params: { eventsPerSecond: 5 } },
+  realtime: { params: { eventsPerSecond: 5 }, transport: WebSocket as unknown as any },
 });
 
 export interface SeasonContext {
