@@ -288,7 +288,7 @@ export default function ScheduleStaffTools({
                       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                         {preview.pairings.filter((p) => p.week === w).map((p, i) => (
                           <li key={i} className="text-[#E6EDF7]">
-                            {p.a.name} <span className="text-[#8B98B0]">vs</span> {p.b.name}
+                            {p.a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {p.b.name}
                           </li>
                         ))}
                       </ul>

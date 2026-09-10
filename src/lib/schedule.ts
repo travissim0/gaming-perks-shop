@@ -17,8 +17,11 @@ export interface Pairing {
 
 /**
  * Circle-method round-robin. `weeks` rounds; with an odd team count one team
- * sits out each week. More weeks than (teams − 1) repeats the rotation with
- * home/away flipped, so a double round-robin falls out naturally.
+ * sits out each week. `a` is the HOME team (picks the side). Home and away
+ * are balanced within a cycle: each pairing's home alternates with the round
+ * and the pair position, so nobody is home every week. More weeks than
+ * (teams − 1) repeats the rotation with home/away flipped, so a double
+ * round-robin gives every pair one match at each team's home.
  */
 export function roundRobin(teams: TeamRef[], weeks: number): { pairings: Pairing[]; byes: Map<number, TeamRef> } {
   const pairings: Pairing[] = [];
@@ -30,9 +33,15 @@ export function roundRobin(teams: TeamRef[], weeks: number): { pairings: Pairing
   const n = ring.length;
   const roundsPerCycle = n - 1;
 
+  // Home minus away so far, and where each team played last, for balancing.
+  const balance = new Map<string, number>();
+  const last = new Map<string, 'home' | 'away'>();
+  // First-cycle home assignment per unordered pair, so the second cycle can flip it exactly.
+  const firstHome = new Map<string, string>();
+
   for (let w = 1; w <= weeks; w++) {
     const r = (w - 1) % roundsPerCycle;
-    const flip = Math.floor((w - 1) / roundsPerCycle) % 2 === 1;
+    const cycle = Math.floor((w - 1) / roundsPerCycle);
     // Rotate everyone except ring[0] by r places.
     const rest = ring.slice(1);
     const order = [ring[0], ...rest.slice(rest.length - r), ...rest.slice(0, rest.length - r)];
@@ -41,7 +50,28 @@ export function roundRobin(teams: TeamRef[], weeks: number): { pairings: Pairing
       const y = order[n - 1 - i];
       if (x.id === BYE.id) { byes.set(w, y); continue; }
       if (y.id === BYE.id) { byes.set(w, x); continue; }
-      pairings.push(flip ? { week: w, a: y, b: x } : { week: w, a: x, b: y });
+
+      const key = [x.id, y.id].sort().join('|');
+      let home: TeamRef;
+      if (cycle % 2 === 1 && firstHome.has(key)) {
+        // Odd cycles mirror the first: the other team hosts.
+        home = firstHome.get(key) === x.id ? y : x;
+      } else {
+        // Greedy balance: the team with fewer home games hosts; on a tie, the
+        // one that was away last week. Keeps every team within one of even.
+        const bx = balance.get(x.id) || 0;
+        const by = balance.get(y.id) || 0;
+        if (bx !== by) home = bx < by ? x : y;
+        else if (last.get(x.id) !== last.get(y.id)) home = last.get(x.id) === 'away' ? x : y;
+        else home = i % 2 === 0 ? x : y;
+        if (cycle % 2 === 0) firstHome.set(key, home.id);
+      }
+      const away = home === x ? y : x;
+      balance.set(home.id, (balance.get(home.id) || 0) + 1);
+      balance.set(away.id, (balance.get(away.id) || 0) - 1);
+      last.set(home.id, 'home');
+      last.set(away.id, 'away');
+      pairings.push({ week: w, a: home, b: away });
     }
   }
   return { pairings, byes };
