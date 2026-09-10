@@ -8,7 +8,19 @@ import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getLeagues, pickFeatured, getOpenSeason, getLatestSeason, type LeagueInfo, type LeagueSeason } from '@/lib/leagues';
+import { ExternalLink } from 'lucide-react';
+import {
+  getLeagues,
+  pickFeatured,
+  getOpenSeason,
+  getLatestSeason,
+  getSeasonDraft,
+  seasonPhase,
+  type LeagueInfo,
+  type LeagueSeason,
+} from '@/lib/leagues';
+import { displayFont, bodyFont } from '@/lib/fonts';
+import { inputCls, labelCls, btnPrimary, btnQuiet, btnDanger } from '@/components/ctf/FormBits';
 import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
@@ -67,6 +79,67 @@ interface BannedPlayer {
   league_ban_date?: string;
 }
 
+type Tab = 'squads' | 'pool' | 'season' | 'discord' | 'tournament' | 'bans';
+const TAB_ALIASES: Record<string, Tab> = { squads: 'squads', pool: 'pool', 'free-agents': 'pool', season: 'season', discord: 'discord', tournament: 'tournament', tournaments: 'tournament', bans: 'bans' };
+
+// ---- Small UI bits (same look as the other CTF pages) -----------------------
+
+function Chip({ active, onClick, children, tone = 'accent', title }: { active: boolean; onClick: () => void; children: React.ReactNode; tone?: 'accent' | 'warn'; title?: string }) {
+  const on = tone === 'warn' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]';
+  return (
+    <button type="button" onClick={onClick} title={title} className={`rounded-md px-3 py-1.5 text-sm transition-colors ${active ? on : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
+      {children}
+    </button>
+  );
+}
+
+function Panel({ title, hint, actions, children, className = '' }: { title?: React.ReactNode; hint?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-xl bg-[#131A2B] ${className}`}>
+      {(title || actions) && (
+        <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06]">
+          <div>
+            {title && <h2 className="font-display text-lg text-[#E6EDF7]">{title}</h2>}
+            {hint && <div className="text-xs text-[#8B98B0]">{hint}</div>}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: React.ReactNode; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#131A2B] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-display text-xl text-[#E6EDF7] mb-2">{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const th = 'py-2 px-4 text-left text-[11px] font-medium uppercase tracking-wide text-[#8B98B0]';
+const td = 'py-2.5 px-4 text-sm';
+const pill = (on: boolean, onCls: string) => `rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${on ? onCls : 'bg-white/5 text-[#8B98B0] hover:bg-white/10'}`;
+
+function Spinner({ label }: { label: string }) {
+  return (
+    <div className="p-8 text-center">
+      <div className="mx-auto h-7 w-7 animate-spin rounded-full border-b-2 border-[#22D3EE]" />
+      <p className="mt-3 text-sm text-[#8B98B0]">{label}</p>
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="p-8 text-center text-sm text-[#8B98B0]">{children}</div>;
+}
+
+// ---- Page ---------------------------------------------------------------------
+
 export default function CTFManagementPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -74,12 +147,16 @@ export default function CTFManagementPage() {
   const [hasAccess, setHasAccess] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'squads' | 'free-agents' | 'tournaments' | 'bans'>('squads');
-  
+  const [activeTab, setActiveTab] = useState<Tab>('squads');
+
+  // Header context: featured league, its season and phase.
+  const [ctx, setCtx] = useState<{ league: LeagueInfo; season: LeagueSeason | null; phase: string | null } | null>(null);
+
   // Squad management state
   const [squads, setSquads] = useState<Squad[]>([]);
   const [squadsLoading, setSquadsLoading] = useState(true);
   const [squadFilter, setSquadFilter] = useState<'all' | 'active' | 'inactive' | 'tournament-eligible' | 'tournament-ineligible'>('all');
+  const [squadSearch, setSquadSearch] = useState('');
   const [showDeleteSquadConfirm, setShowDeleteSquadConfirm] = useState<string | null>(null);
   const [deletingSquad, setDeletingSquad] = useState(false);
   const [showChangeCaptain, setShowChangeCaptain] = useState<Squad | null>(null);
@@ -90,7 +167,7 @@ export default function CTFManagementPage() {
   const [squadMembersForCaptain, setSquadMembersForCaptain] = useState<{ id: string; player_id: string; in_game_alias: string; role: string }[]>([]);
   const [loadingMembersForCaptain, setLoadingMembersForCaptain] = useState(false);
   const [transferringCaptain, setTransferringCaptain] = useState(false);
-  
+
   // Free agent state
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   const [freeAgentsLoading, setFreeAgentsLoading] = useState(true);
@@ -101,59 +178,38 @@ export default function CTFManagementPage() {
   // Staff-only: players who ticked "interested in captaining" (served by /api/free-agents/captain-interest)
   const [captainCandidates, setCaptainCandidates] = useState<Set<string>>(new Set());
   const [captainOnly, setCaptainOnly] = useState(false);
-  
+
   // League ban state
   const [bannedPlayers, setBannedPlayers] = useState<BannedPlayer[]>([]);
   const [bannedPlayersLoading, setBannedPlayersLoading] = useState(true);
   const [showBanPlayer, setShowBanPlayer] = useState(false);
 
-  // Check access permissions with better error handling
+  // Check access permissions
   useEffect(() => {
     let isMounted = true;
-    
+
     const checkAccess = async () => {
-      console.log('🔍 CTF Management access check - loading:', loading, 'user:', !!user);
-      
-      if (loading) {
-        console.log('⏳ Still loading auth, waiting...');
-        return;
-      }
-      
+      if (loading) return;
+
       if (!user) {
-        console.log('❌ No user found, redirecting to login');
-        // Small delay to prevent race conditions
-        setTimeout(() => {
-          if (isMounted) {
-            router.push('/auth/login');
-          }
-        }, 100);
+        setTimeout(() => { if (isMounted) router.push('/auth/login'); }, 100);
         return;
       }
 
       try {
-        console.log('👤 Checking access for user:', user.email);
-        
         const { data, error } = await supabase
           .from('profiles')
           .select('id, in_game_alias, email, ctf_role, is_admin')
           .eq('id', user.id)
           .single();
 
-        if (error) {
-          console.error('❌ Profile fetch error:', error);
-          throw error;
-        }
-
+        if (error) throw error;
         if (!isMounted) return;
 
         setProfile(data);
-        console.log('📋 Profile loaded:', data.in_game_alias, 'Role:', data.ctf_role, 'Admin:', data.is_admin);
-
-        // Allow access for CTF admins and site admins
         const access = data.is_admin || data.ctf_role === 'ctf_admin';
-        
+
         if (!access) {
-          console.log('🚫 Access denied for user:', data.in_game_alias);
           setAccessChecked(true);
           setTimeout(() => {
             if (isMounted) {
@@ -164,11 +220,10 @@ export default function CTFManagementPage() {
           return;
         }
 
-        console.log('✅ Access granted for user:', data.in_game_alias);
         setHasAccess(true);
         setAccessChecked(true);
       } catch (error) {
-        console.error('❌ Error checking access:', error);
+        console.error('Error checking access:', error);
         if (isMounted) {
           setAccessChecked(true);
           setTimeout(() => {
@@ -182,26 +237,26 @@ export default function CTFManagementPage() {
     };
 
     checkAccess();
-    
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [user, loading, router]);
 
-  // Handle mounting and URL tab parameter
+  // Mount + ?tab= parameter
   useEffect(() => {
     setMounted(true);
-    // Only run on client side to prevent hydration mismatch
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get('tab');
-      if (tabParam && ['squads', 'free-agents', 'tournaments', 'bans'].includes(tabParam)) {
-        setActiveTab(tabParam as any);
-      }
-      
-
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam && TAB_ALIASES[tabParam]) setActiveTab(TAB_ALIASES[tabParam]);
     }
   }, []);
+
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState(null, '', url.toString());
+    }
+  };
 
   // Load data when access is granted
   useEffect(() => {
@@ -209,8 +264,28 @@ export default function CTFManagementPage() {
       loadSquads();
       loadFreeAgents();
       loadBannedPlayers();
+      loadHeaderContext();
     }
   }, [hasAccess]);
+
+  const loadHeaderContext = async () => {
+    try {
+      const L = pickFeatured(await getLeagues());
+      if (!L) return;
+      const S = (await getOpenSeason(L)) || (await getLatestSeason(L));
+      let draftDone: boolean | undefined;
+      if (S && L.format === 'draft') {
+        const d = await getSeasonDraft(S.id).catch(() => null);
+        draftDone = d?.status === 'complete';
+      }
+      const phase = S
+        ? seasonPhase(L, S, S.status === 'active' ? 'active' : S.status === 'upcoming' ? 'upcoming' : 'off-season', { draftDone }).label
+        : null;
+      setCtx({ league: L, season: S, phase });
+    } catch (e) {
+      console.error('header context failed', e);
+    }
+  };
 
   const loadSquads = async () => {
     try {
@@ -338,7 +413,6 @@ export default function CTFManagementPage() {
         .order('league_ban_date', { ascending: false });
 
       if (error) throw error;
-
       setBannedPlayers(data || []);
     } catch (error) {
       console.error('Error loading banned players:', error);
@@ -370,7 +444,7 @@ export default function CTFManagementPage() {
 
       toast.success('Player banned from CTF league');
       loadBannedPlayers();
-      loadFreeAgents(); // Refresh in case they were in free agent pool
+      loadFreeAgents();
       setShowBanPlayer(false);
     } catch (error) {
       console.error('Error banning player:', error);
@@ -461,15 +535,9 @@ export default function CTFManagementPage() {
   const toggleSquadStatus = async (squadId: string, field: 'is_active' | 'tournament_eligible', currentValue: boolean) => {
     try {
       await patchSquads(squadId, { [field]: !currentValue });
-
-      setSquads(prev => prev.map(squad =>
-        squad.id === squadId
-          ? { ...squad, [field]: !currentValue }
-          : squad
-      ));
-
+      setSquads(prev => prev.map(squad => squad.id === squadId ? { ...squad, [field]: !currentValue } : squad));
       const fieldName = field === 'is_active' ? 'squad status' : 'tournament eligibility';
-      toast.success(`Updated ${fieldName} successfully`);
+      toast.success(`Updated ${fieldName}`);
     } catch (error: any) {
       console.error(`Error updating ${field}:`, error);
       toast.error(error?.message || `Failed to update ${field}`);
@@ -479,15 +547,9 @@ export default function CTFManagementPage() {
   const deleteSquad = async (squadId: string) => {
     try {
       setDeletingSquad(true);
-      const { error: membersError } = await supabase
-        .from('squad_members')
-        .delete()
-        .eq('squad_id', squadId);
+      const { error: membersError } = await supabase.from('squad_members').delete().eq('squad_id', squadId);
       if (membersError) throw membersError;
-      const { error: squadError } = await supabase
-        .from('squads')
-        .delete()
-        .eq('id', squadId);
+      const { error: squadError } = await supabase.from('squads').delete().eq('id', squadId);
       if (squadError) throw squadError;
       toast.success('Squad deleted');
       setShowDeleteSquadConfirm(null);
@@ -538,15 +600,10 @@ export default function CTFManagementPage() {
           'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: JSON.stringify({
-          squadId: showChangeCaptain.id,
-          newCaptainId,
-        }),
+        body: JSON.stringify({ squadId: showChangeCaptain.id, newCaptainId }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.error || res.statusText || 'Transfer failed');
-      }
+      if (!res.ok) throw new Error(json?.error || res.statusText || 'Transfer failed');
       toast.success('Captain updated');
       setShowChangeCaptain(null);
       loadSquads();
@@ -592,7 +649,7 @@ export default function CTFManagementPage() {
 
       if (error) throw error;
 
-      toast.success('Added to free agent pool successfully');
+      toast.success('Added to the pool');
       setShowAddFreeAgent(false);
       loadFreeAgents();
     } catch (error) {
@@ -616,7 +673,7 @@ export default function CTFManagementPage() {
 
       if (error) throw error;
 
-      toast.success('Updated free agent successfully');
+      toast.success('Registration updated');
       setEditingFreeAgent(null);
       loadFreeAgents();
     } catch (error) {
@@ -629,14 +686,9 @@ export default function CTFManagementPage() {
     try {
       // Delete the row so we don't hit (player_id, is_active) unique constraint
       // if the player already has an inactive row. Same behavior for the UI.
-      const { error } = await supabase
-        .from('free_agents')
-        .delete()
-        .eq('id', agentId);
-
+      const { error } = await supabase.from('free_agents').delete().eq('id', agentId);
       if (error) throw error;
-
-      toast.success('Removed from free agent pool');
+      toast.success('Removed from the pool');
       loadFreeAgents();
     } catch (error) {
       console.error('Error removing free agent:', error);
@@ -649,17 +701,12 @@ export default function CTFManagementPage() {
       setClearingPool(true);
       // Delete active rows instead of updating to is_active=false to avoid violating
       // unique constraint (player_id, is_active) when a player already has an inactive row.
-      const { error } = await supabase
-        .from('free_agents')
-        .delete()
-        .eq('is_active', true);
-
+      const { error } = await supabase.from('free_agents').delete().eq('is_active', true);
       if (error) {
         console.error('Error clearing free agent pool:', error.message, error.code, error.details);
         throw error;
       }
-
-      toast.success('Free agent pool cleared. Players can re-join when the next season opens.');
+      toast.success('Pool cleared. Players can register again when the next season opens.');
       setShowClearFreeAgentsConfirm(false);
       loadFreeAgents();
     } catch (error: unknown) {
@@ -671,736 +718,474 @@ export default function CTFManagementPage() {
     }
   };
 
-  const filteredSquads = squads.filter(squad => {
+  // ---- Derived -----------------------------------------------------------------
+
+  const squadTerm = squadSearch.trim().toLowerCase();
+  const filteredSquads = squads.filter((squad) => {
+    if (squadTerm && !`${squad.tag} ${squad.name} ${squad.captain_alias}`.toLowerCase().includes(squadTerm)) return false;
     switch (squadFilter) {
-      case 'active':
-        return squad.is_active;
-      case 'inactive':
-        return !squad.is_active;
-      case 'tournament-eligible':
-        return squad.tournament_eligible;
-      case 'tournament-ineligible':
-        return !squad.tournament_eligible;
-      default:
-        return true;
+      case 'active': return squad.is_active;
+      case 'inactive': return !squad.is_active;
+      case 'tournament-eligible': return squad.tournament_eligible;
+      case 'tournament-ineligible': return !squad.tournament_eligible;
+      default: return true;
     }
   });
+  const eligibleSquads = squads.filter((s) => s.tournament_eligible);
+  const availableSquads = squads.filter((s) => s.is_active && !s.tournament_eligible);
+  const candidateCount = freeAgents.filter((a) => captainCandidates.has(a.player_id)).length;
+  const rolloverPending = rollover ? rollover.squadIds.filter((id) => squads.some((s) => s.id === id && s.is_active)) : [];
+
+  const shell = (children: React.ReactNode) => (
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+      <Navbar user={user} />
+      <main className="container mx-auto px-4 py-6 max-w-7xl space-y-4">{children}</main>
+    </div>
+  );
 
   if (loading || !accessChecked || !mounted) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-purple-400 font-mono">
-            {loading ? 'Loading authentication...' : !mounted ? 'Initializing...' : 'Verifying CTF admin access...'}
-          </p>
-          <p className="text-gray-400 text-sm mt-2">
-            {!mounted ? 'Setting up page...' : !accessChecked ? 'Please wait...' : 'Almost ready...'}
-          </p>
-        </div>
-      </div>
-    );
+    return shell(<Spinner label={loading ? 'Loading…' : 'Checking staff access…'} />);
   }
 
   if (!hasAccess) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h1>
-          <p className="text-gray-300">CTF Admin privileges required</p>
-        </div>
-      </div>
+    return shell(
+      <section className="rounded-xl bg-[#131A2B] px-6 py-8 text-center">
+        <h1 className="font-display text-3xl text-[#E6EDF7]">Staff only</h1>
+        <p className="mt-2 text-sm text-[#8B98B0]">CTF admin privileges are required for this page.</p>
+      </section>,
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <Navbar user={user} />
-      
-      <div className="container mx-auto py-8 px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-purple-400 mb-2">🎮 CTF Management</h1>
-          <p className="text-gray-400">
-            Manage squads, tournament eligibility, and free agent pool
-          </p>
-          <div className="text-sm text-gray-500 mt-2">
-            Logged in as: <span className="text-purple-400">{profile?.in_game_alias}</span> 
-            ({profile?.ctf_role || 'admin'})
-          </div>
-        </div>
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'squads', label: 'Squads', count: squads.length },
+    { key: 'pool', label: 'Player pool', count: freeAgents.length },
+    { key: 'season', label: 'Season' },
+    { key: 'discord', label: 'Discord' },
+    { key: 'tournament', label: 'Tournament', count: eligibleSquads.length },
+    { key: 'bans', label: 'Bans', count: bannedPlayers.length },
+  ];
 
-        {/* Quick Actions */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-purple-400 mb-4">⚡ Quick Actions</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={() => setActiveTab('squads')}
-              className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-center transition-colors group"
-            >
-              <div className="text-2xl mb-2">🛡️</div>
-              <div className="font-bold">Squad Management</div>
-              <div className="text-sm opacity-75">Manage squads & tournaments</div>
-            </button>
-            
-            <button
-              onClick={() => setActiveTab('free-agents')}
-              className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-center transition-colors group"
-            >
-              <div className="text-2xl mb-2">🎯</div>
-              <div className="font-bold">Admin Free Agents</div>
-              <div className="text-sm opacity-75">Manage available players</div>
-            </button>
-            
-            <button
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.open('/free-agents', '_blank');
-                }
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-center transition-colors group"
-            >
-              <div className="text-2xl mb-2">👀</div>
-              <div className="font-bold">View Public Pool</div>
-              <div className="text-sm opacity-75">See what players see</div>
-            </button>
-            
-            <button
-              onClick={() => setActiveTab('bans')}
-              className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-lg text-center transition-colors group"
-            >
-              <div className="text-2xl mb-2">🚫</div>
-              <div className="font-bold">League Bans</div>
-              <div className="text-sm opacity-75">Manage banned players</div>
-            </button>
-          </div>
-        </div>
+  const seasonName = ctx?.season ? `${ctx.league.name} Season ${ctx.season.season_number}` : ctx?.league.name || null;
 
-        {/* Navigation Tabs */}
-        <div className="mb-6">
-          <div className="flex space-x-1 bg-gray-800 p-1 rounded-lg w-fit">
-            {[
-              { key: 'squads', label: '🛡️ Squad Management', count: squads.length },
-              { key: 'free-agents', label: '🎯 Free Agent Pool', count: freeAgents.length },
-              { key: 'tournaments', label: '🏆 Tournament Controls', count: filteredSquads.filter(s => s.tournament_eligible).length },
-              { key: 'bans', label: '🚫 League Bans', count: bannedPlayers.length }
-            ].map(({ key, label, count }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key as any)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === key
-                    ? 'bg-purple-600 text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                {label} ({count})
-              </button>
+  return shell(
+    <>
+      {/* Header strip */}
+      <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+        <div className="relative px-5 sm:px-6 py-5">
+          <div className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80 mb-1">Free Infantry · CTF leagues</div>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">CTF management</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[#8B98B0]">
+                {seasonName && <span className="text-[#E6EDF7]">{seasonName}</span>}
+                {ctx?.phase && <span className="text-[#F59E0B]">{ctx.phase}</span>}
+                <span>
+                  Signed in as <span className="text-[#E6EDF7]">{profile?.in_game_alias}</span> · {profile?.is_admin ? 'site admin' : 'CTF admin'}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/league" className={btnQuiet}>League page</Link>
+              <Link href="/free-agents" target="_blank" rel="noopener noreferrer" className={`${btnQuiet} inline-flex items-center gap-1.5`}>
+                Public pool <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+              {ctx?.league.format === 'draft' && <Link href="/league/ctfdl/draft" className={btnQuiet}>Draft lobby</Link>}
+              <Link href="/league/schedule" className={btnQuiet}>Schedule</Link>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {tabs.map((t) => (
+              <Chip key={t.key} active={activeTab === t.key} onClick={() => selectTab(t.key)}>
+                {t.label}
+                {typeof t.count === 'number' && <span className={`ml-1.5 tabular-nums ${activeTab === t.key ? 'text-[#22D3EE]/70' : 'text-[#8B98B0]'}`}>{t.count}</span>}
+              </Chip>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* Squad Management Tab */}
-        {activeTab === 'squads' && (
-          <div className="space-y-6">
-            {/* Squad Filters */}
-            <div className="flex flex-wrap gap-4 items-center">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Filter Squads</label>
-                <select
-                  value={squadFilter}
-                  onChange={(e) => setSquadFilter(e.target.value as any)}
-                  className="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-purple-500"
-                >
-                  <option value="all">All Squads ({squads.length})</option>
-                  <option value="active">Active ({squads.filter(s => s.is_active).length})</option>
-                  <option value="inactive">Inactive ({squads.filter(s => !s.is_active).length})</option>
-                  <option value="tournament-eligible">Tournament Eligible ({squads.filter(s => s.tournament_eligible).length})</option>
-                  <option value="tournament-ineligible">Tournament Ineligible ({squads.filter(s => !s.tournament_eligible).length})</option>
-                </select>
-              </div>
-            </div>
+      {/* Squads */}
+      {activeTab === 'squads' && (
+        <Panel
+          title="Squads"
+          hint="Active, league and tournament flags. Captain changes and deletion live in the row menu."
+          actions={
+            <input
+              type="text"
+              value={squadSearch}
+              onChange={(e) => setSquadSearch(e.target.value)}
+              placeholder="Search squads, captains…"
+              className={`${inputCls} w-56`}
+            />
+          }
+        >
+          <div className="px-5 py-3 flex flex-wrap gap-1.5 border-b border-white/[0.06]">
+            {([
+              ['all', `All ${squads.length}`],
+              ['active', `Active ${squads.filter((s) => s.is_active).length}`],
+              ['inactive', `Inactive ${squads.filter((s) => !s.is_active).length}`],
+              ['tournament-eligible', `Tournament eligible ${squads.filter((s) => s.tournament_eligible).length}`],
+              ['tournament-ineligible', `Not eligible ${squads.filter((s) => !s.tournament_eligible).length}`],
+            ] as const).map(([k, label]) => (
+              <Chip key={k} active={squadFilter === k} onClick={() => setSquadFilter(k)}>{label}</Chip>
+            ))}
+          </div>
 
-            {/* Season dates + Discord invite (feeds the /league hero) */}
-            <SeasonSettingsPanel />
-
-            {/* Discord application settings (account link) */}
-            <DiscordAppPanel />
-
-            {/* FreeInf CTF Discord bot: heartbeat, sync, season teardown */}
-            <DiscordBotPanel />
-
-            {/* Season rollover: archive draft-league squads */}
-            {rollover && (() => {
-              const pending = rollover.squadIds.filter((id) => squads.some((s) => s.id === id && s.is_active));
-              const label = `${rollover.league.name} Season ${rollover.season.season_number}`;
-              return (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-                  <div className="text-sm">
-                    <div className="font-medium text-amber-200">Season rollover · {label}</div>
-                    <div className="text-gray-400">
-                      {pending.length > 0
-                        ? `${pending.length} squad${pending.length === 1 ? '' : 's'} from this season ${pending.length === 1 ? 'is' : 'are'} still active. Archiving marks them inactive and legacy, so their players read as "last season" in the pool and can create or join a new squad. Memberships and history are kept.`
-                        : 'All squads from this season are already archived.'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowArchiveConfirm(true)}
-                    disabled={pending.length === 0 || archiving}
-                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium"
-                  >
-                    Archive {label} squads
-                  </button>
-                </div>
-              );
-            })()}
-
-            {showArchiveConfirm && rollover && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-md w-full">
-                  <h3 className="text-lg font-bold text-white mb-2">Archive {rollover.league.name} Season {rollover.season.season_number} squads?</h3>
-                  <p className="text-gray-300 text-sm mb-3">These squads will be marked inactive. Nothing is deleted; squad pages and match history stay intact.</p>
-                  <ul className="mb-4 max-h-48 overflow-y-auto space-y-1 text-sm text-gray-200">
-                    {rollover.squadIds
-                      .map((id) => squads.find((s) => s.id === id))
-                      .filter((s): s is Squad => !!s && s.is_active)
-                      .map((s) => <li key={s.id}>{s.tag ? `[${s.tag}] ` : ''}{s.name}</li>)}
-                  </ul>
-                  <div className="flex gap-3 justify-end">
-                    <button onClick={() => setShowArchiveConfirm(false)} disabled={archiving} className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50">Cancel</button>
-                    <button onClick={archiveSeasonSquads} disabled={archiving} className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50">{archiving ? 'Archiving…' : 'Archive'}</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Squads Table */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
-              {squadsLoading ? (
-                <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400 mx-auto"></div>
-                  <p className="mt-4 text-gray-400">Loading squads...</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-700">
-                      <tr>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Squad</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Captain</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Members</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">League</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Status</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Tournament</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSquads.map((squad) => (
-                        <tr key={squad.id} className="border-b border-gray-700 hover:bg-gray-700/30">
-                          <td className="py-3 px-4">
-                            <div>
-                              <div className="font-medium text-white">[{squad.tag}] {squad.name}</div>
-                              <div className="text-sm text-gray-400">{squad.description}</div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-cyan-400">{squad.captain_alias}</td>
-                          <td className="py-3 px-4">{squad.member_count}</td>
-                          <td className="py-3 px-4">
-                            <select
-                              value={squad.league_slug || ''}
-                              onChange={(e) => setSquadLeague(squad.id, e.target.value)}
-                              className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white"
-                              title="Which league this squad plays in (sets the squad page layout)"
-                            >
-                              <option value="">—</option>
-                              <option value="ctfpl">CTFPL</option>
-                              <option value="ctfdl">CTFDL</option>
-                              <option value="ovdl">OVDL</option>
-                            </select>
-                          </td>
-                          <td className="py-3 px-4">
-                            <button
-                              onClick={() => toggleSquadStatus(squad.id, 'is_active', squad.is_active)}
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                squad.is_active
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'bg-red-600 text-white hover:bg-red-700'
-                              }`}
-                            >
-                              {squad.is_active ? 'Active' : 'Inactive'}
-                            </button>
-                          </td>
-                          <td className="py-3 px-4">
-                            <button
-                              onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)}
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                squad.tournament_eligible
-                                  ? 'bg-purple-600 text-white hover:bg-purple-700'
-                                  : 'bg-gray-600 text-white hover:bg-gray-700'
-                              }`}
-                            >
-                              {squad.tournament_eligible ? 'Eligible' : 'Not Eligible'}
-                            </button>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-2">
-                              <Link
-                                href={`/squads/${squad.id}`}
-                                className="text-blue-400 hover:text-blue-300 text-sm"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                View
-                              </Link>
-                              <button
-                                type="button"
-                                onClick={() => openChangeCaptain(squad)}
-                                className="text-amber-400 hover:text-amber-300 text-sm"
-                              >
-                                Change captain
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowDeleteSquadConfirm(squad.id)}
-                                className="text-red-400 hover:text-red-300 text-sm"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {filteredSquads.length === 0 && !squadsLoading && (
-                <div className="p-8 text-center text-gray-400">
-                  No squads match the current filter
-                </div>
-              )}
-            </div>
-
-            {/* Delete squad confirmation */}
-            {showDeleteSquadConfirm && (
-              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
-                  <h3 className="text-lg font-semibold text-white mb-2">Delete squad?</h3>
-                  <p className="text-gray-300 text-sm mb-4">
-                    This will remove all members and delete the squad. This cannot be undone.
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteSquadConfirm(null)}
-                      className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteSquad(showDeleteSquadConfirm)}
-                      disabled={deletingSquad}
-                      className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {deletingSquad ? 'Deleting…' : 'Delete squad'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Change captain modal */}
-            {showChangeCaptain && (
-              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                <div className="bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-xl">
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    Change captain – [{showChangeCaptain.tag}] {showChangeCaptain.name}
-                  </h3>
-                  <p className="text-gray-400 text-sm mb-4">
-                    Choose a member to become the new captain. Invite players and manage roster on the squad page.
-                  </p>
-                  {loadingMembersForCaptain ? (
-                    <p className="text-gray-400">Loading members…</p>
-                  ) : squadMembersForCaptain.length === 0 ? (
-                    <p className="text-gray-400">No members found.</p>
-                  ) : (
-                    <ul className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-                      {squadMembersForCaptain.map((m) => (
-                        <li key={m.player_id} className="flex items-center justify-between gap-2 py-1">
-                          <span className="text-white">
-                            {m.in_game_alias}
-                            {m.role === 'captain' && <span className="ml-2 text-amber-400 text-sm">(current captain)</span>}
+          {squadsLoading ? (
+            <Spinner label="Loading squads…" />
+          ) : filteredSquads.length === 0 ? (
+            <Empty>No squads match that filter.</Empty>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className={th}>Squad</th>
+                    <th className={th}>Captain</th>
+                    <th className={`${th} text-right`}>Members</th>
+                    <th className={th}>League</th>
+                    <th className={th}>Status</th>
+                    <th className={th}>Tournament</th>
+                    <th className={`${th} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSquads.map((squad) => (
+                    <tr key={squad.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
+                      <td className={td}>
+                        <div className="flex items-center gap-3">
+                          <span className="w-9 h-9 rounded-md bg-[#1B2438] text-[#22D3EE] text-[11px] font-medium flex items-center justify-center shrink-0">
+                            {(squad.tag || squad.name || '?').slice(0, 4).toUpperCase()}
                           </span>
-                          <button
-                            type="button"
-                            disabled={m.role === 'captain' || transferringCaptain}
-                            onClick={() => transferCaptain(m.player_id)}
-                            className="text-sm px-3 py-1 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Make captain
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setShowChangeCaptain(null)}
-                      className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Free Agents Tab */}
-        {activeTab === 'free-agents' && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap justify-between items-center gap-3">
-              <h2 className="text-xl font-bold text-purple-400">Free Agent Pool</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowClearFreeAgentsConfirm(true)}
-                  disabled={freeAgents.length === 0 || clearingPool}
-                  className="bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium"
-                  title="Remove everyone from the pool (e.g. after season end). Players can re-join for the next season."
-                >
-                  {clearingPool ? 'Clearing…' : 'Clear entire pool'}
-                </button>
-                <button
-                  onClick={() => setShowAddFreeAgent(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  Add Free Agent
-                </button>
-              </div>
-            </div>
-
-            {/* Clear pool confirmation modal */}
-            {showClearFreeAgentsConfirm && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                <div className="bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-md w-full">
-                  <h3 className="text-lg font-bold text-white mb-2">Clear entire free agent pool?</h3>
-                  <p className="text-gray-300 text-sm mb-4">
-                    This will remove all {freeAgents.length} player{freeAgents.length === 1 ? '' : 's'} from the pool. Use this when a season ends so the pool is fresh for the next season. Players can join again from the Free Agents page.
-                  </p>
-                  <div className="flex gap-3 justify-end">
-                    <button
-                      onClick={() => setShowClearFreeAgentsConfirm(false)}
-                      disabled={clearingPool}
-                      className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={clearEntireFreeAgentPool}
-                      disabled={clearingPool}
-                      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
-                    >
-                      {clearingPool ? 'Clearing…' : 'Clear pool'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <label className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5 text-amber-300 cursor-pointer" title="Players who ticked 'interested in captaining' when registering. Only staff can see this.">
-                <input type="checkbox" checked={captainOnly} onChange={(e) => setCaptainOnly(e.target.checked)} className="h-4 w-4 accent-amber-400" style={{ WebkitAppearance: 'checkbox', appearance: 'auto' }} />
-                Captain candidates only ({freeAgents.filter((a) => captainCandidates.has(a.player_id)).length})
-              </label>
-              <span className="text-gray-400">
-                {freeAgents.length} active registration{freeAgents.length === 1 ? '' : 's'}
-              </span>
-            </div>
-
-            {/* Free Agents List */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
-              {freeAgentsLoading ? (
-                <div className="p-8 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400 mx-auto"></div>
-                  <p className="mt-4 text-gray-400">Loading free agents...</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-700">
-                      <tr>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Player</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Classes</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Availability (EST)</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Season</th>
-                        <th className="text-left py-3 px-4 font-medium text-amber-300" title="Staff only">Captain?</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-300">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {freeAgents.filter((a) => !captainOnly || captainCandidates.has(a.player_id)).map((agent) => (
-                        <tr key={agent.id} className="border-b border-gray-700 hover:bg-gray-700/30 align-top">
-                          <td className="py-3 px-4">
-                            <div className="font-medium text-white">{agent.player_alias}</div>
-                            {agent.contact_info && (
-                              <div className="text-xs text-gray-400">@{agent.contact_info.replace(/^@/, '')}</div>
-                            )}
-                            {agent.notes && (
-                              <div className="mt-1 max-w-xs text-xs text-gray-500 line-clamp-2" title={agent.notes}>{agent.notes}</div>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex flex-wrap gap-1">
-                              {agent.preferred_roles.map((role, index) => (
-                                <span key={`p-${index}`} className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">
-                                  {role}
-                                </span>
-                              ))}
-                              {(agent.secondary_roles || []).map((role, index) => (
-                                <span key={`s-${index}`} className="bg-gray-600 text-gray-200 px-2 py-0.5 rounded text-xs" title="Secondary">
-                                  {role}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-gray-300">
-                            {(agent.availability_days?.length || 0) > 0 ? (
-                              <div className="space-y-1">
-                                <div className="flex gap-0.5">
-                                  {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map((d) => {
-                                    const on = agent.availability_days!.includes(d);
-                                    return <span key={d} title={d} className={`w-6 rounded py-0.5 text-center text-[10px] font-semibold ${on ? 'bg-green-500/25 text-green-300' : 'bg-gray-700 text-gray-500'}`}>{d.slice(0, 2)}</span>;
-                                  })}
-                                </div>
-                                <div className="text-xs text-gray-400">
-                                  {Array.from(new Set(Object.values(agent.availability_times || {}).map((t) => `${t.start}–${t.end}`))).join(' · ') || 'Times not set'}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-xs">{agent.availability || '—'}</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-xs text-gray-300 whitespace-nowrap">
-                            {agent.league_slug ? `${agent.league_slug.toUpperCase()} S${agent.season_number ?? '?'}` : <span className="text-gray-500">untagged</span>}
-                          </td>
-                          <td className="py-3 px-4">
-                            {captainCandidates.has(agent.player_id) ? (
-                              <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-300">Yes</span>
-                            ) : (
-                              <span className="text-xs text-gray-500">—</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex space-x-2">
-                              <button 
-                                onClick={() => setEditingFreeAgent(agent)}
-                                className="text-blue-400 hover:text-blue-300 text-sm"
-                              >
-                                Edit
-                              </button>
-                              <button 
-                                onClick={() => removeFromFreeAgentPool(agent.id)}
-                                className="text-red-400 hover:text-red-300 text-sm"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {freeAgents.length === 0 && !freeAgentsLoading && (
-                <div className="p-8 text-center text-gray-400">
-                  No free agents in the pool. Use the "Add Free Agent" button to get started.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tournament Controls Tab */}
-        {activeTab === 'tournaments' && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-bold text-purple-400">Tournament Management</h2>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Tournament Eligible Squads */}
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-green-400 mb-4">Tournament Eligible Squads</h3>
-                <div className="space-y-2">
-                  {squads.filter(s => s.tournament_eligible).map((squad) => (
-                    <div key={squad.id} className="flex items-center justify-between bg-gray-700 p-3 rounded">
-                      <div>
-                        <span className="font-medium text-white">[{squad.tag}] {squad.name}</span>
-                        <div className="text-sm text-gray-400">{squad.member_count} members</div>
-                      </div>
-                      <button
-                        onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)}
-                        className="text-red-400 hover:text-red-300 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {squads.filter(s => s.tournament_eligible).length === 0 && (
-                  <p className="text-gray-400 text-center py-4">No tournament eligible squads</p>
-                )}
-              </div>
-
-              {/* Available Squads to Add */}
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-yellow-400 mb-4">Available Squads</h3>
-                <div className="space-y-2">
-                  {squads.filter(s => s.is_active && !s.tournament_eligible).map((squad) => (
-                    <div key={squad.id} className="flex items-center justify-between bg-gray-700 p-3 rounded">
-                      <div>
-                        <span className="font-medium text-white">[{squad.tag}] {squad.name}</span>
-                        <div className="text-sm text-gray-400">{squad.member_count} members</div>
-                      </div>
-                      <button
-                        onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)}
-                        className="text-green-400 hover:text-green-300 text-sm"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {squads.filter(s => s.is_active && !s.tournament_eligible).length === 0 && (
-                  <p className="text-gray-400 text-center py-4">All active squads are tournament eligible</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* League Bans Tab */}
-        {activeTab === 'bans' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-red-400">League Ban Management</h2>
-              <button
-                onClick={() => setShowBanPlayer(true)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Ban Player
-              </button>
-            </div>
-
-            {bannedPlayersLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-gray-800 rounded-lg p-6 animate-pulse">
-                    <div className="h-6 bg-gray-700 rounded mb-4"></div>
-                    <div className="h-4 bg-gray-700 rounded mb-2"></div>
-                    <div className="h-4 bg-gray-700 rounded mb-4 w-3/4"></div>
-                  </div>
-                ))}
-              </div>
-            ) : bannedPlayers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-400 text-xl">No banned players</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bannedPlayers.map((player) => (
-                  <div key={player.id} className="bg-gray-800 border border-red-500/30 rounded-lg p-6">
-                    <h3 className="text-lg font-bold text-red-400 mb-3">{player.in_game_alias}</h3>
-                    
-                    <div className="space-y-2 text-sm">
-                      
-                      <div>
-                        <span className="text-gray-400">Banned:</span>
-                        <span className="ml-2 text-gray-300">
-                          {player.league_ban_date ? new Date(player.league_ban_date).toLocaleDateString() : 'Unknown'}
-                        </span>
-                      </div>
-                      
-                      {player.league_ban_reason && (
-                        <div>
-                          <span className="text-gray-400">Reason:</span>
-                          <p className="text-gray-300 mt-1 text-xs bg-gray-700 p-2 rounded">
-                            {player.league_ban_reason}
-                          </p>
+                          <div className="min-w-0">
+                            <div className="font-medium text-[#E6EDF7] truncate">{squad.name}</div>
+                            {squad.description && <div className="text-xs text-[#8B98B0] truncate max-w-xs">{squad.description}</div>}
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      </td>
+                      <td className={`${td} text-[#E6EDF7]`}>{squad.captain_alias}</td>
+                      <td className={`${td} text-right tabular-nums text-[#E6EDF7]`}>{squad.member_count}</td>
+                      <td className={td}>
+                        <select
+                          value={squad.league_slug || ''}
+                          onChange={(e) => setSquadLeague(squad.id, e.target.value)}
+                          className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1 text-xs text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+                          title="Which league this squad plays in (sets the squad page layout)"
+                        >
+                          <option value="">—</option>
+                          <option value="ctfpl">CTFPL</option>
+                          <option value="ctfdl">CTFDL</option>
+                          <option value="ovdl">OVDL</option>
+                        </select>
+                      </td>
+                      <td className={td}>
+                        <button onClick={() => toggleSquadStatus(squad.id, 'is_active', squad.is_active)} className={pill(squad.is_active, 'bg-[#34D399]/15 text-[#34D399] hover:bg-[#34D399]/25')} title="Click to toggle">
+                          {squad.is_active ? 'Active' : 'Inactive'}
+                        </button>
+                      </td>
+                      <td className={td}>
+                        <button onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)} className={pill(squad.tournament_eligible, 'bg-[#F59E0B]/15 text-[#F59E0B] hover:bg-[#F59E0B]/25')} title="Click to toggle">
+                          {squad.tournament_eligible ? 'Eligible' : 'Not eligible'}
+                        </button>
+                      </td>
+                      <td className={`${td} text-right whitespace-nowrap`}>
+                        <Link href={`/squads/${squad.id}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#8B98B0] hover:text-[#22D3EE] mr-3">View</Link>
+                        <button type="button" onClick={() => openChangeCaptain(squad)} className="text-xs text-[#F59E0B] hover:text-[#FBBF24] mr-3">Captain</button>
+                        <button type="button" onClick={() => setShowDeleteSquadConfirm(squad.id)} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      )}
 
-                    <button
-                      onClick={() => unbanPlayer(player.id)}
-                      className="mt-4 w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded font-medium transition-colors"
-                    >
-                      Unban Player
-                    </button>
-                  </div>
-                ))}
+      {/* Player pool */}
+      {activeTab === 'pool' && (
+        <Panel
+          title="Player pool"
+          hint={`${freeAgents.length} active registration${freeAgents.length === 1 ? '' : 's'}. Captain interest is staff-only.`}
+          actions={
+            <>
+              <Chip active={captainOnly} tone="warn" onClick={() => setCaptainOnly((v) => !v)} title="Players who ticked 'interested in captaining' when registering">
+                Captain candidates <span className="ml-1 tabular-nums opacity-70">{candidateCount}</span>
+              </Chip>
+              <button onClick={() => setShowClearFreeAgentsConfirm(true)} disabled={freeAgents.length === 0 || clearingPool} className={btnDanger} title="Remove everyone from the pool, e.g. after season end. Players can register again.">
+                {clearingPool ? 'Clearing…' : 'Clear pool'}
+              </button>
+              <button onClick={() => setShowAddFreeAgent(true)} className={btnPrimary}>Add player</button>
+            </>
+          }
+        >
+          {freeAgentsLoading ? (
+            <Spinner label="Loading the pool…" />
+          ) : freeAgents.length === 0 ? (
+            <Empty>Nobody is in the pool. Players register from the league page, or add one here.</Empty>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className={th}>Player</th>
+                    <th className={th}>Classes</th>
+                    <th className={th}>Availability (EST)</th>
+                    <th className={th}>Season</th>
+                    <th className={`${th} text-[#F59E0B]`} title="Staff only">Captain?</th>
+                    <th className={`${th} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {freeAgents.filter((a) => !captainOnly || captainCandidates.has(a.player_id)).map((agent) => (
+                    <tr key={agent.id} className="border-t border-white/[0.06] hover:bg-white/[0.02] align-top">
+                      <td className={td}>
+                        <div className="font-medium text-[#E6EDF7]">{agent.player_alias}</div>
+                        {agent.contact_info && <div className="text-xs text-[#8B98B0]">@{agent.contact_info.replace(/^@/, '')}</div>}
+                        {agent.notes && <div className="mt-1 max-w-xs text-xs text-[#8B98B0]/80 line-clamp-2" title={agent.notes}>{agent.notes}</div>}
+                      </td>
+                      <td className={td}>
+                        <div className="flex flex-wrap gap-1">
+                          {agent.preferred_roles.map((role, i) => (
+                            <span key={`p-${i}`} className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[11px] text-[#22D3EE]">{role}</span>
+                          ))}
+                          {(agent.secondary_roles || []).map((role, i) => (
+                            <span key={`s-${i}`} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#8B98B0]" title="Secondary">{role}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className={`${td} text-[#8B98B0]`}>
+                        {(agent.availability_days?.length || 0) > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex gap-0.5">
+                              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d) => {
+                                const on = agent.availability_days!.includes(d);
+                                return <span key={d} title={d} className={`w-6 rounded py-0.5 text-center text-[10px] font-semibold ${on ? 'bg-[#34D399]/20 text-[#34D399]' : 'bg-white/5 text-[#8B98B0]/60'}`}>{d.slice(0, 2)}</span>;
+                              })}
+                            </div>
+                            <div className="text-xs">
+                              {Array.from(new Set(Object.values(agent.availability_times || {}).map((t) => `${t.start}–${t.end}`))).join(' · ') || 'Times not set'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs">{agent.availability || '—'}</span>
+                        )}
+                      </td>
+                      <td className={`${td} text-xs text-[#8B98B0] whitespace-nowrap`}>
+                        {agent.league_slug ? `${agent.league_slug.toUpperCase()} S${agent.season_number ?? '?'}` : 'untagged'}
+                      </td>
+                      <td className={td}>
+                        {captainCandidates.has(agent.player_id)
+                          ? <span className="rounded bg-[#F59E0B]/15 px-2 py-0.5 text-xs font-semibold text-[#F59E0B]">Yes</span>
+                          : <span className="text-xs text-[#8B98B0]/60">—</span>}
+                      </td>
+                      <td className={`${td} text-right whitespace-nowrap`}>
+                        <button onClick={() => setEditingFreeAgent(agent)} className="text-xs text-[#8B98B0] hover:text-[#22D3EE] mr-3">Edit</button>
+                        <button onClick={() => removeFromFreeAgentPool(agent.id)} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Remove</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {/* Season */}
+      {activeTab === 'season' && (
+        <>
+          <SeasonSettingsPanel />
+          {rollover && (
+            <Panel
+              title={`Season rollover · ${rollover.league.name} Season ${rollover.season.season_number}`}
+              actions={
+                <button onClick={() => setShowArchiveConfirm(true)} disabled={rolloverPending.length === 0 || archiving} className={btnQuiet + ' disabled:opacity-50 disabled:cursor-not-allowed'}>
+                  Archive {rolloverPending.length} squad{rolloverPending.length === 1 ? '' : 's'}
+                </button>
+              }
+            >
+              <div className="px-5 py-4 text-sm text-[#8B98B0]">
+                {rolloverPending.length > 0
+                  ? `${rolloverPending.length} squad${rolloverPending.length === 1 ? '' : 's'} from this season ${rolloverPending.length === 1 ? 'is' : 'are'} still active. Archiving marks them inactive and legacy, so their players read as "last season" in the pool and can create or join a new squad. Memberships and history are kept.`
+                  : 'All squads from this season are already archived.'}
               </div>
+            </Panel>
+          )}
+        </>
+      )}
+
+      {/* Discord */}
+      {activeTab === 'discord' && (
+        <>
+          <DiscordBotPanel />
+          <DiscordAppPanel />
+        </>
+      )}
+
+      {/* Tournament */}
+      {activeTab === 'tournament' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Panel title="Tournament eligible" hint={`${eligibleSquads.length} squad${eligibleSquads.length === 1 ? '' : 's'}`}>
+            {eligibleSquads.length === 0 ? (
+              <Empty>No squads are marked eligible.</Empty>
+            ) : (
+              <ul className="divide-y divide-white/[0.06]">
+                {eligibleSquads.map((squad) => (
+                  <li key={squad.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                    <div>
+                      <div className="text-sm font-medium text-[#E6EDF7]">{squad.tag ? `[${squad.tag}] ` : ''}{squad.name}</div>
+                      <div className="text-xs text-[#8B98B0]">{squad.member_count} member{squad.member_count === 1 ? '' : 's'}{!squad.is_active && ' · inactive'}</div>
+                    </div>
+                    <button onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Remove</button>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Ban Player Modal */}
-      {showBanPlayer && (
-        <BanPlayerModal
-          onBan={banPlayer}
-          onCancel={() => setShowBanPlayer(false)}
-        />
+          </Panel>
+          <Panel title="Active, not eligible" hint={`${availableSquads.length} squad${availableSquads.length === 1 ? '' : 's'}`}>
+            {availableSquads.length === 0 ? (
+              <Empty>Every active squad is tournament eligible.</Empty>
+            ) : (
+              <ul className="divide-y divide-white/[0.06]">
+                {availableSquads.map((squad) => (
+                  <li key={squad.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                    <div>
+                      <div className="text-sm font-medium text-[#E6EDF7]">{squad.tag ? `[${squad.tag}] ` : ''}{squad.name}</div>
+                      <div className="text-xs text-[#8B98B0]">{squad.member_count} member{squad.member_count === 1 ? '' : 's'}</div>
+                    </div>
+                    <button onClick={() => toggleSquadStatus(squad.id, 'tournament_eligible', squad.tournament_eligible)} className="text-xs text-[#34D399] hover:text-[#6EE7B7]">Add</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
       )}
 
-      {/* Add Free Agent Modal */}
+      {/* Bans */}
+      {activeTab === 'bans' && (
+        <Panel
+          title="League bans"
+          hint="Banned players are removed from the pool and cannot register or play."
+          actions={<button onClick={() => setShowBanPlayer(true)} className={btnDanger + ' bg-[#F87171]/10'}>Ban a player</button>}
+        >
+          {bannedPlayersLoading ? (
+            <Spinner label="Loading bans…" />
+          ) : bannedPlayers.length === 0 ? (
+            <Empty>No banned players.</Empty>
+          ) : (
+            <ul className="divide-y divide-white/[0.06]">
+              {bannedPlayers.map((player) => (
+                <li key={player.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-[#E6EDF7]">{player.in_game_alias}</div>
+                    <div className="text-xs text-[#8B98B0]">
+                      Banned {player.league_ban_date ? new Date(player.league_ban_date).toLocaleDateString() : 'on an unknown date'}
+                    </div>
+                    {player.league_ban_reason && <div className="mt-1 text-xs text-[#8B98B0]/80 max-w-xl">{player.league_ban_reason}</div>}
+                  </div>
+                  <button onClick={() => unbanPlayer(player.id)} className={btnQuiet}>Unban</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
+
+      {/* ---- Modals ---------------------------------------------------------- */}
+
+      {showArchiveConfirm && rollover && (
+        <Modal title={`Archive ${rollover.league.name} Season ${rollover.season.season_number} squads?`} onClose={() => !archiving && setShowArchiveConfirm(false)}>
+          <p className="text-sm text-[#8B98B0] mb-3">These squads will be marked inactive and legacy. Nothing is deleted; squad pages and match history stay intact.</p>
+          <ul className="mb-4 max-h-48 overflow-y-auto space-y-1 text-sm text-[#E6EDF7]">
+            {rollover.squadIds
+              .map((id) => squads.find((s) => s.id === id))
+              .filter((s): s is Squad => !!s && s.is_active)
+              .map((s) => <li key={s.id}>{s.tag ? `[${s.tag}] ` : ''}{s.name}</li>)}
+          </ul>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowArchiveConfirm(false)} disabled={archiving} className={btnQuiet}>Cancel</button>
+            <button onClick={archiveSeasonSquads} disabled={archiving} className={btnPrimary}>{archiving ? 'Archiving…' : 'Archive'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {showDeleteSquadConfirm && (
+        <Modal title="Delete squad?" onClose={() => !deletingSquad && setShowDeleteSquadConfirm(null)}>
+          <p className="text-sm text-[#8B98B0] mb-4">This removes every member and deletes the squad. It cannot be undone. To keep history, mark it inactive instead.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setShowDeleteSquadConfirm(null)} className={btnQuiet}>Cancel</button>
+            <button type="button" onClick={() => deleteSquad(showDeleteSquadConfirm)} disabled={deletingSquad} className={btnDanger + ' bg-[#F87171]/10'}>
+              {deletingSquad ? 'Deleting…' : 'Delete squad'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {showChangeCaptain && (
+        <Modal title={<>Change captain · {showChangeCaptain.tag ? `[${showChangeCaptain.tag}] ` : ''}{showChangeCaptain.name}</>} onClose={() => !transferringCaptain && setShowChangeCaptain(null)}>
+          <p className="text-sm text-[#8B98B0] mb-3">Pick a member to become captain. Rosters and invites are managed on the squad page.</p>
+          {loadingMembersForCaptain ? (
+            <p className="text-sm text-[#8B98B0]">Loading members…</p>
+          ) : squadMembersForCaptain.length === 0 ? (
+            <p className="text-sm text-[#8B98B0]">No members found.</p>
+          ) : (
+            <ul className="mb-4 max-h-60 overflow-y-auto divide-y divide-white/[0.06]">
+              {squadMembersForCaptain.map((m) => (
+                <li key={m.player_id} className="flex items-center justify-between gap-2 py-2">
+                  <span className="text-sm text-[#E6EDF7]">
+                    {m.in_game_alias}
+                    {m.role === 'captain' && <span className="ml-2 text-xs text-[#F59E0B]">current captain</span>}
+                  </span>
+                  <button type="button" disabled={m.role === 'captain' || transferringCaptain} onClick={() => transferCaptain(m.player_id)} className={btnQuiet + ' disabled:opacity-40 disabled:cursor-not-allowed'}>
+                    Make captain
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setShowChangeCaptain(null)} className={btnQuiet}>Close</button>
+          </div>
+        </Modal>
+      )}
+
+      {showClearFreeAgentsConfirm && (
+        <Modal title="Clear the whole pool?" onClose={() => !clearingPool && setShowClearFreeAgentsConfirm(false)}>
+          <p className="text-sm text-[#8B98B0] mb-4">
+            Removes all {freeAgents.length} player{freeAgents.length === 1 ? '' : 's'} from the pool. Do this when a season ends so the next one starts fresh. Players can register again from the league page.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowClearFreeAgentsConfirm(false)} disabled={clearingPool} className={btnQuiet}>Cancel</button>
+            <button onClick={clearEntireFreeAgentPool} disabled={clearingPool} className={btnDanger + ' bg-[#F87171]/10'}>{clearingPool ? 'Clearing…' : 'Clear pool'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {showBanPlayer && <BanPlayerModal onBan={banPlayer} onCancel={() => setShowBanPlayer(false)} />}
+
       {showAddFreeAgent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold text-purple-400 mb-4">Add Free Agent</h3>
-            <FreeAgentForm 
-              onSubmit={addToFreeAgentPool}
-              onCancel={() => setShowAddFreeAgent(false)}
-            />
-          </div>
-        </div>
+        <Modal title="Add a player to the pool" onClose={() => setShowAddFreeAgent(false)}>
+          <FreeAgentForm onSubmit={addToFreeAgentPool} onCancel={() => setShowAddFreeAgent(false)} />
+        </Modal>
       )}
 
-      {/* Edit Free Agent Modal */}
       {editingFreeAgent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold text-purple-400 mb-4">Edit Free Agent</h3>
-            <FreeAgentForm 
-              initialData={editingFreeAgent}
-              onSubmit={(data) => {
-                updateFreeAgent(editingFreeAgent.id, data);
-              }}
-              onCancel={() => setEditingFreeAgent(null)}
-            />
-          </div>
-        </div>
+        <Modal title={`Edit · ${editingFreeAgent.player_alias}`} onClose={() => setEditingFreeAgent(null)}>
+          <FreeAgentForm initialData={editingFreeAgent} onSubmit={(data) => updateFreeAgent(editingFreeAgent.id, data)} onCancel={() => setEditingFreeAgent(null)} />
+        </Modal>
       )}
-    </div>
+    </>,
   );
 }
 
-// Free Agent Form Component
-function FreeAgentForm({ 
-  initialData, 
-  onSubmit, 
-  onCancel 
-}: { 
-  initialData?: FreeAgent, 
-  onSubmit: (data: Partial<FreeAgent>) => void, 
-  onCancel: () => void 
-}) {
+// ---- Free agent form -----------------------------------------------------------
+
+function FreeAgentForm({ initialData, onSubmit, onCancel }: { initialData?: FreeAgent; onSubmit: (data: Partial<FreeAgent>) => void; onCancel: () => void }) {
   const [formData, setFormData] = useState({
     player_id: initialData?.player_id || '',
     preferred_roles: initialData?.preferred_roles || [],
@@ -1413,19 +1198,15 @@ function FreeAgentForm({
   const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
 
   useEffect(() => {
-    // Fetch players not currently in squads
     const fetchPlayers = async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, in_game_alias')
         .eq('registration_status', 'completed')
-        .not('in_game_alias', 'is', null);
-
-      if (!error && data) {
-        setAvailablePlayers(data);
-      }
+        .not('in_game_alias', 'is', null)
+        .order('in_game_alias');
+      if (!error && data) setAvailablePlayers(data);
     };
-
     fetchPlayers();
   }, []);
 
@@ -1443,119 +1224,69 @@ function FreeAgentForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.player_id) {
-      toast.error('Please select a player');
+      toast.error('Pick a player');
       return;
     }
     onSubmit(formData);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Player</label>
-        <select
-          value={formData.player_id}
-          onChange={(e) => setFormData(prev => ({ ...prev, player_id: e.target.value }))}
-          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-          required
-        >
-          <option value="">Select Player</option>
-          {availablePlayers.map(player => (
-            <option key={player.id} value={player.id}>{player.in_game_alias}</option>
-          ))}
-        </select>
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {!initialData && (
+        <label className="block">
+          <span className={labelCls}>Player</span>
+          <select value={formData.player_id} onChange={(e) => setFormData(prev => ({ ...prev, player_id: e.target.value }))} className={inputCls} required>
+            <option value="">Select a player</option>
+            {availablePlayers.map(player => <option key={player.id} value={player.id}>{player.in_game_alias}</option>)}
+          </select>
+        </label>
+      )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Preferred Roles</label>
-        <div className="grid grid-cols-2 gap-2">
+        <span className={labelCls}>Preferred roles</span>
+        <div className="flex flex-wrap gap-1.5">
           {roleOptions.map(role => (
-            <label key={role} className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.preferred_roles.includes(role)}
-                onChange={() => handleRoleToggle(role)}
-                className="mr-2"
-              />
-              <span className="text-white text-sm">{role}</span>
-            </label>
+            <Chip key={role} active={formData.preferred_roles.includes(role)} onClick={() => handleRoleToggle(role)}>{role}</Chip>
           ))}
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Skill Level</label>
-        <select
-          value={formData.skill_level}
-          onChange={(e) => setFormData(prev => ({ ...prev, skill_level: e.target.value }))}
-          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-        >
+      <label className="block">
+        <span className={labelCls}>Skill level</span>
+        <select value={formData.skill_level} onChange={(e) => setFormData(prev => ({ ...prev, skill_level: e.target.value }))} className={inputCls}>
           <option value="beginner">Beginner</option>
           <option value="intermediate">Intermediate</option>
           <option value="advanced">Advanced</option>
           <option value="expert">Expert</option>
         </select>
-      </div>
+      </label>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Availability</label>
-        <input
-          type="text"
-          value={formData.availability}
-          onChange={(e) => setFormData(prev => ({ ...prev, availability: e.target.value }))}
-          placeholder="e.g., Weekends, Evenings EST"
-          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-        />
-      </div>
+      <label className="block">
+        <span className={labelCls}>Availability</span>
+        <input type="text" value={formData.availability} onChange={(e) => setFormData(prev => ({ ...prev, availability: e.target.value }))} placeholder="e.g. weekends, evenings EST" className={inputCls} />
+      </label>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Contact Info</label>
-        <input
-          type="text"
-          value={formData.contact_info}
-          onChange={(e) => setFormData(prev => ({ ...prev, contact_info: e.target.value }))}
-          placeholder="Discord, Email, etc."
-          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-        />
-      </div>
+      <label className="block">
+        <span className={labelCls}>Contact</span>
+        <input type="text" value={formData.contact_info} onChange={(e) => setFormData(prev => ({ ...prev, contact_info: e.target.value }))} placeholder="Discord username" className={inputCls} />
+      </label>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Notes</label>
-        <textarea
-          value={formData.notes}
-          onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-          placeholder="Additional information..."
-          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white h-20"
-        />
-      </div>
+      <label className="block">
+        <span className={labelCls}>Notes</span>
+        <textarea value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder="Anything captains should know" className={`${inputCls} h-20`} />
+      </label>
 
-      <div className="flex space-x-4 pt-4">
-        <button
-          type="submit"
-          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded font-medium"
-        >
-          {initialData ? 'Update' : 'Add'} Free Agent
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded font-medium"
-        >
-          Cancel
-        </button>
+      <div className="flex justify-end gap-2 pt-2">
+        <button type="button" onClick={onCancel} className={btnQuiet}>Cancel</button>
+        <button type="submit" className={btnPrimary}>{initialData ? 'Save' : 'Add to pool'}</button>
       </div>
     </form>
   );
 }
 
-// Ban Player Modal Component
-function BanPlayerModal({ 
-  onBan, 
-  onCancel 
-}: { 
-  onBan: (playerId: string, reason: string) => void, 
-  onCancel: () => void 
-}) {
+// ---- Ban modal ------------------------------------------------------------------
+
+function BanPlayerModal({ onBan, onCancel }: { onBan: (playerId: string, reason: string) => void; onCancel: () => void }) {
   const [selectedPlayer, setSelectedPlayer] = useState('');
   const [banReason, setBanReason] = useState('');
   const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
@@ -1569,95 +1300,43 @@ function BanPlayerModal({
         .eq('is_league_banned', false)
         .not('in_game_alias', 'is', null)
         .order('in_game_alias');
-
-      if (!error && data) {
-        setAvailablePlayers(data);
-      }
+      if (!error && data) setAvailablePlayers(data);
     };
-
     fetchPlayers();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPlayer) {
-      toast.error('Please select a player to ban');
-      return;
-    }
-    if (!banReason.trim()) {
-      toast.error('Please provide a reason for the ban');
-      return;
-    }
+    if (!selectedPlayer) { toast.error('Pick a player to ban'); return; }
+    if (!banReason.trim()) { toast.error('Give a reason for the ban'); return; }
     onBan(selectedPlayer, banReason.trim());
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-        <h3 className="text-lg font-bold text-red-400 mb-4">Ban Player from CTF League</h3>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Select Player to Ban
-            </label>
-            <select
-              value={selectedPlayer}
-              onChange={(e) => setSelectedPlayer(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              required
-            >
-              <option value="">Choose a player...</option>
-              {availablePlayers.map(player => (
-                <option key={player.id} value={player.id}>
-                  {player.in_game_alias}
-                </option>
-              ))}
-            </select>
-          </div>
+    <Modal title="Ban a player from CTF leagues" onClose={onCancel}>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <label className="block">
+          <span className={labelCls}>Player</span>
+          <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className={inputCls} required>
+            <option value="">Choose a player</option>
+            {availablePlayers.map(player => <option key={player.id} value={player.id}>{player.in_game_alias}</option>)}
+          </select>
+        </label>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Ban Reason (required)
-            </label>
-            <textarea
-              value={banReason}
-              onChange={(e) => setBanReason(e.target.value)}
-              placeholder="Explain why this player is being banned from the CTF league..."
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white resize-none"
-              rows={4}
-              required
-            />
-          </div>
+        <label className="block">
+          <span className={labelCls}>Reason (required)</span>
+          <textarea value={banReason} onChange={(e) => setBanReason(e.target.value)} placeholder="Why this player is banned from the CTF leagues" className={`${inputCls} resize-none`} rows={4} required />
+        </label>
 
-          <div className="bg-red-500/20 border border-red-500/30 rounded p-3">
-            <p className="text-red-400 text-sm">
-              <strong>Warning:</strong> Banning a player will:
-            </p>
-            <ul className="text-red-300 text-xs mt-2 space-y-1">
-              <li>• Remove them from the free agent pool</li>
-              <li>• Prevent them from joining the free agent pool</li>
-              <li>• Block them from tournament participation</li>
-            </ul>
-          </div>
+        <div className="rounded-md border border-[#F87171]/30 bg-[#F87171]/10 px-3 py-2 text-xs text-[#FCA5A5]">
+          Banning removes them from the player pool, blocks registration, and blocks tournament play.
+        </div>
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded font-medium transition-colors"
-            >
-              Ban Player
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded font-medium transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onCancel} className={btnQuiet}>Cancel</button>
+          <button type="submit" className={btnDanger + ' bg-[#F87171]/10'}>Ban player</button>
+        </div>
+      </form>
+    </Modal>
   );
-} 
+}

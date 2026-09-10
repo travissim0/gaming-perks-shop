@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { inputCls, labelCls } from '@/components/ctf/FormBits';
 
 type Row = { set: boolean; source: string; preview: string | null };
 
@@ -11,6 +12,8 @@ const FIELDS = [
   { key: 'DISCORD_CLIENT_SECRET', label: 'Client Secret', hint: 'OAuth2 page → Client Secret → Reset / Copy. Shown masked once saved.', secret: true },
   { key: 'DISCORD_GUILD_ID', label: 'CTFPL server ID', hint: 'Right-click the server icon with Developer Mode on → Copy Server ID.', secret: false },
 ] as const;
+
+const btnDiscord = 'px-4 py-2 rounded-md text-sm font-medium bg-[#5865F2] text-white hover:bg-[#6B76F5] disabled:opacity-50 transition-colors';
 
 /**
  * Staff panel for the Discord application settings that power the account
@@ -72,42 +75,41 @@ export default function DiscordAppPanel() {
   };
 
   const allSet = FIELDS.every((f) => rows[f.key]?.set);
-  const inputCls = 'w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none';
 
   return (
-    <div className="rounded-lg border border-[#5865F2]/40 bg-[#5865F2]/5 px-4 py-3 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section className="rounded-xl bg-[#131A2B]">
+      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06]">
         <div>
-          <div className="font-medium text-indigo-200 flex items-center gap-2">
+          <h2 className="font-display text-lg text-[#E6EDF7] flex items-center gap-2">
             Discord app
             {!loading && !pendingSql && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide ${allSet ? 'bg-green-500/15 text-green-300' : 'bg-amber-500/15 text-amber-300'}`}>
+              <span className={`font-sans text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wide ${allSet ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}>
                 {allSet ? 'Ready' : 'Incomplete'}
               </span>
             )}
-          </div>
-          <div className="text-sm text-gray-400">
+          </h2>
+          <div className="text-xs text-[#8B98B0]">
             {pendingSql
               ? 'Run add-site-settings.sql in Supabase to enable this panel.'
               : 'Powers “Connect Discord” on profiles and the CTFPL nickname lookup. Redirect URLs in the portal must include https://www.freeinf.org/api/discord/callback and https://freeinf.org/api/discord/callback.'}
           </div>
         </div>
         {!pendingSql && (
-          <button onClick={save} disabled={saving || loading} className="bg-[#5865F2] hover:bg-[#6B76F5] disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          <button onClick={save} disabled={saving || loading} className={btnDiscord}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         )}
       </div>
 
       {!pendingSql && !loading && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-3">
           {FIELDS.map((f) => {
             const row = rows[f.key];
             return (
               <label key={f.key} className="block">
-                <span className="block text-xs text-gray-300 mb-1">
+                <span className={labelCls}>
                   {f.label}
-                  {row?.source === 'env' && <span className="ml-2 text-[10px] text-gray-500 uppercase">from hosting env</span>}
+                  {row?.source === 'env' && <span className="ml-2 text-[10px] text-[#8B98B0]/60">from hosting env</span>}
                 </span>
                 <input
                   type={f.secret ? 'password' : 'text'}
@@ -118,12 +120,12 @@ export default function DiscordAppPanel() {
                   autoComplete="off"
                   className={inputCls}
                 />
-                <span className="block text-[11px] text-gray-500 mt-1">{f.hint}</span>
+                <span className="block text-[11px] text-[#8B98B0]/70 mt-1">{f.hint}</span>
               </label>
             );
           })}
         </div>
       )}
-    </div>
+    </section>
   );
 }

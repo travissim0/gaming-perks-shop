@@ -13,6 +13,7 @@ import {
   type LeagueInfo,
   type LeagueSeason,
 } from '@/lib/leagues';
+import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
 type DateKey = 'registration_closes_on' | 'draft_on' | 'start_date' | 'playoffs_start_on' | 'end_date';
 
@@ -112,7 +113,7 @@ export default function SeasonSettingsPanel() {
     }
   };
 
-  if (loading) return <div className="text-sm text-gray-400">Loading season settings…</div>;
+  if (loading) return <div className="rounded-xl bg-[#131A2B] px-5 py-4 text-sm text-[#8B98B0]">Loading season settings…</div>;
   if (!league) return null;
 
   const preview = season
@@ -124,77 +125,70 @@ export default function SeasonSettingsPanel() {
       )
     : null;
   const isDraft = league.format === 'draft';
-  const inputCls = 'w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none';
+  const next = preview?.milestones.find((m) => !m.past);
 
   return (
-    <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-4 py-3 space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <section className="rounded-xl bg-[#131A2B]">
+      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06]">
         <div>
-          <div className="font-medium text-cyan-200">
-            Season dates · {league.name}{season ? ` Season ${season.season_number}` : ''}
-          </div>
-          <div className="text-sm text-gray-400">
-            Drives the strip at the top of /league. Leave anything blank that isn’t decided yet.
+          <h2 className="font-display text-lg text-[#E6EDF7]">
+            Season dates{season ? ` · ${league.name} Season ${season.season_number}` : ` · ${league.name}`}
+          </h2>
+          <div className="text-xs text-[#8B98B0]">
+            Drives the strip at the top of the league page. Leave anything blank that isn’t decided yet.
             {preview && (
               <>
-                {' '}Right now it reads <span className="text-amber-300">{preview.label}</span>
-                {preview.milestones.find((m) => !m.past) && (
-                  <> · next: {preview.milestones.find((m) => !m.past)!.label} {preview.milestones.find((m) => !m.past)!.date}</>
-                )}.
+                {' '}Right now it reads <span className="text-[#F59E0B]">{preview.label}</span>
+                {next && <> · next: {next.label} {next.date}</>}.
               </>
             )}
           </div>
         </div>
-      </div>
-
-      {season ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {FIELDS.filter((f) => !f.draftOnly || isDraft).map((f) => (
-            <label key={f.key} className="block">
-              <span className="block text-xs text-gray-300 mb-1">{f.label}</span>
-              <input
-                type="date"
-                value={dates[f.key]}
-                onChange={(e) => setDates((d) => ({ ...d, [f.key]: e.target.value }))}
-                className={inputCls}
-                style={{ colorScheme: 'dark' }}
-              />
-              <span className="block text-[11px] text-gray-500 mt-1">{f.hint}</span>
-            </label>
-          ))}
-        </div>
-      ) : (
-        <div className="text-sm text-gray-400">No season found for {league.name}. Create the season first, then set its dates here.</div>
-      )}
-
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block flex-1 min-w-[260px]">
-          <span className="block text-xs text-gray-300 mb-1">{league.name} Discord invite</span>
-          <input
-            type="url"
-            value={discord}
-            onChange={(e) => setDiscord(e.target.value)}
-            placeholder="https://discord.gg/…"
-            className={inputCls}
-          />
-        </label>
-        <button
-          onClick={saveDiscord}
-          disabled={saving !== null}
-          className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          {saving === 'discord' ? 'Saving…' : 'Save invite'}
-        </button>
         {season && (
-          <button
-            onClick={saveDates}
-            disabled={saving !== null}
-            className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
-          >
+          <button onClick={saveDates} disabled={saving !== null} className={btnPrimary}>
             {saving === 'dates' ? 'Saving…' : 'Save season dates'}
           </button>
         )}
       </div>
-    </div>
+
+      <div className="p-5 space-y-5">
+        {season ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {FIELDS.filter((f) => !f.draftOnly || isDraft).map((f) => (
+              <label key={f.key} className="block">
+                <span className={labelCls}>{f.label}</span>
+                <input
+                  type="date"
+                  value={dates[f.key]}
+                  onChange={(e) => setDates((d) => ({ ...d, [f.key]: e.target.value }))}
+                  className={inputCls}
+                  style={{ colorScheme: 'dark' }}
+                />
+                <span className="block text-[11px] text-[#8B98B0]/70 mt-1">{f.hint}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-[#8B98B0]">No season found for {league.name}. Create the season first, then set its dates here.</div>
+        )}
+
+        <div className="flex flex-wrap items-end gap-3 border-t border-white/[0.06] pt-4">
+          <label className="block flex-1 min-w-[260px]">
+            <span className={labelCls}>{league.name} Discord invite</span>
+            <input
+              type="url"
+              value={discord}
+              onChange={(e) => setDiscord(e.target.value)}
+              placeholder="https://discord.gg/…"
+              className={inputCls}
+            />
+            <span className="block text-[11px] text-[#8B98B0]/70 mt-1">Shown as the “Join the Discord” button in the league page community box.</span>
+          </label>
+          <button onClick={saveDiscord} disabled={saving !== null} className={`${btnQuiet} mb-5 disabled:opacity-50`}>
+            {saving === 'discord' ? 'Saving…' : 'Save invite'}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
