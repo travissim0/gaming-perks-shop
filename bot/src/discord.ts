@@ -45,16 +45,31 @@ const BOT_ALLOW = [
   PermissionFlagsBits.ManageRoles,
 ];
 
+/**
+ * Discord rejects an overwrite that grants a permission the bot itself lacks
+ * (50013 Missing Permissions), so only hand out what the bot's role holds.
+ */
+function grantable(guild: Guild, wanted: bigint[]): bigint[] {
+  const me = guild.members.me;
+  if (!me || me.permissions.has(PermissionFlagsBits.Administrator)) return wanted;
+  const missing = wanted.filter((p) => !me.permissions.has(p));
+  if (missing.length) {
+    const names = Object.entries(PermissionFlagsBits).filter(([, v]) => missing.includes(v)).map(([k]) => k);
+    console.warn(`bot role lacks ${names.join(', ')} — grant them in Server Settings → Roles → FreeInf CTF (or Administrator)`);
+  }
+  return wanted.filter((p) => me.permissions.has(p));
+}
+
 export function overwritesFor(guild: Guild, role: Role, captainDiscordId: string | null): OverwriteResolvable[] {
   const list: OverwriteResolvable[] = [
     { id: guild.roles.everyone.id, type: OverwriteType.Role, deny: [PermissionFlagsBits.ViewChannel] },
     // The bot itself, or the @everyone deny locks it out of what it just built.
-    { id: guild.client.user.id, type: OverwriteType.Member, allow: BOT_ALLOW },
-    { id: role.id, type: OverwriteType.Role, allow: MEMBER_ALLOW },
+    { id: guild.client.user.id, type: OverwriteType.Member, allow: grantable(guild, BOT_ALLOW) },
+    { id: role.id, type: OverwriteType.Role, allow: grantable(guild, MEMBER_ALLOW) },
   ];
-  if (config.staffRoleId) list.push({ id: config.staffRoleId, type: OverwriteType.Role, allow: MEMBER_ALLOW });
+  if (config.staffRoleId) list.push({ id: config.staffRoleId, type: OverwriteType.Role, allow: grantable(guild, MEMBER_ALLOW) });
   if (captainDiscordId && guild.members.cache.has(captainDiscordId)) {
-    list.push({ id: captainDiscordId, type: OverwriteType.Member, allow: CAPTAIN_ALLOW });
+    list.push({ id: captainDiscordId, type: OverwriteType.Member, allow: grantable(guild, CAPTAIN_ALLOW) });
   }
   return list;
 }
