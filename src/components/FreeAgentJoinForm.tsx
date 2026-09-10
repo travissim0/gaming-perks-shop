@@ -4,6 +4,10 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { toast } from 'react-hot-toast';
 import { CLASS_OPTIONS, TIMEZONE_OPTIONS, ROLE_GROUPS } from '@/lib/constants';
 
+/** Draft stashed while the player connects Discord (same tab, survives the redirect). */
+const DRAFT_KEY = 'ctf-register-draft';
+const DRAFT_TTL_MS = 30 * 60 * 1000;
+
 export interface FreeAgentFormData {
   preferred_roles: string[];
   secondary_roles: string[];
@@ -92,8 +96,41 @@ export default function FreeAgentJoinForm({
   const [syncTimes, setSyncTimes] = useState(true);
   const [masterTime, setMasterTime] = useState({ start: '18:00', end: '22:00' });
 
-  // Pre-populate when initialData is provided (edit mode)
+  // Connecting Discord leaves the page and comes back. Stash the answers in
+  // sessionStorage before leaving and restore them once, on return.
+  const [restoredDraft, setRestoredDraft] = useState(false);
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(DRAFT_KEY);
+      const draft = JSON.parse(raw);
+      if (!draft || Date.now() - (draft.savedAt || 0) > DRAFT_TTL_MS) return;
+      setFormData((d) => ({ ...d, ...draft.formData }));
+      if (draft.userTimezone) setUserTimezone(draft.userTimezone);
+      if (typeof draft.syncTimes === 'boolean') setSyncTimes(draft.syncTimes);
+      if (draft.masterTime) setMasterTime(draft.masterTime);
+      setRestoredDraft(true);
+      toast.success('Your answers were kept while you connected Discord');
+    } catch {
+      /* ignore a bad draft */
+    }
+  }, []);
+
+  const connectDiscord = () => {
+    if (!onConnectDiscord) return;
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), formData, userTimezone, syncTimes, masterTime }));
+    } catch {
+      /* storage unavailable — they'll just retype */
+    }
+    onConnectDiscord();
+  };
+
+  // Pre-populate when initialData is provided (edit mode). A restored draft
+  // is newer than whatever is saved, so it wins.
+  useEffect(() => {
+    if (restoredDraft) return;
     if (initialData) {
       setFormData({
         preferred_roles: initialData.preferred_roles || [],
@@ -117,7 +154,7 @@ export default function FreeAgentJoinForm({
         if (allSame) setMasterTime({ start: first.start, end: first.end });
       }
     }
-  }, [initialData]);
+  }, [initialData, restoredDraft]);
 
   const timeSlots = (() => {
     const slots: string[] = [];
@@ -449,7 +486,7 @@ export default function FreeAgentJoinForm({
                   className="w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
                 />
                 {onConnectDiscord && (
-                  <button type="button" onClick={onConnectDiscord} className="shrink-0 rounded-md bg-[#5865F2] px-3 py-2 text-sm font-medium text-white hover:bg-[#6B76F5]">
+                  <button type="button" onClick={connectDiscord} className="shrink-0 rounded-md bg-[#5865F2] px-3 py-2 text-sm font-medium text-white hover:bg-[#6B76F5]">
                     Connect Discord
                   </button>
                 )}
