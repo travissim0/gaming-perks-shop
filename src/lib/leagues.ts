@@ -26,6 +26,8 @@ export interface LeagueInfo {
   is_featured: boolean;
   display_order: number;
   data_source: LeagueDataSource;
+  /** Discord invite for the league (add-season-dates.sql). */
+  discord_url?: string | null;
 }
 
 export interface LeagueSeason {
@@ -33,6 +35,12 @@ export interface LeagueSeason {
   season_number: number;
   season_name: string | null;
   status: string;
+  // Milestones (all optional; add-season-dates.sql). ISO dates, "YYYY-MM-DD".
+  start_date?: string | null;
+  end_date?: string | null;
+  registration_closes_on?: string | null;
+  draft_on?: string | null;
+  playoffs_start_on?: string | null;
 }
 
 export interface StandingRow {
@@ -56,17 +64,21 @@ const BASIC_COLS = 'id, slug, name, description';
  * everything else as generic).
  */
 export async function getLeagues(): Promise<LeagueInfo[]> {
-  const full = await supabase
-    .from('leagues')
-    .select(REGISTRY_COLS)
-    .order('display_order', { ascending: true })
-    .order('slug', { ascending: true });
+  // discord_url arrived later (add-season-dates.sql) — try with it, then without.
+  for (const cols of [`${REGISTRY_COLS}, discord_url`, REGISTRY_COLS]) {
+    const full = await supabase
+      .from('leagues')
+      .select(cols)
+      .order('display_order', { ascending: true })
+      .order('slug', { ascending: true });
 
-  if (!full.error && full.data) {
-    return (full.data as any[]).map((l) => ({
-      ...l,
-      data_source: (l.data_source === 'ctfpl' ? 'ctfpl' : 'generic') as LeagueDataSource,
-    }));
+    if (!full.error && full.data) {
+      return (full.data as any[]).map((l) => ({
+        discord_url: null,
+        ...l,
+        data_source: (l.data_source === 'ctfpl' ? 'ctfpl' : 'generic') as LeagueDataSource,
+      }));
+    }
   }
 
   // Registry columns missing — basic fallback.
@@ -94,47 +106,33 @@ export function pickFeatured(leagues: LeagueInfo[]): LeagueInfo | null {
 }
 
 const SEASON_COLS = 'id, season_number, season_name, status';
+const SEASON_DATE_COLS = `${SEASON_COLS}, start_date, end_date, registration_closes_on, draft_on, playoffs_start_on`;
+
+/** Which table holds a league's seasons. */
+export const seasonTable = (league: LeagueInfo) =>
+  league.data_source === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
+
+/**
+ * Newest season for a league, optionally filtered by status. Selects the
+ * milestone dates when the columns exist and falls back to the basic set.
+ */
+async function fetchSeason(league: LeagueInfo, status?: string): Promise<LeagueSeason | null> {
+  for (const cols of [SEASON_DATE_COLS, SEASON_COLS]) {
+    let q = supabase.from(seasonTable(league)).select(cols);
+    if (league.data_source !== 'ctfpl') q = q.eq('league_id', league.id);
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q.order('season_number', { ascending: false }).limit(1).maybeSingle();
+    if (!error) return (data as unknown as LeagueSeason) || null;
+  }
+  return null;
+}
 
 export async function getActiveSeason(league: LeagueInfo): Promise<LeagueSeason | null> {
-  if (league.data_source === 'ctfpl') {
-    const { data } = await supabase
-      .from('ctfpl_seasons')
-      .select(SEASON_COLS)
-      .eq('status', 'active')
-      .order('season_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return (data as LeagueSeason) || null;
-  }
-  const { data } = await supabase
-    .from('league_seasons')
-    .select(SEASON_COLS)
-    .eq('league_id', league.id)
-    .eq('status', 'active')
-    .order('season_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as LeagueSeason) || null;
+  return fetchSeason(league, 'active');
 }
 
 export async function getLatestSeason(league: LeagueInfo): Promise<LeagueSeason | null> {
-  if (league.data_source === 'ctfpl') {
-    const { data } = await supabase
-      .from('ctfpl_seasons')
-      .select(SEASON_COLS)
-      .order('season_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return (data as LeagueSeason) || null;
-  }
-  const { data } = await supabase
-    .from('league_seasons')
-    .select(SEASON_COLS)
-    .eq('league_id', league.id)
-    .order('season_number', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data as LeagueSeason) || null;
+  return fetchSeason(league);
 }
 
 /**
@@ -169,6 +167,93 @@ export function poolBlurb(league: LeagueInfo): string {
     default:
       return 'Squad captains recruit from this pool and can invite you directly.';
   }
+}
+
+// ---- Season phase ----------------------------------------------------------
+
+export interface SeasonMilestone {
+  label: string;
+  /** "YYYY-MM-DD" */
+  date: string;
+  past: boolean;
+}
+
+export interface SeasonPhase {
+  /** "Recruiting" · "Week 3" · "Playoffs" · "Off-season" … */
+  label: string;
+  /** Upcoming and recent milestones, in date order. */
+  milestones: SeasonMilestone[];
+}
+
+/** Parse "YYYY-MM-DD" as local midnight so day math isn't skewed by UTC. */
+export function parseDateOnly(d: string): Date {
+  const [y, m, day] = d.slice(0, 10).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, day || 1);
+}
+
+/** "Sep 27" (adds the year when it isn't this year). */
+export function formatDateOnly(d: string, now = new Date()): string {
+  const dt = parseDateOnly(d);
+  return dt.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(dt.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
+/**
+ * Where a season is right now, derived from its status and milestone dates.
+ * Weeks are seven days from start_date; playoffs override the week counter.
+ * `draftDone` lets a draft league report "Draft complete" from the live
+ * ctfdl_drafts row even when no draft_on date was entered.
+ */
+export function seasonPhase(
+  league: LeagueInfo,
+  season: LeagueSeason | null,
+  status: SeasonStatus,
+  opts: { draftDone?: boolean; now?: Date } = {},
+): SeasonPhase {
+  const now = opts.now ?? new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = (d: string) => Math.floor((today.getTime() - parseDateOnly(d).getTime()) / 86_400_000);
+  const isDraft = league.format === 'draft';
+
+  const milestones: SeasonMilestone[] = [];
+  const add = (label: string, date: string | null | undefined) => {
+    if (date) milestones.push({ label, date, past: days(date) > 0 });
+  };
+  if (season) {
+    add('Registration closes', season.registration_closes_on);
+    if (isDraft) add(opts.draftDone ? 'Drafted' : 'Draft', season.draft_on);
+    add('Season starts', season.start_date);
+    add('Playoffs', season.playoffs_start_on);
+    add('Season ends', season.end_date);
+  }
+  milestones.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!season || status === 'off-season') {
+    return { label: 'Off-season', milestones: milestones.filter((m) => m.label === 'Season ends') };
+  }
+
+  if (status === 'upcoming') {
+    const regOpen = !season.registration_closes_on || days(season.registration_closes_on) <= 0;
+    if (isDraft && opts.draftDone) return { label: 'Teams set', milestones };
+    if (isDraft && season.draft_on && days(season.draft_on) >= 0) return { label: 'Draft day', milestones };
+    return { label: regOpen ? 'Recruiting' : 'Pre-season', milestones };
+  }
+
+  // active
+  if (season.start_date && days(season.start_date) < 0) {
+    return { label: 'Starts soon', milestones };
+  }
+  if (season.playoffs_start_on && days(season.playoffs_start_on) >= 0) {
+    return { label: 'Playoffs', milestones };
+  }
+  if (season.start_date) {
+    const week = Math.floor(days(season.start_date) / 7) + 1;
+    return { label: `Week ${week}`, milestones };
+  }
+  return { label: 'In progress', milestones };
 }
 
 /** Active season if there is one; otherwise the latest season and whether it's upcoming or off-season. */

@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getLeagues, pickFeatured, getOpenSeason, getLatestSeason, type LeagueInfo, type LeagueSeason } from '@/lib/leagues';
+import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 
 interface Squad {
   id: string;
@@ -823,6 +824,9 @@ export default function CTFManagementPage() {
                 </select>
               </div>
             </div>
+
+            {/* Season dates + Discord invite (feeds the /league hero) */}
+            <SeasonSettingsPanel />
 
             {/* Season rollover: archive draft-league squads */}
             {rollover && (() => {

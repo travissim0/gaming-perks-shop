@@ -47,7 +47,7 @@ const seasonLabel = (s: LeagueSeason | null) =>
  * standings snippet and CTAs, then a strip of every league with its status.
  * Presentational: the page fetches via the league adapters and passes data in.
  */
-export default function LeagueStatusSection({ data }: { data: LeagueStatusData | null }) {
+export default function LeagueStatusSection({ data, compact = false }: { data: LeagueStatusData | null; compact?: boolean }) {
   if (!data || !data.featured) return null;
   const { featured, entries, standings } = data;
   const L = featured.league;
@@ -59,7 +59,7 @@ export default function LeagueStatusSection({ data }: { data: LeagueStatusData |
       <div className="px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Trophy className="w-5 h-5 text-[#22D3EE]" aria-hidden="true" />
-          <h3 className="font-display text-xl text-[#E6EDF7]">League status</h3>
+          <h3 className="font-display text-xl text-[#E6EDF7]">{compact ? 'Leagues' : 'League status'}</h3>
         </div>
         <Link
           href="/league/standings"
@@ -70,7 +70,8 @@ export default function LeagueStatusSection({ data }: { data: LeagueStatusData |
       </div>
 
       <div className="px-4 pb-4 space-y-3">
-        {/* Featured league */}
+        {/* Featured league (the /league hero covers this in compact mode) */}
+        {!compact && (
         <div className="rounded-lg bg-[#1B2438] p-4">
           <div className="flex items-start justify-between gap-5 flex-wrap">
             <div className="min-w-0">
@@ -132,6 +133,7 @@ export default function LeagueStatusSection({ data }: { data: LeagueStatusData |
             )}
           </div>
         </div>
+        )}
 
         {/* All leagues */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

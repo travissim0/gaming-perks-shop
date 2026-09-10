@@ -1,80 +1,52 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import Link from "next/link";
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { ChevronRight, ExternalLink, Play, Radio } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
-import TopSupportersWidget from '@/components/TopSupportersWidget';
-import NewsSection from '@/components/NewsSection';
-import { useDonationMode } from '@/hooks/useDonationMode';
+import SeasonHero from '@/components/ctf/SeasonHero';
+import CtfNewsFeed from '@/components/ctf/CtfNewsFeed';
+import LeagueStatusSection, { type LeagueStatusData, type LeagueStatusEntry } from '@/components/ctf/LeagueStatusSection';
 import { supabase } from '@/lib/supabase';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
-import { getClassColor, getPlayerDisplayStyle, isNonPlayingTeam } from '@/utils/classColors';
-import { getEloTier } from '@/utils/eloTiers';
-import { getLeagues, pickFeatured, getSeasonStatus, getStandings, type StandingRow } from '@/lib/leagues';
-import LeagueStatusSection, { type LeagueStatusData, type LeagueStatusEntry } from '@/components/ctf/LeagueStatusSection';
+import { getPlayerDisplayStyle, isNonPlayingTeam } from '@/utils/classColors';
+import {
+  getLeagues,
+  pickFeatured,
+  getSeasonStatus,
+  getStandings,
+  getRecentChampions,
+  seasonPhase,
+  formatDateOnly,
+  leagueStandingsHref,
+  type StandingRow,
+  type SeasonChampions,
+  type SeasonPhase,
+} from '@/lib/leagues';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import './ctf-theme.css';
 
-interface ServerStats {
-  totalPlayers: number;
-  activeGames: number;
-  serverStatus: string;
-}
+// ── Types ───────────────────────────────────────────────────────────────
 
-interface ActiveZone {
-  title: string;
-  playerCount: number;
-}
-
+interface ActiveZone { title: string; playerCount: number }
 interface ServerData {
   zones: ActiveZone[];
-  stats: ServerStats;
+  stats: { totalPlayers: number; activeGames: number; serverStatus: string };
   lastUpdated: string;
 }
 
-interface GamePlayer {
-  alias: string;
-  team: string;
-  teamType?: 'Titan' | 'Collective';
-  class: string;
-  isOffense: boolean;
-  weapon?: string;
-}
-
-interface GameData {
-  arenaName: string | null;
-  gameType: string | null;
-  baseUsed: string | null;
-  players: GamePlayer[];
-  lastUpdated: string | null;
-}
+interface GamePlayer { alias: string; team: string; class: string; isOffense: boolean; weapon?: string }
+interface GameData { arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null }
 
 interface FeaturedVideo {
   id: string;
   title: string;
-  description: string;
   youtube_url?: string;
   vod_url?: string;
   thumbnail_url?: string;
-  video_type: string;
-  match_id?: string;
-  match_title?: string;
-  match_date?: string;
-  view_count: number;
   published_at: string;
-}
-
-interface RecordedGamePlayer {
-  player_name: string;
-  main_class: string;
-  side: string;
-  team: string;
-  kills: number;
-  deaths: number;
-  flag_captures?: number;
-  carrier_kills?: number;
 }
 
 interface RecordedGame {
@@ -82,59 +54,12 @@ interface RecordedGame {
   gameDate: string;
   gameMode: string;
   mapName: string;
-  duration: number;
-  totalPlayers: number;
-  players: RecordedGamePlayer[];
-  videoInfo: {
-    has_video: boolean;
-    youtube_url?: string;
-    vod_url?: string;
-    video_title?: string;
-    thumbnail_url?: string;
-  };
-  winningInfo?: {
-    type: string;
-    side: string;
-    winner: string;
-  };
+  videoInfo: { has_video: boolean; youtube_url?: string; vod_url?: string; video_title?: string; thumbnail_url?: string };
 }
 
-interface OnlineUser {
-  id: string;
-  in_game_alias: string;
-  last_seen: string;
-  squad_name?: string;
-  squad_tag?: string;
-  role?: string;
-  avatar_url?: string | null;
-}
+interface OnlineUser { id: string; in_game_alias: string; last_seen: string; avatar_url?: string | null }
 
-interface Squad {
-  id: string;
-  name: string;
-  tag: string;
-  member_count: number;
-  captain_alias: string;
-  banner_url?: string;
-  is_active?: boolean;
-}
-
-interface Match {
-  id: string;
-  title: string;
-  scheduled_at: string;
-  squad_a_name?: string;
-  squad_b_name?: string;
-  status: string;
-  match_type: string;
-}
-
-interface RecentGamePlayer {
-  name?: string;
-  player_name?: string;
-  alias?: string;
-}
-
+interface RecentGamePlayer { name?: string; player_name?: string; alias?: string }
 interface RecentGame {
   gameId: string;
   gameMode: string;
@@ -144,1806 +69,881 @@ interface RecentGame {
   players?: RecentGamePlayer[];
 }
 
-interface SupabaseProfileRow {
-  id: string;
-  in_game_alias: string;
-  last_seen: string;
-  avatar_url: string | null;
-}
-
-interface SupabaseSquadRow {
-  id: string;
-  name: string;
-  tag: string;
-  banner_url?: string;
-  captain_id: string;
-  profiles: { in_game_alias: string } | null;
-}
-
-interface SupabaseMatchRow {
+interface UpcomingMatch {
   id: string;
   title: string;
   scheduled_at: string;
-  status: string;
+  squad_a_name?: string;
+  squad_b_name?: string;
   match_type: string;
-  squad_a: { name: string } | null;
-  squad_b: { name: string } | null;
 }
 
-interface EloLeaderEntry {
-  player_name: string;
-  elo_rating: string;
-  weighted_elo: string;
-  total_games: number;
-  win_rate: string;
-  elo_tier: { name: string; color: string; min: number; max: number };
-}
-
-interface SeasonStanding {
-  squad_name: string;
-  squad_tag: string;
-  squad_id: string;
-  rank: number;
-  wins: number;
-  losses: number;
-  points: number;
-  win_percentage: number;
-}
-
-interface ActiveSeason {
+interface LeagueResult {
   id: string;
-  season_number: number;
-  season_name: string | null;
-  status: string;
-  league_name?: string;
+  squad_a_name: string;
+  squad_b_name: string;
+  squad_a_score: number | null;
+  squad_b_score: number | null;
+  played_at: string | null;
+  team_a_result?: string | null;
+  team_b_result?: string | null;
+  status?: string;
 }
 
-// ── Banner slide color helpers ──────────────────────────────────────────
-const SLIDE_COLORS: Record<string, {
-  overlay: string;
-  text: string;
-  button: string;
-  dot: string;
-}> = {
-  cyan:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-cyan-900/60 to-gray-900/90',   text: 'text-cyan-400',   button: 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 hover:shadow-cyan-500/25',     dot: 'bg-cyan-400' },
-  purple: { overlay: 'bg-gradient-to-r from-gray-900/90 via-purple-900/60 to-gray-900/90', text: 'text-purple-400', button: 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 hover:shadow-purple-500/25', dot: 'bg-purple-400' },
-  pink:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-pink-900/60 to-gray-900/90',   text: 'text-pink-400',   button: 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 hover:shadow-pink-500/25',     dot: 'bg-pink-400' },
-  green:  { overlay: 'bg-gradient-to-r from-gray-900/90 via-green-900/60 to-gray-900/90',  text: 'text-green-400',  button: 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 hover:shadow-green-500/25',   dot: 'bg-green-400' },
-  blue:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-blue-900/60 to-gray-900/90',   text: 'text-blue-400',   button: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 hover:shadow-blue-500/25',     dot: 'bg-blue-400' },
-  orange: { overlay: 'bg-gradient-to-r from-gray-900/90 via-orange-900/60 to-gray-900/90', text: 'text-orange-400', button: 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 hover:shadow-orange-500/25',   dot: 'bg-orange-400' },
-  indigo: { overlay: 'bg-gradient-to-r from-gray-900/90 via-indigo-900/60 to-gray-900/90', text: 'text-indigo-400', button: 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 hover:shadow-indigo-500/25', dot: 'bg-indigo-400' },
-  teal:   { overlay: 'bg-gradient-to-r from-gray-900/90 via-teal-900/60 to-gray-900/90',   text: 'text-teal-400',   button: 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 hover:shadow-teal-500/25',     dot: 'bg-teal-400' },
-  red:    { overlay: 'bg-gradient-to-r from-red-900/90 via-red-900/60 to-gray-900/90',     text: 'text-red-400',    button: 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 hover:shadow-red-500/25',       dot: 'bg-red-400' },
-  yellow: { overlay: 'bg-gradient-to-r from-yellow-900/60 to-gray-900/90',                 text: 'text-yellow-400', button: 'bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 hover:shadow-yellow-500/25', dot: 'bg-yellow-400' },
+interface Team {
+  id: string;
+  name: string;
+  tag: string | null;
+  captain_alias: string;
+  member_count: number;
+}
+
+interface StaffMember { id: string; in_game_alias: string; avatar_url?: string | null }
+
+interface LeagueView {
+  status: LeagueStatusData;
+  phase: SeasonPhase;
+  standings: StandingRow[];
+  draft: { status: 'setup' | 'live' | 'paused' | 'complete' } | null;
+  registered: number | null;
+  teams: Team[];
+  results: LeagueResult[];
+  champions: SeasonChampions[];
+}
+
+// ── Small helpers ───────────────────────────────────────────────────────
+
+const getYouTubeVideoId = (url: string) => {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
+    /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
+    /(?:youtube\.com\/v\/)([^&\n?#]+)/,
+    /(?:youtu\.be\/)([^&\n?#]+)/,
+    /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+};
+const youTubeThumb = (url?: string) => {
+  const id = url ? getYouTubeVideoId(url) : null;
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
 };
 
-const getSlideColor = (color: string) => SLIDE_COLORS[color] || SLIDE_COLORS.cyan;
+const relTime = (iso: string) => {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 172800) return 'Yesterday';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
 
-// ── Banner slides data ──────────────────────────────────────────────────
-const ALL_BANNER_SLIDES = [
-  { title: "FREE INFANTRY", subtitle: "Capture the Flag leagues", description: "🎮 Competitive Gaming Platform", highlight: "Join the Battle", color: "cyan", href: "/dashboard", showWhen: "guest" as const },
-  { title: "ACTIVE SQUADS", subtitle: "Form Elite Teams", description: "🛡️ Create or Join Competitive Squads", highlight: "Build Your Team", color: "purple", href: "/squads", showWhen: "always" as const },
-  { title: "FREE AGENTS", subtitle: "Find Your Perfect Squad", description: "🎯 Connect Players with Teams", highlight: "Join the Pool", color: "pink", href: "/free-agents", showWhen: "always" as const },
-  { title: "LIVE MATCHES", subtitle: "Compete in Real-Time", description: "⚔️ Schedule and Play Competitive Matches", highlight: "Enter the Arena", color: "green", href: "/matches", showWhen: "always" as const },
-  { title: "PLAYER STATS", subtitle: "Track Your Performance", description: "📊 Advanced Statistics & ELO Rankings", highlight: "View Stats", color: "blue", href: "/stats", showWhen: "always" as const },
-  { title: "DUELING SYSTEM", subtitle: "1v1 Competitive Matches", description: "⚡ Face Off in Skill-Based Duels", highlight: "Challenge Players", color: "orange", href: "/dueling", showWhen: "always" as const },
-  { title: "COMMUNITY FORUM", subtitle: "Connect with Players", description: "💬 Discuss Strategies & Share Content", highlight: "Join Discussion", color: "indigo", href: "/forum", showWhen: "always" as const },
-  { title: "NEWS & UPDATES", subtitle: "Stay Informed", description: "📰 Latest Patch Notes & Announcements", highlight: "Read Latest", color: "teal", href: "/news", showWhen: "always" as const },
-  { title: "GAMING PERKS", subtitle: "Enhance Your Experience", description: "🛍️ Exclusive In-Game Perks & Items", highlight: "Browse Shop", color: "red", href: "/perks", showWhen: "always" as const },
-  { title: "SUPPORT THE GAME", subtitle: "Keep Free Infantry Running", description: "💰 Donate to Support Development", highlight: "Make a Difference", color: "yellow", href: "/donate", showWhen: "always" as const },
-];
+const whenLabel = (iso: string) => {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `Today ${time}`;
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === tomorrow.toDateString()) return `Tomorrow ${time}`;
+  return `${d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} ${time}`;
+};
 
-export default function Home() {
+const teamColor = (team: string) => {
+  if (/TI|Titan/i.test(team)) return '#3B82F6';
+  if (/CO|Collective/i.test(team)) return '#EF4444';
+  return '#8B98B0';
+};
+
+const isCtfZone = (title: string) => /\bctf\b/i.test(title);
+
+/** Flat themed card. The `.ctf-theme` stylesheet styles `section` + its first child as the header bar. */
+function Card({
+  title,
+  action,
+  children,
+  className = '',
+}: {
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-xl overflow-hidden bg-[#131A2B] ${className}`}>
+      <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+        <h3 className="font-display text-lg text-[#E6EDF7]">{title}</h3>
+        {action}
+      </div>
+      <div className="p-3">{children}</div>
+    </section>
+  );
+}
+
+const MoreLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
+  <Link href={href} className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE] transition-colors">
+    {children} <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+  </Link>
+);
+
+const Empty = ({ children }: { children: React.ReactNode }) => (
+  <div className="px-1 py-3 text-sm text-[#8B98B0]">{children}</div>
+);
+
+// ── Page ────────────────────────────────────────────────────────────────
+
+export default function LeagueHome() {
   const { user, loading } = useAuth();
-  const [userProfile, setUserProfile] = useState<Record<string, unknown> | null>(null);
+
   const [serverData, setServerData] = useState<ServerData>({
     zones: [],
     stats: { totalPlayers: 0, activeGames: 0, serverStatus: 'offline' },
-    lastUpdated: ''
+    lastUpdated: '',
   });
-  const [gameData, setGameData] = useState<GameData>({
-    arenaName: null,
-    gameType: null,
-    baseUsed: null,
-    players: [],
-    lastUpdated: null
-  });
-  const { donations: recentDonations } = useDonationMode('recent-donations', 5);
+  const [gameData, setGameData] = useState<GameData>({ arenaName: null, gameType: null, players: [], lastUpdated: null });
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
-  const [topSquads, setTopSquads] = useState<Squad[]>([]);
-  const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
-  const [userSquad, setUserSquad] = useState<Squad | null>(null);
-  const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
-  const [leagueStatus, setLeagueStatus] = useState<LeagueStatusData | null>(null);
-
-  // Recorded games state
   const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
-  const [showRecordedGamesTheater, setShowRecordedGamesTheater] = useState(false);
-  const [showVideoEmbed, setShowVideoEmbed] = useState(false);
+  const [featuredVideos, setFeaturedVideos] = useState<FeaturedVideo[]>([]);
+  const [upcoming, setUpcoming] = useState<UpcomingMatch[]>([]);
+  const [league, setLeague] = useState<LeagueView | null>(null);
+  const [leagueLoaded, setLeagueLoaded] = useState(false);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [viewerRegistered, setViewerRegistered] = useState(false);
+  const [embed, setEmbed] = useState<{ videoId: string; title: string } | null>(null);
 
-  // Carousel and animation states
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [scrollY, setScrollY] = useState(0);
-  const bannerRef = useRef<HTMLDivElement>(null);
+  // ── Presence: keep last_seen fresh so "Online" works (unchanged behaviour) ──
+  useEffect(() => {
+    if (!user) return;
+    const touch = async () => {
+      const last = localStorage.getItem('lastActivityUpdate');
+      const now = Date.now();
+      if (last && now - parseInt(last) < 60000) return;
+      try {
+        await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
+        localStorage.setItem('lastActivityUpdate', String(now));
+      } catch (e) {
+        console.error('Error updating user activity:', e);
+      }
+    };
+    touch();
+    const t = setInterval(touch, 600000);
+    return () => clearInterval(t);
+  }, [user]);
 
-  // YouTube embed modal state
-  const [embedModal, setEmbedModal] = useState<{
-    isOpen: boolean;
-    videoId: string | null;
-    title: string;
-  }>({ isOpen: false, videoId: null, title: '' });
+  // ── Viewer registration (hero button state) ──
+  useEffect(() => {
+    if (!user) { setViewerRegistered(false); return; }
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const res = await fetch('/api/league/register', { headers: { Authorization: `Bearer ${session.access_token}` } });
+        if (!res.ok) return;
+        const json = await res.json();
+        setViewerRegistered(!!json.registration && json.registration.is_active !== false);
+      } catch { /* ignore */ }
+    })();
+  }, [user]);
 
-  // New widgets state
-  const [eloLeaders, setEloLeaders] = useState<EloLeaderEntry[]>([]);
-  const [seasonStandings, setSeasonStandings] = useState<SeasonStanding[]>([]);
-  const [activeSeason, setActiveSeason] = useState<ActiveSeason | null>(null);
+  // ── League bundle: featured league, phase, standings, teams, results, champions ──
+  const fetchLeague = useCallback(async () => {
+    try {
+      const leagues = await getLeagues();
+      if (leagues.length === 0) { setLeagueLoaded(true); return; }
 
-  // Filter slides based on user authentication
-  const baseSlides = ALL_BANNER_SLIDES.filter(slide =>
-    slide.showWhen === "always" ||
-    (slide.showWhen === "guest" && !user) ||
-    (slide.showWhen === "user" && user)
-  );
+      const entries: LeagueStatusEntry[] = await Promise.all(
+        leagues.map(async (l) => {
+          const { season, status } = await getSeasonStatus(l);
+          return { league: l, status, season };
+        }),
+      );
+      const featuredLeague = pickFeatured(leagues);
+      const featured = entries.find((e) => e.league.id === featuredLeague?.id) || entries[0];
+      const L = featured.league;
+      const S = featured.season;
 
-  // Data-driven first slide for the FEATURED league (from the league registry).
-  const featuredEntry = leagueStatus?.featured;
-  const featuredSlide = featuredEntry
-    ? [{
-        title: `${featuredEntry.league.name} ${
-          featuredEntry.status === 'active' ? 'IS LIVE' : featuredEntry.status === 'upcoming' ? 'IS COMING' : 'LEAGUE'
-        }`,
-        subtitle: featuredEntry.league.description || featuredEntry.league.name,
-        description: featuredEntry.season
-          ? (featuredEntry.season.season_name || `Season ${featuredEntry.season.season_number}`)
-          : 'Season details coming soon',
-        highlight: 'View Standings',
-        color: 'cyan',
-        href: `/league/standings?league=${featuredEntry.league.slug}`,
-        showWhen: 'always' as const,
-      }]
-    : [];
+      const [standings, draftRow, registered, teams, results, champions] = await Promise.all([
+        S ? getStandings(L, S, 50) : Promise.resolve([] as StandingRow[]),
+        L.format === 'draft' && S
+          ? supabase.from('ctfdl_drafts').select('status').eq('league_season_id', S.id).maybeSingle().then((r) => r.data)
+          : Promise.resolve(null),
+        S
+          ? supabase
+              .from('free_agents')
+              .select('id', { count: 'exact', head: true })
+              .eq('is_active', true)
+              .eq('league_slug', L.slug)
+              .eq('season_number', S.season_number)
+              .then((r) => (r.error ? null : r.count))
+          : Promise.resolve(null),
+        loadTeams(L.slug),
+        S && featured.status !== 'off-season' ? loadResults(L.slug, S.season_number) : Promise.resolve([] as LeagueResult[]),
+        getRecentChampions(L, 3).catch(() => [] as SeasonChampions[]),
+      ]);
 
-  const bannerSlides = [...featuredSlide, ...baseSlides];
+      const draft = draftRow ? { status: (draftRow as any).status } : null;
+      const phase = seasonPhase(L, S, featured.status, { draftDone: draft?.status === 'complete' });
+
+      setLeague({
+        status: { entries, featured, standings: standings.slice(0, 3) },
+        phase,
+        standings,
+        draft,
+        registered: typeof registered === 'number' ? registered : null,
+        teams,
+        results,
+        champions,
+      });
+    } catch (e) {
+      console.error('Error loading league:', e);
+    } finally {
+      setLeagueLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (user) {
-        try {
-          const result = await Promise.race([
-            supabase
-              .from('profiles')
-              .select('is_admin, ctf_role')
-              .eq('id', user.id)
-              .single(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-            )
-          ]);
-
-          const { data } = result as any;
-          if (data) {
-            setUserProfile(data);
-          }
-        } catch (error) {
-          console.error('Error fetching user profile:', error);
-        }
-      }
-    };
-
-    const quickProfileCheck = async () => {
-      if (!user) return;
-
+    const fetchServer = async () => {
       try {
-        const result = await Promise.race([
-          supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', user.id)
-            .single(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile check timeout')), 3000)
-          )
-        ]);
-
-        const { data: profile, error } = result as any;
-
-        if (error && error.code === 'PGRST116') {
-          await supabase
-            .from('profiles')
-            .insert([{
-              id: user.id,
-              email: user.email,
-              in_game_alias: null,
-              last_seen: new Date().toISOString()
-            }]);
-        }
-      } catch (error) {
-        console.error('Quick profile check error:', error);
-      }
+        const r = await fetch('/api/server-status');
+        if (r.ok) setServerData(await r.json());
+      } catch (e) { console.error('server-status', e); }
     };
-
-    const updateUserActivity = async () => {
-      if (!user) return;
-
-      const lastUpdate = localStorage.getItem('lastActivityUpdate');
-      const now = Date.now();
-      if (lastUpdate && (now - parseInt(lastUpdate)) < 60000) {
-        return;
-      }
-
+    const fetchGame = async () => {
       try {
-        const timestamp = new Date().toISOString();
-
-        await Promise.race([
-          supabase
-            .from('profiles')
-            .update({ last_seen: timestamp })
-            .eq('id', user.id),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Activity update timeout')), 3000)
-          )
-        ]);
-
-        localStorage.setItem('lastActivityUpdate', now.toString());
-      } catch (error) {
-        console.error('Error updating user activity:', error);
-      }
+        const r = await fetch('/api/game-data');
+        if (r.ok) setGameData(await r.json());
+      } catch (e) { console.error('game-data', e); }
     };
-
-    if (user) {
-      fetchUserProfile();
-      updateUserActivity();
-      quickProfileCheck();
-    }
-
-    const handleScroll = () => {
-      setScrollY(window.scrollY);
-    };
-
-    const carouselInterval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % bannerSlides.length);
-    }, 5000);
-
-    window.addEventListener('scroll', handleScroll);
-
-    // ── Data fetch functions ──────────────────────────────────────────
-
-    const fetchServerData = async () => {
+    const fetchVideos = async () => {
       try {
-        const response = await fetch('/api/server-status');
-        if (response.ok) {
-          const data = await response.json();
-          setServerData(data);
+        const r = await fetch('/api/featured-videos?limit=6');
+        if (!r.ok) return;
+        const j = await r.json();
+        if (Array.isArray(j.videos)) {
+          setFeaturedVideos(j.videos.map((v: FeaturedVideo) => ({ ...v, thumbnail_url: v.thumbnail_url || youTubeThumb(v.youtube_url) || undefined })));
         }
-      } catch (error) {
-        console.error('Error fetching server data:', error);
-      }
+      } catch (e) { console.error('featured-videos', e); }
     };
-
-    const fetchGameData = async () => {
+    const fetchOnline = async () => {
       try {
-        const response = await fetch('/api/game-data');
-        if (response.ok) {
-          const data = await response.json();
-          setGameData(data);
-        }
-      } catch (error) {
-        console.error('Error fetching game data:', error);
-      }
-    };
-
-    const fetchFeaturedVideos = async () => {
-      try {
-        const response = await fetch('/api/featured-videos?limit=6');
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-
-        if (data.videos && Array.isArray(data.videos)) {
-          const videosWithThumbnails = data.videos.map((video: FeaturedVideo) => {
-            const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
-            return {
-              ...video,
-              thumbnail_url: video.thumbnail_url || autoThumbnail
-            };
-          });
-
-          setFeaturedVideos(videosWithThumbnails);
-        }
-      } catch (error) {
-        console.error('Error fetching featured videos:', error);
-
-        // Fallback: try direct RPC call
-        try {
-          const { data, error: rpcError } = await supabase.rpc('get_featured_videos', { limit_count: 6 });
-
-          if (rpcError) return;
-
-          if (data) {
-            const videosWithThumbnails = data.map((video: FeaturedVideo) => {
-              const autoThumbnail = video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null;
-              return {
-                ...video,
-                thumbnail_url: video.thumbnail_url || autoThumbnail
-              };
-            });
-
-            setFeaturedVideos(videosWithThumbnails);
-          }
-        } catch (rpcError) {
-          console.error('RPC fallback also failed:', rpcError);
-        }
-      }
-    };
-
-    const fetchOnlineUsers = async () => {
-      try {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-
-        const { data: onlineData, error } = await supabase
+        const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data } = await supabase
           .from('profiles')
-          .select('id, in_game_alias, email, last_seen, avatar_url')
-          .gte('last_seen', fiveMinutesAgo)
+          .select('id, in_game_alias, last_seen, avatar_url')
+          .gte('last_seen', since)
           .order('last_seen', { ascending: false })
           .limit(20);
-
-        if (error) return;
-
-        if (onlineData) {
-          const formattedUsers = onlineData
-            .filter(user => user.in_game_alias)
-            .map((user: SupabaseProfileRow) => ({
-              id: user.id,
-              in_game_alias: user.in_game_alias,
-              last_seen: user.last_seen,
-              squad_name: undefined,
-              squad_tag: undefined,
-              role: undefined,
-              avatar_url: user.avatar_url,
-            }));
-
-          setOnlineUsers(formattedUsers);
-        }
-      } catch (error) {
-        console.error('Error fetching online users:', error);
-      }
+        setOnlineUsers(((data || []) as OnlineUser[]).filter((u) => u.in_game_alias));
+      } catch (e) { console.error('online users', e); }
     };
-
-    const fetchRecentGames = async () => {
+    const fetchRecent = async () => {
       try {
-        const response = await fetch('/api/player-stats/recent-games');
-        if (response.ok) {
-          const data = await response.json();
-          setRecentGames(data.games || []);
-        }
-      } catch (error) {
-        console.error('Error fetching recent games:', error);
-      }
+        const r = await fetch('/api/player-stats/recent-games');
+        if (r.ok) setRecentGames((await r.json()).games || []);
+      } catch (e) { console.error('recent-games', e); }
     };
-
-    const fetchRecordedGames = async () => {
+    const fetchRecorded = async () => {
       try {
-        const response = await fetch('/api/player-stats/recent-games?with_recordings=true&limit=10');
-
-        if (response.ok) {
-          const data = await response.json();
-
-          if (!data || typeof data !== 'object') {
-            setRecordedGames([]);
-            setShowRecordedGamesTheater(false);
-            return;
-          }
-
-          const games = Array.isArray(data.games) ? data.games : [];
-
-          const gamesWithRecordings = games.filter((game: RecordedGame) => {
-            try {
-              return game &&
-                     typeof game === 'object' &&
-                     game.videoInfo &&
-                     typeof game.videoInfo === 'object' &&
-                     game.videoInfo.has_video === true &&
-                     (game.videoInfo.youtube_url || game.videoInfo.vod_url);
-            } catch {
-              return false;
-            }
-          }) || [];
-
-          const validatedGames = gamesWithRecordings.map((game: RecordedGame) => {
-            try {
-              return {
-                ...game,
-                players: Array.isArray(game.players) ? game.players : [],
-                videoInfo: game.videoInfo || { has_video: false },
-                winningInfo: game.winningInfo || null
-              };
-            } catch {
-              return null;
-            }
-          }).filter(Boolean);
-
-          setRecordedGames(validatedGames);
-          setShowRecordedGamesTheater(validatedGames.length > 0);
-
-          if (validatedGames.length === 0) {
-            fetch('/api/player-stats/recent-games?limit=3')
-              .then(res => res.json())
-              .then(data => {
-                if (data.games && data.games.length > 0) {
-                  setRecordedGames(data.games.slice(0, 1));
-                  setShowRecordedGamesTheater(true);
-                }
-              })
-              .catch(() => {});
-          }
-        } else {
-          setRecordedGames([]);
-          setShowRecordedGamesTheater(false);
-        }
-      } catch (error) {
-        console.error('Error fetching recorded games:', error);
-        setRecordedGames([]);
-        setShowRecordedGamesTheater(false);
-      }
+        const r = await fetch('/api/player-stats/recent-games?with_recordings=true&limit=10');
+        if (!r.ok) { setRecordedGames([]); return; }
+        const j = await r.json();
+        const games: RecordedGame[] = Array.isArray(j?.games) ? j.games : [];
+        setRecordedGames(games.filter((g) => g?.videoInfo?.has_video && (g.videoInfo.youtube_url || g.videoInfo.vod_url)).slice(0, 4));
+      } catch (e) { console.error('recorded games', e); setRecordedGames([]); }
     };
-
-    const fetchTopSquads = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('squads')
-          .select(`
-            id,
-            name,
-            tag,
-            banner_url,
-            captain_id,
-            profiles!squads_captain_id_fkey(in_game_alias)
-          `)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
-
-        if (!error && data) {
-          const squadIds = data.map(squad => squad.id);
-          const { data: memberCounts } = await supabase
-            .from('squad_members')
-            .select('squad_id')
-            .in('squad_id', squadIds)
-            .eq('status', 'active');
-
-          const squads: Squad[] = (data as unknown as SupabaseSquadRow[]).map((squad) => ({
-            id: squad.id,
-            name: squad.name,
-            tag: squad.tag,
-            member_count: memberCounts?.filter(m => m.squad_id === squad.id).length || 0,
-            captain_alias: squad.profiles?.in_game_alias || 'Unknown',
-            banner_url: squad.banner_url
-          }));
-
-          setTopSquads(squads);
-        }
-      } catch (error) {
-        console.error('Error fetching top squads:', error);
-        setTopSquads([]);
-      }
-    };
-
-    const fetchUpcomingMatches = async () => {
+    const fetchUpcoming = async () => {
       try {
         const { data, error } = await supabase
           .from('matches')
-          .select(`
-            id,
-            title,
-            scheduled_at,
-            status,
-            match_type,
-            squad_a:squads!matches_squad_a_id_fkey(name),
-            squad_b:squads!matches_squad_b_id_fkey(name)
-          `)
+          .select('id, title, scheduled_at, status, match_type, squad_a:squads!matches_squad_a_id_fkey(name), squad_b:squads!matches_squad_b_id_fkey(name)')
           .gte('scheduled_at', new Date().toISOString())
           .eq('status', 'scheduled')
           .order('scheduled_at', { ascending: true })
-          .limit(5);
-
+          .limit(6);
         if (!error && data) {
-          const matches: Match[] = (data as unknown as SupabaseMatchRow[]).map((match) => ({
-            id: match.id,
-            title: match.title,
-            scheduled_at: match.scheduled_at,
-            squad_a_name: match.squad_a?.name,
-            squad_b_name: match.squad_b?.name,
-            status: match.status,
-            match_type: match.match_type
-          }));
-          setUpcomingMatches(matches);
+          setUpcoming((data as any[]).map((m) => ({
+            id: m.id,
+            title: m.title,
+            scheduled_at: m.scheduled_at,
+            match_type: m.match_type,
+            squad_a_name: m.squad_a?.name,
+            squad_b_name: m.squad_b?.name,
+          })));
         }
-      } catch (error) {
-        console.error('Error fetching matches:', error);
-      }
+      } catch (e) { console.error('matches', e); }
     };
-
-    const fetchUserSquad = async () => {
-      if (!user) return;
-
+    const fetchStaff = async () => {
       try {
-        const { data, error } = await supabase
-          .from('squad_members')
-          .select(`
-            squads!inner(id, name, tag)
-          `)
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle();
-
-        if (!error && data) {
-          setUserSquad({
-            id: (data.squads as any).id,
-            name: (data.squads as any).name,
-            tag: (data.squads as any).tag,
-            member_count: 0,
-            captain_alias: ''
-          });
-        } else {
-          setUserSquad(null);
-        }
-      } catch (error) {
-        console.error('Error fetching user squad:', error);
-      }
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, in_game_alias, avatar_url')
+          .eq('ctf_role', 'ctf_admin')
+          .not('in_game_alias', 'is', null)
+          .order('in_game_alias')
+          .limit(6);
+        setStaff((data || []) as StaffMember[]);
+      } catch { /* ignore */ }
     };
 
-    // ── New widget fetchers ─────────────────────────────────────────
+    fetchServer(); fetchGame(); fetchVideos(); fetchOnline(); fetchRecent(); fetchRecorded(); fetchUpcoming(); fetchStaff();
+    fetchLeague();
 
-    const fetchEloLeaders = async () => {
-      try {
-        const response = await fetch('/api/player-stats/elo-leaderboard?limit=10&minGames=10&sortBy=weighted_elo');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data && Array.isArray(data.data)) {
-            setEloLeaders(data.data.slice(0, 10));
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching ELO leaders:', error);
-      }
-    };
-
-    // League status via the league adapters: every league's season status,
-    // plus the FEATURED league's standings (drives the League Status section,
-    // the sidebar standings widget, and the featured carousel slide).
-    const fetchActiveSeasonStandings = async () => {
-      try {
-        const leagues = await getLeagues();
-        if (leagues.length === 0) return;
-
-        const entries: LeagueStatusEntry[] = await Promise.all(
-          leagues.map(async (league) => {
-            const { season, status } = await getSeasonStatus(league);
-            return { league, status, season };
-          })
-        );
-
-        const featuredLeague = pickFeatured(leagues);
-        const featured =
-          entries.find((e) => e.league.id === featuredLeague?.id) || entries[0] || null;
-
-        let standings: StandingRow[] = [];
-        if (featured?.season) {
-          standings = await getStandings(featured.league, featured.season, 8);
-        }
-
-        setLeagueStatus({ entries, featured, standings: standings.slice(0, 3) });
-
-        if (featured?.season) {
-          setActiveSeason({
-            id: featured.season.id,
-            season_number: featured.season.season_number,
-            season_name: featured.season.season_name,
-            status: featured.season.status,
-            league_name: featured.league.name,
-          });
-          setSeasonStandings(standings);
-        }
-      } catch (error) {
-        console.error('Error fetching league status:', error);
-      }
-    };
-
-    // ── Execute all fetches ─────────────────────────────────────────
-
-    fetchServerData();
-    fetchGameData();
-    fetchFeaturedVideos();
-    fetchOnlineUsers();
-    fetchRecentGames();
-    fetchRecordedGames();
-    fetchTopSquads();
-    fetchUpcomingMatches();
-    fetchUserSquad();
-    fetchEloLeaders();
-    fetchActiveSeasonStandings();
-
-    // Set up polling intervals
-    const serverInterval = setInterval(fetchServerData, 300000);
-    const gameInterval = setInterval(fetchGameData, 5000);
-    const videosInterval = setInterval(fetchFeaturedVideos, 300000);
-    const usersInterval = setInterval(fetchOnlineUsers, 10000);
-    const recentGamesInterval = setInterval(fetchRecentGames, 30000);
-    const squadsInterval = setInterval(fetchTopSquads, 60000);
-    const matchesInterval = setInterval(fetchUpcomingMatches, 30000);
-    const activityInterval = setInterval(updateUserActivity, 600000);
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && embedModal.isOpen) {
-        closeEmbedModal();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      clearInterval(serverInterval);
-      clearInterval(gameInterval);
-      clearInterval(videosInterval);
-      clearInterval(usersInterval);
-      clearInterval(recentGamesInterval);
-      clearInterval(squadsInterval);
-      clearInterval(matchesInterval);
-      clearInterval(activityInterval);
-      clearInterval(carouselInterval);
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [user, embedModal.isOpen]);
+    const timers = [
+      setInterval(fetchServer, 300000),
+      setInterval(fetchGame, 5000),
+      setInterval(fetchOnline, 10000),
+      setInterval(fetchRecent, 30000),
+      setInterval(fetchUpcoming, 30000),
+      setInterval(fetchLeague, 120000),
+    ];
+    return () => timers.forEach(clearInterval);
+  }, [fetchLeague]);
 
   useEffect(() => {
-    if (currentSlide >= bannerSlides.length) {
-      setCurrentSlide(0);
-    }
-  }, [user, bannerSlides.length, currentSlide]);
+    if (!embed) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setEmbed(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [embed]);
 
-  // ── Helper functions ────────────────────────────────────────────────
-
-  const getClassPriority = (className: string): number => {
-    switch (className.toLowerCase()) {
-      case 'field medic': return 1;
-      case 'combat engineer': return 2;
-      case 'squad leader': return 3;
-      case 'heavy weapons': return 4;
-      case 'infantry': return 5;
-      case 'jump trooper': return 6;
-      case 'infiltrator': return 7;
-      default: return 8;
-    }
+  const playVideo = (title: string, youtube?: string, vod?: string) => {
+    const id = youtube ? getYouTubeVideoId(youtube) : null;
+    if (id) setEmbed({ videoId: id, title });
+    else if (vod) window.open(vod, '_blank', 'noopener');
   };
 
-  const getWeaponEmoji = (weapon: string) => {
-    switch (weapon?.toLowerCase()) {
-      case 'caw': return ' 🪚';
-      case 'sg': return ' 💥';
-      default: return '';
-    }
-  };
+  // ── Derived ──
+  const activePlayers = gameData.players.filter((p) => p.class !== 'Spectator' && p.class !== 'Not Playing');
+  const hasLiveGame = !!gameData.arenaName && activePlayers.length > 0;
+  const ctfZones = serverData.zones.filter((z) => isCtfZone(z.title));
+  const otherZones = serverData.zones.filter((z) => !isCtfZone(z.title));
+  const ctfPlayers = ctfZones.reduce((n, z) => n + z.playerCount, 0);
 
-  const getYouTubeVideoId = (url: string) => {
-    if (!url) return null;
-
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=)([^&\n?#]+)/,
-      /(?:youtube\.com\/embed\/)([^&\n?#]+)/,
-      /(?:youtube\.com\/v\/)([^&\n?#]+)/,
-      /(?:youtu\.be\/)([^&\n?#]+)/,
-      /(?:youtube\.com\/\S*[?&]v=)([^&\n?#]+)/
-    ];
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-
-    return null;
-  };
-
-  const getYouTubeThumbnail = (url: string, quality = 'hqdefault') => {
-    const videoId = getYouTubeVideoId(url);
-    if (!videoId) return null;
-    return `https://i.ytimg.com/vi/${videoId}/${quality}.jpg`;
-  };
-
-  const getBestYouTubeThumbnail = (url: string) => {
-    const videoId = getYouTubeVideoId(url);
-    if (!videoId) return null;
-    return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-  };
-
-  const recordVideoView = async (videoId?: string, matchId?: string) => {
-    try {
-      await supabase.rpc('record_video_view', {
-        p_video_id: videoId || null,
-        p_match_id: matchId || null,
-        p_session_id: `session_${Date.now()}`
-      });
-    } catch (error) {
-      console.error('Error recording video view:', error);
-    }
-  };
-
-  const openVideoEmbed = (video: FeaturedVideo) => {
-    if (video.youtube_url) {
-      const videoId = getYouTubeVideoId(video.youtube_url);
-      if (videoId) {
-        setEmbedModal({ isOpen: true, videoId, title: video.title });
-        recordVideoView(video.id);
-      }
-    }
-  };
-
-  const closeEmbedModal = () => {
-    setEmbedModal({ isOpen: false, videoId: null, title: '' });
-  };
-
-  // ── Recorded games theater helpers ──────────────────────────────────
-
-  const getDefenseClassOrder = (className: string): number => {
-    const order: Record<string, number> = {
-      'Engineer': 1, 'Medic': 2, 'Rifleman': 3, 'Grenadier': 4,
-      'Rocket': 5, 'Mortar': 6, 'Sniper': 7, 'Pilot': 8
-    };
-    return order[className] || 99;
-  };
-
-  const getOffenseClassOrder = (className: string): number => {
-    const order: Record<string, number> = {
-      'Pilot': 1, 'Rifleman': 2, 'Grenadier': 3, 'Rocket': 4,
-      'Mortar': 5, 'Sniper': 6, 'Engineer': 7, 'Medic': 8
-    };
-    return order[className] || 99;
-  };
-
-  const getTeamColor = (teamName: string): string => {
-    if (teamName.includes('TI') || teamName.includes('Titan')) return '#3B82F6';
-    if (teamName.includes('CO') || teamName.includes('Collective')) return '#EF4444';
-    return '#6B7280';
-  };
-
-  const getPlayerWinStatus = (player: RecordedGamePlayer, game: RecordedGame): 'win' | 'loss' | 'unknown' => {
-    if (!game.winningInfo) return 'unknown';
-
-    const playerTeam = player.team;
-    const winnerTeam = game.winningInfo.winner;
-
-    if (playerTeam === winnerTeam) return 'win';
-    if (playerTeam && winnerTeam && playerTeam !== winnerTeam) return 'loss';
-    return 'unknown';
-  };
-
-  const getGroupedGamePlayers = (game: RecordedGame) => {
-    if (!game?.players) return {};
-
-    const teamGroups = game.players.reduce((acc, player) => {
-      const team = player.team || 'Unknown';
-      if (!acc[team]) {
-        acc[team] = { defense: [], offense: [] };
-      }
-
-      const side = player.side || 'N/A';
-      if (side === 'defense') {
-        acc[team].defense.push(player);
-      } else if (side === 'offense') {
-        acc[team].offense.push(player);
-      }
-
-      return acc;
-    }, {} as Record<string, { defense: RecordedGamePlayer[], offense: RecordedGamePlayer[] }>);
-
-    Object.keys(teamGroups).forEach(team => {
-      teamGroups[team].defense.sort((a, b) => {
-        const orderA = getDefenseClassOrder(a.main_class || '');
-        const orderB = getDefenseClassOrder(b.main_class || '');
-        if (orderA !== orderB) return orderA - orderB;
-        return b.kills - a.kills;
-      });
-
-      teamGroups[team].offense.sort((a, b) => {
-        const orderA = getOffenseClassOrder(a.main_class || '');
-        const orderB = getOffenseClassOrder(b.main_class || '');
-        if (orderA !== orderB) return orderA - orderB;
-        return b.kills - a.kills;
-      });
-    });
-
-    return teamGroups;
-  };
-
-  const formatGameDuration = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  };
-
-  const formatGameDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)}h ago`;
-    } else if (diffInHours < 48) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString();
-    }
-  };
-
-  // ── Loading state ───────────────────────────────────────────────────
+  const featured = league?.status.featured || null;
+  const L = featured?.league || null;
+  const S = featured?.season || null;
+  const isDraftLeague = L?.format === 'draft';
+  const hasWatch = featuredVideos.length > 0 || recordedGames.length > 0;
+  const showThisWeek = upcoming.length > 0 || (league?.results.length || 0) > 0 || featured?.status === 'active';
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-cyan-500"></div>
+      <div className="min-h-screen bg-[#0B0F1A] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#22D3EE]" />
       </div>
     );
   }
 
-  // ── Current slide helpers ───────────────────────────────────────────
-  const slide = bannerSlides[Math.min(currentSlide, bannerSlides.length - 1)];
-  const slideColor = slide ? getSlideColor(slide.color) : getSlideColor('cyan');
-
-  // ── Live game helpers ───────────────────────────────────────────────
-  const activePlayers = gameData.players.filter(p => p.class !== 'Spectator' && p.class !== 'Not Playing');
-  const hasLiveGame = gameData.arenaName && activePlayers.length > 0;
-
   return (
-    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen relative overflow-hidden`}>
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
 
-      <main className="container mx-auto px-4 py-8 relative z-10">
-        {/* Interactive Carousel Banner */}
-        <div
-          ref={bannerRef}
-          className="relative mb-8 overflow-hidden rounded-2xl shadow-2xl"
-          style={{
-            height: '400px',
-            transform: `translateY(${Math.max(0, scrollY - 100) * -0.15}px)`,
-            opacity: Math.max(0.3, 1 - scrollY / 600)
-          }}
-        >
-          {/* Free Infantry banner background (replaces the CTFPL-only video header) */}
-          <div className="absolute inset-0 bg-[#0B0F1A]">
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage:
-                  'radial-gradient(circle at 18% 30%, rgba(34,211,238,0.16), transparent 42%), radial-gradient(circle at 82% 72%, rgba(245,158,11,0.10), transparent 48%)',
-              }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-              <span
-                className="font-display leading-none tracking-tight text-white/[0.035] whitespace-nowrap"
-                style={{ fontSize: 'min(20vw, 220px)' }}
-              >
-                FREE INFANTRY
-              </span>
-            </div>
-            <div className="absolute top-5 left-6 flex items-baseline gap-2">
-              <span className="font-display text-2xl tracking-wide text-white">FREE INFANTRY</span>
-              <span className="text-[10px] tracking-[0.3em] uppercase text-[#22D3EE]/80">CTF leagues</span>
-            </div>
-          </div>
-
-          {/* Dynamic Overlay Gradient */}
-          <div className={`absolute inset-0 transition-all duration-1000 ${slideColor.overlay}`}></div>
-
-          {/* Slide Content */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {slide && (
-              <div
-                className="text-center px-4 transition-all duration-1000 transform"
-                style={{
-                  transform: `translateY(${scrollY * 0.2}px) scale(${Math.max(0.8, 1 - scrollY / 1000)})`,
-                  filter: `brightness(${Math.max(0.7, 1 + scrollY / 500)})`
-                }}
-              >
-                <h1 className={`text-4xl lg:text-6xl font-bold mb-4 tracking-wider drop-shadow-2xl transition-all duration-1000 ${slideColor.text}`}>
-                  {slide.title}
-                </h1>
-                <p className="text-lg lg:text-2xl text-gray-200 mb-2 drop-shadow-lg transition-all duration-1000">
-                  {slide.subtitle}
-                </p>
-                <div className="text-gray-300 font-mono text-sm lg:text-base drop-shadow-lg mb-4 transition-all duration-1000">
-                  {slide.description}
-                </div>
-
-                <button
-                  className={`px-6 py-3 rounded-lg font-bold tracking-wider transition-all duration-300 shadow-lg transform hover:scale-105 text-white ${slideColor.button}`}
-                  onClick={() => { window.location.href = slide.href; }}
-                >
-                  {slide.highlight}
-                </button>
+      <main className="container mx-auto px-4 py-6 space-y-4">
+        {/* ── Season strip ───────────────────────────────────────────── */}
+        {featured && L ? (
+          <SeasonHero
+            league={L}
+            season={S}
+            status={featured.status}
+            phase={league!.phase}
+            registered={league!.registered}
+            teams={league!.teams.length}
+            draft={league!.draft}
+            viewerRegistered={viewerRegistered}
+          />
+        ) : (
+          <section className="rounded-xl bg-[#131A2B] px-6 py-8">
+            {leagueLoaded ? (
+              <>
+                <div className="text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80 mb-1">Free Infantry · CTF leagues</div>
+                <h1 className="font-display text-5xl text-[#E6EDF7]">No league configured</h1>
+              </>
+            ) : (
+              <div className="animate-pulse space-y-3">
+                <div className="h-3 w-40 rounded bg-white/5" />
+                <div className="h-12 w-64 rounded bg-white/5" />
+                <div className="h-3 w-80 rounded bg-white/5" />
               </div>
             )}
-          </div>
+          </section>
+        )}
 
-          {/* Navigation Arrows */}
-          <button
-            onClick={() => setCurrentSlide((prev) => (prev - 1 + bannerSlides.length) % bannerSlides.length)}
-            className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-
-          <button
-            onClick={() => setCurrentSlide((prev) => (prev + 1) % bannerSlides.length)}
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all duration-300 hover:scale-110"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-
-          {/* Slide Indicators */}
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
-            {bannerSlides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentSlide(index)}
-                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                  index === currentSlide
-                    ? `${slideColor.dot} scale-125`
-                    : 'bg-white/50 hover:bg-white/70'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* CLEAN 3-COLUMN LAYOUT */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-
-          {/* LEFT SIDEBAR (3 columns) */}
-          <div className="xl:col-span-3">
-            <div className="space-y-3">
-
-              {/* Online Users */}
-              {onlineUsers.length > 0 && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
-                  <div className="bg-gray-700/50 px-4 py-3 border-b border-green-500/30">
-                    <h3 className="text-green-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      Online users
-                      <span className="text-green-300 text-xs font-mono bg-green-900/30 px-2 py-1 rounded">
-                        {onlineUsers.length}
-                      </span>
-                    </h3>
+          {/* ── LEFT: live ───────────────────────────────────────────── */}
+          <div className="xl:col-span-3 space-y-4">
+            <Card
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-[#34D399]" aria-hidden="true" /> Live now
+                </span>
+              }
+              action={serverData.lastUpdated ? <span className="text-[11px] text-[#8B98B0]">{relTime(serverData.lastUpdated)}</span> : undefined}
+            >
+              <div className="rounded-lg bg-[#1B2438] px-3 py-3 flex items-baseline justify-between">
+                <div>
+                  <div className="font-display text-4xl leading-none text-[#E6EDF7] tabular-nums">{ctfPlayers}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mt-1">
+                    {ctfZones.length === 1 ? `in ${ctfZones[0].title}` : 'in CTF'}
                   </div>
-                  <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                    <div className="space-y-2">
-                      {onlineUsers.slice(0, 8).map((user) => (
-                        <div key={user.id} className="bg-gray-800/30 border border-green-500/10 rounded p-1.5">
-                          <div className="flex items-center space-x-2">
-                            <UserAvatar
-                              user={{
-                                avatar_url: user.avatar_url,
-                                in_game_alias: user.in_game_alias,
-                                email: null
-                              }}
-                              size="sm"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-green-400 text-sm font-mono truncate">
-                                {user.in_game_alias}
-                              </div>
-                              {user.squad_tag && (
-                                <div className="text-gray-500 text-xs truncate">
-                                  [{user.squad_tag}] {user.squad_name}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
+                </div>
+                <div className="text-right">
+                  <div className="font-display text-2xl leading-none text-[#8B98B0] tabular-nums">{serverData.stats.totalPlayers}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mt-1">online in game</div>
+                </div>
+              </div>
+              {(ctfZones.length > 1 || otherZones.length > 0) && (
+                <ul className="mt-2 space-y-1">
+                  {[...(ctfZones.length > 1 ? ctfZones : []), ...otherZones].map((z) => (
+                    <li key={z.title} className="flex items-center justify-between text-xs px-1">
+                      <span className={`truncate ${isCtfZone(z.title) ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{z.title}</span>
+                      <span className="tabular-nums text-[#E6EDF7]">{z.playerCount}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
+            </Card>
 
-              {/* Live Game */}
-              {hasLiveGame && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
-                  <div className="bg-gray-700/50 px-4 py-3 border-b border-yellow-500/30">
-                    <h3 className="text-yellow-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      ⚔️ LIVE GAME
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                      </span>
-                    </h3>
-                  </div>
-                  <div className="p-3 bg-gray-900">
-                    <div className="text-center mb-2">
-                      <div className="text-yellow-400 font-bold text-sm">{gameData.arenaName}</div>
-                      {gameData.gameType && (
-                        <div className="text-gray-400 text-xs">{gameData.gameType}</div>
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      {(() => {
-                        const teams = activePlayers.reduce((acc, p) => {
-                          const team = p.team || 'Unknown';
-                          if (!acc[team]) acc[team] = [];
-                          acc[team].push(p);
-                          return acc;
-                        }, {} as Record<string, GamePlayer[]>);
-
-                        // Playing teams first; NP and spec sink to the bottom where they belong.
-                        const ordered = Object.entries(teams).sort(([a], [b]) => {
-                          const an = isNonPlayingTeam(a) ? 1 : 0;
-                          const bn = isNonPlayingTeam(b) ? 1 : 0;
-                          return an - bn || a.localeCompare(b);
-                        });
-
-                        return ordered.map(([team, players]) => {
-                          const teamColor = isNonPlayingTeam(team) ? '#6b7280' : getTeamColor(team);
-                          return (
-                            <div key={team}>
-                              {/* Header bar - the separator between teams, like the in-game list */}
-                              <div
-                                className="flex items-baseline justify-between px-1.5 py-[3px] bg-gray-800/80 border-l-2 rounded-sm"
-                                style={{ borderColor: teamColor }}
+            {hasLiveGame && (
+              <Card
+                title="Live game"
+                action={
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#34D399] opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#34D399]" />
+                  </span>
+                }
+              >
+                <div className="text-sm text-[#E6EDF7]">{gameData.arenaName}</div>
+                {gameData.gameType && <div className="text-xs text-[#8B98B0]">{gameData.gameType}</div>}
+                {/* Playing teams first; NP and spec sink to the bottom, greyed (Travis's live-list treatment). */}
+                <div className="mt-2 space-y-1.5">
+                  {Object.entries(
+                    activePlayers.reduce((acc, p) => {
+                      (acc[p.team || 'Unknown'] ||= []).push(p);
+                      return acc;
+                    }, {} as Record<string, GamePlayer[]>),
+                  )
+                    .sort(([a], [b]) => (isNonPlayingTeam(a) ? 1 : 0) - (isNonPlayingTeam(b) ? 1 : 0) || a.localeCompare(b))
+                    .map(([team, players]) => {
+                      const color = isNonPlayingTeam(team) ? '#6b7280' : teamColor(team);
+                      return (
+                        <div key={team}>
+                          <div className="flex items-baseline justify-between px-1.5 py-[3px] bg-[#1B2438] border-l-2 rounded-sm" style={{ borderColor: color }}>
+                            <span className="text-[10px] font-bold uppercase tracking-wider truncate" style={{ color }}>{team}</span>
+                            <span className="text-[9px] font-mono text-[#8B98B0] ml-1.5 shrink-0">{players.length}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 px-1.5 pt-0.5">
+                            {players.slice(0, 14).map((p, i) => (
+                              <span
+                                key={i}
+                                className="text-[10px] font-mono leading-[1.4] truncate"
+                                style={getPlayerDisplayStyle(p.class, p.team)}
+                                title={isNonPlayingTeam(p.team) ? `${p.alias} - not in the game (${p.team})` : p.class}
                               >
-                                <span
-                                  className="text-[10px] font-bold uppercase tracking-wider truncate"
-                                  style={{ color: teamColor }}
-                                >
-                                  {team}
-                                </span>
-                                <span className="text-[9px] font-mono text-gray-500 ml-1.5 flex-shrink-0">
-                                  {players.length}
-                                </span>
-                              </div>
-
-                              {/* Two dense columns - narrower and shorter than one wrapped line of names */}
-                              <div className="grid grid-cols-2 gap-x-2 px-1.5 pt-0.5">
-                                {players.slice(0, 14).map((p, i) => (
-                                  <span
-                                    key={i}
-                                    className="text-[10px] font-mono leading-[1.4] truncate"
-                                    style={getPlayerDisplayStyle(p.class, p.team)}
-                                    title={
-                                      isNonPlayingTeam(p.team)
-                                        ? `${p.alias} - not in the game (${p.team})`
-                                        : `${p.class}${getWeaponEmoji(p.weapon || '')}`
-                                    }
-                                  >
-                                    {p.alias}
-                                  </span>
-                                ))}
-                                {players.length > 14 && (
-                                  <span className="text-[10px] font-mono leading-[1.4] text-gray-500">
-                                    +{players.length - 14}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                    <div className="text-center mt-1.5">
-                      <span className="text-gray-500 text-[10px]">{activePlayers.length} players</span>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Server Status */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-3 border-b border-blue-500/30">
-                  <h3 className="text-blue-400 font-bold text-sm tracking-wider">Server status</h3>
-                </div>
-                <div className="p-4">
-                  <div className="text-center mb-4">
-                    <div className="text-2xl font-bold text-cyan-400 mb-1">
-                      {serverData.stats.totalPlayers}
-                    </div>
-                    <div className="text-xs text-gray-400">TOTAL PLAYERS</div>
-                  </div>
-
-                  {serverData.zones.length > 0 && (
-                    <div className="space-y-2">
-                      {serverData.zones.map((zone, index) => (
-                        <div key={index} className="flex items-center justify-between text-xs bg-gray-800/30 rounded px-2 py-1">
-                          <span className="text-gray-300 truncate">{zone.title}</span>
-                          <span className="text-cyan-400 font-mono font-bold">{zone.playerCount}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {serverData.lastUpdated && (
-                    <p className="text-xs text-gray-500 mt-3 text-center font-mono">
-                      {new Date(serverData.lastUpdated).toLocaleTimeString()}
-                    </p>
-                  )}
-                </div>
-              </section>
-
-              {/* Recent Games */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-green-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-2 border-b border-green-500/30">
-                  <h3 className="text-green-400 font-bold text-sm tracking-wider">Recent games</h3>
-                </div>
-                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                  {recentGames.length > 0 ? (
-                    <div className="space-y-2">
-                      {recentGames.slice(0, 3).map((game, index) => (
-                        <Link key={index} href={`/stats/game/${encodeURIComponent(game.gameId)}`}>
-                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-green-500/50 transition-all duration-300 cursor-pointer">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-green-400 font-bold text-xs">{game.gameMode}</span>
-                              <span className="text-gray-400 text-xs">{game.mapName}</span>
-                            </div>
-                            <div className="text-xs text-gray-400 mb-1">
-                              {new Date(game.gameDate).toLocaleDateString()}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {(game.playerDetails || game.players || []).slice(0, 4).map((player: RecentGamePlayer, pIndex: number) => (
-                                <span key={pIndex} className="text-xs text-gray-300">
-                                  {player.name || player.player_name || player.alias}{pIndex < Math.min(3, (game.playerDetails || game.players || []).length - 1) ? ',' : ''}
-                                </span>
-                              ))}
-                              {(game.playerDetails || game.players || []).length > 4 && (
-                                <span className="text-xs text-gray-500">+{(game.playerDetails || game.players || []).length - 4} more</span>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="text-gray-500 text-sm">No recent games</div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Scheduled Matches */}
-              {upcomingMatches.length > 0 && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
-                  <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
-                    <h3 className="text-cyan-400 font-bold text-sm tracking-wider">🎯 SCHEDULED MATCHES</h3>
-                  </div>
-                  <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                    <div className="space-y-2">
-                      {upcomingMatches.slice(0, 3).map((match) => (
-                        <Link key={match.id} href={`/matches/${match.id}`}>
-                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer">
-                            <h4 className="text-cyan-400 font-bold text-xs mb-1 truncate">
-                              {match.title}
-                            </h4>
-                            <div className="text-xs text-gray-400">
-                              {new Date(match.scheduled_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Active Squads */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
-                  <h3 className="text-purple-400 font-bold text-sm tracking-wider">Squads</h3>
-                </div>
-                <div className="p-3 bg-gray-900 max-h-64 overflow-y-auto">
-                  {topSquads.length > 0 ? (
-                    <div className="space-y-2">
-                      {topSquads.map((squad) => (
-                        <Link key={squad.id} href={`/squads/${squad.id}`}>
-                          <div className="bg-gray-700/30 border border-gray-600 rounded p-2 hover:border-purple-500/50 transition-all duration-300 cursor-pointer">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-purple-400 font-bold text-xs">[{squad.tag}]</span>
-                              <span className="text-gray-300 text-xs truncate flex-1">{squad.name}</span>
-                            </div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              {squad.member_count} members
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="text-gray-500 text-sm">No active squads</div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-            </div>
-          </div>
-
-          {/* CENTER CONTENT (6 columns) */}
-          <div className="xl:col-span-6">
-            <div className="space-y-3">
-
-              {/* League Status — featured league + every league's season state */}
-              <LeagueStatusSection data={leagueStatus} />
-
-              {/* News Section */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-2 border-b border-blue-500/30">
-                  <h3 className="text-lg font-bold text-blue-400 tracking-wider">News & Updates</h3>
-                </div>
-                <div className="p-4">
-                  <NewsSection limit={1} showReadState={true} heroLayout={false} allowCollapse={true} audience="ctf" />
-                </div>
-              </section>
-
-              {/* Recent Recorded Games Theater */}
-              {showRecordedGamesTheater && recordedGames.length > 0 && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden mb-6">
-                  <div className="bg-gray-700/50 px-4 py-2 border-b border-cyan-500/30">
-                    <h3 className="text-lg font-bold text-cyan-400 tracking-wider">Most recent recorded games</h3>
-                    <p className="text-gray-300 text-sm">Latest competitive gameplay recordings</p>
-                  </div>
-                  <div className="p-4">
-                    {/* Featured Main Game */}
-                    {recordedGames[0] && recordedGames[0].videoInfo && (
-                      <div className="mb-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {/* Main Video - 2/3 width */}
-                          <div className="md:col-span-2">
-                            <div className="bg-white/10 backdrop-blur-lg rounded-lg overflow-hidden border border-white/20">
-                              <div className="p-3 bg-white/20 border-b border-white/20 flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-sm">
-                                  <span className="text-cyan-400 font-bold">🎮 {recordedGames[0]?.mapName || 'Unknown Map'}</span>
-                                  <span className="text-gray-300">• {recordedGames[0]?.gameMode || 'Unknown Mode'}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {recordedGames[0]?.videoInfo?.youtube_url && (
-                                    <a
-                                      href={recordedGames[0].videoInfo.youtube_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs transition-colors"
-                                    >
-                                      📺 YouTube
-                                    </a>
-                                  )}
-                                  {recordedGames[0]?.gameId && (
-                                    <Link
-                                      href={`/stats/game/${encodeURIComponent(recordedGames[0].gameId)}`}
-                                      className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs transition-colors"
-                                    >
-                                      📊 Stats
-                                    </Link>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="p-3">
-                                {recordedGames[0]?.videoInfo?.youtube_url && !showVideoEmbed ? (
-                                  <div
-                                    className="relative cursor-pointer group"
-                                    onClick={() => setShowVideoEmbed(true)}
-                                  >
-                                    <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                                      <img
-                                        src={getYouTubeThumbnail(recordedGames[0].videoInfo.youtube_url, 'hqdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
-                                        alt={recordedGames[0]?.videoInfo?.video_title || 'Match Recording'}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                        onError={(e) => {
-                                          try {
-                                            const target = e.target as HTMLImageElement;
-                                            target.src = VIDEO_THUMBNAIL_PLACEHOLDER;
-                                          } catch {}
-                                        }}
-                                      />
-                                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-all duration-300">
-                                        <div className="bg-red-600 rounded-full p-4 group-hover:bg-red-500 group-hover:scale-110 transition-all duration-300">
-                                          <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M8 5v14l11-7z"/>
-                                          </svg>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="mt-2 text-center">
-                                      <p className="text-gray-300 text-sm">🎮 Click to watch full recording</p>
-                                      <p className="text-gray-400 text-xs">
-                                        Duration: {recordedGames[0]?.duration ? formatGameDuration(recordedGames[0].duration) : 'Unknown'} • {recordedGames[0]?.totalPlayers || 0} players
-                                      </p>
-                                    </div>
-                                  </div>
-                                ) : recordedGames[0]?.videoInfo?.youtube_url && showVideoEmbed ? (
-                                  <div className="space-y-3">
-                                    <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                                      <iframe
-                                        src={`https://www.youtube.com/embed/${getYouTubeVideoId(recordedGames[0].videoInfo.youtube_url)}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&hd=1`}
-                                        title={recordedGames[0]?.videoInfo?.video_title || 'Match Recording'}
-                                        className="w-full h-full border-0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowFullScreen
-                                        loading="eager"
-                                      />
-                                    </div>
-                                    <div className="text-center">
-                                      <button
-                                        onClick={() => setShowVideoEmbed(false)}
-                                        className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors"
-                                      >
-                                        🔙 Back to Thumbnail
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="text-center py-4">
-                                    <p className="text-gray-400 text-sm">Video content not available</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Team Stats Sidebar - 1/3 width */}
-                          <div className="md:col-span-1">
-                            <div className="space-y-2">
-                              {(() => {
-                                try {
-                                  if (!recordedGames[0] || !recordedGames[0].players) {
-                                    return (
-                                      <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                        <p className="text-gray-400 text-center text-sm">Player data not available</p>
-                                      </div>
-                                    );
-                                  }
-
-                                  const groupedPlayers = getGroupedGamePlayers(recordedGames[0]);
-                                  if (!groupedPlayers || Object.keys(groupedPlayers).length === 0) {
-                                    return (
-                                      <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                        <p className="text-gray-400 text-center text-sm">No team data available</p>
-                                      </div>
-                                    );
-                                  }
-
-                                  return Object.entries(groupedPlayers).map(([team, { defense, offense }]) => {
-                                    try {
-                                      const winStatus = defense?.length > 0 ? getPlayerWinStatus(defense[0], recordedGames[0]) :
-                                                       offense?.length > 0 ? getPlayerWinStatus(offense[0], recordedGames[0]) : 'unknown';
-
-                                      return (
-                                        <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                          <div className="flex items-center justify-between mb-2">
-                                            <span className="text-gray-300 font-medium text-sm">{team}</span>
-                                            {winStatus !== 'unknown' && (
-                                              <div className={`px-3 py-1.5 rounded-md text-xs font-bold border-2 ${
-                                                winStatus === 'win'
-                                                  ? 'bg-green-600/80 text-green-50 border-green-400 shadow-green-500/25 shadow-md'
-                                                  : 'bg-red-600/80 text-red-50 border-red-400 shadow-red-500/25 shadow-md'
-                                              }`}>
-                                                {winStatus === 'win' ? '🏆 WIN' : '💀 LOSS'}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {defense && defense.length > 0 && (
-                                            <div className="mb-2">
-                                              <div className="text-blue-200 text-xs font-medium mb-1">🛡️ Defense</div>
-                                              <div className="space-y-1">
-                                                {defense.map((player, idx) => {
-                                                  if (!player) return null;
-                                                  return (
-                                                    <div key={idx} className="bg-blue-500/10 rounded p-1.5">
-                                                      <div className="flex items-center justify-between">
-                                                        <span
-                                                          className="font-medium text-xs truncate"
-                                                          style={{ color: getClassColor(player.main_class || '') }}
-                                                          title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
-                                                        >
-                                                          {player.player_name || 'Unknown Player'}
-                                                        </span>
-                                                        <span className="text-gray-300 text-xs ml-1">
-                                                          {player.kills || 0}K/{player.deaths || 0}D
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {offense && offense.length > 0 && (
-                                            <div>
-                                              <div className="text-red-200 text-xs font-medium mb-1">⚔️ Offense</div>
-                                              <div className="space-y-1">
-                                                {offense.map((player, idx) => {
-                                                  if (!player) return null;
-                                                  return (
-                                                    <div key={idx} className="bg-red-500/10 rounded p-1.5">
-                                                      <div className="flex items-center justify-between">
-                                                        <span
-                                                          className="font-medium text-xs truncate"
-                                                          style={{ color: getClassColor(player.main_class || '') }}
-                                                          title={`${player.player_name || 'Unknown'} (${player.main_class || 'Unknown'})`}
-                                                        >
-                                                          {player.player_name || 'Unknown Player'}
-                                                        </span>
-                                                        <span className="text-gray-300 text-xs ml-1">
-                                                          {player.kills || 0}K/{player.deaths || 0}D
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    } catch (teamError) {
-                                      return (
-                                        <div key={team} className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                          <p className="text-gray-400 text-center text-sm">Error loading team data</p>
-                                        </div>
-                                      );
-                                    }
-                                  });
-                                } catch {
-                                  return (
-                                    <div className="bg-white/10 backdrop-blur-lg rounded-lg p-3 border border-white/20">
-                                      <p className="text-gray-400 text-center text-sm">Unable to load player stats</p>
-                                    </div>
-                                  );
-                                }
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Additional Recent Games */}
-                    {recordedGames.length > 1 && (
-                      <div>
-                        <h4 className="text-sm font-bold text-gray-300 mb-3">📹 More Recent Recordings</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {recordedGames.slice(1, 9).map((game) => (
-                            <Link key={game.gameId} href={`/stats/game/${encodeURIComponent(game.gameId)}`}>
-                              <div className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-cyan-500/50 transition-all duration-300">
-                                <div className="relative aspect-video overflow-hidden">
-                                  {game.videoInfo.youtube_url ? (
-                                    <img
-                                      src={getYouTubeThumbnail(game.videoInfo.youtube_url, 'hqdefault') || VIDEO_THUMBNAIL_PLACEHOLDER}
-                                      alt={`${game.mapName} - ${game.gameMode}`}
-                                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                      onError={(e) => {
-                                        e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER;
-                                      }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                                      <div className="text-gray-400 text-center">
-                                        <div className="text-lg mb-1">🎮</div>
-                                        <div className="text-xs">Recording</div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                                    <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                                      <svg className="w-3 h-3 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M8 5v14l11-7z"/>
-                                      </svg>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="p-2">
-                                  <h5 className="font-medium text-xs text-white group-hover:text-cyan-300 transition-colors truncate">
-                                    {game.mapName} • {game.gameMode}
-                                  </h5>
-                                  <div className="text-xs text-gray-400 mt-1">
-                                    {formatGameDate(game.gameDate)} • {formatGameDuration(game.duration)}
-                                  </div>
-                                </div>
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* Featured Videos */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-red-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-4 py-2 border-b border-red-500/30">
-                  <h3 className="text-lg font-bold text-red-400 tracking-wider">Videos</h3>
-                </div>
-                <div className="p-4">
-                  {featuredVideos.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-                      {featuredVideos.map((video) => {
-                        const thumbnailUrl = video.thumbnail_url ||
-                          (video.youtube_url ? getBestYouTubeThumbnail(video.youtube_url) : null);
-
-                        return (
-                          <div key={video.id} className="group cursor-pointer bg-gray-700/30 border border-gray-600 rounded-lg overflow-hidden hover:border-red-500/50 transition-all duration-300"
-                          onClick={() => {
-                            if (video.youtube_url) {
-                              openVideoEmbed(video);
-                            } else if (video.vod_url) {
-                              recordVideoView(video.id);
-                              window.open(video.vod_url, '_blank');
-                            }
-                          }}>
-                            <div className="relative aspect-video overflow-hidden">
-                              {thumbnailUrl ? (
-                                <img
-                                  src={thumbnailUrl}
-                                  alt={video.title}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  onError={(e) => {
-                                    e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER;
-                                  }}
-                                />
-                              ) : (
-                                <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-lg">📹</div>
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center">
-                                <div className="w-8 h-8 md:w-12 md:h-12 bg-red-600 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                                  <svg className="w-3 h-3 md:w-4 md:h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M8 5v14l11-7z"/>
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="p-2">
-                              <h4 className="font-medium text-sm text-white group-hover:text-red-300 transition-colors truncate">
-                                {video.title}
-                              </h4>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="text-6xl mb-4">🎬</div>
-                      <div className="text-gray-500 text-lg mb-2">No featured videos yet</div>
-                      <div className="text-gray-600 text-sm">
-                        Check back soon for the latest Free Infantry content!
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-            </div>
-          </div>
-
-          {/* RIGHT SIDEBAR (3 columns) */}
-          <div className="xl:col-span-3">
-            <div className="space-y-3">
-
-              {/* ELO Leaderboard Widget */}
-              {eloLeaders.length > 0 && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg shadow-xl overflow-hidden">
-                  <div className="bg-gray-700/50 px-3 py-2 border-b border-cyan-500/30">
-                    <h3 className="text-cyan-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      Top players
-                      <Link href="/stats/elo" className="text-xs text-gray-400 hover:text-cyan-300 transition-colors">
-                        View All →
-                      </Link>
-                    </h3>
-                  </div>
-                  <div className="p-2 bg-gray-900">
-                    <div className="space-y-1">
-                      {eloLeaders.map((player, index) => {
-                        const tier = getEloTier(parseInt(player.weighted_elo || player.elo_rating || '0'));
-                        return (
-                          <Link key={player.player_name} href={`/stats/player/${encodeURIComponent(player.player_name)}`}>
-                            <div className="flex items-center gap-2 p-1.5 bg-gray-800/30 rounded hover:bg-gray-700/30 transition-colors cursor-pointer">
-                              <span className="text-xs font-bold w-5 text-center" style={{ color: tier.color }}>
-                                {index + 1}
+                                {p.alias}
                               </span>
-                              <div className="flex-1 min-w-0">
-                                <span className="text-white text-xs font-medium truncate block">
-                                  {player.player_name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-mono font-bold" style={{ color: tier.color }}>
-                                  {parseInt(player.weighted_elo || player.elo_rating || '0')}
-                                </span>
-                                <span className="text-[10px] px-1 py-0.5 rounded font-bold" style={{ color: tier.color, backgroundColor: `${tier.color}20` }}>
-                                  {tier.name}
-                                </span>
-                              </div>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Season Standings Widget */}
-              {activeSeason && seasonStandings.length > 0 && (
-                <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg shadow-xl overflow-hidden">
-                  <div className="bg-gray-700/50 px-3 py-2 border-b border-purple-500/30">
-                    <h3 className="text-purple-400 font-bold text-sm tracking-wider flex items-center justify-between">
-                      {activeSeason.league_name} Season {activeSeason.season_number}
-                      <Link href="/league/standings" className="text-xs text-gray-400 hover:text-purple-300 transition-colors">
-                        Full Standings →
-                      </Link>
-                    </h3>
-                  </div>
-                  <div className="p-2 bg-gray-900">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-500 border-b border-gray-700">
-                          <th className="text-left py-1 px-1">#</th>
-                          <th className="text-left py-1">Team</th>
-                          <th className="text-center py-1">W</th>
-                          <th className="text-center py-1">L</th>
-                          <th className="text-right py-1 px-1">Pts</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {seasonStandings.map((standing) => (
-                          <tr key={standing.squad_id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                            <td className="py-1 px-1 text-gray-400 font-bold">{standing.rank}</td>
-                            <td className="py-1">
-                              <Link href={`/squads/${standing.squad_id}`} className="hover:text-purple-300 transition-colors">
-                                <span className="text-purple-400 font-bold">[{standing.squad_tag}]</span>
-                                <span className="text-gray-300 ml-1 truncate">{standing.squad_name}</span>
-                              </Link>
-                            </td>
-                            <td className="text-center py-1 text-green-400">{standing.wins}</td>
-                            <td className="text-center py-1 text-red-400">{standing.losses}</td>
-                            <td className="text-right py-1 px-1 text-yellow-400 font-bold">{standing.points}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
-
-              {/* Recent Donations */}
-              <section className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg shadow-xl overflow-hidden">
-                <div className="bg-gray-700/50 px-3 py-1.5 border-b border-yellow-500/30">
-                  <h3 className="text-sm font-bold text-yellow-400 tracking-wider">Recent donations</h3>
-                </div>
-                <div className="p-2">
-                  {recentDonations.length > 0 ? (
-                    <div className="space-y-1">
-                      {recentDonations.slice(0, 6).map((donation, index) => (
-                        <div key={donation.id || index} className="flex items-center gap-2 p-1.5 bg-gray-700/30 rounded border border-gray-600/50 hover:border-yellow-500/50 transition-colors">
-                          <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center text-[10px]">
-                            💝
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="font-medium text-white text-xs truncate">
-                                {donation.customerName || 'Anonymous'}
-                              </div>
-                              <div className="font-bold text-yellow-400 text-xs whitespace-nowrap">
-                                ${donation.amount}
-                              </div>
-                            </div>
-                            {donation.message && (
-                              <div className="text-gray-400 text-[10px] truncate leading-tight">
-                                &ldquo;{donation.message}&rdquo;
-                              </div>
+                            ))}
+                            {players.length > 14 && (
+                              <span className="text-[10px] font-mono leading-[1.4] text-[#8B98B0]">+{players.length - 14}</span>
                             )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="text-2xl mb-1">💝</div>
-                      <div className="text-gray-500 text-xs">No recent donations</div>
-                    </div>
-                  )}
+                      );
+                    })}
                 </div>
-              </section>
+              </Card>
+            )}
 
-              {/* Top Supporters */}
-              <TopSupportersWidget
-                showAdminControls={false}
-                maxSupporters={10}
-                className=""
-              />
+            <Card
+              title="Online"
+              action={<span className="text-[11px] tabular-nums text-[#8B98B0]">{onlineUsers.length}</span>}
+            >
+              {onlineUsers.length === 0 ? (
+                <Empty>Nobody on the site right now.</Empty>
+              ) : (
+                <ul className="space-y-1 max-h-64 overflow-y-auto">
+                  {onlineUsers.slice(0, 10).map((u) => (
+                    <li key={u.id}>
+                      <Link href={`/stats/player/${encodeURIComponent(u.in_game_alias)}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/5 transition-colors">
+                        <UserAvatar user={{ avatar_url: u.avatar_url ?? null, in_game_alias: u.in_game_alias, email: null }} size="sm" />
+                        <span className="text-sm text-[#E6EDF7] truncate">{u.in_game_alias}</span>
+                        <span className="ml-auto text-[11px] text-[#8B98B0]">{relTime(u.last_seen)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
 
-            </div>
+            <Card title="Recent pub games" action={<MoreLink href="/stats">All stats</MoreLink>}>
+              {recentGames.length === 0 ? (
+                <Empty>No games recorded recently.</Empty>
+              ) : (
+                <ul className="space-y-1">
+                  {recentGames.slice(0, 4).map((g, i) => {
+                    const players = g.playerDetails || g.players || [];
+                    return (
+                      <li key={`${g.gameId}-${i}`}>
+                        <Link href={`/stats/game/${encodeURIComponent(g.gameId)}`} className="block rounded-md px-2 py-1.5 hover:bg-white/5 transition-colors">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[#22D3EE] font-medium">{g.gameMode}</span>
+                            <span className="text-[#8B98B0]">{relTime(g.gameDate)}</span>
+                          </div>
+                          <div className="text-[11px] text-[#8B98B0] truncate">
+                            {g.mapName}
+                            {players.length > 0 && ` · ${players.slice(0, 3).map((p) => p.name || p.player_name || p.alias).join(', ')}${players.length > 3 ? ` +${players.length - 3}` : ''}`}
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
           </div>
 
+          {/* ── CENTER: the season ───────────────────────────────────── */}
+          <div className="xl:col-span-6 space-y-4">
+            {showThisWeek && (
+              <Card title="This week" action={<MoreLink href="/matches">All matches</MoreLink>}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1.5 px-1">Upcoming</div>
+                    {upcoming.length === 0 ? (
+                      <Empty>Nothing scheduled yet.</Empty>
+                    ) : (
+                      <ul className="space-y-1">
+                        {upcoming.slice(0, 5).map((m) => (
+                          <li key={m.id}>
+                            <Link href={`/matches/${m.id}`} className="block rounded-md bg-[#1B2438] px-3 py-2 hover:bg-[#222d45] transition-colors">
+                              <div className="text-sm text-[#E6EDF7] truncate">
+                                {m.squad_a_name && m.squad_b_name ? (
+                                  <>
+                                    {m.squad_a_name} <span className="text-[#8B98B0]">vs</span> {m.squad_b_name}
+                                  </>
+                                ) : m.title}
+                              </div>
+                              <div className="text-[11px] text-[#8B98B0]">{whenLabel(m.scheduled_at)}</div>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1.5 px-1">Latest results</div>
+                    {(league?.results.length || 0) === 0 ? (
+                      <Empty>No league matches played yet.</Empty>
+                    ) : (
+                      <ul className="space-y-1">
+                        {league!.results.slice(0, 5).map((r) => {
+                          const aWin = (r.team_a_result || '').toLowerCase() === 'win' || (r.squad_a_score ?? 0) > (r.squad_b_score ?? 0);
+                          const bWin = (r.team_b_result || '').toLowerCase() === 'win' || (r.squad_b_score ?? 0) > (r.squad_a_score ?? 0);
+                          return (
+                            <li key={r.id} className="rounded-md bg-[#1B2438] px-3 py-2">
+                              <div className="flex items-center justify-between gap-2 text-sm">
+                                <span className={`truncate ${aWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_a_name}</span>
+                                <span className="tabular-nums font-medium shrink-0">
+                                  <span className={aWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_a_score ?? '–'}</span>
+                                  <span className="text-white/20 mx-1">:</span>
+                                  <span className={bWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_b_score ?? '–'}</span>
+                                </span>
+                                <span className={`truncate text-right ${bWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_b_name}</span>
+                              </div>
+                              {r.played_at && <div className="text-[11px] text-[#8B98B0] mt-0.5">{relTime(r.played_at)}{r.status && r.status !== 'Season' ? ` · ${r.status}` : ''}</div>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            <CtfNewsFeed limit={4} />
+
+            {hasWatch && (
+              <Card title="Watch" action={featuredVideos.length > 0 ? <MoreLink href="/videos">All videos</MoreLink> : undefined}>
+                {featuredVideos.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {featuredVideos.slice(0, 6).map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => playVideo(v.title, v.youtube_url, v.vod_url)}
+                        className="group text-left rounded-lg overflow-hidden bg-[#1B2438]"
+                      >
+                        <div className="relative aspect-video overflow-hidden">
+                          <img
+                            src={v.thumbnail_url || VIDEO_THUMBNAIL_PLACEHOLDER}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => { e.currentTarget.src = VIDEO_THUMBNAIL_PLACEHOLDER; }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/35 transition-colors">
+                            <span className="w-9 h-9 rounded-full bg-[#22D3EE] text-[#0B0F1A] flex items-center justify-center">
+                              <Play className="w-4 h-4 ml-0.5" aria-hidden="true" />
+                            </span>
+                          </div>
+                        </div>
+                        <div className="px-2.5 py-2 text-xs text-[#E6EDF7] truncate group-hover:text-[#22D3EE] transition-colors">{v.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {recordedGames.length > 0 && (
+                  <div className={featuredVideos.length > 0 ? 'mt-3' : ''}>
+                    <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1.5 px-1">Recorded games</div>
+                    <ul className="space-y-1">
+                      {recordedGames.map((g) => (
+                        <li key={g.gameId} className="flex items-center gap-2 rounded-md bg-[#1B2438] px-2.5 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() => playVideo(g.videoInfo.video_title || `${g.mapName} · ${g.gameMode}`, g.videoInfo.youtube_url, g.videoInfo.vod_url)}
+                            className="w-7 h-7 rounded-full bg-[#22D3EE]/15 text-[#22D3EE] hover:bg-[#22D3EE] hover:text-[#0B0F1A] flex items-center justify-center shrink-0 transition-colors"
+                            aria-label="Play recording"
+                          >
+                            <Play className="w-3.5 h-3.5 ml-0.5" aria-hidden="true" />
+                          </button>
+                          <Link href={`/stats/game/${encodeURIComponent(g.gameId)}`} className="min-w-0 flex-1 hover:text-[#22D3EE] transition-colors">
+                            <div className="text-sm text-[#E6EDF7] truncate">{g.mapName} <span className="text-[#8B98B0]">· {g.gameMode}</span></div>
+                          </Link>
+                          <span className="text-[11px] text-[#8B98B0] shrink-0">{relTime(g.gameDate)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            <LeagueStatusSection data={league?.status || null} compact />
+          </div>
+
+          {/* ── RIGHT: the league ────────────────────────────────────── */}
+          <div className="xl:col-span-3 space-y-4">
+            {L && (
+              <Card
+                title={S ? `${L.name} S${S.season_number} standings` : 'Standings'}
+                action={<MoreLink href={leagueStandingsHref(L)}>Full table</MoreLink>}
+              >
+                {league!.standings.length === 0 ? (
+                  <Empty>
+                    {featured?.status === 'upcoming'
+                      ? isDraftLeague
+                        ? 'Standings start once the draft is done and play begins.'
+                        : 'Standings start when the season begins.'
+                      : 'No standings yet.'}
+                  </Empty>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[#8B98B0]">
+                        <th className="text-left font-normal py-1 px-1 w-6">#</th>
+                        <th className="text-left font-normal py-1">Team</th>
+                        <th className="text-center font-normal py-1 w-8">W</th>
+                        <th className="text-center font-normal py-1 w-8">L</th>
+                        <th className="text-right font-normal py-1 px-1 w-10">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {league!.standings.map((row) => (
+                        <tr key={row.squad_id} className="border-t border-white/[0.06] hover:bg-white/5">
+                          <td className="py-1.5 px-1 text-[#8B98B0] tabular-nums">{row.rank}</td>
+                          <td className="py-1.5">
+                            <Link href={`/squads/${row.squad_id}`} className="flex items-center gap-1.5 hover:text-[#22D3EE] transition-colors">
+                              {row.squad_tag && <span className="text-[#22D3EE] font-medium">[{row.squad_tag}]</span>}
+                              <span className="text-[#E6EDF7] truncate">{row.squad_name}</span>
+                            </Link>
+                          </td>
+                          <td className="text-center py-1.5 text-[#34D399] tabular-nums">{row.wins}</td>
+                          <td className="text-center py-1.5 text-[#F87171] tabular-nums">{row.losses}</td>
+                          <td className="text-right py-1.5 px-1 text-[#F59E0B] font-medium tabular-nums">{row.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            )}
+
+            {L && (
+              <Card
+                title={isDraftLeague && league!.draft?.status !== 'complete' ? 'Captains' : 'Teams'}
+                action={<MoreLink href="/squads">All squads</MoreLink>}
+              >
+                {league!.teams.length === 0 ? (
+                  <Empty>{isDraftLeague ? 'No captains confirmed yet.' : 'No squads entered yet.'}</Empty>
+                ) : (
+                  <ul className="space-y-1">
+                    {league!.teams.map((t) => (
+                      <li key={t.id}>
+                        <Link href={`/squads/${t.id}`} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-white/5 transition-colors">
+                          <span className="w-9 h-7 rounded-md bg-[#1B2438] text-[#22D3EE] text-[11px] font-medium flex items-center justify-center shrink-0">
+                            {(t.tag || t.name).slice(0, 4).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm text-[#E6EDF7] truncate">{t.name}</span>
+                            <span className="block text-[11px] text-[#8B98B0] truncate">
+                              {isDraftLeague ? `Captain ${t.captain_alias}` : `${t.member_count} member${t.member_count === 1 ? '' : 's'} · ${t.captain_alias}`}
+                            </span>
+                          </span>
+                          {!isDraftLeague || league!.draft?.status === 'complete' ? (
+                            <span className="text-[11px] tabular-nums text-[#8B98B0]">{t.member_count}</span>
+                          ) : null}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isDraftLeague && league!.draft?.status !== 'complete' && (
+                  <p className="mt-2 px-1 text-[11px] text-[#8B98B0]">
+                    Rosters are filled on draft day.{' '}
+                    <Link href="/free-agents" className="text-[#22D3EE] hover:text-[#67E8F9]">See who’s in the pool</Link>
+                  </p>
+                )}
+              </Card>
+            )}
+
+            {L && league!.champions.length > 0 && (
+              <Card title="Past champions" action={<MoreLink href={leagueStandingsHref(L)}>History</MoreLink>}>
+                <ul className="space-y-1">
+                  {league!.champions.map((c) => (
+                    <li key={c.season_id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+                      <span className="w-9 shrink-0 text-[11px] text-[#8B98B0] tabular-nums">S{c.season_number}</span>
+                      <span className="min-w-0 flex-1">
+                        {c.champions.length > 0 ? (
+                          c.champions.map((sq, i) => (
+                            <React.Fragment key={sq.id}>
+                              {i > 0 && <span className="text-[#8B98B0]"> & </span>}
+                              <Link href={`/squads/${sq.id}`} className="text-sm text-[#E6EDF7] hover:text-[#F59E0B] transition-colors">
+                                {sq.tag ? `[${sq.tag}] ` : ''}{sq.name}
+                              </Link>
+                            </React.Fragment>
+                          ))
+                        ) : (
+                          <span className="text-sm text-[#8B98B0]">Not recorded</span>
+                        )}
+                        {c.end_date && <span className="block text-[11px] text-[#8B98B0]">{formatDateOnly(c.end_date)}</span>}
+                      </span>
+                      <span className="text-[#F59E0B]" aria-hidden="true">🏆</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
+            <Card title="Community">
+              {L?.discord_url ? (
+                <a
+                  href={L.discord_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between gap-2 rounded-md bg-[#5865F2] hover:bg-[#6B76F5] text-white px-3 py-2.5 text-sm font-medium transition-colors"
+                >
+                  <span>Join the {L.name} Discord</span>
+                  <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                </a>
+              ) : (
+                <div className="rounded-md bg-[#1B2438] px-3 py-2.5 text-xs text-[#8B98B0]">
+                  Announcements, scheduling and captains chat live on Discord. Ask staff for the invite.
+                </div>
+              )}
+              {staff.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1.5 px-1">Staff</div>
+                  <ul className="space-y-1">
+                    {staff.map((s) => (
+                      <li key={s.id}>
+                        <Link href={`/stats/player/${encodeURIComponent(s.in_game_alias)}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-white/5 transition-colors">
+                          <UserAvatar user={{ avatar_url: s.avatar_url ?? null, in_game_alias: s.in_game_alias, email: null }} size="sm" />
+                          <span className="text-sm text-[#E6EDF7] truncate">{s.in_game_alias}</span>
+                          <span className="ml-auto text-[10px] uppercase tracking-wide text-[#22D3EE]">Admin</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 px-1 text-xs">
+                <Link href="/free-agents" className="text-[#8B98B0] hover:text-[#22D3EE]">Player pool</Link>
+                <Link href="/squads/players" className="text-[#8B98B0] hover:text-[#22D3EE]">Players</Link>
+                <Link href="/forum" className="text-[#8B98B0] hover:text-[#22D3EE]">Forum</Link>
+              </div>
+            </Card>
+          </div>
         </div>
       </main>
 
-      {/* YouTube Embed Modal */}
-      {embedModal.isOpen && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              closeEmbedModal();
-            }
-          }}
-        >
-          <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-700">
-              <h3 className="text-xl font-bold text-white truncate pr-4">
-                {embedModal.title}
-              </h3>
-              <button
-                onClick={closeEmbedModal}
-                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {embed && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setEmbed(null); }}>
+          <div className="w-full max-w-4xl rounded-xl overflow-hidden bg-[#131A2B]">
+            <div className="px-4 py-2.5 flex items-center justify-between">
+              <div className="text-sm text-[#E6EDF7] truncate">{embed.title}</div>
+              <button type="button" onClick={() => setEmbed(null)} className="text-[#8B98B0] hover:text-[#E6EDF7] text-sm">Close</button>
             </div>
-
-            <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
-              {embedModal.videoId ? (
-                <iframe
-                  src={`https://www.youtube.com/embed/${embedModal.videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3`}
-                  title={embedModal.title}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                  loading="eager"
-                ></iframe>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-white text-center">
-                    <div className="text-4xl mb-4">⚠️</div>
-                    <div>Unable to load video</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 bg-gray-800 flex items-center justify-between">
-              <div className="text-sm text-gray-400">
-                🎬 Playing from YouTube
-              </div>
-              <button
-                onClick={() => {
-                  if (embedModal.videoId) {
-                    window.open(`https://www.youtube.com/watch?v=${embedModal.videoId}`, '_blank');
-                  }
-                }}
-                className="text-red-400 hover:text-red-300 text-sm border border-red-500/50 hover:border-red-400 px-3 py-1 rounded transition-colors"
-              >
-                🔗 Open in YouTube
-              </button>
+            <div className="aspect-video bg-black">
+              <iframe
+                src={`https://www.youtube.com/embed/${embed.videoId}?autoplay=1`}
+                title={embed.title}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
             </div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// ── Loaders that live outside the component ─────────────────────────────
+
+/** Active, non-legacy squads for a league. Untagged squads count as the featured league (same rule as the squad page). */
+async function loadTeams(slug: string): Promise<Team[]> {
+  const base = 'id, name, tag, captain_id, is_active, profiles!squads_captain_id_fkey(in_game_alias)';
+  let rows: any[] | null = null;
+  const withLeague = await supabase.from('squads').select(`${base}, league_slug, is_legacy`).eq('is_active', true);
+  if (!withLeague.error) {
+    rows = (withLeague.data || []).filter((s: any) => !s.is_legacy && (s.league_slug === slug || !s.league_slug));
+  } else {
+    const basic = await supabase.from('squads').select(base).eq('is_active', true);
+    rows = basic.data || [];
+  }
+  if (!rows || rows.length === 0) return [];
+  const ids = rows.map((s) => s.id);
+  const { data: members } = await supabase.from('squad_members').select('squad_id').in('squad_id', ids).eq('status', 'active');
+  const counts = new Map<string, number>();
+  (members || []).forEach((m: any) => counts.set(m.squad_id, (counts.get(m.squad_id) || 0) + 1));
+  return rows
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      tag: s.tag ?? null,
+      captain_alias: s.profiles?.in_game_alias || 'Unknown',
+      member_count: counts.get(s.id) || 0,
+    }))
+    .sort((a, b) => b.member_count - a.member_count || a.name.localeCompare(b.name));
+}
+
+async function loadResults(slug: string, seasonNumber: number): Promise<LeagueResult[]> {
+  try {
+    const r = await fetch(`/api/ctf/matches?league=${encodeURIComponent(slug)}&season_number=${seasonNumber}`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (Array.isArray(j.matches) ? j.matches : [])
+      .filter((m: any) => m.played_at)
+      .sort((a: any, b: any) => new Date(b.played_at).getTime() - new Date(a.played_at).getTime())
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
 }
