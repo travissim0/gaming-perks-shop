@@ -13,10 +13,18 @@ import {
   getLeagues,
   pickFeatured,
   getOpenSeason,
+  getSeasonStatus,
+  getSeasonDraft,
+  seasonPhase,
   seasonLabel,
   poolBlurb,
+  formatDateOnly,
+  leagueStandingsHref,
   type LeagueInfo,
   type LeagueSeason,
+  type SeasonStatus,
+  type SeasonPhase,
+  type SeasonDraft,
 } from '@/lib/leagues';
 
 interface FreeAgent {
@@ -57,6 +65,8 @@ const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
  */
 export default function FreeAgentsPage() {
   const { user, loading: authLoading } = useAuth();
+  const [phase, setPhase] = useState<SeasonPhase | null>(null);
+  const [draft, setDraft] = useState<SeasonDraft | null>(null);
 
   // League context
   const [league, setLeague] = useState<LeagueInfo | null>(null);
@@ -110,16 +120,24 @@ export default function FreeAgentsPage() {
       setLoading(true);
       let featured: LeagueInfo | null = null;
       let open: LeagueSeason | null = null;
+      let st: SeasonStatus = 'off-season';
+      let dr: SeasonDraft | null = null;
       try {
         const leagues = await getLeagues();
         featured = pickFeatured(leagues);
-        if (featured) open = await getOpenSeason(featured);
+        if (featured) {
+          open = await getOpenSeason(featured);
+          st = (await getSeasonStatus(featured)).status;
+          if (open && featured.format === 'draft') dr = await getSeasonDraft(open.id);
+        }
       } catch (e) {
         console.error('Error loading league context:', e);
       }
       if (cancelled) return;
       setLeague(featured);
       setSeason(open);
+      setDraft(dr);
+      setPhase(featured ? seasonPhase(featured, open, st, { draftDone: featured.format === 'draft' ? dr?.status === 'complete' : undefined }) : null);
       await Promise.all([loadFreeAgents(featured, open), loadActiveSquadMemberIds()]);
       if (!cancelled) setLoading(false);
     })();
@@ -490,26 +508,46 @@ export default function FreeAgentsPage() {
           </div>
         )}
 
-        {/* Header */}
-        <div className="mb-5 rounded-xl bg-[#131A2B] p-5 md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-[11px] uppercase tracking-[0.2em] text-[#8B98B0]">Free agent pool</span>
-                {registrationOpen && (
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${season!.status === 'active' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}>
-                    {season!.status === 'active' ? 'Season live' : 'Registration open'}
-                  </span>
+        {/* Header strip (same shape as the league, standings and schedule pages) */}
+        <section className="relative mb-5 overflow-hidden rounded-xl bg-[#131A2B]">
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+          <div className="relative flex flex-col gap-4 px-5 py-5 sm:px-6 lg:flex-row lg:items-end">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 text-[11px] uppercase tracking-[0.25em] text-[#22D3EE]/80">Free Infantry · CTF leagues</div>
+              <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">Player pool</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="text-[#E6EDF7]">{poolTitle}</span>
+                {phase && (
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className="font-medium text-[#F59E0B]">{phase.label}</span>
+                  </>
                 )}
+                <span className="text-white/20">·</span>
+                <span className="text-[#8B98B0]"><span className="text-[#E6EDF7] tabular-nums">{freeAgents.length}</span> registered</span>
+                {draft && draft.teams.length > 0 && (
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className="text-[#8B98B0]"><span className="text-[#E6EDF7] tabular-nums">{draft.teams.length}</span> captains drafting</span>
+                  </>
+                )}
+                {(() => { const next = phase?.milestones.find((m) => !m.past); return next ? (
+                  <>
+                    <span className="text-white/20">·</span>
+                    <span className="text-[#8B98B0]">{next.label} <span className="text-[#E6EDF7]">{formatDateOnly(next.date)}</span></span>
+                  </>
+                ) : null; })()}
               </div>
-              <h1 className="font-display text-3xl leading-none text-[#E6EDF7] md:text-4xl">{poolTitle}</h1>
-              <p className="mt-2 max-w-xl text-sm text-[#8B98B0]">
-                {league ? poolBlurb(league) : 'Players looking for a team.'}{' '}
-                <span className="text-[#E6EDF7]">{freeAgents.length}</span> registered.
-              </p>
+              <p className="mt-1.5 max-w-xl text-sm text-[#8B98B0]">{league ? poolBlurb(league) : 'Players looking for a team.'}</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              {league && (
+                <>
+                  <Link href={leagueStandingsHref(league)} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Standings</Link>
+                  <Link href={`/league/schedule?league=${league.slug}`} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Schedule</Link>
+                </>
+              )}
               {user && isInFreeAgentPool ? (
                 <>
                   <span className="rounded-md bg-[#34D399]/15 px-3 py-1.5 text-sm font-medium text-[#34D399]">You're registered</span>
@@ -527,7 +565,7 @@ export default function FreeAgentsPage() {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Filters */}
         <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl bg-[#131A2B] px-4 py-3">
@@ -642,18 +680,28 @@ export default function FreeAgentsPage() {
                         {agent.preferred_roles.map((cls) => classChip(cls, 'preferred', agent.class_ratings?.[cls]))}
                       </div>
                     )}
-                    {(agent.secondary_roles?.length || 0) > 0 && (
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Also</span>
-                        {agent.secondary_roles!.map((cls) => classChip(cls, 'secondary', agent.class_ratings?.[cls]))}
-                      </div>
-                    )}
-                    {(agent.classes_to_try?.length || 0) > 0 && (
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Learning</span>
-                        {agent.classes_to_try!.map((cls) => classChip(cls, 'try'))}
-                      </div>
-                    )}
+                    {/* The form lets a class appear in more than one list; show each class once, in its strongest slot. */}
+                    {(() => {
+                      const main = new Set(agent.preferred_roles);
+                      const also = Array.from(new Set(agent.secondary_roles || [])).filter((c) => !main.has(c));
+                      const learning = Array.from(new Set(agent.classes_to_try || [])).filter((c) => !main.has(c) && !also.includes(c));
+                      return (
+                        <>
+                          {also.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Also</span>
+                              {also.map((cls) => classChip(cls, 'secondary', agent.class_ratings?.[cls]))}
+                            </div>
+                          )}
+                          {learning.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Learning</span>
+                              {learning.map((cls) => classChip(cls, 'try'))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Availability */}
