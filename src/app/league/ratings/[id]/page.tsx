@@ -3,256 +3,149 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
+import { ChevronLeft } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import type { SquadRatingWithDetails, PlayerRatingWithDetails } from '@/types/database';
 import { SYSTEM_USER_ID } from '@/lib/constants';
-import { getRatingColor, getRatingBgColor, getStarDisplay } from '@/utils/ratingUtils';
+import { getRatingColor, getStarDisplay } from '@/utils/ratingUtils';
 import Navbar from '@/components/Navbar';
+import { displayFont, bodyFont } from '@/lib/fonts';
 
-export default function IndividualSquadRatingPage() {
+/** One squad rating: the analyst's quote and commentary, then per-player notes. */
+
+type Rating = SquadRatingWithDetails & { league_slug?: string | null; squad_id?: string | null };
+
+const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+
+export default function SquadRatingPage() {
+  const { user } = useAuth();
   const params = useParams();
-  const [squadRating, setSquadRating] = useState<SquadRatingWithDetails | null>(null);
-  const [playerRatings, setPlayerRatings] = useState<PlayerRatingWithDetails[]>([]);
+  const [rating, setRating] = useState<Rating | null>(null);
+  const [players, setPlayers] = useState<PlayerRatingWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (params.id) {
-      fetchRatingDetails();
-    }
+    if (!params.id) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/squad-ratings/${params.id}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Could not load this rating');
+        setRating(json.squad_rating);
+        setPlayers(json.player_ratings || []);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [params.id]);
 
-  const fetchRatingDetails = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/squad-ratings/${params.id}`);
-      const data = await response.json();
+  const analyst = rating ? (rating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : rating.analyst_alias || 'Anonymous') : '';
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch rating details');
-      }
-
-      setSquadRating(data.squad_rating);
-      setPlayerRatings(data.player_ratings || []);
-    } catch (err) {
-      console.error('Error fetching rating details:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch rating details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  // Rating utilities imported from @/utils/ratingUtils
+  const shell = (children: React.ReactNode) => (
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
+      <Navbar user={user} />
+      <main className="container mx-auto px-4 py-6 max-w-4xl space-y-4">
+        <Link href="/league/ratings" className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE]">
+          <ChevronLeft className="w-3.5 h-3.5" /> Squad ratings
+        </Link>
+        {children}
+      </main>
+    </div>
+  );
 
   if (loading) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse">
-            <div className="h-20 bg-gray-700 rounded mb-8"></div>
-            <div className="h-12 bg-gray-700 rounded mb-6"></div>
-            <div className="space-y-6">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-32 bg-gray-700 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+    return shell(
+      <section className="rounded-xl bg-[#131A2B] px-6 py-8 animate-pulse space-y-3">
+        <div className="h-3 w-40 rounded bg-white/5" />
+        <div className="h-12 w-2/3 rounded bg-white/5" />
+        <div className="h-24 rounded bg-white/5" />
+      </section>,
+    );
+  }
+  if (error || !rating) {
+    return shell(
+      <section className="rounded-xl bg-[#131A2B] px-6 py-8">
+        <h1 className="font-display text-4xl text-[#E6EDF7]">Rating not found</h1>
+        <p className="text-sm text-[#8B98B0] mt-2">{error || 'It may have been removed.'}</p>
+      </section>,
     );
   }
 
-  if (error || !squadRating) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-        <div className="container mx-auto px-4 py-8">
-          <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6">
-            <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Rating</h2>
-            <p className="text-red-300">{error || 'Rating not found'}</p>
-            <Link 
-              href="/league/ratings"
-              className="inline-block mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-            >
-              Back to Ratings
-            </Link>
+  const sorted = [...players].sort((a, b) => b.rating - a.rating);
+
+  return shell(
+    <>
+      {/* Header strip */}
+      <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
+        <div className="relative px-5 sm:px-6 py-5 flex items-start gap-4">
+          <span className="w-16 h-16 rounded-lg bg-[#1B2438] text-[#22D3EE] text-lg font-medium flex items-center justify-center shrink-0">
+            {(rating.squad_tag || rating.squad_name).slice(0, 4).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
+              <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${rating.is_official ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}>
+                {rating.is_official ? 'Official rating' : 'Unofficial rating'}
+              </span>
+              {rating.league_slug && <span className="px-1.5 py-0.5 rounded bg-white/5 text-[#8B98B0] uppercase tracking-wide">{rating.league_slug}</span>}
+              {rating.season_name && <span className="text-[#8B98B0]">{rating.season_name}</span>}
+            </div>
+            <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">
+              {rating.squad_id ? <Link href={`/squads/${rating.squad_id}`} className="hover:text-[#22D3EE]">{rating.squad_name}</Link> : rating.squad_name}
+            </h1>
+            <div className="mt-2 text-sm text-[#8B98B0]">
+              By <span className="text-[#E6EDF7]">{analyst}</span> · {fmt(rating.analysis_date || rating.created_at)}
+              {rating.updated_at && rating.updated_at !== rating.created_at && <> · updated {fmt(rating.updated_at)}</>}
+            </div>
+            {!rating.is_official && <p className="mt-1.5 text-xs text-[#F59E0B]">One person’s opinion, not the panel’s.</p>}
           </div>
         </div>
-      </div>
-    );
-  }
+      </section>
 
-  return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        {/* Navigation Buttons */}
-        <div className="flex items-center justify-between mb-8">
-          <Link 
-            href="/league/ratings"
-            className="inline-flex items-center text-cyan-400 hover:text-cyan-300 transition-colors group"
-          >
-            <svg className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Ratings
-          </Link>
-          
-          <Link 
-            href="/"
-            className="inline-flex items-center text-gray-400 hover:text-gray-300 transition-colors text-sm"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            Home
-          </Link>
-        </div>
+      {rating.analyst_quote && (
+        <blockquote className="rounded-xl bg-[#131A2B] px-5 sm:px-6 py-5 border-l-4 border-[#22D3EE]">
+          <p className="font-display text-2xl sm:text-3xl leading-tight text-[#E6EDF7]">“{rating.analyst_quote}”</p>
+          <cite className="block mt-2 text-sm text-[#8B98B0] not-italic">{analyst}</cite>
+        </blockquote>
+      )}
 
-        {/* Squad Name - Biggest Letters */}
-        <div className="text-center mb-8">
-          <h1 className="text-6xl md:text-8xl font-black text-white mb-4 tracking-tight">
-            {squadRating.squad_name}
-          </h1>
-          <div className="flex items-center justify-center space-x-4 mb-4">
-            <div className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-2xl font-bold px-6 py-3 rounded-lg">
-              {squadRating.squad_tag}
-            </div>
-            {/* Official/Unofficial Badge */}
-            <div className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-              squadRating.is_official 
-                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-            }`}>
-              {squadRating.is_official ? '✓ Official Rating' : '⚠ Unofficial Rating'}
-            </div>
+      {rating.analyst_commentary && (
+        <section className="rounded-xl bg-[#131A2B] px-5 sm:px-6 py-5">
+          <h2 className="font-display text-xl text-[#E6EDF7] mb-3">Commentary</h2>
+          <div className="rules-prose whitespace-pre-line">{rating.analyst_commentary}</div>
+        </section>
+      )}
+
+      {rating.breakdown_summary && (
+        <section className="rounded-xl bg-[#131A2B] px-5 sm:px-6 py-5">
+          <h2 className="font-display text-xl text-[#E6EDF7] mb-3">Breakdown</h2>
+          <div className="rules-prose whitespace-pre-line">{rating.breakdown_summary}</div>
+        </section>
+      )}
+
+      {sorted.length > 0 && (
+        <section className="rounded-xl overflow-hidden bg-[#131A2B]">
+          <div className="px-5 sm:px-6 py-3 flex items-center justify-between">
+            <h2 className="font-display text-xl text-[#E6EDF7]">Players</h2>
+            <span className="text-xs text-[#8B98B0]">Rated out of 6</span>
           </div>
-          {/* Unofficial Disclaimer for Individual Page */}
-          {!squadRating.is_official && (
-            <div className="bg-gradient-to-r from-orange-900/20 to-red-900/20 border border-orange-500/30 rounded-lg p-4 max-w-2xl mx-auto">
-              <div className="flex items-center justify-center space-x-2">
-                <span className="text-orange-400">⚠️</span>
-                <p className="text-orange-200/80 text-sm text-center">
-                  This is an individual opinion and should be taken with a grain of salt.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Squad Breakdown by Analyst */}
-        <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold text-gray-300 mb-2">
-            Squad Breakdown by <span className="text-cyan-400">
-              {squadRating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : squadRating.analyst_alias}
-            </span>
-          </h2>
-          <h3 className="text-xl text-gray-400 mb-2">({squadRating.season_name})</h3>
-          <p className="text-gray-500">{formatDate(squadRating.analysis_date)}</p>
-        </div>
-
-        {/* Analyst Commentary Section */}
-        {squadRating.analyst_commentary && (
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">
-              Analyst Commentary
-            </h2>
-            {squadRating.analyst_quote && (
-              <div className="bg-gradient-to-r from-gray-800/50 to-gray-900/50 border-l-4 border-cyan-500 p-6 mb-6 rounded-r-lg">
-                <blockquote className="text-xl text-gray-300 italic font-light">
-                  "{squadRating.analyst_quote}"
-                </blockquote>
-                <cite className="text-cyan-400 text-sm font-medium mt-2 block">
-                  — {squadRating.analyst_id === SYSTEM_USER_ID ? 'Anonymous' : squadRating.analyst_alias}
-                </cite>
-              </div>
-            )}
-            <div className="prose prose-invert max-w-none">
-              <div className="text-gray-300 leading-relaxed whitespace-pre-line">
-                {squadRating.analyst_commentary}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Breakdown Summary Section */}
-        {squadRating.breakdown_summary && (
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">
-              Breakdown Summary
-            </h2>
-            <div className="bg-gray-800/50 rounded-lg p-6">
-              <div className="text-gray-300 leading-relaxed whitespace-pre-line">
-                {squadRating.breakdown_summary}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Player Notes Section */}
-        {playerRatings.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">
-              Player Notes
-            </h2>
-            <div className="grid gap-6">
-              {playerRatings
-                .sort((a, b) => b.rating - a.rating)
-                .map((playerRating) => (
-                <div 
-                  key={playerRating.id}
-                  className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 border border-gray-700 rounded-lg p-6 hover:border-gray-600 transition-all duration-300"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-4">
-                      <h3 className="text-2xl font-bold text-white">
-                        {playerRating.player_alias}
-                      </h3>
-                      <div className={`px-3 py-1 rounded-full border ${getRatingBgColor(playerRating.rating)}`}>
-                        <span className={`font-bold text-lg ${getRatingColor(playerRating.rating)}`}>
-                          {playerRating.rating}★
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {getStarDisplay(playerRating.rating)}
-                      <span className={`text-sm font-medium ${getRatingColor(playerRating.rating)}`}>
-                        ({playerRating.rating}/6.0)
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {playerRating.notes && (
-                    <div className="bg-gray-900/50 rounded-lg p-4">
-                      <div className="text-gray-300 leading-relaxed whitespace-pre-line">
-                        {playerRating.notes}
-                      </div>
-                    </div>
-                  )}
+          <ul className="divide-y divide-white/[0.06]">
+            {sorted.map((p) => (
+              <li key={p.id} className="px-5 sm:px-6 py-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Link href={`/stats/player/${encodeURIComponent(p.player_alias)}`} className="font-display text-xl text-[#E6EDF7] hover:text-[#22D3EE]">{p.player_alias}</Link>
+                  <span className="flex items-center gap-1.5">{getStarDisplay(p.rating)}</span>
+                  <span className={`text-sm font-medium tabular-nums ${getRatingColor(p.rating)}`}>{p.rating}</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="text-center mt-12 pt-8 border-t border-gray-700">
-          <p className="text-gray-500 text-sm">
-            Analysis published on {formatDate(squadRating.created_at)}
-            {squadRating.updated_at !== squadRating.created_at && (
-              <span> • Last updated {formatDate(squadRating.updated_at)}</span>
-            )}
-          </p>
-        </div>
-      </div>
-    </div>
+                {p.notes && <p className="mt-1.5 text-sm text-[#8B98B0] leading-snug whitespace-pre-line">{p.notes}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </>,
   );
 }
