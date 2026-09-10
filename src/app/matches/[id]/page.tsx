@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import MatchSetup from '@/components/ctf/MatchSetup';
 
 /*
  * Match detail — where the schedule and the match log land. Crew sign-ups,
@@ -503,6 +504,11 @@ export default function MatchDetailPage() {
             </div>
           ) : null}
         </section>
+      )}
+
+      {/* Side + lineups (both teams set, not yet played) */}
+      {match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
+        <MatchSetup matchId={match.id} user={user} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
