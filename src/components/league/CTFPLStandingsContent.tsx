@@ -153,8 +153,10 @@ export function CTFPLStandingsContent({
         if (cancelled) return;
         const list = (data || []) as Season[];
         setSeasons(list);
-        const active = list.find((s) => s.status === 'active') || list.find((s) => s.status === 'upcoming') || list[0];
-        setSelected(active ? active.season_number : null);
+        // Default: the running season; otherwise the last completed one (an
+        // upcoming season has nothing to show yet).
+        const pick = list.find((s) => s.status === 'active') || list.find((s) => s.status === 'completed') || list[0];
+        setSelected(pick ? pick.season_number : null);
       } catch (e) {
         console.error('Error loading seasons:', e);
       } finally {
