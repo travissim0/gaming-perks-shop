@@ -11,6 +11,7 @@ interface Post {
   title: string;
   subtitle: string | null;
   content: any;
+  featured_image_url?: string | null;
   author_name: string | null;
   /** Poster's in-game alias (from the news RPC); preferred over author_name. */
   author_alias?: string | null;
@@ -90,7 +91,20 @@ export default function CtfNewsFeed({ limit = 4 }: { limit?: number }) {
       ) : (
         <div className="px-4 pb-4 space-y-3">
           {open && (
-            <article className="rounded-lg bg-[#1B2438] p-4">
+            <article className="rounded-lg bg-[#1B2438] overflow-hidden">
+              {/* Banner image, same as the homepage and /news/[id] (skipped when a video is the lead media) */}
+              {open.featured_image_url && !open.metadata?.video_url && (
+                <div className="relative w-full max-h-56 overflow-hidden bg-[#0F1522]">
+                  <img
+                    src={open.featured_image_url}
+                    alt={open.title}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1B2438]/80 to-transparent" />
+                </div>
+              )}
+              <div className="p-4">
               <div className="flex items-center gap-2 flex-wrap text-[11px] text-[#8B98B0] mb-1.5">
                 {open.featured && (
                   <span className="px-1.5 py-0.5 rounded bg-[#F59E0B]/15 text-[#F59E0B] font-medium uppercase tracking-wide">Featured</span>
@@ -121,6 +135,7 @@ export default function CtfNewsFeed({ limit = 4 }: { limit?: number }) {
               >
                 {full ? 'Show less' : 'Read the full post'}
               </button>
+              </div>
             </article>
           )}
 
