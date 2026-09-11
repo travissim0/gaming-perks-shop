@@ -256,7 +256,6 @@ export default function UslMixGamePage() {
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300" title={p.shots_fired ? `${p.shots_landed} of ${p.shots_fired} shots` : undefined}>{p.shots_landed || '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap" title={`${p.opening_kills} opening kills · ${p.opening_fights_won} fights won after · ${p.opening_deaths} opening deaths`}>
                         {p.opening_kills ? <span className="text-amber-300 font-semibold">{p.opening_kills}</span> : <span className="text-gray-600">—</span>}
-                        {p.opening_fights_won ? <span className="text-xs text-emerald-300"> ({p.opening_fights_won}w)</span> : null}
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300">{p.accuracy !== null ? `${p.accuracy}%` : '—'}</td>
                       <td className="py-2 px-2 text-right tabular-nums text-gray-300 whitespace-nowrap"
