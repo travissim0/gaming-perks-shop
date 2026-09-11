@@ -44,6 +44,10 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const [isAxidus, setIsAxidus] = useState(false);
   const [orderNotifications, setOrderNotifications] = useState<any[]>([]);
   const [donationNotifications, setDonationNotifications] = useState<any[]>([]);
+  // Admin notifications have no read state in the DB; they count as consumed once
+  // the dropdown has been opened and closed. Stamp lives in localStorage.
+  const ADMIN_SEEN_KEY = 'admin_notifications_seen_at';
+  const [adminSeenAt, setAdminSeenAt] = useState<number>(0);
   const notificationRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const adminDropdownRef = useRef<HTMLDivElement>(null);
@@ -343,6 +347,32 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
       ordersSubscription.unsubscribe();
     };
   }, [isAxidus]);
+
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(ADMIN_SEEN_KEY) || 0);
+      if (v) setAdminSeenAt(v);
+    } catch {}
+  }, []);
+
+  // Opening then closing the dropdown consumes the admin notifications shown in it
+  const wasNotifOpen = useRef(false);
+  useEffect(() => {
+    if (showNotificationDropdown) {
+      wasNotifOpen.current = true;
+      return;
+    }
+    if (!wasNotifOpen.current) return;
+    wasNotifOpen.current = false;
+    if (!isAxidus) return;
+    const now = Date.now();
+    setAdminSeenAt(now);
+    try { localStorage.setItem(ADMIN_SEEN_KEY, String(now)); } catch {}
+  }, [showNotificationDropdown, isAxidus]);
+
+  const unseenDonations = donationNotifications.filter((d) => new Date(d.created_at).getTime() > adminSeenAt);
+  const unseenOrders = orderNotifications.filter((o) => new Date(o.created_at).getTime() > adminSeenAt);
+  const adminNotificationCount = isAxidus ? unseenDonations.length + unseenOrders.length : 0;
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -1080,9 +1110,9 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                   className="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-800/50"
                 >
                   <Bell className="w-5 h-5" />
-                  {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 0 && (
+                  {(unreadMessageCount + pendingSquadRequests + adminNotificationCount) > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0))}
+                      {(unreadMessageCount + pendingSquadRequests + adminNotificationCount) > 9 ? '9+' : (unreadMessageCount + pendingSquadRequests + adminNotificationCount)}
                     </span>
                   )}
                 </button>
@@ -1167,25 +1197,25 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       )}
 
                       {/* Admin Notifications - Only for Axidus */}
-                      {isAxidus && (donationNotifications.length > 0 || orderNotifications.length > 0) && (
+                      {isAxidus && (unseenDonations.length > 0 || unseenOrders.length > 0) && (
                         <div className="border-b border-gray-600/30">
                           <div className="px-4 py-2 bg-gray-700/50">
                             <p className="text-sm font-medium text-green-400">💰 Admin Notifications</p>
                           </div>
                           
                           {/* Donation Notifications */}
-                          {donationNotifications.map((donation) => (
+                          {unseenDonations.map((donation) => (
                             <div key={`donation-${donation.id}`} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-green-400 font-bold">💰</span>
                                     <p className="text-sm font-medium text-white">
-                                      New Donation: ${donation.amount}
+                                      New Donation: ${((donation.amount_cents || 0) / 100).toFixed(2)}
                                     </p>
                                   </div>
                                   <p className="text-xs text-gray-400">
-                                    From: {donation.donor_name || 'Anonymous'}
+                                    From: {donation.kofi_from_name || donation.customer_name || 'Anonymous'}
                                   </p>
                                   <p className="text-xs text-gray-500">
                                     {new Date(donation.created_at).toLocaleString()}
@@ -1196,14 +1226,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                           ))}
                           
                           {/* Order Notifications */}
-                          {orderNotifications.map((order) => (
+                          {unseenOrders.map((order) => (
                             <div key={`order-${order.id}`} className="px-4 py-3 border-b border-gray-600/20 last:border-b-0">
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="text-blue-400 font-bold">🛒</span>
                                     <p className="text-sm font-medium text-white">
-                                      New Order: ${order.amount}
+                                      New Order
                                     </p>
                                   </div>
                                   <p className="text-xs text-gray-400">
@@ -1247,7 +1277,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
                       </Link>
 
                       {/* Empty State */}
-                      {(unreadMessageCount + pendingSquadRequests + (isAxidus ? orderNotifications.length + donationNotifications.length : 0)) === 0 && (
+                      {(unreadMessageCount + pendingSquadRequests + adminNotificationCount) === 0 && (
                         <div className="px-4 py-6 text-center text-gray-400">
                           <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
                           <p className="text-sm">No new notifications</p>
