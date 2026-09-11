@@ -28,12 +28,55 @@ export interface PlayerStatData {
   avgResourceUnusedPerDeath: number;
   avgExplosiveUnusedPerDeath: number;
   gameLengthMinutes: number;
+  // ---- schema 2 (CTF script ctf-2026.09.11+). All optional: schema-1 scripts omit them.
+  classPlayTimes?: Record<string, number>;                    // class name -> seconds played
+  weapons?: Record<string, { fired: number; landed: number }>; // weapon name -> shots
+  playSeconds?: number;
+  timesSummoned?: number;
+  summonsPerformed?: number;
+  minedTso?: number;
+  minedTox?: number;
+  isCaptain?: boolean;
 }
 
 export interface PlayerStatsPayload {
   gameId?: string;
   gameDate?: string;
+  schemaVersion?: number;  // absent = 1
+  scriptVersion?: string;
   players: PlayerStatData[];
+}
+
+// Columns added by the schema-2 migration. Kept as a list so the insert can fall back to the
+// schema-1 shape if the migration has not been applied yet, instead of dropping the whole game.
+const SCHEMA2_COLUMNS = [
+  'class_play_times', 'weapon_stats', 'play_seconds', 'times_summoned', 'summons_performed',
+  'mined_tso', 'mined_tox', 'is_captain', 'schema_version', 'script_version',
+] as const;
+
+const nonNegInt = (v: unknown) => Math.max(0, Math.trunc(Number(v) || 0));
+
+// Only accept the exact shapes the script emits; anything else becomes null rather than
+// letting arbitrary JSON into a jsonb column.
+function cleanClassPlayTimes(v: unknown): Record<string, number> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out: Record<string, number> = {};
+  for (const [k, secs] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof secs === 'number' && isFinite(secs) && secs > 0) out[k] = Math.trunc(secs);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function cleanWeapons(v: unknown): Record<string, { fired: number; landed: number }> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out: Record<string, { fired: number; landed: number }> = {};
+  for (const [k, cell] of Object.entries(v as Record<string, unknown>)) {
+    if (!cell || typeof cell !== 'object') continue;
+    const fired = nonNegInt((cell as { fired?: unknown }).fired);
+    const landed = Math.min(fired, nonNegInt((cell as { landed?: unknown }).landed));
+    if (fired > 0) out[k] = { fired, landed };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 export async function POST(request: NextRequest) {
@@ -77,16 +120,39 @@ export async function POST(request: NextRequest) {
       avg_resource_unused_per_death: Math.max(0, player.avgResourceUnusedPerDeath || 0),
       avg_explosive_unused_per_death: Math.max(0, player.avgExplosiveUnusedPerDeath || 0),
       game_length_minutes: Math.max(0, player.gameLengthMinutes || 0),
-      game_date: data.gameDate ? new Date(data.gameDate).toISOString() : new Date().toISOString()
+      game_date: data.gameDate ? new Date(data.gameDate).toISOString() : new Date().toISOString(),
+      // schema 2
+      class_play_times: cleanClassPlayTimes(player.classPlayTimes),
+      weapon_stats: cleanWeapons(player.weapons),
+      play_seconds: nonNegInt(player.playSeconds),
+      times_summoned: nonNegInt(player.timesSummoned),
+      summons_performed: nonNegInt(player.summonsPerformed),
+      mined_tso: nonNegInt(player.minedTso),
+      mined_tox: nonNegInt(player.minedTox),
+      is_captain: player.isCaptain === true,
+      schema_version: nonNegInt(data.schemaVersion) || 1,
+      script_version: typeof data.scriptVersion === 'string' ? data.scriptVersion.slice(0, 64) : null,
     }));
 
     // Insert all player stats in a single batch
-    const { data: insertResult, error: insertError } = await supabase
+    let { data: insertResult, error: insertError } = await supabase
       .from('player_stats')
       .insert(playersToInsert);
 
+    // Migration not applied yet? PostgREST reports the missing column as PGRST204. Strip the
+    // schema-2 columns and save the schema-1 row rather than losing the game.
+    if (insertError && (insertError.code === 'PGRST204' || /column .* does not exist|Could not find the '.*' column/i.test(insertError.message || ''))) {
+      console.warn(`player_stats insert rejected schema-2 columns (${insertError.message}); retrying with schema-1 shape`);
+      const legacyRows = playersToInsert.map(row => {
+        const copy: Record<string, unknown> = { ...row };
+        for (const col of SCHEMA2_COLUMNS) delete copy[col];
+        return copy;
+      });
+      ({ data: insertResult, error: insertError } = await supabase.from('player_stats').insert(legacyRows));
+    }
+
     if (insertError) {
-      console.error('Database insertion error:', insertError);
+console.error('Database insertion error:', insertError);
       return NextResponse.json(
         { error: 'Failed to save player stats', details: insertError.message },
         { status: 500 }
