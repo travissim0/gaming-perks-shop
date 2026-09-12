@@ -42,11 +42,14 @@ interface Row {
 
 interface Pagination { total: number; offset: number; limit: number; hasMore: boolean }
 
-type Mode = 'Combined' | 'OvD' | 'Mix';
+// "Pub" is every game the zone records that was not an OvD or a Mix - it has its own ladder since
+// 2026-09-11 and is deliberately kept apart from the match modes.
+type Mode = 'Combined' | 'OvD' | 'Mix' | 'Pub';
 const MODES: { key: Mode; label: string }[] = [
   { key: 'Combined', label: 'All modes' },
   { key: 'OvD', label: 'OvD' },
   { key: 'Mix', label: 'Mix' },
+  { key: 'Pub', label: 'Pub' },
 ];
 
 const PERIODS = [
@@ -355,23 +358,51 @@ export default function PlayerStatsPage() {
             ) : (
               <ul className="divide-y divide-white/[0.06]">
                 {games.map((g, i) => {
-                  const side = (s: string) => (g.players || []).filter((p: any) => p.side === s).slice(0, 5);
-                  const def = side('defense');
-                  const off = side('offense');
-                  const names = (list: any[]) => list.map((p: any, j: number) => (
-                    <span key={j} className="truncate" style={{ color: getClassColor(p.main_class) }} title={`${p.player_name || p.name} · ${p.main_class || ''}`}>{p.player_name || p.name}</span>
-                  ));
+                  // One line per team. Defense/offense colour the dot when the game has sides (an
+                  // OvD); a Pub game or a Mix lists the two teams as they were named in the zone.
+                  const players: any[] = g.players || [];
+                  const teams: string[] = (g.teams || []).filter((t: string) => players.some((p) => p.team === t));
+                  const winner = g.winner as { type: 'side' | 'team'; name: string } | null;
+                  const lines = teams.slice(0, 2).map((team) => {
+                    const rows = players.filter((p) => p.team === team);
+                    const o = rows.filter((p) => p.side === 'offense').length, d = rows.filter((p) => p.side === 'defense').length;
+                    const side = o === 0 && d === 0 ? null : o > d ? 'offense' : d > o ? 'defense' : null;
+                    const won = winner ? (winner.type === 'side' ? side === winner.name : team === winner.name) : null;
+                    return { team, side, won, rows: rows.slice(0, 6), extra: Math.max(0, rows.length - 6) };
+                  });
+                  // In a Mix both teams' majority side is "defense"; only colour dots when the sides oppose.
+                  const ovdShape = lines.length === 2 && !!lines[0].side && !!lines[1].side && lines[0].side !== lines[1].side;
+                  const dot = (side: string | null) => (ovdShape && side ? (side === 'defense' ? '#22D3EE' : '#F59E0B') : '#8B98B0');
+                  const outcome = !winner ? (players.some((p) => p.result === 'Win') ? null : 'No winner recorded')
+                    : winner.type === 'side' ? (winner.name === 'defense' ? `Defense held${g.baseUsed ? ` ${g.baseUsed}` : ''}` : `Offense broke${g.baseUsed ? ` ${g.baseUsed}` : ''}`)
+                    : `${winner.name} won`;
                   return (
                     <li key={g.gameId || i}>
                       <Link href={`/stats/game/${encodeURIComponent(g.gameId)}`} className="block px-4 py-2.5 hover:bg-white/[0.03]">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span><span className="text-[#22D3EE] font-medium">{g.gameMode}</span>{g.mapName && <span className="text-[#8B98B0]"> · {g.mapName}</span>}</span>
-                          <span className="text-[#8B98B0]">{relDate(g.gameDate)}</span>
+                        <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                          <span className="min-w-0 truncate">
+                            <span className={`font-medium ${g.gameMode === 'OvD' ? 'text-[#22D3EE]' : g.gameMode === 'Mix' ? 'text-[#A78BFA]' : 'text-[#E6EDF7]'}`}>{g.gameMode}</span>
+                            {g.mapName && <span className="text-[#8B98B0]"> · {g.mapName}</span>}
+                            {g.durationSeconds > 0 && <span className="text-[#8B98B0] tabular-nums"> · {mmss(g.durationSeconds)}</span>}
+                            {g.totalPlayers > 0 && <span className="text-[#8B98B0] tabular-nums"> · {g.totalPlayers}p</span>}
+                          </span>
+                          <span className="text-[#8B98B0] shrink-0">{relDate(g.gameDate)}</span>
                         </div>
-                        {(def.length > 0 || off.length > 0) && (
+                        {outcome && <div className={`text-[11px] mb-1 ${winner ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{outcome}</div>}
+                        {lines.length > 0 && (
                           <div className="space-y-0.5 text-[11px]">
-                            <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#22D3EE] shrink-0" /><div className="flex flex-wrap gap-x-2 min-w-0">{names(def)}</div></div>
-                            <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#F87171] shrink-0" /><div className="flex flex-wrap gap-x-2 min-w-0">{names(off)}</div></div>
+                            {lines.map((l) => (
+                              <div key={l.team} className="flex items-start gap-1.5">
+                                <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dot(l.side) }} />
+                                <div className="flex flex-wrap gap-x-2 min-w-0">
+                                  {!ovdShape && <span className={`${l.won ? 'text-[#34D399]' : l.won === false ? 'text-[#F87171]' : 'text-[#8B98B0]'} font-medium`}>{l.team}</span>}
+                                  {l.rows.map((p: any, j: number) => (
+                                    <span key={j} className="truncate" style={{ color: getClassColor(p.main_class) }} title={`${p.player_name} · ${p.main_class || ''}${p.is_captain ? ' · captain' : ''}`}>{p.is_captain ? '★' : ''}{p.player_name}</span>
+                                  ))}
+                                  {l.extra > 0 && <span className="text-[#8B98B0]">+{l.extra}</span>}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </Link>

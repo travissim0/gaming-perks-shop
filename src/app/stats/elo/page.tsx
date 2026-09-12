@@ -1,11 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ArrowDown, ArrowUp, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { displayFont, bodyFont } from '@/lib/fonts';
+import { ELO_TIERS } from '@/utils/eloTiers';
+import { Card, Tag, relDate, fmtPct } from '@/components/ctf-stats/CtfStats';
+
+/*
+ * ELO leaderboard over /api/player-stats/elo-leaderboard (unchanged). Same rules as before: a
+ * player is "in placement" until 10 games and is listed but not tiered; the ladder is per game
+ * mode with a "Combined" rollup; mode chips come from what the API reports so a new ladder (Pub,
+ * since 2026-09-11) appears on its own.
+ */
 
 interface EloPlayer {
   player_name: string;
@@ -13,9 +22,9 @@ interface EloPlayer {
   profile_id: string;
   all_aliases: string;
   game_mode: string;
-  elo_rating: string;
-  weighted_elo: string;
-  elo_peak: string;
+  elo_rating: string | number;
+  weighted_elo: string | number;
+  elo_peak: string | number;
   elo_confidence: string;
   total_games: number;
   total_wins: number;
@@ -23,654 +32,279 @@ interface EloPlayer {
   win_rate: string;
   kill_death_ratio: string;
   last_game_date: string;
-  elo_rank?: number;
-  overall_elo_rank?: number;
   display_rank: number;
-  elo_tier: {
-    name: string;
-    color: string;
-    min: number;
-    max: number;
-  };
+  elo_tier: { name: string; color: string; min: number; max: number };
 }
 
-interface EloLeaderboardResponse {
-  data: EloPlayer[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-    hasMore: boolean;
-  };
-  filters: {
-    gameMode: string;
-    sortBy: string;
-    sortOrder: string;
-    minGames: number;
-    playerName: string;
-    availableGameModes: string[];
-  };
+interface Pagination { total: number; limit: number; offset: number; hasMore: boolean }
+
+const PLACEMENT_GAMES = 10;
+const MODE_ORDER = ['Combined', 'OvD', 'Mix', 'Pub'];
+const MODE_LABEL: Record<string, string> = { Combined: 'All modes' };
+const MIN_GAMES = [0, 3, 5, 10, 20];
+
+interface Col { key: string; label: string; sort?: string; title?: string }
+const COLUMNS: Col[] = [
+  { key: 'elo', label: 'ELO', sort: 'weighted_elo', title: 'Weighted ELO - raw rating pulled toward 1200 until the rating is confident' },
+  { key: 'peak', label: 'Peak', sort: 'elo_peak' },
+  { key: 'conf', label: 'Confidence', sort: 'elo_confidence', title: 'How settled the rating is; full after 20 games' },
+  { key: 'games', label: 'Games', sort: 'total_games' },
+  { key: 'wr', label: 'Win %', sort: 'win_rate' },
+  { key: 'kd', label: 'K/D', sort: 'kill_death_ratio' },
+  { key: 'last', label: 'Last game', sort: 'last_game_date' },
+];
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={`px-3 py-1.5 rounded-md text-sm transition-colors ${active ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#8B98B0] hover:text-[#E6EDF7] hover:bg-white/5'}`}>
+      {children}
+    </button>
+  );
 }
 
-const SORT_OPTIONS = [
-  { value: 'weighted_elo', label: 'ELO Rating (Weighted)' },
-  { value: 'elo_rating', label: 'Raw ELO' },
-  { value: 'elo_peak', label: 'Peak ELO' },
-  { value: 'elo_confidence', label: 'Rating Confidence' },
-  { value: 'total_games', label: 'Games Played' },
-  { value: 'win_rate', label: 'Win Rate' },
-  { value: 'kill_death_ratio', label: 'K/D Ratio' },
-  { value: 'last_game_date', label: 'Last Active' }
-];
-
-const MIN_GAMES_OPTIONS = [
-  { value: 0, label: 'All Players' },
-  { value: 3, label: '3+ Games' },
-  { value: 5, label: '5+ Games' },
-  { value: 10, label: '10+ Games (Default)' },
-  { value: 20, label: '20+ Games' }
-];
+const inputCls = 'bg-[#0B0F1A] border border-white/10 rounded-md px-3 py-1.5 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none';
 
 export default function EloLeaderboardPage() {
   const { user } = useAuth();
   const [players, setPlayers] = useState<EloPlayer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [more, setMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState('Combined');
-  const [availableGameModes, setAvailableGameModes] = useState<string[]>([]);
+  const [modes, setModes] = useState<string[]>(['Combined', 'OvD', 'Mix']);
   const [sortBy, setSortBy] = useState('weighted_elo');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minGames, setMinGames] = useState(10);
-  const [playerName, setPlayerName] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [currentRequestGameMode, setCurrentRequestGameMode] = useState('Combined');
-  const [pagination, setPagination] = useState({
-    total: 0,
-    offset: 0,
-    limit: 50,
-    hasMore: false
-  });
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [pagination, setPagination] = useState<Pagination>({ total: 0, offset: 0, limit: 50, hasMore: false });
 
-  const fetchEloLeaderboard = async (offset = 0, abortController?: AbortController) => {
+  const load = useCallback(async (offset: number, signal?: AbortSignal) => {
+    offset === 0 ? setLoading(true) : setMore(true);
+    setError(null);
     try {
-      // Track which game mode this request is for
-      const requestGameMode = gameMode;
-      
-      // Use different loading states for initial load vs load more
+      const params = new URLSearchParams({ gameMode, sortBy, sortOrder, minGames: String(minGames), playerName: query, limit: '50', offset: String(offset) });
+      const r = await fetch(`/api/player-stats/elo-leaderboard?${params}`, { signal });
+      if (!r.ok) throw new Error(`Could not load the leaderboard (${r.status})`);
+      const j = await r.json();
+      if (signal?.aborted) return;
+      setPlayers((prev) => (offset === 0 ? j.data : [...prev, ...j.data]));
+      setPagination(j.pagination);
+      const available: string[] = j.filters?.availableGameModes || [];
+      const rank = (m: string) => { const i = MODE_ORDER.indexOf(m); return i < 0 ? 99 : i; };
+      if (available.length) setModes([...new Set(['Combined', ...available])].sort((a, b) => rank(a) - rank(b)));
+      // Searching for an alias: open the rows whose main name does not match, so the hit is visible.
       if (offset === 0) {
-        setLoading(true);
-        setCurrentRequestGameMode(requestGameMode);
-        // Clear existing data immediately when starting a fresh load (tab switch)
-        setPlayers([]);
-        setExpandedRows(new Set());
-      } else {
-        setLoadingMore(true);
+        const q = query.trim().toLowerCase();
+        const open = new Set<string>();
+        if (q) j.data.forEach((p: EloPlayer) => { if (!p.player_name.toLowerCase().includes(q) && (p.all_aliases || '').toLowerCase().includes(q)) open.add(p.player_name_normalized); });
+        setExpanded(open);
       }
-      setError(null);
-
-      const params = new URLSearchParams({
-        gameMode: requestGameMode,
-        sortBy,
-        sortOrder,
-        minGames: minGames.toString(),
-        playerName,
-        limit: pagination.limit.toString(),
-        offset: offset.toString()
-      });
-
-      const response = await fetch(`/api/player-stats/elo-leaderboard?${params}`, {
-        signal: abortController?.signal
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data: EloLeaderboardResponse = await response.json();
-      
-      // Check if request was aborted or if the game mode has changed since this request started
-      if (abortController?.signal.aborted || requestGameMode !== gameMode) {
-        return;
-      }
-      
-      // If offset is 0, replace the data (refresh/filter change)
-      // If offset > 0, append the data (load more)
-      if (offset === 0) {
-        setPlayers(data.data);
-        setLoading(false);
-      } else {
-        setPlayers(prevPlayers => [...prevPlayers, ...data.data]);
-        // Short delay to ensure smooth transition from skeleton to real data
-        setTimeout(() => {
-          setLoadingMore(false);
-        }, 300);
-      }
-      
-      setPagination(data.pagination);
-      setAvailableGameModes(data.filters.availableGameModes || []);
-
-      // Auto-expand rows when searching for aliases (not main names)
-      if (offset === 0 && playerName && playerName.trim()) {
-        const searchTerm = playerName.trim().toLowerCase();
-        const newExpandedRows = new Set<string>();
-        
-        data.data.forEach(player => {
-          const playerNameLower = player.player_name.toLowerCase();
-          const hasAliases = player.all_aliases && player.all_aliases !== player.player_name;
-          
-          if (hasAliases && !playerNameLower.includes(searchTerm) && 
-              player.all_aliases.toLowerCase().includes(searchTerm)) {
-            newExpandedRows.add(`${player.player_name_normalized}-${player.game_mode}`);
-          }
-        });
-        
-        setExpandedRows(newExpandedRows);
-      } else if (offset === 0) {
-        setExpandedRows(new Set());
-      }
-    } catch (err) {
-      // Don't show error if request was aborted (normal behavior when switching tabs)
-      if (abortController?.signal.aborted) {
-        return;
-      }
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      setLoading(false);
-      setLoadingMore(false);
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return;
+      setError(e.message);
+    } finally {
+      if (!signal?.aborted) { setLoading(false); setMore(false); }
     }
-  };
+  }, [gameMode, sortBy, sortOrder, minGames, query]);
 
   useEffect(() => {
-    const abortController = new AbortController();
-    
-    // Reset pagination when filters change
-    setPagination(prev => ({
-      ...prev,
-      offset: 0,
-      hasMore: false
-    }));
-    
-    fetchEloLeaderboard(0, abortController);
-    
-    // Cleanup: abort any in-flight request when dependencies change
-    return () => {
-      abortController.abort();
-    };
-  }, [gameMode, sortBy, sortOrder, minGames, playerName]);
+    const ac = new AbortController();
+    load(0, ac.signal);
+    return () => ac.abort();
+  }, [load]);
 
-  const handleSearch = () => {
-    setPlayerName(searchInput);
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const sortOn = (col: Col) => {
+    if (!col.sort) return;
+    if (sortBy === col.sort) setSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'));
+    else { setSortBy(col.sort); setSortOrder('desc'); }
   };
+  const reset = () => { setGameMode('Combined'); setSortBy('weighted_elo'); setSortOrder('desc'); setMinGames(10); setSearch(''); setQuery(''); };
+  const isDefault = gameMode === 'Combined' && sortBy === 'weighted_elo' && sortOrder === 'desc' && minGames === 10 && !query;
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+  const aliasesOf = (p: EloPlayer) => {
+    const list = [p.player_name];
+    (p.all_aliases || '').split(',').map((a) => a.trim()).forEach((a) => { if (a && !list.includes(a)) list.push(a); });
+    return list;
   };
+  const showRank = !query;
+  const ranked = useMemo(() => players.filter((p) => p.total_games >= PLACEMENT_GAMES).length, [players]);
 
-  const loadMore = () => {
-    if (pagination.hasMore && !loading && !loadingMore) {
-      fetchEloLeaderboard(pagination.offset + pagination.limit);
-    }
+  const confColor = (c: number) => (c >= 0.8 ? '#34D399' : c >= 0.5 ? '#F59E0B' : '#F87171');
+  const rankBadge = (rank: number) => {
+    if (rank > 3) return <span className="text-[#8B98B0] tabular-nums">{rank}</span>;
+    const color = rank === 1 ? '#F59E0B' : rank === 2 ? '#CBD5E1' : '#CD7F32';
+    return <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-[#0B0F1A]" style={{ background: color }}>{rank}</span>;
   };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const getConfidenceColor = (confidence: string) => {
-    const conf = parseFloat(confidence);
-    if (conf >= 0.8) return 'text-green-400';
-    if (conf >= 0.5) return 'text-yellow-400';
-    return 'text-red-400';
-  };
-
-  const getConfidenceLabel = (confidence: string) => {
-    const conf = parseFloat(confidence);
-    if (conf >= 0.8) return 'High';
-    if (conf >= 0.5) return 'Medium';
-    return 'Low';
-  };
-
-  const toggleRowExpansion = (playerId: string) => {
-    setExpandedRows(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(playerId)) {
-        newSet.delete(playerId);
-      } else {
-        newSet.add(playerId);
-      }
-      return newSet;
-    });
-  };
-
-  const isRowExpanded = (playerId: string) => {
-    return expandedRows.has(playerId);
-  };
-
-  if (loading && players.length === 0) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
-        <Navbar user={user} />
-        <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-xl">Loading ELO leaderboard...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
-        <Navbar user={user} />
-        <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4 text-red-400">Error Loading ELO Leaderboard</h1>
-          <p className="text-gray-400 mb-4">{error}</p>
-          <button
-            onClick={() => fetchEloLeaderboard(0)}
-            className="bg-cyan-600 hover:bg-cyan-700 px-6 py-2 rounded-lg transition-colors"
-          >
-            Retry
-          </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="ctf-theme min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+    <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
-      
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 bg-clip-text text-transparent mb-2">
-            ELO Leaderboard
-          </h1>
-          <p className="text-xl text-gray-400">Competitive rankings based on skill and performance</p>
-        </motion.div>
-
-        {/* Filters */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 rounded-xl p-6 mb-8 border border-cyan-500/20 shadow-xl shadow-cyan-500/5"
-        >
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
-          {/* Game Mode Buttons Row */}
-          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Combined' ? 'bg-cyan-600 border-cyan-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
-              onClick={() => setGameMode('Combined')}
-            >
-              Combined<br /><span className="text-xs font-normal">OvD + Mix</span>
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'OvD' ? 'bg-blue-600 border-blue-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
-              onClick={() => setGameMode('OvD')}
-            >
-              OvD<br /><span className="text-xs font-normal">Offense vs Defense</span>
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg text-lg font-bold transition-all duration-200 shadow border-2 max-w-xs ${gameMode === 'Mix' ? 'bg-purple-600 border-purple-400 text-white scale-105' : 'bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
-              onClick={() => setGameMode('Mix')}
-            >
-              Mix<br /><span className="text-xs font-normal">10v10</span>
-            </button>
-          </div>
-
-          {/* Filters Grid */}
-          <div className="flex justify-center w-full">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 gap-x-6 mb-4 w-full max-w-2xl min-w-0">
-              {/* Sort By */}
-              <div className="lg:col-span-2">
-                <label className="block text-sm font-medium text-gray-400 mb-2">Sort By</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full min-w-[200px] max-w-xs bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
-                >
-                  {SORT_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Sort Order */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Order</label>
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
-                >
-                  <option value="desc">Highest First</option>
-                  <option value="asc">Lowest First</option>
-                </select>
-              </div>
-
-              {/* Minimum Games */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Min Games</label>
-                <select
-                  value={minGames}
-                  onChange={(e) => setMinGames(parseInt(e.target.value))}
-                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&>option]:bg-gray-800 [&>option]:text-white"
-                >
-                  {MIN_GAMES_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Player Search */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Search Player</label>
-                <div className="flex">
-                  <input
-                    type="text"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Player name..."
-                    className="flex-1 bg-gray-800 border border-gray-600 rounded-l-lg px-3 py-2 h-[42px] text-white placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                  <button
-                    onClick={handleSearch}
-                    className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 h-[42px] transition-colors"
-                  >
-                    🔍
-                  </button>
-                  {playerName && (
-                    <button
-                      onClick={() => { setSearchInput(''); setPlayerName(''); }}
-                      className="bg-red-600 hover:bg-red-700 px-3 py-2 h-[42px] rounded-r-lg transition-colors text-white ml-1"
-                      title="Clear search"
-                    >
-                      ❌
-                    </button>
-                  )}
-                </div>
+      <main className="container mx-auto px-4 py-6 space-y-4">
+        {/* Header strip */}
+        <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
+          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(245,158,11,0.12), transparent 40%)' }} />
+          <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] uppercase tracking-[0.25em] text-[#F59E0B]/80 mb-1">Free Infantry · CTF</div>
+              <h1 className="font-display text-5xl leading-none text-[#E6EDF7]">ELO leaderboard</h1>
+              <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
+                <span><span className="text-[#E6EDF7] tabular-nums">{pagination.total}</span> players</span>
+                <span className="text-white/20">·</span>
+                <span>{MODE_LABEL[gameMode] || gameMode}</span>
+                <span className="text-white/20">·</span>
+                <span>{minGames > 0 ? `${minGames}+ games` : 'All players'}</span>
+                <span className="text-white/20">·</span>
+                <span>Sorted by {(COLUMNS.find((c) => c.sort === sortBy)?.label || sortBy).toLowerCase()}</span>
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Link href="/stats" className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors">Player stats</Link>
+              <Link href="/matches" className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-[#8B98B0] hover:text-[#22D3EE] transition-colors">Match log <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" /></Link>
+            </div>
           </div>
-
-          {/* Results Summary */}
-          <div className="text-sm text-gray-400 text-center mt-2">
-            Showing {players.length} of {pagination.total} players
-            {minGames > 0 && ` with ${minGames}+ games`}
-            {playerName && ` matching "${playerName}"`}
+          <div className="relative border-t border-white/[0.06] px-3 sm:px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex gap-1">{modes.map((m) => <Chip key={m} active={gameMode === m} onClick={() => setGameMode(m)}>{MODE_LABEL[m] || m}</Chip>)}</div>
+            <span className="hidden sm:block w-px h-5 bg-white/10" />
+            <div className="flex gap-1">{MIN_GAMES.map((n) => <Chip key={n} active={minGames === n} onClick={() => setMinGames(n)}>{n === 0 ? 'Everyone' : `${n}+ games`}</Chip>)}</div>
           </div>
-        </motion.div>
+        </section>
 
-        {/* ELO Leaderboard Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700/50"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gradient-to-r from-gray-700 to-gray-800">
-                <tr>
-                  {(!playerName || playerName.trim() === '') && (
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank</th>
-                  )}
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Player</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tier</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">ELO</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Peak</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Confidence</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Games</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Win Rate</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">K/D</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Last Active</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {players.map((player, index) => (
-                  <motion.tr
-                    key={`${gameMode}-${player.player_name_normalized}-${player.game_mode}-${index}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="hover:bg-gray-700/30 transition-colors duration-200"
-                  >
-                    {(!playerName || playerName.trim() === '') && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          {player.display_rank <= 3 ? (
-                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                              player.display_rank === 1 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black' :
-                              player.display_rank === 2 ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white' :
-                              'bg-gradient-to-r from-amber-600 to-amber-700 text-white'
-                            }`}>
-                              {player.display_rank}
-                            </span>
-                          ) : (
-                            <span className="text-lg font-bold text-gray-400">
-                              #{player.display_rank}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {player.all_aliases && player.all_aliases !== player.player_name && (
-                          <button
-                            onClick={() => toggleRowExpansion(`${player.player_name_normalized}-${player.game_mode}`)}
-                            className="text-gray-400 hover:text-cyan-400 transition-colors"
-                          >
-                            {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) ? 
-                              <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4">
+          <section className="rounded-xl overflow-hidden bg-[#131A2B] min-w-0">
+            <div className="px-3 py-2.5 flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players or aliases…" className={`${inputCls} w-60 pr-7`} />
+                {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
+              </div>
+              <span className="text-xs text-[#8B98B0]">{players.length} shown{ranked < players.length ? ` · ${players.length - ranked} in placement` : ''}</span>
+              <div className="ml-auto flex items-center gap-1">
+                {!isDefault && <button type="button" onClick={reset} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7] px-2">Reset</button>}
+              </div>
+            </div>
+
+            {error ? (
+              <div className="px-4 pb-5 text-sm text-[#F87171]">{error} <button type="button" onClick={() => load(0)} className="text-[#22D3EE] hover:text-[#67E8F9]">Retry.</button></div>
+            ) : loading ? (
+              <div className="px-4 pb-4 space-y-2 animate-pulse">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-9 rounded-md bg-white/5" />)}</div>
+            ) : players.length === 0 ? (
+              <div className="px-4 pb-5 text-sm text-[#8B98B0]">Nobody matches. {!isDefault && <button type="button" onClick={reset} className="text-[#22D3EE] hover:text-[#67E8F9]">Reset the filters.</button>}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[760px]">
+                  <thead>
+                    <tr className="text-[11px] uppercase tracking-wide text-[#8B98B0]">
+                      {showRank && <th className="w-12 px-3 py-2 text-left font-normal">#</th>}
+                      <th className="px-2 py-2 text-left font-normal">Player</th>
+                      <th className="px-2 py-2 text-left font-normal">Tier</th>
+                      {COLUMNS.map((c) => (
+                        <th key={c.key} className="px-2 py-2 text-right font-normal whitespace-nowrap" title={c.title}>
+                          <button type="button" onClick={() => sortOn(c)} className={`inline-flex items-center gap-1 hover:text-[#E6EDF7] ${sortBy === c.sort ? 'text-[#22D3EE]' : ''}`}>
+                            {c.label}
+                            {sortBy === c.sort && (sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />)}
                           </button>
-                        )}
-                        <div>
-                          <Link 
-                            href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                            className="text-white hover:text-cyan-400 transition-colors font-medium"
-                          >
-                            {player.player_name}
-                          </Link>
-                          {player.game_mode !== 'Combined' && (
-                            <div className="text-xs text-gray-500">{player.game_mode}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {players.map((p, i) => {
+                      const aliases = aliasesOf(p);
+                      const open = expanded.has(p.player_name_normalized);
+                      const placement = p.total_games < PLACEMENT_GAMES;
+                      const conf = parseFloat(p.elo_confidence);
+                      const elo = Math.round(Number(p.weighted_elo));
+                      const raw = Math.round(Number(p.elo_rating));
+                      return (
+                        <React.Fragment key={`${p.player_name_normalized}-${p.game_mode}-${i}`}>
+                          <tr className={`border-t border-white/[0.06] hover:bg-white/[0.03] ${open ? 'bg-[#22D3EE]/[0.04]' : ''}`}>
+                            {showRank && <td className="px-3 py-2">{placement ? <span className="text-[#8B98B0]/60">—</span> : rankBadge(p.display_rank)}</td>}
+                            <td className="px-2 py-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {aliases.length > 1 ? (
+                                  <button type="button" onClick={() => setExpanded((s) => { const n = new Set(s); n.has(p.player_name_normalized) ? n.delete(p.player_name_normalized) : n.add(p.player_name_normalized); return n; })} className="text-[#8B98B0] hover:text-[#22D3EE] shrink-0" title={`${aliases.length - 1} other alias${aliases.length > 2 ? 'es' : ''}`}>
+                                    <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                  </button>
+                                ) : <span className="w-3.5 shrink-0" />}
+                                <Link href={`/stats/player/${encodeURIComponent(p.player_name)}`} className="text-[#E6EDF7] hover:text-[#22D3EE] transition-colors truncate">{p.player_name}</Link>
+                                {p.game_mode !== 'Combined' && gameMode === 'Combined' && <Tag>{p.game_mode}</Tag>}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2 whitespace-nowrap">
+                              {placement ? (
+                                <span className="text-xs text-[#8B98B0] italic">Placement · {p.total_games}/{PLACEMENT_GAMES}</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-medium" style={{ color: p.elo_tier.color }}><span className="w-2 h-2 rounded-full" style={{ background: p.elo_tier.color }} />{p.elo_tier.name}</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                              {placement ? <span className="text-[#8B98B0]">—</span> : <span className="font-display text-lg text-[#E6EDF7]" title={raw !== elo ? `Raw ${raw}` : undefined}>{elo}</span>}
+                            </td>
+                            <td className="px-2 py-2 text-right tabular-nums text-[#F59E0B]">{Math.round(Number(p.elo_peak))}</td>
+                            <td className="px-2 py-2 text-right tabular-nums" style={{ color: confColor(conf) }}>{Math.round(conf * 100)}%</td>
+                            <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]">{p.total_games} <span className="text-xs text-[#8B98B0]">{p.total_wins}–{p.total_losses}</span></td>
+                            <td className={`px-2 py-2 text-right tabular-nums ${parseFloat(p.win_rate) >= 0.5 ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`}>{fmtPct(parseFloat(p.win_rate))}</td>
+                            <td className={`px-2 py-2 text-right tabular-nums ${parseFloat(p.kill_death_ratio) >= 1 ? 'text-[#34D399]' : 'text-[#F87171]'}`}>{parseFloat(p.kill_death_ratio).toFixed(2)}</td>
+                            <td className="px-2 py-2 text-right tabular-nums text-[#8B98B0] whitespace-nowrap">{relDate(p.last_game_date)}</td>
+                          </tr>
+                          {open && (
+                            <tr className="bg-[#22D3EE]/[0.04]">
+                              {showRank && <td />}
+                              <td colSpan={COLUMNS.length + 2} className="px-2 pb-2 pt-0">
+                                <div className="flex flex-wrap items-center gap-1 text-xs">
+                                  <span className="text-[#8B98B0] mr-1">Also known as</span>
+                                  {aliases.slice(1).map((a) => (
+                                    <Link key={a} href={`/stats/player/${encodeURIComponent(a)}`} className="px-1.5 py-0.5 rounded bg-[#1B2438] text-[#E6EDF7] hover:text-[#22D3EE]">{a}</Link>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                          {isRowExpanded(`${player.player_name_normalized}-${player.game_mode}`) && player.all_aliases && (
-                            <div className="text-xs text-gray-400 mt-1">
-                              <strong>Aliases:</strong> {player.all_aliases}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {player.total_games < 10 ? (
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 rounded-full mr-2 bg-gray-500 animate-pulse"></div>
-                          <span className="text-sm font-medium text-gray-400 italic">Provisional</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center">
-                          <div
-                            className="w-3 h-3 rounded-full mr-2"
-                            style={{ backgroundColor: player.elo_tier.color }}
-                          ></div>
-                          <span className="text-sm font-medium" style={{ color: player.elo_tier.color }}>
-                            {player.elo_tier.name}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {player.total_games < 10 ? (
-                        <div>
-                          <div className="font-bold text-lg text-gray-400">Placement</div>
-                          <div className="text-xs text-gray-500">{player.total_games}/10 games</div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="font-bold text-lg">{player.weighted_elo}</div>
-                          {player.elo_rating !== player.weighted_elo && (
-                            <div className="text-xs text-gray-500">Raw: {player.elo_rating}</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-yellow-400 font-medium">
-                      {player.elo_peak}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={getConfidenceColor(player.elo_confidence)}>
-                        {getConfidenceLabel(player.elo_confidence)}
-                      </span>
-                      <div className="text-xs text-gray-500">
-                        {(parseFloat(player.elo_confidence) * 100).toFixed(0)}%
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div>{player.total_games}</div>
-                      <div className="text-xs text-green-400">
-                        {player.total_wins}W-{player.total_losses}L
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {(parseFloat(player.win_rate) * 100).toFixed(1)}%
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {parseFloat(player.kill_death_ratio).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs">
-                      {formatDate(player.last_game_date)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Link
-                        href={`/stats/player/${encodeURIComponent(player.player_name)}`}
-                        className="bg-gray-700 hover:bg-gray-600 border border-gray-600 px-3 py-1 rounded-lg text-xs transition-colors text-gray-300 hover:text-white"
-                      >
-                        📊 Profile
-                      </Link>
-                    </td>
-                  </motion.tr>
-                ))}
-                
-                {/* Loading skeleton rows when loading more data */}
-                {loadingMore && Array.from({ length: 5 }).map((_, index) => (
-                  <tr
-                    key={`loading-${index}`}
-                    className="animate-pulse"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="h-4 bg-gray-700/50 rounded w-8"></div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="h-4 bg-gray-700/50 rounded w-24 mb-1"></div>
-                      <div className="h-3 bg-gray-700/30 rounded w-12"></div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 bg-gray-700/50 rounded-full mr-2"></div>
-                        <div className="h-4 bg-gray-700/50 rounded w-16"></div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-12 ml-auto mb-1"></div>
-                      <div className="h-3 bg-gray-700/30 rounded w-8 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-12 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-8 ml-auto mb-1"></div>
-                      <div className="h-3 bg-gray-700/30 rounded w-6 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-6 ml-auto mb-1"></div>
-                      <div className="h-3 bg-gray-700/30 rounded w-12 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-8 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-4 bg-gray-700/50 rounded w-6 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="h-3 bg-gray-700/50 rounded w-16 ml-auto"></div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="h-6 bg-gray-700/50 rounded w-16 mx-auto"></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Load More Button */}
-          {pagination.hasMore && (
-            <div className="p-4 text-center border-t border-gray-700/50">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 px-6 py-2 rounded-lg transition-colors"
-              >
-                {loadingMore ? 'Loading...' : 'Load More'}
-              </button>
-            </div>
-          )}
-        </motion.div>
-
-        {/* ELO System Info */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden mt-8 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 rounded-xl p-6 border border-gray-700/50"
-        >
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-green-400" />
-          <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-green-400 mb-4">About ELO Rankings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-semibold text-gray-300 mb-2">How ELO Works</h4>
-              <ul className="text-sm text-gray-400 space-y-1">
-                <li>• Based on wins/losses against opponents of similar skill</li>
-                <li>• New players start at 1200 ELO with a 10-game placement period</li>
-                <li>• Players in placement are marked as &quot;Provisional&quot; and not ranked</li>
-                <li>• Weighted ELO considers rating confidence for fair rankings</li>
-                <li>• Tier is based on weighted ELO after completing placement</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-300 mb-2">Tier System</h4>
-              <div className="grid grid-cols-3 gap-2 text-xs text-gray-400">
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-gray-500 mr-1"></div>Unranked (&lt;850)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#CD7F32'}}></div>Bronze (850-949)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#C0C0C0'}}></div>Silver (950-1049)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FFD700'}}></div>Gold (1050-1149)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#E5E4E2'}}></div>Platinum (1150-1249)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#B9F2FF'}}></div>Diamond (1250-1349)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#FF6B6B'}}></div>Master (1350-1449)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#9B59B6'}}></div>Grandmaster (1450-1599)</div>
-                <div className="flex items-center"><div className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: '#F39C12'}}></div>Legend (1600+)</div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )}
+
+            {!loading && !error && pagination.hasMore && (
+              <div className="px-3 py-3 border-t border-white/[0.06] flex items-center justify-between text-xs text-[#8B98B0]">
+                <span>{players.length} of {pagination.total}</span>
+                <button type="button" onClick={() => load(pagination.offset + pagination.limit)} disabled={more} className="px-3 py-1.5 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 disabled:opacity-50">{more ? 'Loading…' : 'Show more'}</button>
+              </div>
+            )}
+          </section>
+
+          <div className="space-y-4 self-start">
+            <Card title="How the rating works">
+              <ul className="space-y-1.5 text-sm text-[#8B98B0]">
+                <li>Everyone starts at <span className="text-[#E6EDF7]">1200</span>. A win against a stronger team moves you more than a win against a weaker one.</li>
+                <li>The first <span className="text-[#E6EDF7]">{PLACEMENT_GAMES} games</span> are placement: listed, not ranked.</li>
+                <li>The shown ELO is pulled toward 1200 until the rating is confident, which takes 20 games.</li>
+                <li>Each mode has its own ladder. &ldquo;All modes&rdquo; is the rollup.</li>
+                <li>Only games with a recorded winner move the rating.</li>
+              </ul>
+            </Card>
+            <Card title="Tiers">
+              <ul className="grid grid-cols-1 gap-1 text-sm">
+                {[...ELO_TIERS].reverse().map((t) => (
+                  <li key={t.name} className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-2" style={{ color: t.color }}><span className="w-2 h-2 rounded-full" style={{ background: t.color }} />{t.name}</span>
+                    <span className="text-xs text-[#8B98B0] tabular-nums">{t.max >= 2500 ? `${t.min}+` : t.min === 0 ? `< ${t.max + 1}` : `${t.min}–${t.max}`}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           </div>
-        </motion.div>
-      </div>
+        </div>
+      </main>
     </div>
   );
-} 
+}
