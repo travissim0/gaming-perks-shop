@@ -17,6 +17,15 @@ import { recomputeAllRatings } from '@/lib/uslMix/ingest';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
+// Same gate as recompute: the zone's own USL_MIX_INGEST_KEY (x-api-key / Bearer) or a zone admin's session.
+function ingestKeyMatches(request: NextRequest): boolean {
+  const expected = process.env.USL_MIX_INGEST_KEY;
+  if (!expected) return false;
+  const bearer = request.headers.get('Authorization');
+  const given = request.headers.get('x-api-key') ?? (bearer?.startsWith('Bearer ') ? bearer.slice(7) : null);
+  return !!given && given === expected;
+}
+
 type Fix = {
   game_id: string;
   alias: string;
@@ -29,8 +38,10 @@ type Fix = {
 const isInt = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 export async function POST(request: NextRequest) {
-  const auth = await requireZoneAdmin(request);
-  if (!auth.ok) return auth.response!;
+  if (!ingestKeyMatches(request)) {
+    const auth = await requireZoneAdmin(request);
+    if (!auth.ok) return auth.response!;
+  }
   let body: any;
   try {
     body = await request.json();
