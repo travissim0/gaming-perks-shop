@@ -12,11 +12,11 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
  * CTF alike, from the zone scripts' minute-by-minute snapshot (/api/live).
  *
  * Drawn the way the retail client draws it, with the retail bitmap fonts (uiart Medium for the
- * list and tickers, Small for the counts) at 2x:
+ * list and tickers, Small for the counts) at the client's own 1x size:
  *  - ticker "bubbles": one line each, never wrapped, grey-bordered boxes on black, right-aligned
  *    to the widest, stacked in the upper-left. They sit beside the player list when both fit
  *    the card and above it otherwise (flex-wrap does the choosing).
- *  - player list: "Players: N" centred in green, a double rule, then every team's name centred
+ *  - player list: its own bordered panel (the retail notepad). "Players: N" centred in green, a double rule, then every team's name centred
  *    in its colour (Titan green, Collective red, spec magenta, np grey) with the member count
  *    right-aligned, and its players one per row - 14px rows at 1x, the spectator S in purple in
  *    the left gutter, aliases in class colours (grey when spectating, dark grey when dead).
@@ -26,7 +26,7 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
 
 const POLL_MS = 60_000;
 const TICK_MS = 1_000;
-const S = 2 as const;                       // integer UI scale (retail pixels -> CSS pixels)
+const S = 1 as const;                       // integer UI scale (retail pixels -> CSS pixels); 1 = the client's own size
 
 // Retail palette (uiart).
 const GREEN = '#40ff40';
@@ -106,16 +106,18 @@ function Rule() {
   );
 }
 
-function Bubble({ text, colour, maxWidth }: { text: string; colour: number; maxWidth: number }) {
+function Bubble({ text, clock, colour, maxWidth }: { text: string; clock: string | null; colour: number; maxWidth: number }) {
   const color = TICKER_COLOURS[colour] ?? GREEN;
-  const pad = 2 * S;
+  const pad = 3 * S;
   const border = 2 * S;
-  // One line, always. A bubble wider than the card drops to 1x rather than wrapping.
-  const scale = measureCfs(text, FONT_MEDIUM, S) + 2 * (pad + border) <= maxWidth ? S : 1;
-  const shown = fitCfs(text, maxWidth - 2 * (pad + border), FONT_MEDIUM, scale);
+  // One line, always: a label wider than the card is clipped the way the client clips it, never wrapped.
+  const clockW = clock ? measureCfs(' ' + clock, FONT_MEDIUM, S) : 0;
+  const shown = fitCfs(text, maxWidth - 2 * (pad + border) - clockW, FONT_MEDIUM, S);
   return (
-    <div style={{ border: `${border}px solid ${BOX}`, background: BLACK, padding: `0 ${pad}px`, whiteSpace: 'nowrap' }} title={text}>
-      <CfsText text={shown} color={color} font={FONT_MEDIUM} scale={scale} />
+    <div className="flex items-start" style={{ border: `${border}px solid ${BOX}`, background: BLACK, padding: `0 ${pad}px`, whiteSpace: 'nowrap' }} title={clock ? `${text} ${clock}` : text}>
+      <CfsText text={shown} color={color} font={FONT_MEDIUM} scale={S} />
+      {/* The client draws the ticker's countdown in yellow after the label. */}
+      {clock && <CfsText text={(shown && !shown.endsWith(' ') ? ' ' : '') + clock} color={YELLOW} font={FONT_MEDIUM} scale={S} />}
     </div>
   );
 }
@@ -175,14 +177,32 @@ function DraftLines({ mix, maxWidth }: { mix: LiveMix; maxWidth: number }) {
   );
 }
 
-function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
+function ArenaCard({ row, driftMs, nowMs }: { row: LiveArenaRow; driftMs: number; nowMs: number }) {
   const [bodyRef, bodyW] = useWidth<HTMLDivElement>(320);
   const [listRef, listW] = useWidth<HTMLDivElement>(200);
   // How far the zone's clocks have moved since this snapshot was taken.
-  const advance = row.age_s * 1000 + driftMs;
+  // age_s was stamped when the response was generated, which a CDN may have served stale; the stored
+  // updated_at is the truth, so take whichever says the snapshot is older (a client clock a few seconds
+  // fast costs nothing).
+  const stampedAt = Date.parse(row.updated_at);
+  const advance = Math.max(row.age_s * 1000 + driftMs, Number.isFinite(stampedAt) ? nowMs - stampedAt : 0);
   const st = row.state;
   const left = st.time_left_ms !== null && st.time_left_ms !== undefined ? st.time_left_ms - advance : null;
   const tickers = row.tickers.filter((t) => !isPersonalTicker(t));
+  // "Flags n/total" is drawn by the client from flag state, never sent as a ticker - rebuild it from the
+  // ownership the CTF script reports, per side, so a visitor sees who holds what.
+  const flagsLine = (() => {
+    if (!row.flags || row.flags.length === 0) return null;
+    const sideOf = new Map(row.teams.map((t) => [t.name, t.side] as const));
+    let t = 0;
+    let c = 0;
+    for (const f of row.flags) {
+      const side = f.team ? sideOf.get(f.team) : undefined;
+      if (side === 'T') t++;
+      else if (side === 'C') c++;
+    }
+    return `Flags T ${t}/${row.flags.length}  C ${c}/${row.flags.length}`;
+  })();
   const drafts = [row.mix, row.mix2].filter(isDraftPhase);
   // The tickers already carry the state ("Not Enough Players", "Time Left: 4:12", the score line), so the
   // status line only adds what no bubble says, and the clock only when no bubble is counting down.
@@ -190,57 +210,54 @@ function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
   const labelDuplicated = !!st.label && tickers.some((t) => norm(t.text).includes(norm(st.label)));
   const anyTickerClock = tickers.some((t) => t.remaining_cs * 10 - advance > 0);
   const statusLine = [!labelDuplicated ? st.label : null, left !== null && st.running && !anyTickerClock ? mmss(left) : null].filter(Boolean).join(' ');
-  const tagColor = row.game === 'usl' ? CYAN : YELLOW;
+  const tagCls = row.game === 'usl' ? 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10' : 'text-amber-300 border-amber-500/40 bg-amber-500/10';
   const countText = `${row.players_playing}/${row.players_total}`;
   const pad = 3 * S;
 
   return (
-    <div style={{ background: BLACK, border: `1px solid ${RULE_LIGHT}` }}>
-      {/* Header: game tag + zone with the live dot, then arena and playing/total on a second line */}
-      <div style={{ padding: `${1 * S}px ${pad}px`, borderBottom: `1px solid ${RULE_LIGHT}` }}>
-        <div className="flex items-center" style={{ gap: 3 * S }}>
-          <span style={{ background: tagColor, padding: `0 ${1 * S}px` }}>
-            <CfsText text={row.game.toUpperCase()} color={BLACK} font={FONT_SMALL} scale={S} />
-          </span>
-          <CfsText text={fitCfs(shortZone(row.zone), bodyW - 40 * S, FONT_SMALL, S)} color={GREEN} font={FONT_SMALL} scale={S} title={row.zone} />
-          <span className="ml-auto relative flex" style={{ width: 4 * S, height: 4 * S }}>
+    <div className="rounded-md border border-gray-700/60" style={{ background: BLACK }}>
+      {/* Header in the site's face (not part of the in-game look): game tag, zone, arena, live dot, playing/total */}
+      <div className="flex items-center gap-1.5 px-1.5 py-1 border-b border-gray-700/60 text-[11px] leading-tight">
+        <span className={`px-1 rounded border font-bold ${tagCls}`}>{row.game.toUpperCase()}</span>
+        <span className="text-gray-200 font-semibold truncate" title={`${row.zone} / ${row.arena}`}>
+          {shortZone(row.zone)}
+          <span className="text-gray-500 font-normal"> · {row.arena}</span>
+        </span>
+        <span className="ml-auto flex items-center gap-1 shrink-0">
+          <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: GREEN }} />
-            <span className="relative inline-flex rounded-full h-full w-full" style={{ background: GREEN }} />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: GREEN }} />
           </span>
-        </div>
-        <div className="flex items-center" style={{ gap: 3 * S, marginTop: 1 * S }}>
-          <CfsText text={fitCfs(row.arena, bodyW - 60 * S, FONT_SMALL, S)} color={SPEC} font={FONT_SMALL} scale={S} title={row.arena} />
-          <span className="ml-auto">
-            <CfsText text={`${countText} playing`} color={YELLOW} font={FONT_SMALL} scale={S} />
-          </span>
-        </div>
+          <span className="font-mono text-gray-400">{countText}</span>
+        </span>
       </div>
 
-      {/* Body: bubbles beside the list when both fit, above it otherwise. */}
-      <div ref={bodyRef} className="flex flex-wrap items-start" style={{ padding: pad, gap: `${2 * S}px ${4 * S}px` }}>
-        {(tickers.length > 0 || statusLine || drafts.length > 0) && (
-          <div className="flex flex-col items-end" style={{ gap: 2 * S, maxWidth: '100%' }}>
+      <div ref={bodyRef} style={{ padding: pad }}>
+        {/* Ticker strip: the bubbles as they float on the viewport, left-aligned, above the list */}
+        {(tickers.length > 0 || statusLine || drafts.length > 0 || flagsLine) && (
+          <div className="flex flex-col items-start" style={{ gap: 2 * S, marginBottom: 4 * S }}>
             {statusLine && <CfsText text={fitCfs(statusLine, bodyW - 2 * pad)} color={YELLOW} scale={S} title={statusLine} />}
             {tickers.map((t) => {
               const rem = t.remaining_cs * 10 - advance;
               const showClock = t.remaining_cs > 0 && rem > 0;
               if (!t.text && !showClock) return null;
-              const text = showClock ? `${t.text}${t.text && !t.text.endsWith(' ') ? ' ' : ''}${mmss(rem)}` : t.text;
-              return <Bubble key={t.idx} text={text} colour={t.colour} maxWidth={bodyW - 2 * pad} />;
+              return <Bubble key={t.idx} text={t.text.replace(/\s+$/, '')} clock={showClock ? mmss(rem) : null} colour={t.colour} maxWidth={bodyW - 2 * pad} />;
             })}
+            {flagsLine && <Bubble text={flagsLine} clock={null} colour={3} maxWidth={bodyW - 2 * pad} />}
             {drafts.map((m, i) => (
               <DraftLines key={i} mix={m} maxWidth={bodyW - 2 * pad} />
             ))}
           </div>
         )}
 
-        <div ref={listRef} className="min-w-0" style={{ flex: '1 1 150px' }}>
+        {/* Player list: its own panel, like the retail notepad */}
+        <div ref={listRef} className="min-w-0" style={{ border: `${2 * S}px solid ${RULE_LIGHT}`, boxShadow: `inset 0 0 0 ${1 * S}px ${RULE_DARK}`, background: '#050505', padding: `${2 * S}px ${3 * S}px` }}>
           <div className="text-center">
             <CfsText text={`Players: ${row.players_total}`} color={GREEN} font={FONT_SMALL} scale={S} />
           </div>
           <Rule />
           {row.teams.map((team) => (
-            <TeamBlock key={team.name} game={row.game} team={team} width={listW} />
+            <TeamBlock key={team.name} game={row.game} team={team} width={listW - 6 * S} />
           ))}
           <Rule />
         </div>
@@ -308,7 +325,7 @@ export default function LiveArenaPanel({ className = '' }: { className?: string 
       </div>
       <div className="p-2 space-y-2">
         {live.map((row) => (
-          <ArenaCard key={row.key} row={row} driftMs={driftMs} />
+          <ArenaCard key={row.key} row={row} driftMs={driftMs} nowMs={now} />
         ))}
       </div>
     </div>
