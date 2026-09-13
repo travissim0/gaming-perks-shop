@@ -104,7 +104,7 @@ function tickerNow(t: LiveTicker, advance: number): { text: string; clock: strin
 }
 
 /** Bubbles a site visitor does not need: the viewer's own HP / personal score, and the idle-state lines. */
-const HIDDEN_LINE = /^HP=|personal score|not enough players|waiting for|^flagsb/i;
+const HIDDEN_LINE = /^HP=|personal score|not enough players|waiting for|^flags\b/i;
 function isHiddenTicker(t: LiveTicker): boolean {
   return HIDDEN_LINE.test(t.text);
 }
