@@ -132,7 +132,7 @@ function PlayerRow({ game, p, nonPlaying, maxWidth }: { game: string; p: LivePla
       <div style={{ width: GUTTER * S, flex: 'none' }}>
         {marker && <CfsText text={marker} color={spec ? PURPLE : YELLOW} scale={S} title={spec ? 'spectating' : 'captain'} />}
       </div>
-      <CfsText text={fitCfs(p.alias, maxWidth - GUTTER * S)} color={color} scale={S} title={title} />
+      <CfsText text={fitCfs(p.alias, maxWidth - GUTTER * S, FONT_MEDIUM, S)} color={color} scale={S} title={title} />
     </div>
   );
 }
@@ -142,7 +142,7 @@ function TeamBlock({ game, team, width }: { game: string; team: LiveTeam; width:
   const color = sideColor(team.side);
   const count = String(team.players.length);
   const countW = measureCfs(count, FONT_MEDIUM, S);
-  const name = fitCfs(team.name, width - countW - 12 * S);
+  const name = fitCfs(team.name, width - countW - 12 * S, FONT_MEDIUM, S);
   return (
     <div>
       {/* Retail header: team name centred, member count right-aligned, same colour, no bar. */}
@@ -171,21 +171,21 @@ function DraftLines({ mix, maxWidth }: { mix: LiveMix; maxWidth: number }) {
   return (
     <div className="flex flex-col items-start" style={{ gap: 1 * S }}>
       {lines.map(([text, color], i) => (
-        <CfsText key={i} text={fitCfs(text, maxWidth)} color={color} scale={S} title={text} />
+        <CfsText key={i} text={fitCfs(text, maxWidth, FONT_MEDIUM, S)} color={color} scale={S} title={text} />
       ))}
     </div>
   );
 }
 
-function ArenaCard({ row, driftMs, nowMs }: { row: LiveArenaRow; driftMs: number; nowMs: number }) {
-  const [bodyRef, bodyW] = useWidth<HTMLDivElement>(320);
+function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: number; serverNowMs: number }) {
+  const [tickRef, tickW] = useWidth<HTMLDivElement>(160);
   const [listRef, listW] = useWidth<HTMLDivElement>(200);
   // How far the zone's clocks have moved since this snapshot was taken.
-  // age_s was stamped when the response was generated, which a CDN may have served stale; the stored
-  // updated_at is the truth, so take whichever says the snapshot is older (a client clock a few seconds
-  // fast costs nothing).
+  // Age the snapshot on the SERVER's clock: updated_at (when the zone's post landed) against the server
+  // time carried by the response (Date + Age headers, so a CDN copy still counts right). age_s + local
+  // drift is the floor in case a header is missing.
   const stampedAt = Date.parse(row.updated_at);
-  const advance = Math.max(row.age_s * 1000 + driftMs, Number.isFinite(stampedAt) ? nowMs - stampedAt : 0);
+  const advance = Math.max(row.age_s * 1000 + driftMs, Number.isFinite(stampedAt) ? serverNowMs - stampedAt : 0);
   const st = row.state;
   const left = st.time_left_ms !== null && st.time_left_ms !== undefined ? st.time_left_ms - advance : null;
   const tickers = row.tickers.filter((t) => !isPersonalTicker(t));
@@ -232,26 +232,25 @@ function ArenaCard({ row, driftMs, nowMs }: { row: LiveArenaRow; driftMs: number
         </span>
       </div>
 
-      <div ref={bodyRef} style={{ padding: pad }}>
-        {/* Ticker strip: the bubbles as they float on the viewport, left-aligned, above the list */}
-        {(tickers.length > 0 || statusLine || drafts.length > 0 || flagsLine) && (
-          <div className="flex flex-col items-start" style={{ gap: 2 * S, marginBottom: 4 * S }}>
-            {statusLine && <CfsText text={fitCfs(statusLine, bodyW - 2 * pad)} color={YELLOW} scale={S} title={statusLine} />}
-            {tickers.map((t) => {
-              const rem = t.remaining_cs * 10 - advance;
-              const showClock = t.remaining_cs > 0 && rem > 0;
-              if (!t.text && !showClock) return null;
-              return <Bubble key={t.idx} text={t.text.replace(/\s+$/, '')} clock={showClock ? mmss(rem) : null} colour={t.colour} maxWidth={bodyW - 2 * pad} />;
-            })}
-            {flagsLine && <Bubble text={flagsLine} clock={null} colour={3} maxWidth={bodyW - 2 * pad} />}
-            {drafts.map((m, i) => (
-              <DraftLines key={i} mix={m} maxWidth={bodyW - 2 * pad} />
-            ))}
-          </div>
-        )}
+      {/* Body: two columns - the ticker strip in the LEFT half (upper-left, like the viewport), the player
+          list panel confined to the RIGHT half. Empty space under the bubbles is fine. */}
+      <div className="flex items-start" style={{ padding: pad, gap: 4 * S }}>
+        <div ref={tickRef} className="flex flex-col items-start min-w-0" style={{ flex: 'none', width: `calc(50% - ${2 * S}px)`, gap: 2 * S }}>
+          {statusLine && <CfsText text={fitCfs(statusLine, tickW, FONT_MEDIUM, S)} color={YELLOW} scale={S} title={statusLine} />}
+          {tickers.map((t) => {
+            const rem = t.remaining_cs * 10 - advance;
+            const showClock = t.remaining_cs > 0 && rem > 0;
+            if (!t.text && !showClock) return null;
+            return <Bubble key={t.idx} text={t.text.replace(/\s+$/, '')} clock={showClock ? mmss(rem) : null} colour={t.colour} maxWidth={tickW} />;
+          })}
+          {flagsLine && <Bubble text={flagsLine} clock={null} colour={3} maxWidth={tickW} />}
+          {drafts.map((m, i) => (
+            <DraftLines key={i} mix={m} maxWidth={tickW} />
+          ))}
+        </div>
 
         {/* Player list: its own panel, like the retail notepad */}
-        <div ref={listRef} className="min-w-0" style={{ border: `${2 * S}px solid ${RULE_LIGHT}`, boxShadow: `inset 0 0 0 ${1 * S}px ${RULE_DARK}`, background: '#050505', padding: `${2 * S}px ${3 * S}px` }}>
+        <div ref={listRef} className="min-w-0" style={{ flex: '1 1 0', border: `${2 * S}px solid ${RULE_LIGHT}`, boxShadow: `inset 0 0 0 ${1 * S}px ${RULE_DARK}`, background: '#050505', padding: `${2 * S}px ${3 * S}px` }}>
           <div className="text-center">
             <CfsText text={`Players: ${row.players_total}`} color={GREEN} font={FONT_SMALL} scale={S} />
           </div>
@@ -269,6 +268,8 @@ function ArenaCard({ row, driftMs, nowMs }: { row: LiveArenaRow; driftMs: number
 export default function LiveArenaPanel({ className = '' }: { className?: string }) {
   const [arenas, setArenas] = useState<LiveArenaRow[]>([]);
   const [fetchedAt, setFetchedAt] = useState<number>(0);
+  /** server clock minus this browser's clock, from the last response's Date/Age headers */
+  const [serverOffsetMs, setServerOffsetMs] = useState<number>(0);
   const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -280,7 +281,12 @@ export default function LiveArenaPanel({ className = '' }: { className?: string 
         const body = (await res.json()) as LiveResponse;
         if (cancelled || !body?.success) return;
         setArenas(Array.isArray(body.arenas) ? body.arenas : []);
-        setFetchedAt(Date.now());
+        const received = Date.now();
+        setFetchedAt(received);
+        const dateHdr = Date.parse(res.headers.get('date') ?? '');
+        const ageHdr = Number(res.headers.get('age') ?? 0);
+        const serverAt = Number.isFinite(dateHdr) ? dateHdr + (Number.isFinite(ageHdr) ? ageHdr * 1000 : 0) : Date.parse(body.generated_at);
+        if (Number.isFinite(serverAt)) setServerOffsetMs(serverAt - received);
       } catch {
         /* keep the last good snapshot */
       }
@@ -325,7 +331,7 @@ export default function LiveArenaPanel({ className = '' }: { className?: string 
       </div>
       <div className="p-2 space-y-2">
         {live.map((row) => (
-          <ArenaCard key={row.key} row={row} driftMs={driftMs} nowMs={now} />
+          <ArenaCard key={row.key} row={row} driftMs={driftMs} serverNowMs={now + serverOffsetMs} />
         ))}
       </div>
     </div>

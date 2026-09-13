@@ -8,7 +8,7 @@ import { LiveGame, LiveResponse } from './types';
 export const DEFAULT_FRESH_S = 150;
 /** CDN cache for the public feed. Short, and with only a short stale window: the panel counts the
  * clocks down from the snapshot's age, so a response served minutes stale would put it minutes off. */
-export const LIVE_CACHE_S = 10;
+export const LIVE_CACHE_S = 5;
 
 /**
  * Shared handler for GET /api/live and GET /api/usl-mix/live.
@@ -38,6 +38,6 @@ export async function buildLiveResponse(request: NextRequest, forceGame?: LiveGa
   };
   return NextResponse.json(body, {
     status: 200,
-    headers: { ...CORS_HEADERS, 'Cache-Control': `public, s-maxage=${LIVE_CACHE_S}, stale-while-revalidate=${LIVE_CACHE_S}` },
+    headers: { ...CORS_HEADERS, 'Cache-Control': `public, s-maxage=${LIVE_CACHE_S}, must-revalidate` },
   });
 }

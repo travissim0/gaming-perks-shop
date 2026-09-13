@@ -24,14 +24,14 @@ function advance(font: CfsFont, g: [number, number]): number {
 }
 
 /** Width of a line in CSS pixels at the given scale. */
-export function measureCfs(text: string, font: CfsFont = FONT_MEDIUM, scale: CfsScale = 2): number {
+export function measureCfs(text: string, font: CfsFont = FONT_MEDIUM, scale: CfsScale = 1): number {
   let w = 0;
   for (const ch of text) w += advance(font, glyph(font, ch.charCodeAt(0)));
   return w * scale;
 }
 
 /** Longest prefix that fits maxWidth (the client clips; no ellipsis). */
-export function fitCfs(text: string, maxWidth: number, font: CfsFont = FONT_MEDIUM, scale: CfsScale = 2): string {
+export function fitCfs(text: string, maxWidth: number, font: CfsFont = FONT_MEDIUM, scale: CfsScale = 1): string {
   if (measureCfs(text, font, scale) <= maxWidth) return text;
   let out = '';
   let w = 0;
@@ -48,7 +48,7 @@ export function CfsText({
   text,
   color,
   font = FONT_MEDIUM,
-  scale = 2,
+  scale = 1,
   className = '',
   style,
   title,
