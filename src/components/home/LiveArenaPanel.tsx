@@ -109,6 +109,34 @@ function isHiddenTicker(t: LiveTicker): boolean {
   return HIDDEN_LINE.test(t.text);
 }
 
+/**
+ * One alias, one arena. A player who moves arenas is still in the old arena's last snapshot until it
+ * refreshes or expires, so an alias seen in two arenas of the same zone is kept only in the arena whose
+ * snapshot is newer. Teams and arenas left empty by that are dropped.
+ */
+function dedupeArenas(rows: LiveArenaRow[]): LiveArenaRow[] {
+  const newest = new Map<string, string>(); // `${zone}|${alias}` -> updated_at of the arena that wins
+  for (const r of rows) {
+    for (const t of r.teams) {
+      for (const p of t.players) {
+        const k = `${r.zone}|${p.alias.toLowerCase()}`;
+        const cur = newest.get(k);
+        if (!cur || r.updated_at > cur) newest.set(k, r.updated_at);
+      }
+    }
+  }
+  return rows
+    .map((r) => {
+      const teams = r.teams
+        .map((t) => ({ ...t, players: t.players.filter((p) => newest.get(`${r.zone}|${p.alias.toLowerCase()}`) === r.updated_at) }))
+        .filter((t) => t.players.length > 0);
+      const total = teams.reduce((n, t) => n + t.players.length, 0);
+      const spectating = teams.reduce((n, t) => n + t.players.filter((p) => p.spec).length, 0);
+      return { ...r, teams, players_total: total, players_playing: total - spectating, players_spectating: spectating };
+    })
+    .filter((r) => r.players_total > 0);
+}
+
 /** Inner width of an element, tracked live so long lines can be fitted like the client clips them. */
 function useWidth<T extends HTMLElement>(fallback: number): [React.RefObject<T | null>, number] {
   const ref = useRef<T | null>(null);
@@ -324,7 +352,7 @@ export default function LiveArenaPanel({ className = '' }: { className?: string 
     return () => clearInterval(t);
   }, [arenas.length]);
 
-  const live = useMemo(() => arenas.filter((a) => a.players_total > 0), [arenas]);
+  const live = useMemo(() => dedupeArenas(arenas.filter((a) => a.players_total > 0)), [arenas]);
   if (live.length === 0) return null;
 
   const driftMs = fetchedAt ? Math.max(0, now - fetchedAt) : 0;
