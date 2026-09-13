@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { VT323 } from 'next/font/google';
+import { Handjet } from 'next/font/google';
 import { classColor } from '@/components/usl-mix/UslMixShell';
 import { getClassColor } from '@/utils/classColors';
 import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTeam } from '@/lib/live/types';
@@ -19,7 +19,8 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
  * Countdowns (game clock, ticker bubbles) keep running between polls from the snapshot's age.
  */
 
-const pixel = VT323({ subsets: ['latin'], weight: '400', display: 'swap' });
+// Handjet: a condensed pixel face whose B/G/8 stay distinct at list sizes (Pixelify's did not).
+const pixel = Handjet({ subsets: ['latin'], weight: ['500', '700'], display: 'swap' });
 
 const POLL_MS = 60_000;
 const TICK_MS = 1_000;
@@ -38,8 +39,8 @@ const BLACK = '#000000';
 /** Ticker colour byte -> text colour, as the client draws them. */
 const TICKER_COLOURS: Record<number, string> = { 0: GREEN, 1: GREEN, 2: YELLOW, 3: CYAN, 4: RED, 5: '#ffffff' };
 
-const TEXT: React.CSSProperties = { fontSize: '16px', lineHeight: 1.0 };
-const SMALL: React.CSSProperties = { fontSize: '14px', lineHeight: 1.0 };
+const TEXT: React.CSSProperties = { fontSize: '19px', lineHeight: 1.0, fontWeight: 500 };
+const SMALL: React.CSSProperties = { fontSize: '16px', lineHeight: 1.05, fontWeight: 500 };
 
 function sideColor(side: LiveSide): string {
   if (side === 'T') return GREEN;
@@ -60,7 +61,7 @@ function mmss(ms: number): string {
 }
 
 function shortZone(zone: string): string {
-  return zone.replace(/^League\s*-\s*/i, '').replace(/^USL\s+/i, '').trim() || zone;
+  return zone.replace(/^League\s*-\s*/i, '').replace(/^(USL|CTF)\s*-?\s*/i, '').trim() || zone;
 }
 
 function isDraftPhase(m: LiveMix | null | undefined): m is LiveMix {
@@ -74,7 +75,7 @@ function PlayerRow({ game, p, nonPlaying }: { game: string; p: LivePlayer; nonPl
   return (
     <div className="flex items-baseline whitespace-nowrap" style={{ ...TEXT, opacity: p.dead && !spec ? 0.55 : 1 }} title={title}>
       {/* Fixed-width marker column so aliases line up: purple S for spectators, star for captains. */}
-      <span className="inline-block w-[10px] shrink-0 text-center" style={{ color: spec ? PURPLE : YELLOW }}>
+      <span className="inline-block w-[11px] shrink-0 text-center" style={{ color: spec ? PURPLE : YELLOW }}>
         {spec ? 'S' : p.captain ? '★' : ''}
       </span>
       <span className="truncate" style={{ color }}>{p.alias}</span>
@@ -87,7 +88,7 @@ function TeamBlock({ game, team }: { game: string; team: LiveTeam }) {
   const color = sideColor(team.side);
   return (
     <div className="mb-1 last:mb-0">
-      <div className="text-center truncate px-1" style={{ ...TEXT, fontSize: '17px', color }} title={`${team.name} - ${team.players.length}`}>
+      <div className="text-center truncate px-1" style={{ ...TEXT, fontSize: '20px', fontWeight: 700, color }} title={`${team.name} - ${team.players.length}`}>
         {team.name}
       </div>
       {team.players.map((p) => (
@@ -100,7 +101,7 @@ function TeamBlock({ game, team }: { game: string; team: LiveTeam }) {
 function TickerBox({ text, clock, colour }: { text: string; clock: string | null; colour: number }) {
   const color = TICKER_COLOURS[colour] ?? GREEN;
   return (
-    <div className="px-1 py-[1px] text-center break-words" style={{ ...TEXT, fontSize: '15px', color, background: BLACK, border: `2px solid ${RULE}` }}>
+    <div className="px-1 py-[1px] text-center break-words" style={{ ...TEXT, fontSize: '17px', fontWeight: 700, color, background: BLACK, border: `2px solid ${RULE}` }}>
       {text}
       {clock ? <span style={{ color: CYAN }}>{text ? ' ' : ''}{clock}</span> : null}
     </div>
@@ -140,6 +141,14 @@ function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
   const gameTag = row.game.toUpperCase();
   const tagColor = row.game === 'usl' ? CYAN : YELLOW;
   const drafts = [row.mix, row.mix2].filter(isDraftPhase);
+  // The tickers already carry most of this ("Not Enough Players", "Time Left: 4:12", the score line), so
+  // the status line only adds what no ticker says: the mode label when it is new information, and the
+  // clock only when no bubble is counting down.
+  const norm = (v: string | null | undefined) => (v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const labelDuplicated = !!st.label && row.tickers.some((t) => norm(t.text) === norm(st.label) || norm(t.text).includes(norm(st.label)));
+  const anyTickerClock = row.tickers.some((t) => t.remaining_cs * 10 - advance > 0);
+  const showLabel = !!st.label && !labelDuplicated;
+  const showClock = left !== null && st.running && !anyTickerClock;
 
   return (
     <div className={pixel.className} style={{ background: BLACK, border: `2px solid ${RULE}` }}>
@@ -162,15 +171,10 @@ function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
       <div className="grid grid-cols-3">
         {/* Left third: game state + ticker bubbles */}
         <div className="col-span-1 p-1 space-y-1 min-w-0">
-          <div className="break-words" style={{ ...SMALL, color: YELLOW }}>
-            {st.label ?? st.mode}
-            {left !== null && st.running ? <span style={{ color: CYAN }}> {mmss(left)}</span> : null}
-          </div>
-          {st.score.length >= 2 && (
-            <div className="break-words" style={SMALL}>
-              <span style={{ color: sideColor(st.score[0].side) }}>{st.score[0].team}</span>
-              <span style={{ color: '#ffffff' }}> {st.score[0].kills}-{st.score[1].kills} </span>
-              <span style={{ color: sideColor(st.score[1].side) }}>{st.score[1].team}</span>
+          {(showLabel || showClock) && (
+            <div className="break-words" style={{ ...SMALL, color: YELLOW }}>
+              {showLabel ? st.label : null}
+              {showClock ? <span style={{ color: CYAN }}>{showLabel ? ' ' : ''}{mmss(left as number)}</span> : null}
             </div>
           )}
           {row.tickers.map((t) => {
