@@ -58,6 +58,8 @@ node_modules/
 ngrok/
 stripe-cli/
 public/*
+# Retail UI bitmap font sheets for the live arena panel (generated, small, must ship)
+!public/ui-fonts/
 !public/zones-config.json
 # Allow specific header video and sounds
 !public/CTFPL-Website-Header-1.webm
