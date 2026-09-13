@@ -76,6 +76,29 @@ function isDraftPhase(m: LiveMix | null | undefined): m is LiveMix {
   return !!m && m.phase !== 'Idle' && m.phase !== 'Running';
 }
 
+/** A ticker label that only makes sense with a countdown after it ("Time Left: ", "Victory in ", "Next game: "). */
+function looksLikeTimerLabel(text: string): boolean {
+  const t = text.trim();
+  return /:$/.test(t) || /(in|starts|ends)$/i.test(t);
+}
+
+/**
+ * What the client would be showing for this ticker right now, or null. The client drops a timed
+ * bubble the moment its countdown reaches zero, and never draws a timer label the server sent
+ * without a countdown (an expired clock the script has not cleared yet). Static text stays until
+ * the script replaces it.
+ */
+function tickerNow(t: LiveTicker, advance: number): { text: string; clock: string | null } | null {
+  const label = t.text.replace(/\s+$/, '');
+  if (t.remaining_cs > 0) {
+    const rem = t.remaining_cs * 10 - advance;
+    if (rem <= 0) return null;
+    return { text: label, clock: mmss(rem) };
+  }
+  if (!label || looksLikeTimerLabel(label)) return null;
+  return { text: label, clock: null };
+}
+
 /** The viewer's own bubbles (HP / personal score) mean nothing to a site visitor. */
 function isPersonalTicker(t: LiveTicker): boolean {
   return /^HP=/i.test(t.text) || /personal score/i.test(t.text);
@@ -108,13 +131,13 @@ function Rule() {
 
 function Bubble({ text, clock, colour, maxWidth }: { text: string; clock: string | null; colour: number; maxWidth: number }) {
   const color = TICKER_COLOURS[colour] ?? GREEN;
-  const pad = 3 * S;
+  const pad = 5 * S;
   const border = 2 * S;
   // One line, always: a label wider than the card is clipped the way the client clips it, never wrapped.
   const clockW = clock ? measureCfs(' ' + clock, FONT_MEDIUM, S) : 0;
   const shown = fitCfs(text, maxWidth - 2 * (pad + border) - clockW, FONT_MEDIUM, S);
   return (
-    <div className="flex items-start" style={{ border: `${border}px solid ${BOX}`, background: BLACK, padding: `0 ${pad}px`, whiteSpace: 'nowrap' }} title={clock ? `${text} ${clock}` : text}>
+    <div className="flex items-start" style={{ border: `${border}px solid ${BOX}`, background: BLACK, padding: `${1 * S}px ${pad}px`, whiteSpace: 'nowrap' }} title={clock ? `${text} ${clock}` : text}>
       <CfsText text={shown} color={color} font={FONT_MEDIUM} scale={S} />
       {/* The client draws the ticker's countdown in yellow after the label. */}
       {clock && <CfsText text={(shown && !shown.endsWith(' ') ? ' ' : '') + clock} color={YELLOW} font={FONT_MEDIUM} scale={S} />}
@@ -130,7 +153,8 @@ function PlayerRow({ game, p, nonPlaying, maxWidth }: { game: string; p: LivePla
   return (
     <div className="flex items-start" style={{ height: (FONT_MEDIUM.cell + ROW_GAP) * S }} title={title}>
       <div style={{ width: GUTTER * S, flex: 'none' }}>
-        {marker && <CfsText text={marker} color={spec ? PURPLE : YELLOW} scale={S} title={spec ? 'spectating' : 'captain'} />}
+        {spec && <CfsText text="S" color={PURPLE} font={FONT_SMALL} scale={S} style={{ marginTop: 3 * S }} title="spectating" />}
+        {!spec && marker && <CfsText text={marker} color={YELLOW} scale={S} title="captain" />}
       </div>
       <CfsText text={fitCfs(p.alias, maxWidth - GUTTER * S, FONT_MEDIUM, S)} color={color} scale={S} title={title} />
     </div>
@@ -208,7 +232,7 @@ function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: 
   // status line only adds what no bubble says, and the clock only when no bubble is counting down.
   const norm = (v: string | null | undefined) => (v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const labelDuplicated = !!st.label && tickers.some((t) => norm(t.text).includes(norm(st.label)));
-  const anyTickerClock = tickers.some((t) => t.remaining_cs * 10 - advance > 0);
+  const anyTickerClock = tickers.some((t) => t.remaining_cs > 0 && t.remaining_cs * 10 - advance > 0);
   const statusLine = [!labelDuplicated ? st.label : null, left !== null && st.running && !anyTickerClock ? mmss(left) : null].filter(Boolean).join(' ');
   const tagCls = row.game === 'usl' ? 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10' : 'text-amber-300 border-amber-500/40 bg-amber-500/10';
   const countText = `${row.players_playing}/${row.players_total}`;
@@ -238,10 +262,9 @@ function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: 
         <div ref={tickRef} className="flex flex-col items-start min-w-0" style={{ flex: 'none', width: `calc(50% - ${2 * S}px)`, gap: 2 * S }}>
           {statusLine && <CfsText text={fitCfs(statusLine, tickW, FONT_MEDIUM, S)} color={YELLOW} scale={S} title={statusLine} />}
           {tickers.map((t) => {
-            const rem = t.remaining_cs * 10 - advance;
-            const showClock = t.remaining_cs > 0 && rem > 0;
-            if (!t.text && !showClock) return null;
-            return <Bubble key={t.idx} text={t.text.replace(/\s+$/, '')} clock={showClock ? mmss(rem) : null} colour={t.colour} maxWidth={tickW} />;
+            const shown = tickerNow(t, advance);
+            if (!shown) return null;
+            return <Bubble key={t.idx} text={shown.text} clock={shown.clock} colour={t.colour} maxWidth={tickW} />;
           })}
           {flagsLine && <Bubble text={flagsLine} clock={null} colour={3} maxWidth={tickW} />}
           {drafts.map((m, i) => (
