@@ -528,9 +528,9 @@ export default function MatchesPage() {
                                 <div className="mt-1 space-y-0.5 text-[11px]">
                                   {teams.slice(0, 2).map((t: any) => (
                                     <div key={t.name} className="flex items-start gap-1.5 min-w-0">
-                                      <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.side === 'defense' ? '#22D3EE' : t.side === 'offense' ? '#F59E0B' : '#8B98B0' }} />
+                                      <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ovdShape && t.side === 'defense' ? '#22D3EE' : ovdShape && t.side === 'offense' ? '#F59E0B' : '#8B98B0' }} />
                                       <span className={`shrink-0 font-medium ${t.result === 'win' ? 'text-[#34D399]' : t.result === 'loss' ? 'text-[#F87171]' : 'text-[#8B98B0]'}`}>
-                                        {t.side ? (t.side === 'defense' ? 'DEF' : 'OFF') : t.name}
+                                        {ovdShape && t.side ? (t.side === 'defense' ? 'DEF' : 'OFF') : t.name}
                                       </span>
                                       <span className="flex flex-wrap gap-x-2 min-w-0">
                                         {players.filter((p) => p.team === t.name).sort((a, b) => (b.kills || 0) - (a.kills || 0)).map((p, i) => (
