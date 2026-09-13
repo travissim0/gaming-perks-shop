@@ -120,6 +120,21 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
               ]}
               example={`curl "${BASE}/api/usl-mix/ratings?a=G&a=THE%20MOUNTAIN"`}
             />
+            <Endpoint
+              method="GET"
+              path="/api/usl-mix/live"
+              desc="Live snapshot of every USL arena that reported in the last ~2.5 minutes: the player list grouped by team (side T/C from the '- T' / '- C' suffix, spec and np as their own teams), each player's class and whether they are spectating, captains, the game clock / score, the draft state, and the in-game ticker lines as a spectator sees them. Zones post once a minute; responses are cached 20s. Same shape as /api/live (which also carries CTF)."
+              params={[
+                ['fresh', 'seconds of silence tolerated before an arena is dropped, 30..600 (default 150)'],
+                ['empty', '1 to include arenas with nobody in them'],
+              ]}
+              example={`curl "${BASE}/api/usl-mix/live"
+# -> { success, generated_at, fresh_window_s, arenas: [ { game, zone, arena, map, players_total, players_playing,
+#      state: { running, mode, label, time_left_ms, score: [{ team, side, kills }] },
+#      tickers: [{ idx, text, remaining_cs }],
+#      teams: [{ name, side, kills, players: [{ alias, class, spec, captain? }] }],
+#      mix: { label, phase, team_size, captains, turn, pool, teams } | null, updated_at, age_s } ] }`}
+            />
           </Panel>
 
           <Panel title="Ingest (game server → site)">

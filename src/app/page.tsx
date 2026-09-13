@@ -12,6 +12,7 @@ import UserAvatar from '@/components/UserAvatar';
 import AveragePopulationWidget from '@/components/zone-activity/AveragePopulationWidget';
 import LaunchSignupBanner from '@/components/home/LaunchSignupBanner';
 import ClientEditorsShowcase from '@/components/home/ClientEditorsShowcase';
+import LiveArenaPanel from '@/components/home/LiveArenaPanel';
 
 interface ServerStats {
   totalPlayers: number;
@@ -556,6 +557,7 @@ export default function HomeNew() {
 
         {/* Zone Activity - Mobile Only (appears first, outside the grid) */}
         <div className="lg:hidden max-w-[1600px] mx-auto px-4 pt-8 space-y-4">
+          <LiveArenaPanel />
           {renderZoneActivity()}
           <AveragePopulationWidget />
         </div>
@@ -638,6 +640,11 @@ export default function HomeNew() {
 
             {/* Right Sidebar: Online Users + Zone Population */}
             <div className="lg:col-span-1 space-y-4 order-3 lg:pt-[4.875rem]">
+              {/* Live Arenas - USL + CTF player lists straight from the zones (desktop; mobile copy above) */}
+              <div className="hidden lg:block">
+                <LiveArenaPanel />
+              </div>
+
               {/* Online Users Panel */}
               {(onlineUsers.length > 0 || unknownOnlineCount > 0) && (
                 <div className="relative overflow-hidden rounded-2xl border border-green-500/20 bg-gradient-to-br from-gray-800/70 via-gray-900/80 to-gray-800/50 backdrop-blur-sm shadow-xl shadow-green-500/5">
