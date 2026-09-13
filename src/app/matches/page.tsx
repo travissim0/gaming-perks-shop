@@ -163,6 +163,26 @@ export default function MatchesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Summaries for the auto-logged rows come from the recent-games feed in ONE call, joined by
+  // game id. (/api/matches?includeStats=true fetches its own site URL server-side and comes
+  // back empty in production, which is why these rows never showed players.)
+  const [summaries, setSummaries] = useState<Map<string, any>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/player-stats/recent-games?limit=40', { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (cancelled) return;
+        const m = new Map<string, any>();
+        for (const g of j.games || []) if (g.gameId) m.set(g.gameId, g);
+        setSummaries(m);
+      } catch { /* the list still renders without summaries */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (!user) { setUserSquad(null); setCtfRole(null); return; }
     (async () => {
@@ -465,17 +485,28 @@ export default function MatchesPage() {
                 </div>
                 <ul className="divide-y divide-white/[0.06]">
                   {autoLogged.map((m) => {
-                    // /api/matches?includeStats=true attaches the WHOLE game API response
-                    // ({ success, data }), not a player array - which is why the old expander
-                    // never had anything to show. Read the summary the game API already computes.
-                    const gs: any = Array.isArray(m.gameStats) ? { players: m.gameStats, teams: [] } : (m.gameStats as any)?.data;
+                    // One recent-games entry per game id: players (class, side, result, captain),
+                    // team names, base, length, and the winner as the script recorded it.
+                    const gs: any = m.game_id ? summaries.get(m.game_id) : undefined;
                     const players: any[] = gs?.players ?? [];
-                    const teams: any[] = gs?.teams ?? [];
-                    const win = gs?.winningInfo;
+                    const teamNames: string[] = (gs?.teams ?? []).filter((t: string) => players.some((p) => p.team === t));
+                    const teams = teamNames.slice(0, 2).map((name) => {
+                      const rows = players.filter((p) => p.team === name);
+                      const o = rows.filter((p) => p.side === 'offense').length, d = rows.filter((p) => p.side === 'defense').length;
+                      const wins = rows.filter((p) => p.result === 'Win').length;
+                      return {
+                        name,
+                        side: o === 0 && d === 0 ? null : o > d ? 'offense' : d > o ? 'defense' : null,
+                        result: !gs?.decided ? null : wins > rows.length - wins ? 'win' : wins === 0 ? 'loss' : null,
+                      };
+                    });
+                    // Side badges only when the two teams took opposite sides (a Mix tags both "defense").
+                    const ovdShape = teams.length === 2 && !!teams[0].side && !!teams[1].side && teams[0].side !== teams[1].side;
+                    const win = gs?.winner as { type: 'side' | 'team'; name: string } | null | undefined;
                     const outcome = !gs ? null
-                      : !gs.decided || !win ? (gs.gameMode === 'Pub' ? null : 'No winner recorded')
-                      : win.type === 'side' ? (win.side === 'defense' ? `Defense held${gs.baseUsed ? ` ${gs.baseUsed}` : ''}` : `Offense broke${gs.baseUsed ? ` ${gs.baseUsed}` : ''}`)
-                      : `${win.winner} won`;
+                      : !win ? (gs.gameMode === 'Pub' ? null : 'No winner recorded')
+                      : win.type === 'side' ? (win.name === 'defense' ? `Defense held${gs.baseUsed ? ` ${gs.baseUsed}` : ''}` : `Offense broke${gs.baseUsed ? ` ${gs.baseUsed}` : ''}`)
+                      : `${win.name} won`;
                     const topKills = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0))[0];
                     const topEb = [...players].sort((a, b) => (b.eb_hits || 0) - (a.eb_hits || 0))[0];
                     const statsHref = m.game_id ? `/stats/game/${encodeURIComponent(m.game_id)}` : `/matches/${m.id}`;

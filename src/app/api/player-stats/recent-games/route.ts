@@ -32,6 +32,7 @@ const ROW_COLUMNS = `
   deaths,
   captures,
   carrier_kills,
+  eb_hits,
   is_captain
 `;
 
@@ -47,7 +48,7 @@ export interface RecentGame {
   durationSeconds: number;
   players: Array<{
     player_name: string; team: string; side: string; main_class: string; result: string;
-    kills: number; deaths: number; flag_captures: number; carrier_kills: number; is_captain: boolean;
+    kills: number; deaths: number; flag_captures: number; carrier_kills: number; eb_hits: number; is_captain: boolean;
   }>;
   teams: string[];
   totalPlayers: number;
@@ -89,6 +90,7 @@ function groupGames(rows: Row[] | null | undefined): Map<string, RecentGame> {
         deaths: stat.deaths || 0,
         flag_captures: stat.captures || 0,
         carrier_kills: stat.carrier_kills || 0,
+        eb_hits: stat.eb_hits || 0,
         is_captain: stat.is_captain === true,
       });
       game.totalPlayers = game.players.length;
