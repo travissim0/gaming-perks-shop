@@ -58,7 +58,11 @@ function sideColor(side: LiveSide): string {
   return CYAN;
 }
 
+/** Medics of either game in a bright yellow: the shared palette's dark-yellow Field Medic sat too close to the engineer brown. */
+const MEDIC_YELLOW = '#ffee44';
+
 function classColorFor(game: string, cls: string): string {
+  if (/medic/i.test(cls)) return MEDIC_YELLOW;
   if (game === 'usl') return classColor(cls) ?? WHITE;
   return getClassColor(cls);
 }
@@ -99,9 +103,10 @@ function tickerNow(t: LiveTicker, advance: number): { text: string; clock: strin
   return { text: label, clock: null };
 }
 
-/** The viewer's own bubbles (HP / personal score) mean nothing to a site visitor. */
-function isPersonalTicker(t: LiveTicker): boolean {
-  return /^HP=/i.test(t.text) || /personal score/i.test(t.text);
+/** Bubbles a site visitor does not need: the viewer's own HP / personal score, and the idle-state lines. */
+const HIDDEN_LINE = /^HP=|personal score|not enough players|waiting for|^flagsb/i;
+function isHiddenTicker(t: LiveTicker): boolean {
+  return HIDDEN_LINE.test(t.text);
 }
 
 /** Inner width of an element, tracked live so long lines can be fitted like the client clips them. */
@@ -134,13 +139,13 @@ function Bubble({ text, clock, colour, maxWidth }: { text: string; clock: string
   const pad = 5 * S;
   const border = 2 * S;
   // One line, always: a label wider than the card is clipped the way the client clips it, never wrapped.
-  const clockW = clock ? measureCfs(' ' + clock, FONT_MEDIUM, S) : 0;
-  const shown = fitCfs(text, maxWidth - 2 * (pad + border) - clockW, FONT_MEDIUM, S);
+  const clockW = clock ? measureCfs(' ' + clock, FONT_SMALL, S) : 0;
+  const shown = fitCfs(text, maxWidth - 2 * (pad + border) - clockW, FONT_SMALL, S);
   return (
     <div className="flex items-start" style={{ border: `${border}px solid ${BOX}`, background: BLACK, padding: `${1 * S}px ${pad}px`, whiteSpace: 'nowrap' }} title={clock ? `${text} ${clock}` : text}>
-      <CfsText text={shown} color={color} font={FONT_MEDIUM} scale={S} />
+      <CfsText text={shown} color={color} font={FONT_SMALL} scale={S} />
       {/* The client draws the ticker's countdown in yellow after the label. */}
-      {clock && <CfsText text={(shown && !shown.endsWith(' ') ? ' ' : '') + clock} color={YELLOW} font={FONT_MEDIUM} scale={S} />}
+      {clock && <CfsText text={(shown && !shown.endsWith(' ') ? ' ' : '') + clock} color={YELLOW} font={FONT_SMALL} scale={S} />}
     </div>
   );
 }
@@ -163,7 +168,7 @@ function PlayerRow({ game, p, nonPlaying, maxWidth }: { game: string; p: LivePla
 
 function TeamBlock({ game, team, width }: { game: string; team: LiveTeam; width: number }) {
   const nonPlaying = team.side === 'spec' || team.side === 'np';
-  const color = sideColor(team.side);
+  const color = MAGENTA; // retail: every team header is magenta, whatever the side
   const count = String(team.players.length);
   const countW = measureCfs(count, FONT_MEDIUM, S);
   const name = fitCfs(team.name, width - countW - 12 * S, FONT_MEDIUM, S);
@@ -212,28 +217,14 @@ function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: 
   const advance = Math.max(row.age_s * 1000 + driftMs, Number.isFinite(stampedAt) ? serverNowMs - stampedAt : 0);
   const st = row.state;
   const left = st.time_left_ms !== null && st.time_left_ms !== undefined ? st.time_left_ms - advance : null;
-  const tickers = row.tickers.filter((t) => !isPersonalTicker(t));
-  // "Flags n/total" is drawn by the client from flag state, never sent as a ticker - rebuild it from the
-  // ownership the CTF script reports, per side, so a visitor sees who holds what.
-  const flagsLine = (() => {
-    if (!row.flags || row.flags.length === 0) return null;
-    const sideOf = new Map(row.teams.map((t) => [t.name, t.side] as const));
-    let t = 0;
-    let c = 0;
-    for (const f of row.flags) {
-      const side = f.team ? sideOf.get(f.team) : undefined;
-      if (side === 'T') t++;
-      else if (side === 'C') c++;
-    }
-    return `Flags T ${t}/${row.flags.length}  C ${c}/${row.flags.length}`;
-  })();
+  const tickers = row.tickers.filter((t) => !isHiddenTicker(t));
   const drafts = [row.mix, row.mix2].filter(isDraftPhase);
   // The tickers already carry the state ("Not Enough Players", "Time Left: 4:12", the score line), so the
   // status line only adds what no bubble says, and the clock only when no bubble is counting down.
   const norm = (v: string | null | undefined) => (v ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const labelDuplicated = !!st.label && tickers.some((t) => norm(t.text).includes(norm(st.label)));
   const anyTickerClock = tickers.some((t) => t.remaining_cs > 0 && t.remaining_cs * 10 - advance > 0);
-  const statusLine = [!labelDuplicated ? st.label : null, left !== null && st.running && !anyTickerClock ? mmss(left) : null].filter(Boolean).join(' ');
+  const statusLine = [!labelDuplicated && st.label && !HIDDEN_LINE.test(st.label) ? st.label : null, left !== null && st.running && !anyTickerClock ? mmss(left) : null].filter(Boolean).join(' ');
   const tagCls = row.game === 'usl' ? 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10' : 'text-amber-300 border-amber-500/40 bg-amber-500/10';
   const countText = `${row.players_playing}/${row.players_total}`;
   const pad = 3 * S;
@@ -266,7 +257,6 @@ function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: 
             if (!shown) return null;
             return <Bubble key={t.idx} text={shown.text} clock={shown.clock} colour={t.colour} maxWidth={tickW} />;
           })}
-          {flagsLine && <Bubble text={flagsLine} clock={null} colour={3} maxWidth={tickW} />}
           {drafts.map((m, i) => (
             <DraftLines key={i} mix={m} maxWidth={tickW} />
           ))}
@@ -274,7 +264,7 @@ function ArenaCard({ row, driftMs, serverNowMs }: { row: LiveArenaRow; driftMs: 
 
         {/* Player list: its own panel, like the retail notepad */}
         <div ref={listRef} className="min-w-0" style={{ flex: '1 1 0', border: `${2 * S}px solid ${RULE_LIGHT}`, boxShadow: `inset 0 0 0 ${1 * S}px ${RULE_DARK}`, background: '#050505', padding: `${2 * S}px ${3 * S}px` }}>
-          <div className="text-center">
+          <div className="flex justify-center" style={{ height: FONT_SMALL.cell * S, lineHeight: 0 }}>
             <CfsText text={`Players: ${row.players_total}`} color={GREEN} font={FONT_SMALL} scale={S} />
           </div>
           <Rule />
