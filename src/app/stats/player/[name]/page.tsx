@@ -128,6 +128,12 @@ function EloSparkline({ games }: { games: StatRow[] }) {
 
 // ---------- Component ----------
 
+/** Tranq darts landed / fired out of a weapon map (one game, or the games in view merged). */
+const tranqOf = (weapons: Record<string, { fired: number; landed: number }> | null | undefined) => {
+  const entry = Object.entries(weapons ?? {}).find(([name]) => /tranq/i.test(name));
+  return { fired: entry ? Number(entry[1]?.fired) || 0 : 0, landed: entry ? Number(entry[1]?.landed) || 0 : 0 };
+};
+
 export default function PlayerPage() {
   const params = useParams();
   const playerName = decodeURIComponent(params.name as string);
@@ -242,7 +248,8 @@ export default function PlayerPage() {
     const eloTotal = games.reduce((s, g) => s + (Number(g.elo_change) || 0), 0);
     const hasElo = games.some((g) => g.elo_change !== null && g.elo_change !== undefined);
     const schema2 = games.some((g) => (g.schema_version ?? 1) >= 2);
-    return { wins, classes, weapons, bySide, captainGames, summoned, summons, playSeconds, eloTotal, hasElo, schema2 };
+    const tranq = tranqOf(weapons);
+    return { wins, classes, weapons, bySide, captainGames, summoned, summons, playSeconds, eloTotal, hasElo, schema2, tranq };
   }, [games]);
 
   // The per-mode view can hold one row per (mode, season). Fold those into one row per mode and
@@ -374,13 +381,14 @@ export default function PlayerPage() {
           <>
             {/* ---- Headline tiles (respect the filters below) -------------- */}
             {cs && (
-              <div className="mb-4 grid grid-cols-3 gap-2 md:grid-cols-6">
+              <div className={`mb-4 grid grid-cols-3 gap-2 ${inView.tranq.fired > 0 ? 'md:grid-cols-7' : 'md:grid-cols-6'}`}>
                 <StatTile label="Games" value={aggregateTotals?.totalGames ?? '—'} />
                 <StatTile label="Win rate" value={fmtPct(cs.winRate, 0)} color={winColor(cs.winRate)} hint={`${inView.wins} of ${games.length} in view`} />
                 <StatTile label="K/D" value={fmtNum(cs.killDeathRatio, 2)} />
                 <StatTile label="Accuracy" value={fmtPct(cs.avgAccuracy, 0)} />
                 {elo ? <StatTile label="ELO" value={Math.round(elo.weighted_elo)} hint={inView.hasElo ? `${fmtDelta(inView.eloTotal, 0)} in view` : undefined} color={T.highlight} /> : <StatTile label="Caps" value={aggregateTotals?.totalCaptures ?? '—'} />}
                 <StatTile label="Kills" value={(aggregateTotals?.totalKills ?? 0).toLocaleString()} />
+                {inView.tranq.fired > 0 && <StatTile label="Tranq" value={fmtPct(inView.tranq.landed / inView.tranq.fired, 0)} hint={`${inView.tranq.landed} / ${inView.tranq.fired} darts in view`} color={T.highlight} />}
               </div>
             )}
 
@@ -530,7 +538,7 @@ export default function PlayerPage() {
               <Card title={<>Recent games <span className="text-sm text-[#8B98B0] font-body">· {games.length}</span></>} className="mb-4" pad={false}>
                 <div className="overflow-x-auto px-2 pb-2">
                   <table className="w-full min-w-[900px] text-sm">
-                    <thead><tr>{th('Date', false)}{th('Mode', false)}{th('Arena', false)}{th('Side', false)}{th('Result', false)}{th('Class', false)}{th('K')}{th('D')}{th('K/D')}{th('Caps')}{th('Acc')}{inView.hasElo && th('ELO Δ')}<th className="px-3 py-2" /></tr></thead>
+                    <thead><tr>{th('Date', false)}{th('Mode', false)}{th('Arena', false)}{th('Side', false)}{th('Result', false)}{th('Class', false)}{th('K')}{th('D')}{th('K/D')}{th('Caps')}{th('Acc')}{inView.tranq.fired > 0 && th('Tranq', true, 'Tranq darts landed / fired')}{inView.hasElo && th('ELO Δ')}<th className="px-3 py-2" /></tr></thead>
                     <tbody>
                       {games.map((game) => {
                         const delta = game.elo_change === null || game.elo_change === undefined ? null : Number(game.elo_change);
@@ -547,6 +555,7 @@ export default function PlayerPage() {
                             <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{fmtKD(game.kills, game.deaths)}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-[#E6EDF7]">{game.captures ?? 0}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-[#8B98B0]">{game.accuracy ? fmtPct(game.accuracy, 0) : '—'}</td>
+                            {inView.tranq.fired > 0 && (() => { const t = tranqOf(game.weapon_stats); return <td className="px-3 py-2 text-right tabular-nums" style={{ color: t.landed > 0 ? T.highlight : T.muted }} title={t.fired > 0 ? `${fmtPct(t.landed / t.fired, 0)} of ${t.fired} darts landed` : undefined}>{t.fired > 0 ? <>{t.landed}<span className="text-[#8B98B0]"> / {t.fired}</span></> : '—'}</td>; })()}
                             {inView.hasElo && <td className="px-3 py-2 text-right tabular-nums" style={{ color: delta === null ? T.muted : delta > 0 ? T.win : delta < 0 ? T.loss : T.muted }}>{fmtDelta(delta)}</td>}
                             <td className="px-3 py-2 text-right">
                               {game.game_id && (
