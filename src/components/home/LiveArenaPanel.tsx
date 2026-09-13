@@ -24,7 +24,7 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
  * Countdowns keep running between polls from the snapshot's age.
  */
 
-const POLL_MS = 60_000;
+const POLL_MS = 20_000;
 const TICK_MS = 1_000;
 const S = 1 as const;                       // integer UI scale (retail pixels -> CSS pixels); 1 = the client's own size
 
