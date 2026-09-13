@@ -54,8 +54,15 @@ const classRank = (p: StatRow) => {
   return i < 0 ? order.length : i;
 };
 
-type Col = 'player' | 'class' | 'kills' | 'deaths' | 'kd' | 'caps' | 'ck' | 'carry' | 'eb' | 'turret' | 'acc' | 'summ' | 'mined' | 'elo';
+/** Tranq darts landed - the medic's stun count, from the per-weapon table. */
+const tranqHits = (p: StatRow) => {
+  const entry = Object.entries(p.weapon_stats ?? {}).find(([name]) => /tranq/i.test(name));
+  return entry ? Number(entry[1]?.landed) || 0 : 0;
+};
+
+type Col = 'player' | 'class' | 'kills' | 'deaths' | 'kd' | 'caps' | 'ck' | 'carry' | 'eb' | 'turret' | 'acc' | 'tranq' | 'summ' | 'mined' | 'elo';
 const GETTERS: SortGetters<StatRow, Col> = {
+  tranq: (p) => tranqHits(p),
   player: (p) => p.player_name,
   class: (p) => classRank(p),
   kills: (p) => p.kills,
@@ -143,6 +150,8 @@ export default function GameStatsPage() {
       .filter((x) => x.acc > 0).sort((a, b) => b.acc - a.acc)[0];
     if (acc) out.push({ label: 'Accuracy', player: acc.p, value: fmtPct(acc.acc) });
     const summ = top('summons_performed'); if (summ) out.push({ label: 'Summons', player: summ, value: String(summ.summons_performed) });
+    const tq = [...ps].sort((a, b) => tranqHits(b) - tranqHits(a))[0];
+    if (tq && tranqHits(tq) > 0) out.push({ label: 'Tranq hits', player: tq, value: String(tranqHits(tq)) });
     const tur = top('turret_damage'); if (tur) out.push({ label: 'Turret damage', player: tur, value: String(tur.turret_damage) });
     return out;
   }, [game]);
@@ -150,6 +159,7 @@ export default function GameStatsPage() {
   const schema2 = (game?.schemaVersion ?? 1) >= 2;
   const showSides = !!game?.players.some((p) => isSide(p.side));
   const showElo = !!game?.players.some((p) => p.elo_change !== null && p.elo_change !== undefined);
+  const showTranq = !!game?.players.some((p) => tranqHits(p) > 0);
 
   const headline = (() => {
     if (!game) return '';
@@ -290,6 +300,7 @@ export default function GameStatsPage() {
                             {th('eb', 'EB', { title: 'Energy-beam hits' })}
                             {th('turret', 'Turret', { title: 'Turret damage' })}
                             {th('acc', 'Acc', { title: 'Accuracy - all weapons when the game recorded them, otherwise the best weapon' })}
+                            {showTranq && th('tranq', 'Tranq', { title: 'Tranq darts landed - stuns' })}
                             {schema2 && th('summ', 'Summ', { title: 'Times summoned / summons performed' })}
                             {schema2 && th('mined', 'Mined', { title: 'Titanium Oxide / Toxin mined' })}
                             {showElo && th('elo', 'ELO Δ', { title: 'Rating change from this game' })}
@@ -311,7 +322,12 @@ export default function GameStatsPage() {
                                       </button>
                                     ) : <span className="block w-3.5" />}
                                   </td>
-                                  <td className="px-2 py-2 max-w-[11rem]"><PlayerName name={p.player_name} mainClass={p.main_class} captain={p.is_captain} /></td>
+                                  <td className="px-2 py-2 max-w-[11rem]">
+                                    <span className="inline-flex items-center gap-1.5 min-w-0">
+                                      <PlayerName name={p.player_name} mainClass={p.main_class} captain={p.is_captain} />
+                                      {p.left_early && <Tag title="Left before the end - stats as of leaving">left</Tag>}
+                                    </span>
+                                  </td>
                                   <td className="px-2 py-2"><ClassSplit classes={p.class_play_times} primary={p.main_class} compact /></td>
                                   <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]">{p.kills}</td>
                                   <td className="px-2 py-2 text-right tabular-nums text-[#8B98B0]">{p.deaths}</td>
@@ -322,6 +338,7 @@ export default function GameStatsPage() {
                                   <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]">{p.eb_hits}</td>
                                   <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]">{p.turret_damage || <span className="text-[#8B98B0]">—</span>}</td>
                                   <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]" title={p.weapon_stats ? 'All weapons' : 'Best weapon'}>{accOf(p) ? fmtPct(accOf(p), 0) : <span className="text-[#8B98B0]">—</span>}</td>
+                                  {showTranq && <td className="px-2 py-2 text-right tabular-nums" style={{ color: tranqHits(p) > 0 ? T.highlight : T.muted }}>{tranqHits(p) > 0 ? tranqHits(p) : '—'}</td>}
                                   {schema2 && <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]" title="summoned / performed">{p.times_summoned ?? 0}<span className="text-[#8B98B0]"> / {p.summons_performed ?? 0}</span></td>}
                                   {schema2 && <td className="px-2 py-2 text-right tabular-nums text-[#E6EDF7]" title="Titanium Oxide / Toxin">{(p.mined_tso ?? 0) || (p.mined_tox ?? 0) ? <>{p.mined_tso ?? 0}<span className="text-[#8B98B0]"> / {p.mined_tox ?? 0}</span></> : <span className="text-[#8B98B0]">—</span>}</td>}
                                   {showElo && <td className="px-2 py-2 text-right tabular-nums" style={{ color: elo === null ? T.muted : elo > 0 ? T.win : elo < 0 ? T.loss : T.muted }} title={elo === null ? undefined : `${Math.round(Number(p.elo_before))} → ${Math.round(Number(p.elo_after))}`}>{fmtDelta(elo)}</td>}

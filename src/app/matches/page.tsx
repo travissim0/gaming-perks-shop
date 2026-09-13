@@ -9,6 +9,7 @@ import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { localDateTimeToIso } from '@/lib/schedule';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import { getClassColor } from '@/utils/classColors';
 
 /*
  * Match log — every match on the site: pickups, scrims, squad matches and the
@@ -111,7 +112,6 @@ export default function MatchesPage() {
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [showPast, setShowPast] = useState(false);
-  const [openStats, setOpenStats] = useState<Set<string>>(new Set());
   // Timezone label only after mount (server and browser zones differ → hydration mismatch otherwise).
   const [tz, setTz] = useState('');
   useEffect(() => { setTz(tzName()); }, []);
@@ -465,45 +465,61 @@ export default function MatchesPage() {
                 </div>
                 <ul className="divide-y divide-white/[0.06]">
                   {autoLogged.map((m) => {
-                    const open = openStats.has(m.id);
-                    const stats: any[] = Array.isArray(m.gameStats) ? m.gameStats : [];
-                    const teams = Array.from(new Set(stats.map((p) => p.team).filter(Boolean)));
+                    // /api/matches?includeStats=true attaches the WHOLE game API response
+                    // ({ success, data }), not a player array - which is why the old expander
+                    // never had anything to show. Read the summary the game API already computes.
+                    const gs: any = Array.isArray(m.gameStats) ? { players: m.gameStats, teams: [] } : (m.gameStats as any)?.data;
+                    const players: any[] = gs?.players ?? [];
+                    const teams: any[] = gs?.teams ?? [];
+                    const win = gs?.winningInfo;
+                    const outcome = !gs ? null
+                      : !gs.decided || !win ? (gs.gameMode === 'Pub' ? null : 'No winner recorded')
+                      : win.type === 'side' ? (win.side === 'defense' ? `Defense held${gs.baseUsed ? ` ${gs.baseUsed}` : ''}` : `Offense broke${gs.baseUsed ? ` ${gs.baseUsed}` : ''}`)
+                      : `${win.winner} won`;
+                    const topKills = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0))[0];
+                    const topEb = [...players].sort((a, b) => (b.eb_hits || 0) - (a.eb_hits || 0))[0];
+                    const statsHref = m.game_id ? `/stats/game/${encodeURIComponent(m.game_id)}` : `/matches/${m.id}`;
+                    const modeCls = gs?.gameMode === 'OvD' ? 'text-[#22D3EE]' : gs?.gameMode === 'Mix' ? 'text-[#A78BFA]' : 'text-[#E6EDF7]';
                     return (
-                      <li key={m.id} className="px-4 py-2.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums">{relTime(m.scheduled_at)}</div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm text-[#E6EDF7] truncate">{m.title}</div>
-                            <div className="text-[11px] text-[#8B98B0]">
-                              {[m.game_mode, m.map_name].filter(Boolean).join(' · ')}
-                              {stats.length > 0 && ` · ${stats.length} players`}
-                            </div>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-3 text-[11px]">
-                            {m.game_id && <Link href={`/stats/game/${encodeURIComponent(m.game_id)}`} className="text-[#22D3EE] hover:text-[#67E8F9]">Stats</Link>}
-                            <Link href={`/matches/${m.id}`} className="text-[#8B98B0] hover:text-[#22D3EE]">Details</Link>
-                            {stats.length > 0 && (
-                              <button type="button" onClick={() => setOpenStats((s) => { const n = new Set(s); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n; })} className="text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Toggle players">
-                                <ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {open && stats.length > 0 && (
-                          <div className="mt-2 pl-[6.75rem] grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
-                            {teams.map((t) => (
-                              <div key={t}>
-                                <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] mb-0.5">{t} · {stats.filter((p) => p.team === t).reduce((n, p) => n + (p.captures || 0), 0)} caps</div>
-                                {stats.filter((p) => p.team === t).map((p, i) => (
-                                  <div key={i} className="flex justify-between text-[#E6EDF7]">
-                                    <span className="truncate">{p.player_name}</span>
-                                    <span className="tabular-nums text-[#8B98B0]"><span className="text-[#34D399]">{p.kills || 0}</span>/<span className="text-[#F87171]">{p.deaths || 0}</span>{p.captures > 0 ? ` · ${p.captures}c` : ''}</span>
-                                  </div>
-                                ))}
+                      <li key={m.id} className="hover:bg-white/[0.02]">
+                        <Link href={statsHref} className="block px-4 py-2.5">
+                          <div className="flex items-start gap-3">
+                            <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums pt-0.5">{relTime(m.scheduled_at)}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                <span className={`text-sm font-medium ${modeCls}`}>{gs?.gameMode || m.game_mode || m.title}</span>
+                                {outcome && <span className={`text-sm ${gs?.decided ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{outcome}</span>}
+                                <span className="text-[11px] text-[#8B98B0]">
+                                  {[m.map_name, gs?.duration ? `${Math.floor(gs.duration / 60)}:${String(gs.duration % 60).padStart(2, '0')}` : null, players.length ? `${players.length} players` : null].filter(Boolean).join(' · ')}
+                                </span>
                               </div>
-                            ))}
+                              {teams.length > 0 && (
+                                <div className="mt-1 space-y-0.5 text-[11px]">
+                                  {teams.slice(0, 2).map((t: any) => (
+                                    <div key={t.name} className="flex items-start gap-1.5 min-w-0">
+                                      <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: t.side === 'defense' ? '#22D3EE' : t.side === 'offense' ? '#F59E0B' : '#8B98B0' }} />
+                                      <span className={`shrink-0 font-medium ${t.result === 'win' ? 'text-[#34D399]' : t.result === 'loss' ? 'text-[#F87171]' : 'text-[#8B98B0]'}`}>
+                                        {t.side ? (t.side === 'defense' ? 'DEF' : 'OFF') : t.name}
+                                      </span>
+                                      <span className="flex flex-wrap gap-x-2 min-w-0">
+                                        {players.filter((p) => p.team === t.name).sort((a, b) => (b.kills || 0) - (a.kills || 0)).map((p, i) => (
+                                          <span key={i} className="truncate" style={{ color: getClassColor(p.main_class) }} title={`${p.player_name} · ${p.main_class || ''} · ${p.kills || 0}/${p.deaths || 0}`}>{p.is_captain ? '★' : ''}{p.player_name}</span>
+                                        ))}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {players.length > 0 && (
+                                <div className="mt-1 text-[11px] text-[#8B98B0]">
+                                  {topKills && <span>Most kills <span className="text-[#E6EDF7]">{topKills.player_name} {topKills.kills}</span></span>}
+                                  {topEb && (topEb.eb_hits || 0) > 0 && <span> · EB <span className="text-[#E6EDF7]">{topEb.player_name} {topEb.eb_hits}</span></span>}
+                                </div>
+                              )}
+                            </div>
+                            <div className="shrink-0 text-[11px] text-[#22D3EE]">Stats</div>
                           </div>
-                        )}
+                        </Link>
                       </li>
                     );
                   })}

@@ -37,6 +37,7 @@ export interface PlayerStatData {
   minedTso?: number;
   minedTox?: number;
   isCaptain?: boolean;
+  leftEarly?: boolean;   // recorded from a leave-time snapshot rather than at Game.End
 }
 
 export interface PlayerStatsPayload {
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
       mined_tso: nonNegInt(player.minedTso),
       mined_tox: nonNegInt(player.minedTox),
       is_captain: player.isCaptain === true,
+      left_early: player.leftEarly === true,
       schema_version: nonNegInt(data.schemaVersion) || 1,
       script_version: typeof data.scriptVersion === 'string' ? data.scriptVersion.slice(0, 64) : null,
     }));
