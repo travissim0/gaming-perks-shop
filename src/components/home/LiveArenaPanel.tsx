@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { SIDE_COLORS, classColor } from '@/components/usl-mix/UslMixShell';
+import { VT323 } from 'next/font/google';
+import { classColor } from '@/components/usl-mix/UslMixShell';
 import { getClassColor } from '@/utils/classColors';
 import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTeam } from '@/lib/live/types';
 
@@ -9,35 +10,43 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
  * Live arenas panel (home page right sidebar): one card per arena with people in it, USL and
  * CTF alike, straight from the zone scripts' minute-by-minute snapshot (/api/live).
  *
- * Layout is deliberately dense - a single vertical column per team, tight leading and negative
- * tracking - so a full 9v9 plus its spectators fits the sidebar without scrolling. Teams read
- * in the in-game order: Titan side, Collective side, other playing teams, then np, then spec;
- * the two non-playing teams are dulled, names are coloured by class, captains get a star.
+ * Styled after the in-game UI rather than the site: black ground, the pixel face, the ticker
+ * "bubbles" as grey-bordered boxes in the left third of the card, and the player list in the
+ * right two-thirds behind a grey divider - "Players: N", a rule, then each team's name centred in
+ * its colour (Titan green, Collective red, spec magenta, np grey) with its players in a single
+ * column below it. Spectators carry the purple S the game shows; captains a star.
  *
  * Countdowns (game clock, ticker bubbles) keep running between polls from the snapshot's age.
  */
 
+const pixel = VT323({ subsets: ['latin'], weight: '400', display: 'swap' });
+
 const POLL_MS = 60_000;
 const TICK_MS = 1_000;
 
-const NON_PLAYING = '#6b7280';
-const OTHER_SIDE = '#8B98B0';
+// In-game palette.
+const GREEN = '#3cff3c';
+const YELLOW = '#ffff3c';
+const CYAN = '#40f0f0';
+const RED = '#ff5050';
+const MAGENTA = '#ff44ff';
+const PURPLE = '#b060ff';
+const GREY = '#9a9f9a';
+const RULE = '#8a8f8a';
+const BLACK = '#000000';
 
-/** Tight but still legible: negative tracking just short of glyph overlap in the UI font. */
-const ROW_STYLE: React.CSSProperties = { fontSize: '10.5px', lineHeight: 1.08, letterSpacing: '-0.04em' };
-const HEAD_STYLE: React.CSSProperties = { fontSize: '9.5px', lineHeight: 1.15, letterSpacing: '-0.01em' };
+/** Ticker colour byte -> text colour, as the client draws them. */
+const TICKER_COLOURS: Record<number, string> = { 0: GREEN, 1: GREEN, 2: YELLOW, 3: CYAN, 4: RED, 5: '#ffffff' };
+
+const TEXT: React.CSSProperties = { fontSize: '16px', lineHeight: 1.0 };
+const SMALL: React.CSSProperties = { fontSize: '14px', lineHeight: 1.0 };
 
 function sideColor(side: LiveSide): string {
-  if (side === 'T') return SIDE_COLORS.T;
-  if (side === 'C') return SIDE_COLORS.C;
-  if (side === 'spec' || side === 'np') return NON_PLAYING;
-  return OTHER_SIDE;
-}
-
-function sideLabel(side: LiveSide): string | null {
-  if (side === 'T') return 'Titan';
-  if (side === 'C') return 'Collective';
-  return null;
+  if (side === 'T') return GREEN;
+  if (side === 'C') return RED;
+  if (side === 'spec') return MAGENTA;
+  if (side === 'np') return GREY;
+  return CYAN;
 }
 
 function classColorFor(game: string, cls: string): string {
@@ -59,15 +68,16 @@ function isDraftPhase(m: LiveMix | null | undefined): m is LiveMix {
 }
 
 function PlayerRow({ game, p, nonPlaying }: { game: string; p: LivePlayer; nonPlaying: boolean }) {
-  const dim = nonPlaying || p.spec;
-  const style: React.CSSProperties = dim
-    ? { ...ROW_STYLE, color: NON_PLAYING, opacity: 0.65, fontStyle: 'italic' }
-    : { ...ROW_STYLE, color: classColorFor(game, p.class), opacity: p.dead ? 0.55 : 1 };
-  const title = dim ? `${p.alias} - ${p.spec ? 'spectating' : 'not playing'} (${p.class})` : `${p.class}${p.dead ? ' - dead' : ''}`;
+  const spec = nonPlaying || p.spec;
+  const color = spec ? GREY : classColorFor(game, p.class);
+  const title = spec ? `${p.alias} - ${p.spec ? 'spectating' : 'not playing'} (${p.class})` : `${p.class}${p.dead ? ' - dead' : ''}`;
   return (
-    <div className="flex items-baseline gap-1 truncate" style={style} title={title}>
-      {p.captain && <span className="text-amber-300 not-italic" style={{ opacity: 1 }}>★</span>}
-      <span className="truncate">{p.alias}</span>
+    <div className="flex items-baseline whitespace-nowrap" style={{ ...TEXT, opacity: p.dead && !spec ? 0.55 : 1 }} title={title}>
+      {/* Fixed-width marker column so aliases line up: purple S for spectators, star for captains. */}
+      <span className="inline-block w-[10px] shrink-0 text-center" style={{ color: spec ? PURPLE : YELLOW }}>
+        {spec ? 'S' : p.captain ? '★' : ''}
+      </span>
+      <span className="truncate" style={{ color }}>{p.alias}</span>
     </div>
   );
 }
@@ -75,30 +85,24 @@ function PlayerRow({ game, p, nonPlaying }: { game: string; p: LivePlayer; nonPl
 function TeamBlock({ game, team }: { game: string; team: LiveTeam }) {
   const nonPlaying = team.side === 'spec' || team.side === 'np';
   const color = sideColor(team.side);
-  const label = sideLabel(team.side);
   return (
     <div className="mb-1 last:mb-0">
-      <div
-        className="flex items-baseline justify-between gap-1 px-1 py-[1px] rounded-sm bg-gray-950/60 border-l-2"
-        style={{ borderColor: color }}
-      >
-        <span className="font-bold uppercase truncate" style={{ ...HEAD_STYLE, color }}>
-          {team.name}
-          {label && (
-            <span className="ml-1 font-semibold normal-case px-1 rounded" style={{ color, background: `${color}22`, border: `1px solid ${color}55` }}>
-              {label}
-            </span>
-          )}
-        </span>
-        <span className="font-mono text-gray-500 shrink-0" style={HEAD_STYLE}>
-          {team.players.length}
-        </span>
+      <div className="text-center truncate px-1" style={{ ...TEXT, fontSize: '17px', color }} title={`${team.name} - ${team.players.length}`}>
+        {team.name}
       </div>
-      <div className="px-1 pt-[1px]">
-        {team.players.map((p) => (
-          <PlayerRow key={p.alias} game={game} p={p} nonPlaying={nonPlaying} />
-        ))}
-      </div>
+      {team.players.map((p) => (
+        <PlayerRow key={p.alias} game={game} p={p} nonPlaying={nonPlaying} />
+      ))}
+    </div>
+  );
+}
+
+function TickerBox({ text, clock, colour }: { text: string; clock: string | null; colour: number }) {
+  const color = TICKER_COLOURS[colour] ?? GREEN;
+  return (
+    <div className="px-1 py-[1px] text-center break-words" style={{ ...TEXT, fontSize: '15px', color, background: BLACK, border: `2px solid ${RULE}` }}>
+      {text}
+      {clock ? <span style={{ color: CYAN }}>{text ? ' ' : ''}{clock}</span> : null}
     </div>
   );
 }
@@ -108,20 +112,20 @@ function DraftBlock({ mix }: { mix: LiveMix }) {
     mix.phase === 'CaptainSignup' ? 'captain signup' : mix.phase === 'BaseSelect' ? 'base pick' : mix.phase === 'Picking' ? 'picking' : mix.phase === 'Countdown' ? 'starting' : mix.phase.toLowerCase();
   const caps = (mix.captains ?? []).filter((c): c is string => !!c);
   return (
-    <div className="mb-1 px-1 py-[2px] rounded-sm bg-cyan-950/30 border border-cyan-500/20" style={ROW_STYLE}>
-      <div className="text-cyan-200 font-semibold">
-        {mix.label} {mix.team_size > 0 ? `${mix.team_size}v${mix.team_size}` : ''} · {phase}
+    <div className="px-1 py-[2px] break-words" style={{ ...SMALL, color: GREEN, border: `2px solid ${RULE}`, background: BLACK }}>
+      <div style={{ color: YELLOW }}>
+        {mix.label} {mix.team_size > 0 ? `${mix.team_size}v${mix.team_size}` : ''} {phase}
         {mix.base ? ` @ ${mix.base}` : ''}
       </div>
       {caps.length > 0 && (
-        <div className="text-gray-300">
-          captains: {caps.join(' vs ')}
-          {mix.turn ? <span className="text-amber-300"> · {mix.turn} to pick</span> : null}
+        <div>
+          capts: {caps.join(' vs ')}
+          {mix.turn ? <span style={{ color: CYAN }}> {mix.turn} to pick</span> : null}
         </div>
       )}
       {mix.pool && mix.pool.length > 0 && (
-        <div className="text-gray-400">
-          pool ({mix.pool.length}): <span className="text-gray-300">{mix.pool.join(', ')}</span>
+        <div style={{ color: GREY }}>
+          pool {mix.pool.length}: <span style={{ color: '#d1d5db' }}>{mix.pool.join(', ')}</span>
         </div>
       )}
     </div>
@@ -134,78 +138,63 @@ function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
   const st = row.state;
   const left = st.time_left_ms !== null && st.time_left_ms !== undefined ? st.time_left_ms - advance : null;
   const gameTag = row.game.toUpperCase();
-  const tagColor = row.game === 'usl' ? 'text-cyan-300 border-cyan-500/40 bg-cyan-500/10' : 'text-amber-300 border-amber-500/40 bg-amber-500/10';
+  const tagColor = row.game === 'usl' ? CYAN : YELLOW;
   const drafts = [row.mix, row.mix2].filter(isDraftPhase);
 
   return (
-    <div className="rounded-lg border border-gray-700/40 bg-gray-900/50 px-1.5 py-1.5">
+    <div className={pixel.className} style={{ background: BLACK, border: `2px solid ${RULE}` }}>
       {/* Header: game / zone / arena / count */}
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className={`px-1 rounded border font-bold ${tagColor}`} style={HEAD_STYLE}>
-          {gameTag}
-        </span>
-        <span className="text-gray-200 font-semibold truncate" style={{ ...HEAD_STYLE, fontSize: '11px' }} title={`${row.zone} / ${row.arena}`}>
+      <div className="flex items-baseline gap-2 px-1.5 py-[2px]" style={{ ...TEXT, borderBottom: `2px solid ${RULE}` }}>
+        <span className="px-1" style={{ color: BLACK, background: tagColor }}>{gameTag}</span>
+        <span className="truncate" style={{ color: GREEN }} title={`${row.zone} / ${row.arena}`}>
           {shortZone(row.zone)}
-          <span className="text-gray-500 font-normal"> · {row.arena}</span>
+          <span style={{ color: GREY }}> {row.arena}</span>
         </span>
         <span className="ml-auto flex items-center gap-1 shrink-0">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: GREEN }} />
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: GREEN }} />
           </span>
-          <span className="font-mono text-gray-400" style={HEAD_STYLE}>
-            {row.players_playing}/{row.players_total}
-          </span>
+          <span style={{ color: YELLOW }}>{row.players_playing}/{row.players_total}</span>
         </span>
       </div>
 
-      {/* Status: label, clock, score */}
-      <div className="flex items-baseline gap-1.5 mb-1 px-0.5" style={ROW_STYLE}>
-        <span className="text-gray-300 truncate">{st.label ?? st.mode}</span>
-        {left !== null && st.running && (
-          <span className="font-mono text-emerald-300 shrink-0 ml-auto">{mmss(left)}</span>
-        )}
-      </div>
-      {st.score.length >= 2 && (
-        <div className="flex items-baseline justify-center gap-1 mb-1 font-mono" style={ROW_STYLE}>
-          <span className="truncate" style={{ color: sideColor(st.score[0].side) }}>{st.score[0].team}</span>
-          <span className="text-white font-bold tabular-nums shrink-0">
-            {st.score[0].kills} - {st.score[1].kills}
-          </span>
-          <span className="truncate" style={{ color: sideColor(st.score[1].side) }}>{st.score[1].team}</span>
-        </div>
-      )}
-
-      {/* Ticker bubbles, as a spectator sees them */}
-      {row.tickers.length > 0 && (
-        <div className="mb-1 space-y-[2px]">
+      <div className="grid grid-cols-3">
+        {/* Left third: game state + ticker bubbles */}
+        <div className="col-span-1 p-1 space-y-1 min-w-0">
+          <div className="break-words" style={{ ...SMALL, color: YELLOW }}>
+            {st.label ?? st.mode}
+            {left !== null && st.running ? <span style={{ color: CYAN }}> {mmss(left)}</span> : null}
+          </div>
+          {st.score.length >= 2 && (
+            <div className="break-words" style={SMALL}>
+              <span style={{ color: sideColor(st.score[0].side) }}>{st.score[0].team}</span>
+              <span style={{ color: '#ffffff' }}> {st.score[0].kills}-{st.score[1].kills} </span>
+              <span style={{ color: sideColor(st.score[1].side) }}>{st.score[1].team}</span>
+            </div>
+          )}
           {row.tickers.map((t) => {
             const rem = t.remaining_cs * 10 - advance;
             const showClock = t.remaining_cs > 0 && rem > 0;
             if (!t.text && !showClock) return null;
-            return (
-              <div
-                key={t.idx}
-                className="px-1.5 py-[1px] rounded-full bg-gray-950/70 border border-gray-600/40 text-gray-200 font-mono truncate"
-                style={{ ...ROW_STYLE, letterSpacing: '-0.02em' }}
-                title={`ticker ${t.idx}`}
-              >
-                {t.text}
-                {/* The zone's label ends in a space ("Time Left: ") that the normaliser trims - restore the gap. */}
-                {showClock ? <span className="text-emerald-300">{t.text ? ' ' : ''}{mmss(rem)}</span> : null}
-              </div>
-            );
+            return <TickerBox key={t.idx} text={t.text} clock={showClock ? mmss(rem) : null} colour={t.colour} />;
           })}
+          {drafts.map((m, i) => (
+            <DraftBlock key={i} mix={m} />
+          ))}
         </div>
-      )}
 
-      {drafts.map((m, i) => (
-        <DraftBlock key={i} mix={m} />
-      ))}
-
-      {row.teams.map((team) => (
-        <TeamBlock key={team.name} game={row.game} team={team} />
-      ))}
+        {/* Right two-thirds: the player list, as the F-key list draws it */}
+        <div className="col-span-2 p-1 min-w-0" style={{ borderLeft: `2px solid ${RULE}` }}>
+          <div className="text-center" style={{ ...TEXT, color: GREEN }}>
+            Players: {row.players_total}
+          </div>
+          <div className="mb-1" style={{ borderTop: `2px solid ${RULE}` }} />
+          {row.teams.map((team) => (
+            <TeamBlock key={team.name} game={row.game} team={team} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
