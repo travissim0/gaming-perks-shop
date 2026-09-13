@@ -25,8 +25,8 @@ export async function buildLiveResponse(request: NextRequest, forceGame?: LiveGa
   const arenas = rows
     .filter((r) => game === 'all' || r.game === game)
     .filter((r) => includeEmpty || r.players_total > 0)
-    // Busiest arena first; ties by recency (rows already come newest first).
-    .sort((a, b) => b.players_total - a.players_total);
+    // Busiest arena first; on a tie USL before CTF, then recency (rows already come newest first).
+    .sort((a, b) => b.players_total - a.players_total || (a.game === b.game ? 0 : a.game === 'usl' ? -1 : 1));
 
   const body: LiveResponse = {
     success: true,

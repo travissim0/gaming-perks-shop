@@ -191,7 +191,8 @@ function ArenaCard({ row, driftMs }: { row: LiveArenaRow; driftMs: number }) {
                 title={`ticker ${t.idx}`}
               >
                 {t.text}
-                {showClock ? <span className="text-emerald-300">{mmss(rem)}</span> : null}
+                {/* The zone's label ends in a space ("Time Left: ") that the normaliser trims - restore the gap. */}
+                {showClock ? <span className="text-emerald-300">{t.text ? ' ' : ''}{mmss(rem)}</span> : null}
               </div>
             );
           })}
