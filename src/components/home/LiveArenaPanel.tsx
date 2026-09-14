@@ -19,7 +19,7 @@ import type { LiveArenaRow, LiveMix, LivePlayer, LiveResponse, LiveSide, LiveTea
  *  - player list: its own bordered panel (the retail notepad). "Players: N" centred in green, a double rule, then every team's name centred
  *    in its colour (Titan green, Collective red, spec magenta, np grey) with the member count
  *    right-aligned, and its players one per row - 14px rows at 1x, the spectator S in purple in
- *    the left gutter, aliases in class colours (grey when spectating, dark grey when dead).
+ *    the left gutter, aliases in class colours (grey when spectating; dead/alive is not shown).
  *
  * Countdowns keep running between polls from the snapshot's age.
  */
@@ -36,7 +36,6 @@ const YELLOW = '#ffff40';
 const CYAN = '#40ffff';
 const RED = '#ff4040';
 const WHITE = '#ffffff';
-const DEAD = '#707070';
 const SPEC = '#9c9c9c';
 const NP = '#8c8c8c';
 const BOX = '#a4a4a4';                       // ticker box border
@@ -180,8 +179,8 @@ function Bubble({ text, clock, colour, maxWidth }: { text: string; clock: string
 
 function PlayerRow({ game, p, nonPlaying, maxWidth }: { game: string; p: LivePlayer; nonPlaying: boolean; maxWidth: number }) {
   const spec = nonPlaying || p.spec;
-  const color = spec ? SPEC : p.dead ? DEAD : classColorFor(game, p.class);
-  const title = spec ? `${p.alias} - ${p.spec ? 'spectating' : 'not playing'} (${p.class})` : `${p.alias} - ${p.class}${p.dead ? ' (dead)' : ''}`;
+  const color = spec ? SPEC : classColorFor(game, p.class);   // dead/alive deliberately not reflected (Travis, 2026-09-14)
+  const title = spec ? `${p.alias} - ${p.spec ? 'spectating' : 'not playing'} (${p.class})` : `${p.alias} - ${p.class}`;
   const marker = spec ? 'S' : p.captain ? '*' : '';
   return (
     <div className="flex items-start" style={{ height: (FONT_MEDIUM.cell + ROW_GAP) * S }} title={title}>
