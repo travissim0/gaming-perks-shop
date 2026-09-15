@@ -3,6 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChatInputCommandInteraction,
+  EmbedBuilder,
   Guild,
   MessageFlags,
   PermissionFlagsBits,
@@ -63,7 +64,9 @@ export async function registerRolePickerCommand(guild: Guild): Promise<void> {
   for (let i = 2; i <= MAX_ROLES; i++) {
     cmd.addRoleOption((o) => o.setName(`role${i}`).setDescription('Another self-assignable role').setRequired(false));
   }
-  cmd.addStringOption((o) => o.setName('text').setDescription('Message above the buttons').setRequired(false));
+  cmd.addStringOption((o) => o.setName('title').setDescription('Embed title (default: Pick your roles)').setRequired(false));
+  cmd.addStringOption((o) => o.setName('text').setDescription('Text above the buttons').setRequired(false));
+  cmd.addStringOption((o) => o.setName('emojis').setDescription('Space-separated emoji, one per role in order (e.g. ⚔️ 🔔 🎥)').setRequired(false));
   await guild.commands.set([cmd]);
 }
 
@@ -86,16 +89,21 @@ async function postPicker(interaction: ChatInputCommandInteraction): Promise<voi
     await interaction.reply({ content: `DRY RUN — would post a picker for ${roles.map((r) => r.name).join(', ')}.`, flags: MessageFlags.Ephemeral });
     return;
   }
+  const emojis = (interaction.options.getString('emojis') || '').split(/\s+/).filter(Boolean);
+  const buttons = roles.map((r, i) => {
+    const b = new ButtonBuilder().setCustomId(`${BUTTON_PREFIX}${r.id}`).setLabel(r.name.slice(0, 80)).setStyle(ButtonStyle.Primary);
+    if (emojis[i]) b.setEmoji(emojis[i]);
+    return b;
+  });
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-  for (let i = 0; i < roles.length; i += 5) {
-    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
-      roles.slice(i, i + 5).map((r) =>
-        new ButtonBuilder().setCustomId(`${BUTTON_PREFIX}${r.id}`).setLabel(r.name.slice(0, 80)).setStyle(ButtonStyle.Secondary),
-      ),
-    ));
+  for (let i = 0; i < buttons.length; i += 5) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(buttons.slice(i, i + 5)));
   }
-  const text = interaction.options.getString('text') || 'Click a button to give yourself the role — click again to remove it.';
-  await interaction.channel.send({ content: text, components: rows });
+  const embed = new EmbedBuilder()
+    .setTitle(interaction.options.getString('title') || 'Pick your roles')
+    .setDescription(interaction.options.getString('text') || 'Click a button to give yourself the role — click again to remove it.')
+    .setColor(0x5865f2);
+  await interaction.channel.send({ embeds: [embed], components: rows });
   await interaction.reply({ content: 'Role picker posted.', flags: MessageFlags.Ephemeral });
   console.log(`role picker posted in #${interaction.channel.name} by ${interaction.user.tag}: ${roles.map((r) => r.name).join(', ')}`);
 }

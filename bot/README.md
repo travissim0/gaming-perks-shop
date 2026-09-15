@@ -53,4 +53,4 @@ CTF management → Season settings has **Discord bot** controls: last sync, a **
 
 ## Self-assign role picker
 
-`/rolepicker` (needs Manage Roles) posts a message in the current channel with a button per role (up to 10, optional custom `text`); clicking toggles that role on the clicker. Roles with moderation permissions, integration-managed roles, and roles at or above the bot's own are refused — both when posting and on every click. To change the lineup, run the command again and delete the old message. The buttons keep working across bot restarts.
+`/rolepicker` (needs Manage Roles) posts an embed in the current channel with a button per role (up to 10; optional `title`, `text`, and `emojis` — space-separated, one per role in order); clicking toggles that role on the clicker. Roles with moderation permissions, integration-managed roles, and roles at or above the bot's own are refused — both when posting and on every click. To change the lineup, run the command again and delete the old message. The buttons keep working across bot restarts.
