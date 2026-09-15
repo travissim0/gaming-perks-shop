@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
 import { postStaff } from './discord.js';
+import { onInteraction, registerRolePickerCommand } from './rolepicker.js';
 
 /**
  * FreeInf CTF bot.
@@ -12,6 +13,7 @@ import { postStaff } from './discord.js';
  * - On changes to squads, squad_members, draft teams or picks: reconcile within
  *   a few seconds.
  * - On a row in discord_bot_commands ('sync' | 'teardown'): run it and mark done.
+ * - /rolepicker (staff): posts a button message for self-assignable roles.
  */
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
@@ -50,6 +52,7 @@ client.once('ready', async () => {
   }
   console.log(`Serving ${guild.name}`);
 
+  await registerRolePickerCommand(guild).catch((e) => console.error('rolepicker command registration:', e?.message || e));
   await runCommands();
   const first = await reconcile(guild, 'startup');
   await postStaff(guild, `**FreeInf CTF bot online** · ${first}`);
@@ -65,6 +68,7 @@ client.once('ready', async () => {
     .subscribe((status) => console.log(`realtime: ${status}`));
 });
 
+client.on('interactionCreate', onInteraction);
 client.on('error', (e) => console.error('discord client error:', e));
 process.on('unhandledRejection', (e) => console.error('unhandled rejection:', e));
 process.on('SIGTERM', () => { client.destroy(); process.exit(0); });

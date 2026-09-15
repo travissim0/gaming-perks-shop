@@ -50,3 +50,7 @@ Add the four secrets it lists to the GitHub repo. Generate the key on your machi
 ## Staff controls
 
 CTF management → Season settings has **Discord bot** controls: last sync, a **Sync now** button, and **Tear down season channels** (confirmed). They queue rows in `discord_bot_commands`; the bot runs them within seconds.
+
+## Self-assign role picker
+
+`/rolepicker` (needs Manage Roles) posts a message in the current channel with a button per role (up to 10, optional custom `text`); clicking toggles that role on the clicker. Roles with moderation permissions, integration-managed roles, and roles at or above the bot's own are refused — both when posting and on every click. To change the lineup, run the command again and delete the old message. The buttons keep working across bot restarts.
