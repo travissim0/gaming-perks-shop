@@ -137,8 +137,9 @@ export default function DiscordLinkCard({ userId }: { userId: string }) {
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <p className="max-w-xl text-sm text-[#8B98B0]">
-            Connect Discord so the CTFPL server and freeinf.org work together: your nickname shows on your profile and in the player pool,
-            registration fills in your Discord for you, and your squad’s roles and channels are set up automatically once you’re drafted.
+            Connect Discord so the CTFPL server and freeinf.org work together: your nickname shows on your profile,
+            registration knows who you are, and your squad’s roles and channels are set up automatically once you’re drafted.
+            Your Discord username is only shown on the free-agent board if you choose to when you register.
             We only read your Discord id, username, avatar and your nickname in the CTFPL server. We never post as you.
           </p>
           <button

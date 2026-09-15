@@ -70,13 +70,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Fill the Discord field on any current registration that's still blank.
-  await supabaseAdmin
-    .from('free_agents')
-    .update({ contact_info: me.username })
-    .eq('player_id', userId)
-    .eq('is_active', true)
-    .or('contact_info.is.null,contact_info.eq.');
+  // Deliberately not copied onto free_agents.contact_info: the public board only
+  // shows a Discord handle the player opted into on the registration form.
 
   return NextResponse.redirect(`${origin}${returnTo}?discord=linked`);
 }

@@ -89,6 +89,8 @@ export default function FreeAgentJoinForm({
     classes_to_try: [] as string[],
     notes: '',
     contact_info: '',
+    /** Linked-Discord players only: put @username on the public board? Off by default. */
+    show_discord: false,
     willing_to_captain: false,
   });
 
@@ -142,6 +144,8 @@ export default function FreeAgentJoinForm({
         classes_to_try: initialData.classes_to_try || [],
         notes: initialData.notes || '',
         contact_info: initialData.contact_info || '',
+        // A saved handle means they chose to show it last time.
+        show_discord: !!initialData.contact_info,
         willing_to_captain: !!initialData.willing_to_captain,
       });
       if (initialData.timezone) setUserTimezone(initialData.timezone);
@@ -272,7 +276,8 @@ export default function FreeAgentJoinForm({
       class_ratings: formData.class_ratings,
       classes_to_try: formData.classes_to_try,
       notes: formData.notes,
-      contact_info: formData.contact_info,
+      // Linked Discord is only published when the player ticks the box.
+      contact_info: discord ? (formData.show_discord ? discord.username : '') : formData.contact_info,
       timezone: userTimezone,
       ...(showCaptainInterest ? { willing_to_captain: formData.willing_to_captain } : {}),
     });
@@ -472,7 +477,18 @@ export default function FreeAgentJoinForm({
                 )}
                 <span className="ml-auto rounded bg-[#5865F2]/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#5865F2]">Linked</span>
               </div>
-              <span className="mt-1 block text-xs text-[#8B98B0]">Taken from your connected Discord account. Captains reach you here, and the CTFPL server sets up your squad’s channels automatically.</span>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm text-[#E6EDF7]">
+                <input
+                  type="checkbox"
+                  checked={formData.show_discord}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, show_discord: e.target.checked }))}
+                  className="mt-0.5 text-[#22D3EE]"
+                />
+                <span>Show @{discord.username} on the free-agent board so captains can reach you</span>
+              </label>
+              <span className="mt-1 block text-xs text-[#8B98B0]">
+                Off by default — nobody sees your Discord unless you tick this. Either way the CTFPL server sets up your squad’s channels automatically once you’re drafted.
+              </span>
             </div>
           ) : (
             <label className="block">

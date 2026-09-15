@@ -237,12 +237,12 @@ export default function LeagueRegisterPage() {
       inline
       showCaptainInterest
       header={contextHeader}
-      initialData={existing ? { ...existing, contact_info: discord ? discord.username : existing.contact_info } : discord ? { contact_info: discord.username } : undefined}
+      initialData={existing ?? undefined}
       discord={discord}
       onConnectDiscord={() => startDiscordLink('/league/register')}
       submitLabel={isEdit ? 'Save changes' : `Register for ${league.name}`}
       submitting={submitting}
-      onSubmit={(data) => handleSubmit(discord ? { ...data, contact_info: discord.username } : data)}
+      onSubmit={handleSubmit}
       onCancel={() => router.push('/free-agents')}
     />,
   );
