@@ -231,9 +231,9 @@ export default function AliasAssociationModal() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="w-full bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-all duration-300"
+        className="w-full rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10 transition-colors"
       >
-        🏷️ Manage Aliases
+        Manage aliases
       </button>
 
       <AnimatePresence>
