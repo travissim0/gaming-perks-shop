@@ -1,42 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { Modal, Chip } from '@/components/ctf/AdminBits';
+import { inputCls, labelCls, btnPrimary, btnQuiet, btnDanger } from '@/components/ctf/FormBits';
 
-interface Profile {
-  id: string;
-  in_game_alias: string;
-  email: string;
-}
+interface Profile { id: string; in_game_alias: string; email: string }
+interface ExistingAlias { id: string; alias: string; is_primary: boolean; added_at: string }
 
-interface ExistingAlias {
-  id: string;
-  alias: string;
-  is_primary: boolean;
-  added_at: string;
-}
-
+/**
+ * Staff tool: attach in-game aliases (from recorded games) to a site profile
+ * so stats consolidate across name changes. One alias is primary.
+ */
 export default function AliasAssociationModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  
-  // Form state
+
   const [aliasToAdd, setAliasToAdd] = useState('');
   const [targetProfileSearch, setTargetProfileSearch] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [existingAliases, setExistingAliases] = useState<ExistingAlias[]>([]);
   const [isPrimary, setIsPrimary] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<ExistingAlias | null>(null);
 
   const searchProfiles = async (searchTerm: string) => {
-    if (!searchTerm.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
+    if (!searchTerm.trim()) { setSearchResults([]); return; }
     setSearchLoading(true);
     try {
       const { data, error } = await supabase
@@ -44,7 +35,6 @@ export default function AliasAssociationModal() {
         .select('id, in_game_alias, email')
         .or(`in_game_alias.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
         .limit(10);
-
       if (error) throw error;
       setSearchResults(data || []);
     } catch (error) {
@@ -63,22 +53,12 @@ export default function AliasAssociationModal() {
         .eq('profile_id', profileId)
         .order('is_primary', { ascending: false })
         .order('added_at', { ascending: true });
-
       if (error) throw error;
-      
       const aliases = data || [];
       setExistingAliases(aliases);
-      
-      // Set primary alias in the input field if it exists
-      const primaryAlias = aliases.find(alias => alias.is_primary);
-      if (primaryAlias) {
-        setAliasToAdd(primaryAlias.alias);
-        setIsPrimary(false); // Don't auto-check primary if one already exists
-      } else {
-        // Clear the input if no primary alias exists and auto-set as primary
-        setAliasToAdd('');
-        setIsPrimary(true); // Auto-check primary since none exists
-      }
+      const primaryAlias = aliases.find((a) => a.is_primary);
+      if (primaryAlias) { setAliasToAdd(primaryAlias.alias); setIsPrimary(false); }
+      else { setAliasToAdd(''); setIsPrimary(true); }
     } catch (error) {
       console.error('Error fetching aliases:', error);
       toast.error('Error fetching existing aliases');
@@ -89,94 +69,54 @@ export default function AliasAssociationModal() {
     setSelectedProfile(profile);
     setTargetProfileSearch(profile.in_game_alias || profile.email);
     setSearchResults([]);
-    
-    // Fetch existing aliases and set primary alias in input field
     await fetchExistingAliases(profile.id);
   };
 
   const addAlias = async () => {
-    if (!selectedProfile || !aliasToAdd.trim()) {
-      toast.error('Please select a profile and enter an alias');
-      return;
-    }
-
+    if (!selectedProfile || !aliasToAdd.trim()) { toast.error('Pick a profile and type an alias'); return; }
     setLoading(true);
     try {
-      // Check if alias already exists for this profile
       const { data: existingAlias, error: checkError } = await supabase
         .from('profile_aliases')
         .select('alias')
         .eq('profile_id', selectedProfile.id)
         .eq('alias', aliasToAdd.trim())
         .single();
+      if (checkError && checkError.code !== 'PGRST116') throw checkError;
+      if (existingAlias) { toast.error('This alias is already on this profile'); return; }
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError;
-      }
-
-      if (existingAlias) {
-        toast.error('This alias already exists for this profile');
-        return;
-      }
-
-      // Auto-set as primary if no primary alias exists
-      const hasPrimaryAlias = existingAliases.find(a => a.is_primary);
+      const hasPrimaryAlias = existingAliases.find((a) => a.is_primary);
       const shouldBePrimary = isPrimary || !hasPrimaryAlias;
-
-      // If setting as primary, unset other primary aliases
       if (shouldBePrimary) {
-        const { error: updateError } = await supabase
-          .from('profile_aliases')
-          .update({ is_primary: false })
-          .eq('profile_id', selectedProfile.id)
-          .eq('is_primary', true);
-
+        const { error: updateError } = await supabase.from('profile_aliases').update({ is_primary: false }).eq('profile_id', selectedProfile.id).eq('is_primary', true);
         if (updateError) throw updateError;
       }
-
-      // Add the new alias
-      const { error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('profile_aliases')
-        .insert({
-          profile_id: selectedProfile.id,
-          alias: aliasToAdd.trim(),
-          is_primary: shouldBePrimary,
-          added_by: 'admin'
-        });
-
+        .insert({ profile_id: selectedProfile.id, alias: aliasToAdd.trim(), is_primary: shouldBePrimary, added_by: 'admin' })
+        .select('id');
       if (insertError) throw insertError;
+      if (!inserted || inserted.length === 0) throw new Error('Nothing was saved — you may not have permission');
 
-      toast.success(`Alias "${aliasToAdd.trim()}" added successfully${shouldBePrimary ? ' as primary' : ''}`);
+      toast.success(`Added “${aliasToAdd.trim()}”${shouldBePrimary ? ' as primary' : ''}`);
       setAliasToAdd('');
       setIsPrimary(false);
-      
-      // Refresh existing aliases
       await fetchExistingAliases(selectedProfile.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding alias:', error);
-      toast.error('Error adding alias');
+      toast.error(error?.message || 'Error adding alias');
     } finally {
       setLoading(false);
     }
   };
 
-  const removeAlias = async (aliasId: string, aliasName: string) => {
-    if (!window.confirm(`Remove alias "${aliasName}"?`)) return;
-
+  const removeAlias = async (alias: ExistingAlias) => {
     try {
-      const { error } = await supabase
-        .from('profile_aliases')
-        .delete()
-        .eq('id', aliasId);
-
+      const { error } = await supabase.from('profile_aliases').delete().eq('id', alias.id);
       if (error) throw error;
-
-      toast.success(`Alias "${aliasName}" removed successfully`);
-      
-      // Refresh existing aliases
-      if (selectedProfile) {
-        await fetchExistingAliases(selectedProfile.id);
-      }
+      toast.success(`Removed “${alias.alias}”`);
+      setConfirmRemove(null);
+      if (selectedProfile) await fetchExistingAliases(selectedProfile.id);
     } catch (error) {
       console.error('Error removing alias:', error);
       toast.error('Error removing alias');
@@ -185,27 +125,12 @@ export default function AliasAssociationModal() {
 
   const setPrimaryAlias = async (aliasId: string, aliasName: string) => {
     if (!selectedProfile) return;
-
     try {
-      // First, unset all primary flags
-      const { error: updateError } = await supabase
-        .from('profile_aliases')
-        .update({ is_primary: false })
-        .eq('profile_id', selectedProfile.id);
-
+      const { error: updateError } = await supabase.from('profile_aliases').update({ is_primary: false }).eq('profile_id', selectedProfile.id);
       if (updateError) throw updateError;
-
-      // Then set the selected alias as primary
-      const { error: setPrimaryError } = await supabase
-        .from('profile_aliases')
-        .update({ is_primary: true })
-        .eq('id', aliasId);
-
+      const { error: setPrimaryError } = await supabase.from('profile_aliases').update({ is_primary: true }).eq('id', aliasId);
       if (setPrimaryError) throw setPrimaryError;
-
-      toast.success(`"${aliasName}" set as primary alias`);
-      
-      // Refresh existing aliases
+      toast.success(`“${aliasName}” is now the primary alias`);
       await fetchExistingAliases(selectedProfile.id);
     } catch (error) {
       console.error('Error setting primary alias:', error);
@@ -214,271 +139,98 @@ export default function AliasAssociationModal() {
   };
 
   const resetForm = () => {
-    setAliasToAdd('');
-    setTargetProfileSearch('');
-    setSelectedProfile(null);
-    setSearchResults([]);
-    setExistingAliases([]);
-    setIsPrimary(false);
+    setAliasToAdd(''); setTargetProfileSearch(''); setSelectedProfile(null); setSearchResults([]); setExistingAliases([]); setIsPrimary(false); setConfirmRemove(null);
   };
+  const closeModal = () => { setIsOpen(false); resetForm(); };
 
-  const closeModal = () => {
-    setIsOpen(false);
-    resetForm();
-  };
+  const primary = existingAliases.find((a) => a.is_primary);
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-full rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10 transition-colors"
-      >
+      <button onClick={() => setIsOpen(true)} className="w-full rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10 transition-colors">
         Manage aliases
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={closeModal}
-            />
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-gradient-to-br from-gray-800 to-gray-900 border border-cyan-500/30 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-cyan-400">🏷️ Alias Association</h2>
-                <button
-                  onClick={closeModal}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
+      {isOpen && (
+        <Modal title="Aliases" hint="Attach in-game names from recorded games to a site profile so stats follow the player across name changes." onClose={closeModal} size="lg">
+          <div className="space-y-4">
+            {/* Profile search */}
+            <div className="relative">
+              <label className={labelCls}>Profile</label>
+              <input
+                type="text"
+                value={targetProfileSearch}
+                onChange={(e) => { setTargetProfileSearch(e.target.value); setSelectedProfile(null); searchProfiles(e.target.value); }}
+                placeholder="Search by alias or email"
+                className={inputCls}
+              />
+              {searchLoading && <span className="absolute right-3 top-7 text-[11px] text-[#8B98B0]">searching…</span>}
+              {searchResults.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-white/10 bg-[#0B0F1A] shadow-xl">
+                  {searchResults.map((profile) => (
+                    <button key={profile.id} type="button" onClick={() => selectProfile(profile)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-white/5">
+                      <span className="text-[#E6EDF7]">{profile.in_game_alias || 'No alias set'}</span>
+                      <span className="text-xs text-[#8B98B0]">{profile.email}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-              <div className="space-y-6">
-                {/* Profile Search */}
-                <div>
-                  <label className="block text-sm font-medium text-cyan-400 mb-2">
-                    Search for Profile
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={targetProfileSearch}
-                      onChange={(e) => {
-                        setTargetProfileSearch(e.target.value);
-                        searchProfiles(e.target.value);
-                      }}
-                      placeholder="Search by in-game alias or email..."
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-cyan-500 focus:outline-none"
-                    />
-                    {searchLoading && (
-                      <div className="absolute right-3 top-2.5">
-                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
-                      </div>
-                    )}
+            {selectedProfile && (
+              <>
+                {/* Current aliases */}
+                <div className="rounded-md bg-[#1B2438] overflow-hidden">
+                  <div className="px-3 py-2 flex items-center justify-between border-b border-white/[0.06]">
+                    <span className="text-sm text-[#E6EDF7]">{selectedProfile.in_game_alias || selectedProfile.email}</span>
+                    <span className="text-xs text-[#8B98B0]">{existingAliases.length} alias{existingAliases.length === 1 ? '' : 'es'} · primary {primary ? <span className="text-[#F59E0B]">{primary.alias}</span> : <span className="text-[#F87171]">none</span>}</span>
                   </div>
-
-                  {/* Search Results */}
-                  {searchResults.length > 0 && (
-                    <div className="mt-2 bg-gray-700 border border-gray-600 rounded-lg overflow-hidden">
-                      {searchResults.map((profile) => (
-                        <button
-                          key={profile.id}
-                          onClick={() => selectProfile(profile)}
-                          className="w-full p-3 text-left hover:bg-gray-600 transition-colors border-b border-gray-600 last:border-b-0"
-                        >
-                          <div className="text-white font-medium">
-                            {profile.in_game_alias || 'No alias set'}
-                          </div>
-                          <div className="text-gray-400 text-sm">{profile.email}</div>
-                        </button>
+                  {existingAliases.length === 0 ? (
+                    <p className="px-3 py-3 text-xs text-[#8B98B0]">No aliases yet. The first one you add becomes primary.</p>
+                  ) : (
+                    <ul className="divide-y divide-white/[0.04]">
+                      {existingAliases.map((alias) => (
+                        <li key={alias.id} className="flex items-center gap-3 px-3 py-1.5 text-sm">
+                          <span className="min-w-0 flex-1 truncate text-[#E6EDF7]">
+                            {alias.alias}
+                            {alias.is_primary && <span className="ml-2 rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">Primary</span>}
+                          </span>
+                          {!alias.is_primary && <button type="button" onClick={() => setPrimaryAlias(alias.id, alias.alias)} className="text-xs text-[#F59E0B] hover:text-[#FBBF24]">Make primary</button>}
+                          <button type="button" onClick={() => setConfirmRemove(alias)} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Remove</button>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
                 </div>
 
-                {/* Selected Profile Info */}
-                {selectedProfile && (
-                  <div className="bg-gray-700/50 border border-gray-600 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-white mb-2">Selected Profile</h3>
-                    <div className="space-y-1">
-                      <p><span className="text-gray-400">Profile Alias:</span> <span className="text-cyan-400">{selectedProfile.in_game_alias || 'Not set'}</span></p>
-                      <p><span className="text-gray-400">Email:</span> <span className="text-white">{selectedProfile.email}</span></p>
-                      <p>
-                        <span className="text-gray-400">Primary Alias:</span> 
-                        <span className={`ml-2 ${existingAliases.find(a => a.is_primary) ? 'text-yellow-400' : 'text-red-400'}`}>
-                          {existingAliases.find(a => a.is_primary)?.alias || 'None set'}
-                        </span>
-                      </p>
-                      <p>
-                        <span className="text-gray-400">Total Aliases:</span> 
-                        <span className="text-white ml-2">{existingAliases.length}</span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Existing Aliases Preview */}
-                {selectedProfile && existingAliases.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-cyan-400">Current Aliases</h3>
-                    <div className="bg-gray-700/30 border border-gray-600 rounded-lg p-3">
-                      <div className="flex flex-wrap gap-2">
-                        {existingAliases.slice(0, 5).map((alias) => (
-                          <span
-                            key={alias.id}
-                            className={`px-2 py-1 rounded text-xs font-medium ${
-                              alias.is_primary 
-                                ? 'bg-yellow-600 text-yellow-100' 
-                                : 'bg-gray-600 text-gray-200'
-                            }`}
-                          >
-                            {alias.alias}
-                            {alias.is_primary && ' ★'}
-                          </span>
-                        ))}
-                        {existingAliases.length > 5 && (
-                          <span className="px-2 py-1 rounded text-xs font-medium bg-gray-500 text-gray-300">
-                            +{existingAliases.length - 5} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Add New Alias */}
-                {selectedProfile && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-cyan-400">Add New Alias</h3>
-                      {existingAliases.find(a => a.is_primary) && (
-                        <span className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded">
-                          Primary alias loaded below
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Alias Name
-                        {existingAliases.find(a => a.is_primary) && (
-                          <span className="text-xs text-yellow-400 ml-2">(Primary alias loaded)</span>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        value={aliasToAdd}
-                        onChange={(e) => setAliasToAdd(e.target.value)}
-                        placeholder={
-                          existingAliases.find(a => a.is_primary) 
-                            ? "Primary alias loaded - edit or add new..." 
-                            : "Enter alias to associate (will be set as primary)..."
-                        }
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:border-cyan-500 focus:outline-none"
-                      />
-                      {!existingAliases.find(a => a.is_primary) && (
-                        <p className="text-xs text-blue-400 mt-1">
-                          💡 This profile has no primary alias. The first alias you add will be set as primary.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="isPrimary"
-                        checked={isPrimary}
-                        onChange={(e) => setIsPrimary(e.target.checked)}
-                        disabled={!existingAliases.find(a => a.is_primary) && existingAliases.length === 0}
-                        className="w-4 h-4 text-cyan-600 bg-gray-700 border-gray-600 rounded focus:ring-cyan-500 disabled:opacity-50"
-                      />
-                      <label htmlFor="isPrimary" className="text-sm text-gray-300">
-                        Set as primary alias
-                        {!existingAliases.find(a => a.is_primary) && (
-                          <span className="text-yellow-400 ml-2">(Required - no primary exists)</span>
-                        )}
-                      </label>
-                    </div>
-
-                    <button
-                      onClick={addAlias}
-                      disabled={loading || !aliasToAdd.trim()}
-                      className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                    >
-                      {loading ? 'Adding...' : 'Add Alias'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Existing Aliases */}
-                {existingAliases.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-cyan-400">Existing Aliases</h3>
-                    
-                    <div className="space-y-2">
-                      {existingAliases.map((alias) => (
-                        <div
-                          key={alias.id}
-                          className="flex items-center justify-between bg-gray-700/50 border border-gray-600 rounded-lg p-3"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span className="text-white font-medium">{alias.alias}</span>
-                            {alias.is_primary && (
-                              <span className="bg-yellow-600 text-yellow-100 px-2 py-1 rounded text-xs font-bold">
-                                PRIMARY
-                              </span>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center space-x-2">
-                            {!alias.is_primary && (
-                              <button
-                                onClick={() => setPrimaryAlias(alias.id, alias.alias)}
-                                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                              >
-                                Set Primary
-                              </button>
-                            )}
-                            <button
-                              onClick={() => removeAlias(alias.id, alias.alias)}
-                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Help Text */}
-                <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-4">
-                  <h4 className="text-blue-400 font-semibold mb-2">ℹ️ How it works</h4>
-                  <ul className="text-sm text-blue-200 space-y-1">
-                    <li>• Search for a player by their current alias or email</li>
-                    <li>• Add any in-game alias they've used to their profile</li>
-                    <li>• Aliases don't need to have website accounts</li>
-                    <li>• Set one alias as primary for display purposes</li>
-                    <li>• This helps consolidate player stats across name changes</li>
-                  </ul>
+                {/* Add */}
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="block flex-1 min-w-[200px]">
+                    <span className={labelCls}>Add an alias</span>
+                    <input type="text" value={aliasToAdd} onChange={(e) => setAliasToAdd(e.target.value)} placeholder="In-game name as it appears in stats" className={inputCls} />
+                  </label>
+                  <Chip active={isPrimary || !primary} tone="warn" onClick={() => primary && setIsPrimary(!isPrimary)} title={primary ? 'Make this the primary alias' : 'No primary yet, so this one will be'} disabled={!primary}>
+                    Primary
+                  </Chip>
+                  <button type="button" onClick={addAlias} disabled={loading || !aliasToAdd.trim()} className={btnPrimary}>{loading ? 'Adding…' : 'Add'}</button>
                 </div>
+              </>
+            )}
+
+            {confirmRemove && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-[#F87171]/10 px-3 py-2 text-sm text-[#FCA5A5]">
+                <span>Remove “{confirmRemove.alias}” from this profile?</span>
+                <span className="flex gap-2">
+                  <button type="button" onClick={() => setConfirmRemove(null)} className={btnQuiet}>Keep</button>
+                  <button type="button" onClick={() => removeAlias(confirmRemove)} className={btnDanger}>Remove</button>
+                </span>
               </div>
-            </motion.div>
+            )}
+
+            <p className="text-[11px] text-[#8B98B0]">Aliases don&apos;t need site accounts of their own. The primary alias is the display name used for stats.</p>
           </div>
-        )}
-      </AnimatePresence>
+        </Modal>
+      )}
     </>
   );
 }

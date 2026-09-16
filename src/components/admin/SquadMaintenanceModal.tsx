@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { patchSquads } from '@/lib/admin-squads';
+import { Modal, Chip, Empty, th, td } from '@/components/ctf/AdminBits';
+import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
 interface Squad {
   id: string;
@@ -18,15 +20,11 @@ interface Squad {
   created_at: string;
   updated_at: string;
 }
+interface PlayerResult { id: string; in_game_alias: string; display_name: string | null }
 
 const SYSTEM_USER_ID = '7066f090-a1a1-4f5f-bf1a-374d0e06130c';
 
-interface PlayerResult {
-  id: string;
-  in_game_alias: string;
-  display_name: string | null;
-}
-
+/** Staff tool: rename squads, edit tags and descriptions, assign a captain to system-owned legacy squads. */
 const SquadMaintenanceModal = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [squads, setSquads] = useState<Squad[]>([]);
@@ -35,12 +33,10 @@ const SquadMaintenanceModal = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'legacy'>('all');
 
-  // Edit form state
   const [editName, setEditName] = useState('');
   const [editTag, setEditTag] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
-  // Captain assignment state
   const [captainSquadId, setCaptainSquadId] = useState<string | null>(null);
   const [captainSearch, setCaptainSearch] = useState('');
   const [captainResults, setCaptainResults] = useState<PlayerResult[]>([]);
@@ -51,94 +47,33 @@ const SquadMaintenanceModal = () => {
     try {
       const { data, error } = await supabase
         .from('squads')
-        .select(`
-          id,
-          name,
-          tag,
-          description,
-          captain_id,
-          is_active,
-          is_legacy,
-          created_at,
-          updated_at,
-          profiles!squads_captain_id_fkey(in_game_alias),
-          squad_members(id)
-        `)
+        .select('id, name, tag, description, captain_id, is_active, is_legacy, created_at, updated_at, profiles!squads_captain_id_fkey(in_game_alias), squad_members(id)')
         .order('name');
-
       if (error) throw error;
-
-      const formattedSquads: Squad[] = (data || []).map((squad: any) => ({
-        ...squad,
-        captain_alias: squad.profiles?.in_game_alias || 'Unknown',
-        member_count: squad.squad_members?.length || 0
-      }));
-
-      setSquads(formattedSquads);
+      setSquads((data || []).map((squad: any) => ({ ...squad, captain_alias: squad.profiles?.in_game_alias || 'Unknown', member_count: squad.squad_members?.length || 0 })));
     } catch (error) {
       console.error('Error fetching squads:', error);
       toast.error('Failed to fetch squads');
     }
   };
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchSquads();
-    }
-  }, [isOpen]);
+  useEffect(() => { if (isOpen) fetchSquads(); }, [isOpen]);
 
-  const startEdit = (squad: Squad) => {
-    setEditingSquad(squad);
-    setEditName(squad.name);
-    setEditTag(squad.tag);
-    setEditDescription(squad.description || '');
-  };
-
-  const cancelEdit = () => {
-    setEditingSquad(null);
-    setEditName('');
-    setEditTag('');
-    setEditDescription('');
-  };
-
-  // Captain assignment functions
-  const startCaptainEdit = (squadId: string) => {
-    setCaptainSquadId(squadId);
-    setCaptainSearch('');
-    setCaptainResults([]);
-  };
-
-  const cancelCaptainEdit = () => {
-    setCaptainSquadId(null);
-    setCaptainSearch('');
-    setCaptainResults([]);
-  };
+  const startEdit = (squad: Squad) => { setEditingSquad(squad); setEditName(squad.name); setEditTag(squad.tag); setEditDescription(squad.description || ''); setCaptainSquadId(null); };
+  const cancelEdit = () => { setEditingSquad(null); setEditName(''); setEditTag(''); setEditDescription(''); };
+  const startCaptainEdit = (squadId: string) => { setCaptainSquadId(squadId); setCaptainSearch(''); setCaptainResults([]); cancelEdit(); };
+  const cancelCaptainEdit = () => { setCaptainSquadId(null); setCaptainSearch(''); setCaptainResults([]); };
 
   const searchPlayers = async (query: string) => {
     setCaptainSearch(query);
-    if (query.length < 2) {
-      setCaptainResults([]);
-      return;
-    }
+    if (query.length < 2) { setCaptainResults([]); return; }
     setCaptainSearching(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error('set-captain search: no session');
-        return;
-      }
-      const url = `/api/ctf/squads/set-captain?q=${encodeURIComponent(query)}`;
-      console.log('set-captain search:', url);
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-      });
+      if (!session) return;
+      const res = await fetch(`/api/ctf/squads/set-captain?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${session.access_token}` } });
       const data = await res.json();
-      console.log('set-captain response:', res.status, data);
-      if (!res.ok) {
-        toast.error(data.error || `Search failed (${res.status})`);
-        setCaptainResults([]);
-        return;
-      }
+      if (!res.ok) { toast.error(data.error || `Search failed (${res.status})`); setCaptainResults([]); return; }
       setCaptainResults(data.players || []);
     } catch (err) {
       console.error('set-captain search error:', err);
@@ -156,17 +91,11 @@ const SquadMaintenanceModal = () => {
       if (!session) return;
       const res = await fetch('/api/ctf/squads/set-captain', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ squadId: captainSquadId, playerId }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to set captain');
-        return;
-      }
+      if (!res.ok) { toast.error(data.error || 'Failed to set captain'); return; }
       toast.success(`Captain set to ${data.captain_alias}`);
       cancelCaptainEdit();
       await fetchSquads();
@@ -178,374 +107,141 @@ const SquadMaintenanceModal = () => {
   };
 
   const saveSquadChanges = async () => {
-    if (!editingSquad || !editName.trim() || !editTag.trim()) {
-      toast.error('Squad name and tag are required');
-      return;
-    }
-
+    if (!editingSquad || !editName.trim() || !editTag.trim()) { toast.error('Squad name and tag are required'); return; }
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('squads')
-        .update({
-          name: editName.trim(),
-          tag: editTag.trim().toUpperCase(),
-          description: editDescription.trim() || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', editingSquad.id);
-
-      if (error) {
-        if (error.code === '23505') {
-          if (error.message.includes('squads_name_key')) {
-            toast.error('Squad name already exists');
-          } else if (error.message.includes('squads_tag_key')) {
-            toast.error('Squad tag already exists');
-          } else {
-            toast.error('Squad name or tag already exists');
-          }
-        } else {
-          throw error;
-        }
-        return;
-      }
-
-      toast.success('Squad updated successfully');
+      // Through the staff API: browser writes to squads are silently dropped by RLS.
+      await patchSquads(editingSquad.id, { name: editName.trim(), tag: editTag.trim().toUpperCase(), description: editDescription.trim() || null });
+      toast.success('Squad updated');
       await fetchSquads();
       cancelEdit();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating squad:', error);
-      toast.error('Failed to update squad');
+      toast.error(error?.message || 'Failed to update squad');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredSquads = squads.filter(squad => {
-    // Apply filter
+  const filteredSquads = squads.filter((squad) => {
     if (filter === 'active' && (!squad.is_active || squad.is_legacy)) return false;
     if (filter === 'inactive' && (squad.is_active || squad.is_legacy)) return false;
     if (filter === 'legacy' && !squad.is_legacy) return false;
-
-    // Apply search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      return (
-        squad.name.toLowerCase().includes(term) ||
-        squad.tag.toLowerCase().includes(term) ||
-        squad.captain_alias.toLowerCase().includes(term)
-      );
+      return squad.name.toLowerCase().includes(term) || squad.tag.toLowerCase().includes(term) || squad.captain_alias.toLowerCase().includes(term);
     }
-
     return true;
   });
 
-  const getSquadStatusBadge = (squad: Squad) => {
-    if (squad.is_legacy) {
-      return (
-        <span className="px-2 py-1 text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">
-          Legacy
-        </span>
-      );
-    } else if (squad.is_active) {
-      return (
-        <span className="px-2 py-1 text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30 rounded-full">
-          Active
-        </span>
-      );
-    } else {
-      return (
-        <span className="px-2 py-1 text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30 rounded-full">
-          Inactive
-        </span>
-      );
-    }
-  };
+  const statusPill = (squad: Squad) =>
+    squad.is_legacy
+      ? <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide bg-white/5 text-[#8B98B0]">Legacy</span>
+      : squad.is_active
+        ? <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide bg-[#34D399]/15 text-[#34D399]">Active</span>
+        : <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide bg-[#F87171]/15 text-[#F87171]">Inactive</span>;
+
+  const captainTarget = captainSquadId ? squads.find((s) => s.id === captainSquadId) : null;
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-full rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10 transition-colors"
-      >
+      <button onClick={() => setIsOpen(true)} className="w-full rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10 transition-colors">
         Edit squad details
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setIsOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-gray-900 border border-blue-500/30 rounded-lg shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-gray-800/50 px-6 py-4 border-b border-blue-500/30 flex justify-between items-center">
-                <h2 className="text-blue-400 text-xl font-bold">🔧 Squad Maintenance</h2>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="text-gray-400 hover:text-white text-2xl font-bold"
-                >
-                  ×
-                </button>
-              </div>
+      {isOpen && (
+        <Modal
+          title="Squad details"
+          hint="Rename squads, edit tags and descriptions. Names and tags must be unique; tags are uppercased."
+          onClose={() => setIsOpen(false)}
+          size="xl"
+          actions={<input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search name, tag, captain" className={`${inputCls} w-56`} />}
+        >
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive'], ['legacy', 'Legacy']] as const).map(([k, label]) => (
+                <Chip key={k} active={filter === k} onClick={() => setFilter(k)}>{label}</Chip>
+              ))}
+              <span className="ml-auto text-xs text-[#8B98B0]">{filteredSquads.length} of {squads.length}</span>
+            </div>
 
-              {/* Content */}
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                <div className="space-y-6">
-                  {/* Controls */}
-                  <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                    <div className="flex flex-wrap items-center gap-4">
-                      {/* Search */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-gray-300 font-medium">Search:</label>
-                        <input
-                          type="text"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          placeholder="Squad name, tag, or captain..."
-                          className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-400"
-                        />
-                      </div>
-
-                      {/* Filter */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-gray-300 font-medium">Filter:</label>
-                        <select
-                          value={filter}
-                          onChange={(e) => setFilter(e.target.value as any)}
-                          className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white"
-                        >
-                          <option value="all">All Squads</option>
-                          <option value="active">Active Only</option>
-                          <option value="inactive">Inactive Only</option>
-                          <option value="legacy">Legacy Only</option>
-                        </select>
-                      </div>
-
-                      <div className="text-gray-400 text-sm">
-                        Showing {filteredSquads.length} of {squads.length} squads
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Squad List */}
-                  <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-700/50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Squad
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Tag
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Captain
-                            </th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Members
-                            </th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Status
-                            </th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase tracking-wider">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-700/50">
-                          {filteredSquads.map((squad) => (
-                            <tr key={squad.id} className="hover:bg-gray-700/25">
-                              {editingSquad?.id === squad.id ? (
-                                // Edit Mode Row
-                                <>
-                                  <td className="px-4 py-4">
-                                    <input
-                                      type="text"
-                                      value={editName}
-                                      onChange={(e) => setEditName(e.target.value)}
-                                      className="w-full bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                      placeholder="Squad name"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-4">
-                                    <input
-                                      type="text"
-                                      value={editTag}
-                                      onChange={(e) => setEditTag(e.target.value.toUpperCase())}
-                                      className="w-full bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                      placeholder="TAG"
-                                      maxLength={10}
-                                    />
-                                  </td>
-                                  <td className="px-4 py-4 text-sm text-gray-300">
-                                    {squad.captain_alias}
-                                  </td>
-                                  <td className="px-4 py-4 text-center text-sm text-gray-300">
-                                    {squad.member_count}
-                                  </td>
-                                  <td className="px-4 py-4 text-center">
-                                    {getSquadStatusBadge(squad)}
-                                  </td>
-                                  <td className="px-4 py-4 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button
-                                        onClick={saveSquadChanges}
-                                        disabled={loading}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition-colors disabled:opacity-50"
-                                      >
-                                        {loading ? 'Saving...' : 'Save'}
-                                      </button>
-                                      <button
-                                        onClick={cancelEdit}
-                                        className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </td>
-                                </>
-                              ) : (
-                                // View Mode Row
-                                <>
-                                  <td className="px-4 py-4 whitespace-nowrap">
-                                    <div>
-                                      <div className="text-sm font-medium text-white">
-                                        {squad.name}
-                                      </div>
-                                      {squad.description && (
-                                        <div className="text-sm text-gray-400 truncate max-w-xs">
-                                          {squad.description}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap">
-                                    <span className="bg-gray-700 text-white px-2 py-1 rounded text-sm font-mono">
-                                      {squad.tag}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
-                                    {squad.captain_alias}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-center text-sm text-gray-300">
-                                    {squad.member_count}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-center">
-                                    {getSquadStatusBadge(squad)}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button
-                                        onClick={() => startEdit(squad)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                                      >
-                                        Edit
-                                      </button>
-                                      {squad.captain_id === SYSTEM_USER_ID && (
-                                        <button
-                                          onClick={() => startCaptainEdit(squad.id)}
-                                          className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-xs transition-colors"
-                                        >
-                                          Set Captain
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {filteredSquads.length === 0 && (
-                      <div className="p-8 text-center text-gray-400">
-                        No squads found matching your criteria.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Captain Assignment Panel */}
-                  {captainSquadId && (
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-amber-400 font-semibold">
-                          Set Captain for: {squads.find(s => s.id === captainSquadId)?.name}
-                        </h3>
-                        <button onClick={cancelCaptainEdit} className="text-gray-400 hover:text-white text-sm">Cancel</button>
-                      </div>
-                      <input
-                        type="text"
-                        value={captainSearch}
-                        onChange={(e) => searchPlayers(e.target.value)}
-                        placeholder="Search player by in-game alias..."
-                        className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                        autoFocus
-                      />
-                      {captainSearching && <div className="text-gray-400 text-sm py-1">Searching...</div>}
-                      {captainResults.length > 0 && (
-                        <div className="space-y-1">
-                          {captainResults.map((p) => (
-                            <button
-                              key={p.id}
-                              onClick={() => assignCaptain(p.id)}
-                              disabled={settingCaptain}
-                              className="w-full text-left px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex justify-between items-center disabled:opacity-50"
-                            >
-                              <span className="text-white">{p.in_game_alias}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {captainSearch.length >= 2 && !captainSearching && captainResults.length === 0 && (
-                        <div className="text-gray-500 text-sm py-1">No players found</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Description Edit Section */}
-                  {editingSquad && (
-                    <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
-                      <h3 className="text-white font-semibold mb-2">Squad Description</h3>
-                      <textarea
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Optional squad description..."
-                        rows={3}
-                      />
-                    </div>
-                  )}
-
-                  {/* Help Section */}
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                    <h3 className="text-lg font-semibold text-blue-400 mb-2">💡 Squad Maintenance</h3>
-                    <ul className="space-y-1 text-gray-300 text-sm">
-                      <li>• Edit squad names and tags for all squad types (active, inactive, legacy)</li>
-                      <li>• Squad names and tags must be unique across all squads</li>
-                      <li>• Tags are automatically converted to uppercase</li>
-                      <li>• Changes are saved immediately when you click Save</li>
-                      <li>• Use the search and filter options to find specific squads quickly</li>
-                    </ul>
-                  </div>
+            {/* Inline editor */}
+            {editingSquad && (
+              <div className="rounded-md bg-[#1B2438] p-3 space-y-3">
+                <div className="text-sm text-[#E6EDF7]">Editing {editingSquad.name}</div>
+                <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_3fr] gap-3">
+                  <label className="block"><span className={labelCls}>Name</span><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className={inputCls} /></label>
+                  <label className="block"><span className={labelCls}>Tag</span><input type="text" value={editTag} onChange={(e) => setEditTag(e.target.value.toUpperCase())} maxLength={10} className={`${inputCls} font-mono`} /></label>
+                  <label className="block"><span className={labelCls}>Description</span><input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="optional" className={inputCls} /></label>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={cancelEdit} className={btnQuiet}>Cancel</button>
+                  <button type="button" onClick={saveSquadChanges} disabled={loading} className={btnPrimary}>{loading ? 'Saving…' : 'Save'}</button>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            )}
+
+            {/* Captain assignment for system-owned squads */}
+            {captainTarget && (
+              <div className="rounded-md bg-[#F59E0B]/10 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[#F59E0B]">Set a captain for {captainTarget.name}</span>
+                  <button type="button" onClick={cancelCaptainEdit} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Cancel</button>
+                </div>
+                <input type="text" value={captainSearch} onChange={(e) => searchPlayers(e.target.value)} placeholder="Search a player by alias" className={inputCls} autoFocus />
+                {captainSearching && <div className="text-xs text-[#8B98B0]">Searching…</div>}
+                {captainResults.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {captainResults.map((p) => (
+                      <button key={p.id} type="button" onClick={() => assignCaptain(p.id)} disabled={settingCaptain} className={btnQuiet}>{p.in_game_alias}</button>
+                    ))}
+                  </div>
+                )}
+                {captainSearch.length >= 2 && !captainSearching && captainResults.length === 0 && <div className="text-xs text-[#8B98B0]">No players found</div>}
+              </div>
+            )}
+
+            {filteredSquads.length === 0 ? (
+              <Empty>No squads match.</Empty>
+            ) : (
+              <div className="overflow-x-auto max-h-[28rem] overflow-y-auto rounded-md bg-[#1B2438]">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-[#1B2438]">
+                    <tr>
+                      <th className={th}>Squad</th>
+                      <th className={th}>Tag</th>
+                      <th className={th}>Captain</th>
+                      <th className={`${th} text-right`}>Members</th>
+                      <th className={th}>Status</th>
+                      <th className={`${th} text-right`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSquads.map((squad) => (
+                      <tr key={squad.id} className={`border-t border-white/[0.06] hover:bg-white/[0.02] ${editingSquad?.id === squad.id ? 'bg-[#22D3EE]/[0.06]' : ''}`}>
+                        <td className={td}>
+                          <div className="text-[#E6EDF7]">{squad.name}</div>
+                          {squad.description && <div className="max-w-xs truncate text-xs text-[#8B98B0]">{squad.description}</div>}
+                        </td>
+                        <td className={`${td} font-mono text-[#22D3EE]`}>{squad.tag}</td>
+                        <td className={`${td} text-[#8B98B0]`}>{squad.captain_alias}</td>
+                        <td className={`${td} text-right tabular-nums text-[#8B98B0]`}>{squad.member_count}</td>
+                        <td className={td}>{statusPill(squad)}</td>
+                        <td className={`${td} text-right whitespace-nowrap`}>
+                          <button type="button" onClick={() => startEdit(squad)} className="text-xs text-[#8B98B0] hover:text-[#22D3EE]">Edit</button>
+                          {squad.captain_id === SYSTEM_USER_ID && (
+                            <button type="button" onClick={() => startCaptainEdit(squad.id)} className="ml-3 text-xs text-[#F59E0B] hover:text-[#FBBF24]">Set captain</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
     </>
   );
 };

@@ -15,7 +15,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const ALLOWED = ['is_active', 'is_legacy', 'tournament_eligible', 'league_slug'] as const;
+const ALLOWED = ['is_active', 'is_legacy', 'tournament_eligible', 'league_slug', 'name', 'tag', 'description'] as const;
 
 async function requireStaff(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
@@ -45,9 +45,28 @@ export async function PATCH(request: NextRequest) {
   if ('league_slug' in patch && patch.league_slug !== null && typeof patch.league_slug !== 'string') {
     return NextResponse.json({ error: 'league_slug must be a string or null' }, { status: 400 });
   }
+  if ('name' in patch) {
+    if (typeof patch.name !== 'string' || !patch.name.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    patch.name = patch.name.trim();
+  }
+  if ('tag' in patch) {
+    if (typeof patch.tag !== 'string' || !patch.tag.trim()) return NextResponse.json({ error: 'tag is required' }, { status: 400 });
+    patch.tag = patch.tag.trim().toUpperCase().slice(0, 10);
+  }
+  if ('description' in patch) {
+    if (patch.description !== null && typeof patch.description !== 'string') return NextResponse.json({ error: 'description must be text or null' }, { status: 400 });
+    patch.description = typeof patch.description === 'string' && patch.description.trim() ? patch.description.trim() : null;
+  }
+  if ('name' in patch || 'tag' in patch || 'description' in patch) patch.updated_at = new Date().toISOString();
 
   const { data, error } = await supabaseAdmin.from('squads').update(patch).in('id', ids).select('id');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === '23505') {
+      const which = /tag/i.test(error.message) ? 'tag' : /name/i.test(error.message) ? 'name' : 'name or tag';
+      return NextResponse.json({ error: `That squad ${which} is already taken` }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   if (!data || data.length === 0) return NextResponse.json({ error: 'No squad matched' }, { status: 404 });
   return NextResponse.json({ ok: true, updated: data.length });
 }
