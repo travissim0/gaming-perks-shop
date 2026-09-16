@@ -1,34 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import Navbar from '@/components/Navbar';
 import CSVUploadZone from '@/components/admin/CSVUploadZone';
 import { parseCSV, processPlayerStats, validatePlayerStats, ProcessedPlayerStat } from '@/lib/csv-parser';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Trophy, AlertCircle, CheckCircle, Loader2, Plus, Swords, ChevronDown } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
+import { Chip, Panel, Spinner, Empty, StaffShell, HeaderStrip, th, td } from '@/components/ctf/AdminBits';
+import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
-interface League {
-  id: string;
-  slug: string;
-  name: string;
-}
-
-interface Season {
-  id: string;
-  season_number: number;
-  season_name: string | null;
-  status: 'upcoming' | 'active' | 'completed';
-}
-
-interface Squad {
-  id: string;
-  name: string;
-  tag: string;
-  is_active: boolean;
-}
+interface League { id: string; slug: string; name: string }
+interface Season { id: string; season_number: number; season_name: string | null; status: 'upcoming' | 'active' | 'completed' }
+interface Squad { id: string; name: string; tag: string; is_active: boolean }
 
 interface MatchRecord {
   id: string;
@@ -58,23 +44,53 @@ interface StandingRow {
   matches_played: number;
 }
 
+/** A scheduled fixture without a recorded result yet (from /api/league/schedule). */
+interface Fixture {
+  id: string;
+  week: number | null;
+  stage: 'regular' | 'playoff';
+  playoff_round: number | null;
+  scheduled_at: string;
+  title: string;
+  squad_a_id: string | null;
+  squad_b_id: string | null;
+  squad_a_name: string | null;
+  squad_a_tag: string | null;
+  squad_b_name: string | null;
+  squad_b_tag: string | null;
+  game_id: string | null;
+  result: { a_score: number; b_score: number } | null;
+}
+
+const SEASON_PILL: Record<string, string> = {
+  active: 'bg-[#34D399]/15 text-[#34D399]',
+  upcoming: 'bg-[#F59E0B]/15 text-[#F59E0B]',
+  completed: 'bg-white/5 text-[#8B98B0]',
+};
+
+const localDate = (iso: string) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/**
+ * Match manager: record official league results (which drive the standings),
+ * optionally with a player-stats CSV. Scheduled fixtures can prefill the form.
+ */
 export default function MatchManagerPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [isCTFAdmin, setIsCTFAdmin] = useState(false);
 
-  // League state
+  // League + season
   const [leagues, setLeagues] = useState<League[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<string>('ctfpl');
-
-  // Season state
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
-
-  // Squad state
   const [squads, setSquads] = useState<Squad[]>([]);
 
-  // Match form state
+  // Match form
   const [squadAName, setSquadAName] = useState('');
   const [squadAId, setSquadAId] = useState('');
   const [squadAScore, setSquadAScore] = useState('0');
@@ -91,8 +107,9 @@ export default function MatchManagerPage() {
   const [matchLength, setMatchLength] = useState('');
   const [mvp, setMvp] = useState('');
   const [existingGameId, setExistingGameId] = useState('');
+  const [fromFixture, setFromFixture] = useState<Fixture | null>(null);
 
-  // Squad search state
+  // Squad search
   const [squadASearch, setSquadASearch] = useState('');
   const [squadBSearch, setSquadBSearch] = useState('');
   const [showSquadADropdown, setShowSquadADropdown] = useState(false);
@@ -100,13 +117,15 @@ export default function MatchManagerPage() {
   const squadARef = useRef<HTMLDivElement>(null);
   const squadBRef = useRef<HTMLDivElement>(null);
 
-  // CSV state
+  // CSV
   const [csvPreview, setCsvPreview] = useState<ProcessedPlayerStat[]>([]);
   const [showCsvUpload, setShowCsvUpload] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Data state
+  // Data
   const [matches, setMatches] = useState<MatchRecord[]>([]);
   const [standings, setStandings] = useState<StandingRow[]>([]);
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -119,11 +138,7 @@ export default function MatchManagerPage() {
     }
     const checkAdmin = async () => {
       if (user && !isCTFAdmin) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('is_admin, ctf_role')
-          .eq('id', user.id)
-          .single();
+        const { data } = await supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).single();
         const hasAccess = data && (data.is_admin === true || data.ctf_role === 'ctf_admin');
         if (!hasAccess) {
           router.push('/dashboard');
@@ -134,81 +149,53 @@ export default function MatchManagerPage() {
       }
     };
     checkAdmin();
-  }, [user, authLoading, isCTFAdmin]);
+  }, [user, authLoading, isCTFAdmin, router]);
 
-  // Fetch leagues
+  // Leagues
   useEffect(() => {
-    const fetchLeagues = async () => {
-      const { data } = await supabase
-        .from('leagues')
-        .select('id, slug, name')
-        .order('slug');
+    (async () => {
+      const { data } = await supabase.from('leagues').select('id, slug, name').order('slug');
       if (data) setLeagues(data);
-    };
-    fetchLeagues();
+    })();
   }, []);
 
-  // Fetch seasons (ALL statuses) when league changes
+  // Seasons (all statuses) when the league changes
   useEffect(() => {
-    const fetchSeasons = async () => {
+    (async () => {
       let data: Season[] | null = null;
-
       if (selectedLeague === 'ctfpl') {
-        const result = await supabase
-          .from('ctfpl_seasons')
-          .select('id, season_number, season_name, status')
-          .order('season_number', { ascending: false });
+        const result = await supabase.from('ctfpl_seasons').select('id, season_number, season_name, status').order('season_number', { ascending: false });
         data = result.data;
       } else {
-        const league = leagues.find(l => l.slug === selectedLeague);
+        const league = leagues.find((l) => l.slug === selectedLeague);
         if (!league) return;
-        const result = await supabase
-          .from('league_seasons')
-          .select('id, season_number, season_name, status')
-          .eq('league_id', league.id)
-          .order('season_number', { ascending: false });
+        const result = await supabase.from('league_seasons').select('id, season_number, season_name, status').eq('league_id', league.id).order('season_number', { ascending: false });
         data = result.data;
       }
-
-      if (data) {
-        setSeasons(data);
-        setSelectedSeason(data.length > 0 ? data[0] : null);
-      } else {
-        setSeasons([]);
-        setSelectedSeason(null);
-      }
-    };
-    fetchSeasons();
+      setSeasons(data || []);
+      setSelectedSeason(data && data.length > 0 ? data[0] : null);
+    })();
   }, [selectedLeague, leagues]);
 
-  // Fetch squads
+  // Squads
   useEffect(() => {
-    const fetchSquads = async () => {
-      const { data } = await supabase
-        .from('squads')
-        .select('id, name, tag, is_active')
-        .order('name');
+    (async () => {
+      const { data } = await supabase.from('squads').select('id, name, tag, is_active').order('name');
       if (data) setSquads(data);
-    };
-    fetchSquads();
+    })();
   }, []);
 
-  // Fetch matches + standings when season changes
+  // Matches, standings and fixtures when the season changes
   useEffect(() => {
-    if (selectedSeason) {
-      fetchSeasonData();
-    }
+    if (selectedSeason) { fetchSeasonData(); fetchFixtures(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSeason]);
 
-  // Click outside to close dropdowns
+  // Click outside closes the squad dropdowns
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (squadARef.current && !squadARef.current.contains(e.target as Node)) {
-        setShowSquadADropdown(false);
-      }
-      if (squadBRef.current && !squadBRef.current.contains(e.target as Node)) {
-        setShowSquadBDropdown(false);
-      }
+      if (squadARef.current && !squadARef.current.contains(e.target as Node)) setShowSquadADropdown(false);
+      if (squadBRef.current && !squadBRef.current.contains(e.target as Node)) setShowSquadBDropdown(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -220,7 +207,7 @@ export default function MatchManagerPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`/api/ctf/matches?season_number=${selectedSeason.season_number}&league=${selectedLeague}`, {
-        headers: session ? { 'Authorization': `Bearer ${session.access_token}` } : {},
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
       });
       const data = await res.json();
       setMatches(data.matches || []);
@@ -232,45 +219,43 @@ export default function MatchManagerPage() {
     }
   };
 
-  const filteredSquadsA = squads.filter(s =>
-    squadASearch &&
-    (s.name.toLowerCase().includes(squadASearch.toLowerCase()) ||
-     s.tag.toLowerCase().includes(squadASearch.toLowerCase()))
-  ).slice(0, 10);
-
-  const filteredSquadsB = squads.filter(s =>
-    squadBSearch &&
-    (s.name.toLowerCase().includes(squadBSearch.toLowerCase()) ||
-     s.tag.toLowerCase().includes(squadBSearch.toLowerCase()))
-  ).slice(0, 10);
-
-  const selectSquadA = (squad: Squad) => {
-    setSquadAName(squad.name);
-    setSquadAId(squad.id);
-    setSquadASearch(squad.name);
-    setShowSquadADropdown(false);
+  const fetchFixtures = async () => {
+    if (!selectedSeason) return;
+    try {
+      const res = await fetch(`/api/league/schedule?league=${encodeURIComponent(selectedLeague)}&season=${selectedSeason.season_number}`, { cache: 'no-store' });
+      const json = res.ok ? await res.json() : { fixtures: [] };
+      setFixtures((json.fixtures || []) as Fixture[]);
+    } catch {
+      setFixtures([]);
+    }
   };
 
-  const selectSquadB = (squad: Squad) => {
-    setSquadBName(squad.name);
-    setSquadBId(squad.id);
-    setSquadBSearch(squad.name);
-    setShowSquadBDropdown(false);
+  const pendingFixtures = useMemo(
+    () => fixtures.filter((f) => !f.result && f.squad_a_name && f.squad_b_name).sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
+    [fixtures],
+  );
+
+  const useFixture = (f: Fixture) => {
+    const a = squads.find((s) => s.id === f.squad_a_id);
+    const b = squads.find((s) => s.id === f.squad_b_id);
+    setSquadAName(a?.name || f.squad_a_name || ''); setSquadAId(a?.id || f.squad_a_id || ''); setSquadASearch(a?.name || f.squad_a_name || '');
+    setSquadBName(b?.name || f.squad_b_name || ''); setSquadBId(b?.id || f.squad_b_id || ''); setSquadBSearch(b?.name || f.squad_b_name || '');
+    setPlayedAt(localDate(f.scheduled_at));
+    setMatchTitle(f.title && !f.title.includes(' vs ') ? f.title : '');
+    setMatchType(f.stage === 'playoff' ? 'Playoffs' : 'Season');
+    if (f.game_id) setExistingGameId(f.game_id);
+    setFromFixture(f);
+    setMessage(null);
+    document.getElementById('record-match')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleSquadAInput = (value: string) => {
-    setSquadASearch(value);
-    setSquadAName(value);
-    setSquadAId(''); // Clear ID — will be resolved server-side if no match
-    setShowSquadADropdown(true);
-  };
+  const filteredSquadsA = squads.filter((s) => squadASearch && (s.name.toLowerCase().includes(squadASearch.toLowerCase()) || s.tag.toLowerCase().includes(squadASearch.toLowerCase()))).slice(0, 10);
+  const filteredSquadsB = squads.filter((s) => squadBSearch && (s.name.toLowerCase().includes(squadBSearch.toLowerCase()) || s.tag.toLowerCase().includes(squadBSearch.toLowerCase()))).slice(0, 10);
 
-  const handleSquadBInput = (value: string) => {
-    setSquadBSearch(value);
-    setSquadBName(value);
-    setSquadBId(''); // Clear ID
-    setShowSquadBDropdown(true);
-  };
+  const selectSquadA = (squad: Squad) => { setSquadAName(squad.name); setSquadAId(squad.id); setSquadASearch(squad.name); setShowSquadADropdown(false); };
+  const selectSquadB = (squad: Squad) => { setSquadBName(squad.name); setSquadBId(squad.id); setSquadBSearch(squad.name); setShowSquadBDropdown(false); };
+  const handleSquadAInput = (value: string) => { setSquadASearch(value); setSquadAName(value); setSquadAId(''); setShowSquadADropdown(true); setFromFixture(null); };
+  const handleSquadBInput = (value: string) => { setSquadBSearch(value); setSquadBName(value); setSquadBId(''); setShowSquadBDropdown(true); setFromFixture(null); };
 
   const handleCsvUpload = (file: File) => {
     const reader = new FileReader();
@@ -294,6 +279,15 @@ export default function MatchManagerPage() {
     reader.readAsText(file);
   };
 
+  const resetForm = () => {
+    setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
+    setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
+    setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
+    setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
+    setPlayedAt(new Date().toISOString().split('T')[0]);
+    setFromFixture(null);
+  };
+
   const handleSubmit = async () => {
     if (!selectedSeason || !squadAName || !squadBName) {
       setMessage({ type: 'error', text: 'Season, Squad A, and Squad B are required' });
@@ -306,13 +300,9 @@ export default function MatchManagerPage() {
 
     setSubmitting(true);
     setMessage(null);
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setMessage({ type: 'error', text: 'Not authenticated' });
-        return;
-      }
+      if (!session) { setMessage({ type: 'error', text: 'Not authenticated' }); return; }
 
       const body: Record<string, unknown> = {
         league: selectedLeague,
@@ -334,48 +324,31 @@ export default function MatchManagerPage() {
         mvp: mvp || undefined,
         game_id: existingGameId || undefined,
       };
-
-      if (csvPreview.length > 0) {
-        body.player_stats = csvPreview;
-      }
+      if (csvPreview.length > 0) body.player_stats = csvPreview;
 
       const res = await fetch('/api/ctf/matches', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify(body),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         const errorText = data.details ? `${data.error}: ${data.details}` : data.error || 'Failed to create match';
         setMessage({ type: 'error', text: errorText });
         return;
       }
 
-      const parts = ['Match recorded successfully!'];
+      const parts = ['Match recorded.'];
       if (data.standings_updated) parts.push('Standings updated.');
       if (data.stats_inserted > 0) parts.push(`${data.stats_inserted} player stats imported.`);
       if (data.warning) parts.push(`Warning: ${data.warning}`);
       setMessage({ type: 'success', text: parts.join(' ') });
 
-      // Reset form
-      setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
-      setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
-      setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
-      setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
-      setPlayedAt(new Date().toISOString().split('T')[0]);
-
-      // Refresh data
+      resetForm();
       fetchSeasonData();
-
-      // Refresh squads in case new ones were created
+      fetchFixtures();
       const { data: updatedSquads } = await supabase.from('squads').select('id, name, tag, is_active').order('name');
       if (updatedSquads) setSquads(updatedSquads);
-
     } catch (error: any) {
       setMessage({ type: 'error', text: `Error: ${error.message}` });
     } finally {
@@ -384,443 +357,308 @@ export default function MatchManagerPage() {
   };
 
   if (authLoading || !isCTFAdmin) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
-      </div>
-    );
+    return <StaffShell user={user}><Spinner label="Checking staff access…" /></StaffShell>;
   }
 
-  const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-500/20 text-green-400',
-      completed: 'bg-gray-500/20 text-gray-400',
-      upcoming: 'bg-blue-500/20 text-blue-400',
-    };
-    return (
-      <span className={`text-xs px-2 py-0.5 rounded-full ${colors[status] || 'bg-gray-500/20 text-gray-400'}`}>
-        {status}
-      </span>
-    );
-  };
+  const seasonLabel = selectedSeason ? `Season ${selectedSeason.season_number}${selectedSeason.season_name ? ` · ${selectedSeason.season_name}` : ''}` : 'No season';
+  const leagueName = selectedLeague === 'ctfpl' ? 'CTFPL' : leagues.find((l) => l.slug === selectedLeague)?.name || selectedLeague.toUpperCase();
+  const canSubmit = !submitting && !!squadAName && !!squadBName && squadAScore !== '' && squadBScore !== '';
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <Navbar user={user} />
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => router.push('/admin/ctf')} className="text-gray-400 hover:text-white">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Swords className="h-6 w-6 text-indigo-400" />
-              Match Manager
-            </h1>
-            <p className="text-gray-400 text-sm">Record league matches and update standings</p>
-          </div>
-        </div>
-
-        {/* League + Season Selector */}
-        <div className="bg-gray-800 rounded-lg p-4 mb-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">League</label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedLeague('ctfpl')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  selectedLeague === 'ctfpl' ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                CTFPL
-              </button>
-              {leagues.map(league => (
-                <button
-                  key={league.slug}
-                  onClick={() => setSelectedLeague(league.slug)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    selectedLeague === league.slug ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {league.name}
+  const squadPicker = (
+    label: string, search: string, onInput: (v: string) => void, matchedId: string, open: boolean, setOpen: (v: boolean) => void,
+    list: Squad[], pick: (s: Squad) => void, ref: React.RefObject<HTMLDivElement | null>, score: string, setScore: (v: string) => void, noShow: boolean, setNoShow: (v: boolean) => void,
+  ) => (
+    <div className="rounded-md bg-[#1B2438] p-3">
+      <label className={labelCls}>{label}</label>
+      <div className="flex items-start gap-3">
+        <div className="relative flex-1" ref={ref}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onInput(e.target.value)}
+            onFocus={() => search && setOpen(true)}
+            placeholder="Search or type a squad name"
+            className={inputCls}
+          />
+          {matchedId && <span className="absolute right-3 top-2.5 text-[10px] uppercase tracking-wide text-[#34D399]">matched</span>}
+          {open && list.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-white/10 bg-[#0B0F1A] shadow-xl">
+              {list.map((s) => (
+                <button key={s.id} type="button" onClick={() => pick(s)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-[#E6EDF7] hover:bg-white/5">
+                  <span>{s.name}</span>
+                  <span className="text-xs text-[#8B98B0]">[{s.tag}]{!s.is_active && ' · legacy'}</span>
                 </button>
               ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Season</label>
-            <select
-              value={selectedSeason?.id || ''}
-              onChange={(e) => {
-                const s = seasons.find(s => s.id === e.target.value);
-                setSelectedSeason(s || null);
-              }}
-              className="bg-gray-700 text-white rounded-lg px-4 py-2 w-full max-w-md border border-gray-600 focus:border-indigo-500 focus:outline-none"
-            >
-              {seasons.length === 0 && <option value="">No seasons found</option>}
-              {seasons.map((s) => (
-                <option key={s.id} value={s.id}>
-                  Season {s.season_number}{s.season_name ? ` - ${s.season_name}` : ''} ({s.status})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Message */}
-        {message && (
-          <div className={`p-4 rounded-lg flex items-start gap-2 mb-6 ${
-            message.type === 'success' ? 'bg-green-900/50 text-green-200 border border-green-700' : 'bg-red-900/50 text-red-200 border border-red-700'
-          }`}>
-            {message.type === 'success' ? <CheckCircle className="h-5 w-5 mt-0.5 shrink-0" /> : <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />}
-            <pre className="whitespace-pre-wrap text-sm">{message.text}</pre>
-          </div>
-        )}
-
-        {/* Record Match Form */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Plus className="h-5 w-5 text-indigo-400" />
-            Record Match
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-            {/* Squad A */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Squad A</label>
-              <div className="relative" ref={squadARef}>
-                <input
-                  type="text"
-                  value={squadASearch}
-                  onChange={(e) => handleSquadAInput(e.target.value)}
-                  onFocus={() => squadASearch && setShowSquadADropdown(true)}
-                  placeholder="Search or type squad name..."
-                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-                />
-                {squadAId && <span className="absolute right-3 top-2.5 text-green-400 text-xs">matched</span>}
-                {showSquadADropdown && filteredSquadsA.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-gray-700 rounded-lg border border-gray-600 shadow-lg max-h-48 overflow-y-auto">
-                    {filteredSquadsA.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => selectSquadA(s)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-600 flex justify-between items-center"
-                      >
-                        <span>{s.name}</span>
-                        <span className="text-gray-400 text-xs">[{s.tag}] {!s.is_active && '(legacy)'}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs text-gray-400 mb-1">Score</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={squadAScore}
-                  onChange={(e) => setSquadAScore(e.target.value)}
-                  placeholder="0"
-                  className="w-24 bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none text-center text-lg"
-                />
-              </div>
-            </div>
-
-            {/* Squad B */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Squad B</label>
-              <div className="relative" ref={squadBRef}>
-                <input
-                  type="text"
-                  value={squadBSearch}
-                  onChange={(e) => handleSquadBInput(e.target.value)}
-                  onFocus={() => squadBSearch && setShowSquadBDropdown(true)}
-                  placeholder="Search or type squad name..."
-                  className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-                />
-                {squadBId && <span className="absolute right-3 top-2.5 text-green-400 text-xs">matched</span>}
-                {showSquadBDropdown && filteredSquadsB.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-gray-700 rounded-lg border border-gray-600 shadow-lg max-h-48 overflow-y-auto">
-                    {filteredSquadsB.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => selectSquadB(s)}
-                        className="w-full text-left px-4 py-2 hover:bg-gray-600 flex justify-between items-center"
-                      >
-                        <span>{s.name}</span>
-                        <span className="text-gray-400 text-xs">[{s.tag}] {!s.is_active && '(legacy)'}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs text-gray-400 mb-1">Score</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={squadBScore}
-                  onChange={(e) => setSquadBScore(e.target.value)}
-                  placeholder="0"
-                  className="w-24 bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none text-center text-lg"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Match Type + Details Row */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
-            <div className="flex gap-2">
-              {['Season', 'Playoffs', 'Finals'].map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setMatchType(type)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    matchType === type ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-            {matchType !== 'Season' && (
-              <p className="text-xs text-yellow-400 mt-1">Standings will NOT be updated for {matchType} matches</p>
-            )}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Match Title (optional)</label>
-              <input
-                type="text"
-                value={matchTitle}
-                onChange={(e) => setMatchTitle(e.target.value)}
-                placeholder={squadAName && squadBName ? `${squadAName} vs ${squadBName}` : 'Auto-generated'}
-                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Date Played</label>
-              <input
-                type="date"
-                value={playedAt}
-                onChange={(e) => setPlayedAt(e.target.value)}
-                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Arena (optional)</label>
-              <input
-                type="text"
-                value={arenaName}
-                onChange={(e) => setArenaName(e.target.value)}
-                placeholder="e.g. CTF_Extreme"
-                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Match Length + MVP Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Match Length (optional)</label>
-              <input
-                type="text"
-                value={matchLength}
-                onChange={(e) => setMatchLength(e.target.value)}
-                placeholder="e.g. 22:45"
-                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">MVP (optional)</label>
-              <input
-                type="text"
-                value={mvp}
-                onChange={(e) => setMvp(e.target.value)}
-                placeholder="e.g. PlayerName"
-                className="w-full bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Flags */}
-          <div className="flex flex-wrap gap-6 mb-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={isOvertime} onChange={(e) => setIsOvertime(e.target.checked)} className="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500" />
-              <span className="text-sm text-gray-300">Overtime</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={squadANoShow} onChange={(e) => setSquadANoShow(e.target.checked)} className="rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500" />
-              <span className="text-sm text-gray-300">Squad A No-Show</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={squadBNoShow} onChange={(e) => setSquadBNoShow(e.target.checked)} className="rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500" />
-              <span className="text-sm text-gray-300">Squad B No-Show</span>
-            </label>
-          </div>
-
-          {/* Link Game ID */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-300 mb-1">Link Game ID (optional)</label>
-            <input
-              type="text"
-              value={existingGameId}
-              onChange={(e) => setExistingGameId(e.target.value)}
-              placeholder="e.g. Tournament_20260101_1234567890"
-              className="w-full max-w-md bg-gray-700 text-white rounded-lg px-4 py-2 border border-gray-600 focus:border-indigo-500 focus:outline-none text-sm"
-            />
-            <p className="text-xs text-gray-500 mt-1">Connect to existing player stats by game ID</p>
-          </div>
-
-          {/* CSV Upload Toggle */}
-          <div className="mb-4">
-            <button
-              onClick={() => setShowCsvUpload(!showCsvUpload)}
-              className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-            >
-              <ChevronDown className={`h-4 w-4 transition-transform ${showCsvUpload ? 'rotate-180' : ''}`} />
-              {showCsvUpload ? 'Hide' : 'Attach'} Player Stats CSV
-            </button>
-            {showCsvUpload && (
-              <div className="mt-3">
-                <CSVUploadZone
-                  onFileUpload={handleCsvUpload}
-                  isProcessing={false}
-                  disabled={submitting}
-                />
-                {csvPreview.length > 0 && (
-                  <div className="mt-2 p-3 bg-gray-700 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-green-400">{csvPreview.length} records parsed</span>
-                      <button onClick={() => setCsvPreview([])} className="text-xs text-red-400 hover:text-red-300">Clear</button>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto text-xs text-gray-400">
-                      {csvPreview.slice(0, 5).map((s, i) => (
-                        <div key={i}>{s.player_name} — {s.team} — {s.main_class} — K:{s.kills} D:{s.deaths} — {s.result}</div>
-                      ))}
-                      {csvPreview.length > 5 && <div className="text-gray-500">...and {csvPreview.length - 5} more</div>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Submit */}
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !squadAName || !squadBName || squadAScore === '' || squadBScore === ''}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors"
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trophy className="h-4 w-4" />}
-            Record Match
-          </button>
-        </div>
-
-        {/* Season Matches */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-bold mb-4">
-            Season Matches {matches.length > 0 && <span className="text-gray-400 font-normal text-sm">({matches.length})</span>}
-          </h2>
-          {loadingData ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-            </div>
-          ) : matches.length === 0 ? (
-            <p className="text-gray-500 text-sm py-4">No matches recorded for this season yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400 text-left">
-                    <th className="pb-2 pr-4">Title</th>
-                    <th className="pb-2 pr-4 text-right">Squad A</th>
-                    <th className="pb-2 px-4 text-center">Score</th>
-                    <th className="pb-2 pl-4">Squad B</th>
-                    <th className="pb-2 pl-4">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matches.map((m) => (
-                    <tr key={m.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                      <td className="py-2 pr-4 text-gray-300">{m.title}</td>
-                      <td className={`py-2 pr-4 text-right font-medium ${m.squad_a_score > m.squad_b_score ? 'text-green-400' : 'text-gray-400'}`}>
-                        {m.squad_a_name}
-                      </td>
-                      <td className="py-2 px-4 text-center font-mono font-bold">
-                        {m.squad_a_score} - {m.squad_b_score}
-                      </td>
-                      <td className={`py-2 pl-4 font-medium ${m.squad_b_score > m.squad_a_score ? 'text-green-400' : 'text-gray-400'}`}>
-                        {m.squad_b_name}
-                      </td>
-                      <td className="py-2 pl-4 text-gray-500 text-xs">
-                        {m.played_at ? new Date(m.played_at).toLocaleDateString() : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           )}
+        </div>
+        <input
+          type="number"
+          min="0"
+          value={score}
+          onChange={(e) => setScore(e.target.value)}
+          placeholder="0"
+          className="w-20 rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-center font-display text-2xl text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+          aria-label={`${label} score`}
+        />
+      </div>
+      <div className="mt-2">
+        <Chip active={noShow} tone="warn" onClick={() => setNoShow(!noShow)}>No-show</Chip>
+      </div>
+    </div>
+  );
+
+  return (
+    <StaffShell user={user}>
+      <HeaderStrip
+        title="Match manager"
+        meta={
+          <>
+            <span className="text-[#E6EDF7]">{leagueName} · {seasonLabel}</span>
+            {selectedSeason && <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${SEASON_PILL[selectedSeason.status] || SEASON_PILL.completed}`}>{selectedSeason.status}</span>}
+            <span>Official results recorded here drive the standings.</span>
+          </>
+        }
+        actions={
+          <>
+            <Link href="/admin/ctf" className={btnQuiet}>CTF admin</Link>
+            <Link href={`/league/schedule?league=${selectedLeague}`} className={btnQuiet}>Schedule</Link>
+            <Link href={`/league/standings?league=${selectedLeague}`} className={btnQuiet}>Standings</Link>
+          </>
+        }
+      >
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap gap-1.5">
+            <Chip active={selectedLeague === 'ctfpl'} onClick={() => setSelectedLeague('ctfpl')}>CTFPL</Chip>
+            {leagues.filter((l) => l.slug !== 'ctfpl').map((league) => (
+              <Chip key={league.slug} active={selectedLeague === league.slug} onClick={() => setSelectedLeague(league.slug)}>{league.name}</Chip>
+            ))}
+          </div>
+          <select
+            value={selectedSeason?.id || ''}
+            onChange={(e) => setSelectedSeason(seasons.find((s) => s.id === e.target.value) || null)}
+            className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+            style={{ colorScheme: 'dark' }}
+          >
+            {seasons.length === 0 && <option value="">No seasons found</option>}
+            {seasons.map((s) => <option key={s.id} value={s.id}>Season {s.season_number}{s.season_name ? ` · ${s.season_name}` : ''} ({s.status})</option>)}
+          </select>
+        </div>
+      </HeaderStrip>
+
+      {/* From the schedule */}
+      {pendingFixtures.length > 0 && (
+        <Panel title="From the schedule" hint={`${pendingFixtures.length} fixture${pendingFixtures.length === 1 ? '' : 's'} without a result. Pick one to fill in the form.`}>
+          <ul className="divide-y divide-white/[0.06]">
+            {pendingFixtures.slice(0, 12).map((f) => {
+              const when = new Date(f.scheduled_at);
+              const past = when.getTime() < Date.now();
+              return (
+                <li key={f.id} className={`flex flex-wrap items-center gap-3 px-5 py-2 ${fromFixture?.id === f.id ? 'bg-[#22D3EE]/[0.06]' : ''}`}>
+                  <span className="w-28 shrink-0 text-xs tabular-nums text-[#8B98B0]">
+                    {when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                    {past ? '' : <span className="ml-1 text-[#F59E0B]">upcoming</span>}
+                  </span>
+                  <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[#8B98B0]">{f.stage === 'playoff' ? 'Playoffs' : f.week ? `Week ${f.week}` : ''}</span>
+                  <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">
+                    {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {f.squad_b_name}
+                  </span>
+                  <button type="button" onClick={() => useFixture(f)} className="text-xs text-[#22D3EE] hover:text-[#67E8F9]">Record result</button>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      )}
+
+      {/* Message */}
+      {message && (
+        <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${message.type === 'success' ? 'bg-[#34D399]/10 text-[#34D399]' : 'bg-[#F87171]/10 text-[#F87171]'}`}>
+          {message.type === 'success' ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+          <pre className="whitespace-pre-wrap font-sans">{message.text}</pre>
+        </div>
+      )}
+
+      {/* Record match */}
+      <div id="record-match">
+      <Panel
+        title="Record a match"
+        hint={fromFixture ? `Filled from the schedule: ${fromFixture.squad_a_name} vs ${fromFixture.squad_b_name}.` : 'Squads, scores and the date. Everything else is optional.'}
+        actions={
+          <>
+            {(squadAName || squadBName) && <button type="button" onClick={resetForm} className={btnQuiet}>Clear</button>}
+            <button type="button" onClick={handleSubmit} disabled={!canSubmit} className={`${btnPrimary} inline-flex items-center gap-2`}>
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Record match
+            </button>
+          </>
+        }
+      >
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {squadPicker('Squad A · home', squadASearch, handleSquadAInput, squadAId, showSquadADropdown, setShowSquadADropdown, filteredSquadsA, selectSquadA, squadARef, squadAScore, setSquadAScore, squadANoShow, setSquadANoShow)}
+            {squadPicker('Squad B · away', squadBSearch, handleSquadBInput, squadBId, showSquadBDropdown, setShowSquadBDropdown, filteredSquadsB, selectSquadB, squadBRef, squadBScore, setSquadBScore, squadBNoShow, setSquadBNoShow)}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className={labelCls}>Match type</label>
+              <div className="flex gap-1.5">
+                {['Season', 'Playoffs', 'Finals'].map((type) => (
+                  <Chip key={type} active={matchType === type} onClick={() => setMatchType(type)}>{type}</Chip>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Flags</label>
+              <Chip active={isOvertime} onClick={() => setIsOvertime(!isOvertime)}>Overtime</Chip>
+            </div>
+            <label className="block">
+              <span className={labelCls}>Date played</span>
+              <input type="date" value={playedAt} onChange={(e) => setPlayedAt(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+            </label>
+            {matchType !== 'Season' && <span className="pb-2 text-xs text-[#F59E0B]">Standings are not updated for {matchType} matches.</span>}
+          </div>
+
+          <button type="button" onClick={() => setShowDetails((v) => !v)} className="flex items-center gap-1 text-sm text-[#8B98B0] hover:text-[#E6EDF7]">
+            <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? 'rotate-180' : ''}`} />
+            Details{(matchTitle || arenaName || matchLength || mvp || existingGameId) ? ' · filled' : ' (optional)'}
+          </button>
+          {showDetails && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="block">
+                <span className={labelCls}>Title</span>
+                <input type="text" value={matchTitle} onChange={(e) => setMatchTitle(e.target.value)} placeholder={squadAName && squadBName ? `${squadAName} vs ${squadBName}` : 'Auto-generated'} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Arena</span>
+                <input type="text" value={arenaName} onChange={(e) => setArenaName(e.target.value)} placeholder="e.g. CTF_Extreme" className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Match length</span>
+                <input type="text" value={matchLength} onChange={(e) => setMatchLength(e.target.value)} placeholder="e.g. 22:45" className={inputCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>MVP</span>
+                <input type="text" value={mvp} onChange={(e) => setMvp(e.target.value)} placeholder="Player alias" className={inputCls} />
+              </label>
+              <label className="block md:col-span-2">
+                <span className={labelCls}>Link game id</span>
+                <input type="text" value={existingGameId} onChange={(e) => setExistingGameId(e.target.value)} placeholder="e.g. Tournament_20260101_1234567890 — connects existing player stats" className={inputCls} />
+              </label>
+            </div>
+          )}
+
+          <button type="button" onClick={() => setShowCsvUpload(!showCsvUpload)} className="flex items-center gap-1 text-sm text-[#8B98B0] hover:text-[#E6EDF7]">
+            <ChevronDown className={`h-4 w-4 transition-transform ${showCsvUpload ? 'rotate-180' : ''}`} />
+            {csvPreview.length > 0 ? `Player stats CSV · ${csvPreview.length} records attached` : 'Attach a player stats CSV'}
+          </button>
+          {showCsvUpload && (
+            <div className="space-y-2">
+              <CSVUploadZone onFileUpload={handleCsvUpload} isProcessing={false} disabled={submitting} />
+              {csvPreview.length > 0 && (
+                <div className="rounded-md bg-[#1B2438] p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm text-[#34D399]">{csvPreview.length} records parsed</span>
+                    <button type="button" onClick={() => setCsvPreview([])} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Clear</button>
+                  </div>
+                  <div className="max-h-32 overflow-y-auto text-xs text-[#8B98B0]">
+                    {csvPreview.slice(0, 5).map((s, i) => (
+                      <div key={i}>{s.player_name} — {s.team} — {s.main_class} — K:{s.kills} D:{s.deaths} — {s.result}</div>
+                    ))}
+                    {csvPreview.length > 5 && <div className="text-[#8B98B0]/60">…and {csvPreview.length - 5} more</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Season matches */}
+        <div className="lg:col-span-3">
+          <Panel title="Recorded matches" hint={`${matches.length} this season`}>
+            {loadingData ? (
+              <Spinner label="Loading…" />
+            ) : matches.length === 0 ? (
+              <Empty>No matches recorded for this season yet.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className={th}>Date</th>
+                      <th className={`${th} text-right`}>Squad A</th>
+                      <th className={`${th} text-center`}>Score</th>
+                      <th className={th}>Squad B</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matches.map((m) => {
+                      const aWon = m.squad_a_score > m.squad_b_score;
+                      const bWon = m.squad_b_score > m.squad_a_score;
+                      return (
+                        <tr key={m.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
+                          <td className={`${td} whitespace-nowrap text-xs text-[#8B98B0]`}>{m.played_at ? new Date(m.played_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</td>
+                          <td className={`${td} text-right ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
+                          <td className={`${td} text-center font-display text-lg tabular-nums whitespace-nowrap`}>
+                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_a_score}</span>
+                            <span className="mx-1 text-white/20">:</span>
+                            <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_b_score}</span>
+                          </td>
+                          <td className={`${td} ${bWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_b_name}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
         </div>
 
         {/* Standings */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-lg font-bold mb-4">
-            Current Standings {selectedSeason && statusBadge(selectedSeason.status)}
-          </h2>
-          {loadingData ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-            </div>
-          ) : standings.length === 0 ? (
-            <p className="text-gray-500 text-sm py-4">No standings data for this season yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400 text-left">
-                    <th className="pb-2 pr-2 w-8">#</th>
-                    <th className="pb-2 pr-4">Squad</th>
-                    <th className="pb-2 pr-3 text-center">MP</th>
-                    <th className="pb-2 pr-3 text-center">W</th>
-                    <th className="pb-2 pr-3 text-center">L</th>
-                    <th className="pb-2 pr-3 text-center">NS</th>
-                    <th className="pb-2 pr-3 text-center">OTW</th>
-                    <th className="pb-2 pr-3 text-center">Pts</th>
-                    <th className="pb-2 pr-3 text-center">Win%</th>
-                    <th className="pb-2 text-center">K/D Diff</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standings.map((s) => (
-                    <tr key={`${s.squad_name}-${s.rank}`} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                      <td className="py-2 pr-2 text-gray-500 font-mono">{s.rank}</td>
-                      <td className="py-2 pr-4 font-medium">
-                        {s.squad_name}
-                        {s.squad_tag && <span className="text-gray-500 text-xs ml-1">[{s.squad_tag}]</span>}
-                      </td>
-                      <td className="py-2 pr-3 text-center text-gray-400">{s.matches_played}</td>
-                      <td className="py-2 pr-3 text-center text-green-400">{s.wins}</td>
-                      <td className="py-2 pr-3 text-center text-red-400">{s.losses}</td>
-                      <td className="py-2 pr-3 text-center text-yellow-400">{s.no_shows || 0}</td>
-                      <td className="py-2 pr-3 text-center text-blue-400">{s.overtime_wins || 0}</td>
-                      <td className="py-2 pr-3 text-center font-bold text-white">{s.points}</td>
-                      <td className="py-2 pr-3 text-center text-gray-300">{s.win_percentage != null ? `${s.win_percentage}%` : '-'}</td>
-                      <td className={`py-2 text-center ${s.kill_death_difference > 0 ? 'text-green-400' : s.kill_death_difference < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                        {s.kill_death_difference > 0 ? '+' : ''}{s.kill_death_difference}
-                      </td>
+        <div className="lg:col-span-2">
+          <Panel title="Standings" hint="Live from recorded season matches.">
+            {loadingData ? (
+              <Spinner label="Loading…" />
+            ) : standings.length === 0 ? (
+              <Empty>No standings for this season yet.</Empty>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th className={th}>#</th>
+                      <th className={th}>Squad</th>
+                      <th className={`${th} text-center`}>W</th>
+                      <th className={`${th} text-center`}>L</th>
+                      <th className={`${th} text-center`} title="No-shows">NS</th>
+                      <th className={`${th} text-center`} title="Overtime wins">OTW</th>
+                      <th className={`${th} text-right`}>Pts</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {standings.map((s) => (
+                      <tr key={`${s.squad_name}-${s.rank}`} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
+                        <td className={`${td} tabular-nums text-[#8B98B0]`}>{s.rank}</td>
+                        <td className={`${td} text-[#E6EDF7]`}>{s.squad_name}{s.squad_tag && <span className="ml-1 text-xs text-[#8B98B0]">[{s.squad_tag}]</span>}</td>
+                        <td className={`${td} text-center tabular-nums text-[#34D399]`}>{s.wins}</td>
+                        <td className={`${td} text-center tabular-nums text-[#F87171]`}>{s.losses}</td>
+                        <td className={`${td} text-center tabular-nums text-[#F59E0B]`}>{s.no_shows || 0}</td>
+                        <td className={`${td} text-center tabular-nums text-[#8B98B0]`}>{s.overtime_wins || 0}</td>
+                        <td className={`${td} text-right font-display text-lg tabular-nums text-[#E6EDF7]`}>{s.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
         </div>
       </div>
-    </div>
+    </StaffShell>
   );
 }
