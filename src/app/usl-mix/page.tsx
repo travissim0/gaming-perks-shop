@@ -88,7 +88,7 @@ const LEADER_TILES: Array<{ key: LeaderBoardKey; label: string; hint: (minGames:
   { key: 'win_rate', label: 'Best win rate', hint: (m) => `at least ${m} games`, color: 'text-emerald-300' },
   { key: 'heal', label: 'Most healing', hint: () => 'HP healed', color: 'text-green-300' },
   { key: 'hits', label: 'Most hits', hint: () => 'shots landed', color: 'text-sky-300' },
-  { key: 'accuracy', label: 'Best accuracy', hint: () => 'at least 100 shots', color: 'text-teal-300' },
+  { key: 'accuracy', label: 'Best accuracy', hint: () => 'at least 100 shots and 3 rated games', color: 'text-teal-300' },
   { key: 'opening_kills', label: 'Most opening kills', hint: () => 'first kill of a fight', color: 'text-amber-300' },
   { key: 'rating_gain', label: 'Biggest rating gain', hint: () => 'rated mixes', color: 'text-purple-300' },
 ];
@@ -121,7 +121,7 @@ export default function UslMixOverviewPage() {
   const [games, setGames] = useState<GameRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<Period>('week');
+  const [period, setPeriod] = useState<Period>('month');   // Month by default: a night with 0 mixes makes Week look empty (Champion, 2026-09-17)
   const [leadersData, setLeadersData] = useState<Leaders | null>(null);
   const [leadersLoading, setLeadersLoading] = useState(true);
 
@@ -278,7 +278,7 @@ export default function UslMixOverviewPage() {
             </div>
             <div className="lg:col-span-3 min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-                Best in each class · kills per game, medics by heal per game · at least {leadersData.filters.minGames} games as that class
+                Best in each class · K/D with 5+ kills per game to qualify, medics by heal per game · at least {leadersData.filters.minGames} games as that class
               </div>
               {leadersData.by_class.length === 0 ? (
                 <p className="text-sm text-gray-500">No class data yet.</p>

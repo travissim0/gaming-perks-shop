@@ -101,7 +101,7 @@ export default function UslMixApiDocsPage() {
                 ['period', 'week | month | year | all (rolling 7 / 30 / 365 days; default week)'],
                 ['kind', 'mix | pub | all'],
                 ['map', 'restrict to one map'],
-                ['minGames', 'games needed for the K/D, win-rate and per-class rankings, default 2'],
+                ['minGames', 'games needed for the K/D, win-rate and per-class rankings; default depends on period: week 5, month 12, year 22, all 22'],
                 ['board', 'flat mode, one ranked list: kills | kd | kills_per_game | win_rate | heal | hits | accuracy | opening_kills | rating_gain | class:<name> | record:<kills|opening_kills|hits|accuracy|heal>'],
                 ['limit', 'entries in flat mode, default 10, max 100'],
               ]}
