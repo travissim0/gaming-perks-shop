@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, AlertCircle, X, ChevronDown, Loader2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, X } from 'lucide-react';
 
 interface CSVUploadZoneProps {
   onFileUpload: (file: File) => void;
@@ -10,120 +10,173 @@ interface CSVUploadZoneProps {
   disabled?: boolean;
 }
 
-const COLUMNS = [
-  'PlayerName', 'Team', 'Kills', 'Deaths', 'Captures', 'CarrierKills', 'CarryTimeSeconds', 'GameLengthMinutes', 'Result', 'MostPlayedClass',
-  'ClassSwaps', 'TurretDamage', 'GameMode', 'Side', 'BaseUsed', 'Accuracy', 'AvgResourceUnusedPerDeath', 'AvgExplosiveUnusedPerDeath', 'EBHits', 'LeftEarly',
-];
-
-/** Drag-and-drop CSV picker for player-stat imports. Validates type and size, hands the file up. */
 export default function CSVUploadZone({ onFileUpload, isProcessing, error, disabled }: CSVUploadZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [rejected, setRejected] = useState<string | null>(null);
-  const [showFormat, setShowFormat] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
-  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(false); };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    
     if (disabled) return;
+    
     const files = e.dataTransfer.files;
-    if (files.length > 0) handleFileSelection(files[0]);
+    if (files.length > 0) {
+      handleFileSelection(files[0]);
+    }
   };
+
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled) return;
+    
     const files = e.target.files;
-    if (files && files.length > 0) handleFileSelection(files[0]);
+    if (files && files.length > 0) {
+      handleFileSelection(files[0]);
+    }
   };
 
   const handleFileSelection = (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv')) { setRejected(`${file.name} is not a .csv file.`); return; }
-    if (file.size > 10 * 1024 * 1024) { setRejected(`${file.name} is over the 10 MB limit.`); return; }
-    setRejected(null);
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return;
+    }
+
     setSelectedFile(file);
     onFileUpload(file);
   };
 
   const clearSelection = () => {
     setSelectedFile(null);
-    setRejected(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return '0 Bytes';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
+    const sizes = ['Bytes', 'KB', 'MB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const inactive = isProcessing || disabled;
-
   return (
-    <div className="space-y-2">
+    <div className="bg-gray-800 rounded-lg p-6">
+      <h2 className="text-xl font-bold text-white mb-4">Import Match Data</h2>
+      
+      {/* Upload Zone */}
       <div
-        className={`rounded-md border border-dashed px-4 py-5 text-center transition-colors ${
-          isDragOver && !disabled ? 'border-[#22D3EE] bg-[#22D3EE]/5' : 'border-white/15 hover:border-white/30'
-        } ${inactive ? 'opacity-50 pointer-events-none' : ''}`}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          isDragOver && !disabled
+            ? 'border-blue-500 bg-blue-500/10' 
+            : 'border-gray-600 hover:border-gray-500'
+        } ${isProcessing || disabled ? 'opacity-50 pointer-events-none' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {!selectedFile ? (
           <>
-            <Upload className="mx-auto mb-2 h-6 w-6 text-[#8B98B0]" />
-            <p className="text-sm text-[#E6EDF7]">Drop a CSV here, or</p>
+            <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">
+              Drop your CSV file here
+            </h3>
+            <p className="text-gray-400 mb-4">
+              or click to browse your computer
+            </p>
             <button
-              type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={inactive}
-              className="mt-2 rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10 disabled:opacity-50"
+              disabled={isProcessing || disabled}
+              className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg text-white font-medium disabled:opacity-50"
             >
-              Choose a file
+              Choose File
             </button>
-            <p className="mt-2 text-[11px] text-[#8B98B0]">{disabled ? 'Fill in the fields above first.' : 'Up to 10 MB. Game mode is set to Tournament on import.'}</p>
-            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileInputChange} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
           </>
         ) : (
-          <div className="flex items-center gap-3 text-left">
-            <FileText className="h-6 w-6 shrink-0 text-[#34D399]" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-[#E6EDF7]">{selectedFile.name}</p>
-              <p className="text-[11px] text-[#8B98B0]">{formatFileSize(selectedFile.size)} · modified {selectedFile.lastModified ? new Date(selectedFile.lastModified).toLocaleDateString() : 'unknown'}</p>
-            </div>
-            {isProcessing ? (
-              <span className="inline-flex items-center gap-1.5 text-xs text-[#8B98B0]"><Loader2 className="h-4 w-4 animate-spin" /> Parsing…</span>
-            ) : (
-              <button type="button" onClick={clearSelection} disabled={inactive} className="rounded p-1 text-[#8B98B0] hover:bg-white/10 hover:text-[#E6EDF7]" aria-label="Remove file">
-                <X className="h-4 w-4" />
+          <div className="bg-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <FileText className="h-8 w-8 text-green-400 mr-3" />
+                <div className="text-left">
+                  <p className="text-white font-medium">{selectedFile.name}</p>
+                  <p className="text-gray-400 text-sm">
+                    {formatFileSize(selectedFile.size)} • Modified {selectedFile.lastModified ? new Date(selectedFile.lastModified).toLocaleDateString() : 'Unknown'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={clearSelection}
+                className="text-gray-400 hover:text-white"
+                disabled={isProcessing || disabled}
+              >
+                <X className="h-5 w-5" />
               </button>
+            </div>
+            
+            {isProcessing && (
+              <div className="flex items-center justify-center py-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                <span className="text-gray-400 ml-2">Processing...</span>
+              </div>
             )}
           </div>
         )}
       </div>
 
-      {(rejected || error) && (
-        <div className="flex items-start gap-2 rounded-md bg-[#F87171]/10 px-3 py-2 text-sm text-[#F87171]">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <pre className="whitespace-pre-wrap font-sans">{rejected || error}</pre>
+      {/* Error Display */}
+      {error && (
+        <div className="mt-4 bg-red-900/50 border border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-red-400 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-red-400 font-medium">Upload Error</h4>
+              <pre className="text-red-300 text-sm mt-1 whitespace-pre-wrap">{error}</pre>
+            </div>
+          </div>
         </div>
       )}
 
-      <button type="button" onClick={() => setShowFormat((v) => !v)} className="flex items-center gap-1 text-[11px] text-[#8B98B0] hover:text-[#E6EDF7]">
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showFormat ? 'rotate-180' : ''}`} />
-        Expected columns
-      </button>
-      {showFormat && (
-        <div className="rounded-md bg-[#0B0F1A]/60 p-3 text-[11px] text-[#8B98B0]">
-          <div className="flex flex-wrap gap-1">
-            {COLUMNS.map((c) => <code key={c} className="rounded bg-white/5 px-1.5 py-0.5 text-[#E6EDF7]">{c}</code>)}
+      {/* Format Instructions */}
+      <div className="mt-6 bg-gray-700 rounded-lg p-4">
+        <h3 className="text-white font-medium mb-2">Expected CSV Format</h3>
+        <div className="text-sm text-gray-300 space-y-1">
+          <p>Your CSV file should contain the following columns:</p>
+          <div className="font-mono text-xs bg-gray-800 p-2 rounded mt-2">
+            PlayerName, Team, Kills, Deaths, Captures, CarrierKills, CarryTimeSeconds,<br/>
+            GameLengthMinutes, Result, MostPlayedClass, ClassSwaps, TurretDamage,<br/>
+            GameMode, Side, BaseUsed, Accuracy, AvgResourceUnusedPerDeath,<br/>
+            AvgExplosiveUnusedPerDeath, EBHits, LeftEarly
           </div>
-          <p className="mt-2">Date and game id are generated if the file doesn&apos;t include them.</p>
+          <div className="mt-2 text-gray-400">
+            <p>• File size limit: 10MB</p>
+            <p>• Game mode will be automatically set to 'Tournament'</p>
+            <p>• Date and Game ID will be auto-generated if not provided</p>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

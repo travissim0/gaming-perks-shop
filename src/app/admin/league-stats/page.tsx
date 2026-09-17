@@ -1,17 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Download, AlertCircle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
-import { toast } from 'react-hot-toast';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/AuthContext';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Download, FileText, BarChart3, Users, Trophy, AlertCircle, CheckCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { parseCSV, processPlayerStats, validatePlayerStats, ProcessedPlayerStat } from '@/lib/csv-parser';
 import CSVUploadZone from '@/components/admin/CSVUploadZone';
+import { useRouter } from 'next/navigation';
 import SeasonManagementModal from '@/components/admin/SeasonManagementModal';
-import { Chip, Panel, Spinner, Empty, StaffShell, HeaderStrip, th, td } from '@/components/ctf/AdminBits';
-import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
 interface PlayerStat {
   id: number;
@@ -33,18 +28,20 @@ interface PlayerStat {
   season: string;
 }
 
-interface Season { id: string; season_number: number; season_name: string | null; status: 'upcoming' | 'active' | 'completed' }
-interface League { id: string; slug: string; name: string }
+interface Season {
+  id: string;
+  season_number: number;
+  season_name: string | null;
+  status: 'upcoming' | 'active' | 'completed';
+}
 
-/**
- * League stats: import Tournament player-stat CSVs, export everything, and
- * two fix-up tools (arena rename by game id, team result correction).
- */
+interface League {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export default function LeagueStatsAdminPage() {
-  const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
-  const [access, setAccess] = useState<'checking' | 'ok' | 'denied'>('checking');
-
   const [stats, setStats] = useState<PlayerStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -64,34 +61,25 @@ export default function LeagueStatsAdminPage() {
   const [resultCorrectionGameId, setResultCorrectionGameId] = useState<string>('');
   const [resultCorrectionTeamBase, setResultCorrectionTeamBase] = useState<string>('');
   const [resultCorrectionResult, setResultCorrectionResult] = useState<'Win' | 'Loss'>('Win');
-
-  // Staff only.
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) { router.push('/auth/login?redirect=/admin/league-stats'); return; }
-    (async () => {
-      const { data } = await supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle();
-      const ok = !!data && (data.is_admin === true || data.ctf_role === 'ctf_admin');
-      setAccess(ok ? 'ok' : 'denied');
-      if (!ok) toast.error('CTF admin access required');
-    })();
-  }, [user, authLoading, router]);
+  
+  const supabase = createClientComponentClient();
+  const router = useRouter();
 
   useEffect(() => {
-    if (access !== 'ok') return;
     fetchStats();
     fetchLeagues();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [access]);
+  }, []);
 
   useEffect(() => {
-    if (access === 'ok') fetchActiveSeasons();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLeague, leagues, access]);
+    fetchActiveSeasons();
+  }, [selectedLeague, leagues]);
 
   const fetchLeagues = async () => {
     try {
-      const { data } = await supabase.from('leagues').select('id, slug, name').order('slug');
+      const { data } = await supabase
+        .from('leagues')
+        .select('id, slug, name')
+        .order('slug');
       if (data) setLeagues(data);
     } catch (error: any) {
       console.error('Error fetching leagues:', error.message);
@@ -100,7 +88,13 @@ export default function LeagueStatsAdminPage() {
 
   const fetchStats = async () => {
     try {
-      const { data, error } = await supabase.from('player_stats').select('*').eq('game_mode', 'Tournament').order('game_date', { ascending: false }).limit(200);
+      const { data, error } = await supabase
+        .from('player_stats')
+        .select('*')
+        .eq('game_mode', 'Tournament')
+        .order('game_date', { ascending: false })
+        .limit(200);
+
       if (error) throw error;
       setStats(data || []);
     } catch (error: any) {
@@ -113,17 +107,39 @@ export default function LeagueStatsAdminPage() {
   const fetchActiveSeasons = async () => {
     try {
       if (selectedLeague === 'ctfpl') {
-        const { data, error } = await supabase.from('ctfpl_seasons').select('id, season_number, season_name, status').eq('status', 'active').order('season_number', { ascending: false });
+        const { data, error } = await supabase
+          .from('ctfpl_seasons')
+          .select('id, season_number, season_name, status')
+          .eq('status', 'active')
+          .order('season_number', { ascending: false });
+
         if (error) throw error;
         setSeasons(data || []);
-        setSelectedSeason(data && data.length > 0 ? data[0].id : '');
+
+        if (data && data.length > 0) {
+          setSelectedSeason(data[0].id);
+        } else {
+          setSelectedSeason('');
+        }
       } else {
-        const league = leagues.find((l) => l.slug === selectedLeague);
+        const league = leagues.find(l => l.slug === selectedLeague);
         if (!league) return;
-        const { data, error } = await supabase.from('league_seasons').select('id, season_number, season_name, status').eq('league_id', league.id).eq('status', 'active').order('season_number', { ascending: false });
+
+        const { data, error } = await supabase
+          .from('league_seasons')
+          .select('id, season_number, season_name, status')
+          .eq('league_id', league.id)
+          .eq('status', 'active')
+          .order('season_number', { ascending: false });
+
         if (error) throw error;
         setSeasons(data || []);
-        setSelectedSeason(data && data.length > 0 ? data[0].id : '');
+
+        if (data && data.length > 0) {
+          setSelectedSeason(data[0].id);
+        } else {
+          setSelectedSeason('');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching active seasons:', error.message);
@@ -133,23 +149,31 @@ export default function LeagueStatsAdminPage() {
   const handleFileUpload = (file: File) => {
     setUploading(true);
     setMessage(null);
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const csvText = e.target?.result as string;
         const csvData = parseCSV(csvText);
-        const selectedSeasonData = seasons.find((s) => s.id === selectedSeason);
-        const customSeason = selectedSeasonData ? `Season ${selectedSeasonData.season_number}${selectedSeasonData.season_name ? ' - ' + selectedSeasonData.season_name : ''}` : undefined;
+        
+        // Get selected season name for custom season assignment
+        const selectedSeasonData = seasons.find(s => s.id === selectedSeason);
+        const customSeason = selectedSeasonData ? 
+          `Season ${selectedSeasonData.season_number}${selectedSeasonData.season_name ? ' - ' + selectedSeasonData.season_name : ''}` : 
+          undefined;
+        
         const processedData = processPlayerStats(csvData, undefined, undefined, customSeason, selectedArena);
         const validationErrors = validatePlayerStats(processedData);
+
         if (validationErrors.length > 0) {
           setMessage({ type: 'error', text: `Validation errors:\n${validationErrors.join('\n')}` });
           setUploading(false);
           return;
         }
+
         setCsvPreview(processedData);
         setShowPreview(true);
-        setMessage({ type: 'success', text: `Parsed ${processedData.length} records. Check the preview, then import.` });
+        setMessage({ type: 'success', text: `Parsed ${processedData.length} records successfully` });
       } catch (error: any) {
         setMessage({ type: 'error', text: `Error parsing CSV: ${error.message}` });
       } finally {
@@ -161,11 +185,16 @@ export default function LeagueStatsAdminPage() {
 
   const importData = async () => {
     if (csvPreview.length === 0) return;
+    
     setUploading(true);
     try {
-      const { error } = await supabase.from('player_stats').insert(csvPreview);
+      const { data, error } = await supabase
+        .from('player_stats')
+        .insert(csvPreview);
+
       if (error) throw error;
-      setMessage({ type: 'success', text: `Imported ${csvPreview.length} records.` });
+
+      setMessage({ type: 'success', text: `Successfully imported ${csvPreview.length} records` });
       setCsvPreview([]);
       setShowPreview(false);
       fetchStats();
@@ -178,11 +207,18 @@ export default function LeagueStatsAdminPage() {
 
   const handleBulkUpdate = async () => {
     if (!bulkEditGameId || !bulkEditArena) return;
+    
     setBulkEditing(true);
     try {
-      const { error } = await supabase.from('player_stats').update({ arena_name: bulkEditArena }).eq('game_id', bulkEditGameId).eq('game_mode', 'Tournament');
+      const { data, error } = await supabase
+        .from('player_stats')
+        .update({ arena_name: bulkEditArena })
+        .eq('game_id', bulkEditGameId)
+        .eq('game_mode', 'Tournament');
+
       if (error) throw error;
-      setMessage({ type: 'success', text: `Arena set to "${bulkEditArena}" for every record in game ${bulkEditGameId}.` });
+
+      setMessage({ type: 'success', text: `Successfully updated arena name to "${bulkEditArena}" for game_id: ${bulkEditGameId}` });
       setBulkEditArena('');
       setBulkEditGameId('');
       setShowBulkEdit(false);
@@ -196,16 +232,20 @@ export default function LeagueStatsAdminPage() {
 
   const handleResultCorrection = async () => {
     if (!resultCorrectionGameId || !resultCorrectionTeamBase) return;
+    
     setBulkEditing(true);
     try {
-      const { error } = await supabase
+      // Update all players whose team contains the team base name
+      const { data, error } = await supabase
         .from('player_stats')
         .update({ result: resultCorrectionResult })
         .eq('game_id', resultCorrectionGameId)
         .eq('game_mode', 'Tournament')
         .ilike('team', `%${resultCorrectionTeamBase}%`);
+
       if (error) throw error;
-      setMessage({ type: 'success', text: `Result set to "${resultCorrectionResult}" for every "${resultCorrectionTeamBase}" player in game ${resultCorrectionGameId}.` });
+
+      setMessage({ type: 'success', text: `Successfully updated result to "${resultCorrectionResult}" for all "${resultCorrectionTeamBase}" team members in game_id: ${resultCorrectionGameId}` });
       setResultCorrectionGameId('');
       setResultCorrectionTeamBase('');
       setShowResultCorrection(false);
@@ -219,11 +259,16 @@ export default function LeagueStatsAdminPage() {
 
   const exportData = async () => {
     try {
-      const { data, error } = await supabase.from('player_stats').select('*').order('game_date', { ascending: false });
+      const { data, error } = await supabase
+        .from('player_stats')
+        .select('*')
+        .order('game_date', { ascending: false });
+
       if (error) throw error;
+
       const csv = convertToCSV(data);
       downloadCSV(csv, `league_stats_${new Date().toISOString().split('T')[0]}.csv`);
-      setMessage({ type: 'success', text: 'Export downloaded.' });
+      setMessage({ type: 'success', text: 'Data exported successfully' });
     } catch (error: any) {
       setMessage({ type: 'error', text: `Error exporting data: ${error.message}` });
     }
@@ -231,8 +276,9 @@ export default function LeagueStatsAdminPage() {
 
   const convertToCSV = (data: any[]) => {
     if (!data.length) return '';
+    
     const headers = Object.keys(data[0]).join(',');
-    const rows = data.map((row) => Object.values(row).join(','));
+    const rows = data.map(row => Object.values(row).join(','));
     return [headers, ...rows].join('\n');
   };
 
@@ -246,208 +292,471 @@ export default function LeagueStatsAdminPage() {
     window.URL.revokeObjectURL(url);
   };
 
-  const totalMatches = new Set(stats.map((s) => s.game_id)).size;
-  const totalPlayers = new Set(stats.map((s) => s.player_name)).size;
-  const totalKills = stats.reduce((sum, s) => sum + s.kills, 0);
-  const readyToImport = !!selectedSeason && !!selectedArena;
+  const getStatsSummary = () => {
+    const totalMatches = new Set(stats.map(s => s.game_id)).size;
+    const totalPlayers = new Set(stats.map(s => s.player_name)).size;
+    const totalKills = stats.reduce((sum, s) => sum + s.kills, 0);
+    
+    return { totalMatches, totalPlayers, totalKills };
+  };
 
-  if (authLoading || access === 'checking') {
-    return <StaffShell user={user}><Spinner label="Checking staff access…" /></StaffShell>;
-  }
-  if (access === 'denied') {
-    return (
-      <StaffShell user={user}>
-        <section className="rounded-xl bg-[#131A2B] px-6 py-8 text-center">
-          <h1 className="font-display text-3xl text-[#E6EDF7]">Staff only</h1>
-          <p className="mt-2 text-sm text-[#8B98B0]">CTF admin privileges are required for this page.</p>
-        </section>
-      </StaffShell>
-    );
-  }
+  const { totalMatches, totalPlayers, totalKills } = getStatsSummary();
 
   return (
-    <StaffShell user={user}>
-      <HeaderStrip
-        title="League stats"
-        meta={
-          <>
-            <span className="text-[#E6EDF7]">Tournament records · last 200</span>
-            <span>{totalMatches} games</span>
-            <span>{totalPlayers} players</span>
-            <span>{totalKills} kills</span>
-          </>
-        }
-        actions={
-          <>
-            <Link href="/admin/ctf" className={btnQuiet}>CTF admin</Link>
-            <button type="button" onClick={fetchStats} disabled={loading} className={btnQuiet}>{loading ? 'Refreshing…' : 'Refresh'}</button>
-            <button type="button" onClick={exportData} className={`${btnQuiet} inline-flex items-center gap-1.5`}><Download className="h-3.5 w-3.5" /> Export all CSV</button>
-          </>
-        }
-      />
-
-      {message && (
-        <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${message.type === 'success' ? 'bg-[#34D399]/10 text-[#34D399]' : 'bg-[#F87171]/10 text-[#F87171]'}`}>
-          {message.type === 'success' ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />}
-          <pre className="whitespace-pre-wrap font-sans">{message.text}</pre>
-        </div>
-      )}
-
-      {/* Import */}
-      <Panel
-        title="Import a stats CSV"
-        hint={readyToImport ? 'Rows are tagged with the season and arena below.' : 'Pick a season and type the arena before uploading.'}
-        actions={<div className="w-44"><SeasonManagementModal /></div>}
-      >
-        <div className="p-5 space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-4">
+            <button
+              onClick={() => router.push('/admin')}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Admin
+            </button>
+            <button
+              onClick={() => router.push('/admin/ctf')}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to CTF Admin
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
             <div>
-              <label className={labelCls}>League</label>
-              <div className="flex flex-wrap gap-1.5">
-                {leagues.map((league) => (
-                  <Chip key={league.slug} active={selectedLeague === league.slug} onClick={() => setSelectedLeague(league.slug)}>{league.name}</Chip>
-                ))}
+              <h1 className="text-3xl font-bold mb-2">League Match Statistics Admin</h1>
+              <p className="text-gray-400">Import and manage Tournament match data</p>
+            </div>
+            <div className="w-48">
+              <SeasonManagementModal />
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center">
+              <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
+              <div>
+                <p className="text-sm text-gray-400">Total Matches</p>
+                <p className="text-2xl font-bold">{totalMatches}</p>
               </div>
             </div>
-            <label className="block">
-              <span className={labelCls}>Active season</span>
-              <select value={selectedSeason} onChange={(e) => setSelectedSeason(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
-                <option value="">Select a season</option>
-                {seasons.map((season) => <option key={season.id} value={season.id}>Season {season.season_number}{season.season_name ? ` · ${season.season_name}` : ''}</option>)}
-              </select>
-              {seasons.length === 0 && <span className="block mt-1 text-[11px] text-[#F59E0B]">No active season for this league. Use Manage seasons.</span>}
-            </label>
-            <label className="block">
-              <span className={labelCls}>Arena</span>
-              <input type="text" value={selectedArena} onChange={(e) => setSelectedArena(e.target.value)} placeholder="OvD, CTF, Siege…" className={inputCls} />
-            </label>
           </div>
-
-          <CSVUploadZone onFileUpload={handleFileUpload} isProcessing={uploading} error={message?.type === 'error' ? message.text : null} disabled={!readyToImport} />
-
-          {showPreview && (
-            <div className="rounded-md bg-[#1B2438] overflow-hidden">
-              <div className="px-3 py-2 flex items-center justify-between border-b border-white/[0.06]">
-                <span className="text-sm text-[#E6EDF7]">Preview · {csvPreview.length} records</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => { setShowPreview(false); setCsvPreview([]); }} className={btnQuiet}>Discard</button>
-                  <button type="button" onClick={importData} disabled={uploading} className={`${btnPrimary} inline-flex items-center gap-2`}>
-                    {uploading && <Loader2 className="h-4 w-4 animate-spin" />} Import {csvPreview.length} records
-                  </button>
-                </div>
+          
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center">
+              <Users className="h-8 w-8 text-blue-500 mr-3" />
+              <div>
+                <p className="text-sm text-gray-400">Total Players</p>
+                <p className="text-2xl font-bold">{totalPlayers}</p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead><tr><th className={th}>Player</th><th className={th}>Team</th><th className={th}>K/D</th><th className={th}>Result</th><th className={th}>Class</th><th className={th}>Mode</th></tr></thead>
-                  <tbody>
-                    {csvPreview.slice(0, 8).map((stat, index) => (
-                      <tr key={index} className="border-t border-white/[0.06]">
-                        <td className={`${td} text-[#E6EDF7]`}>{stat.player_name}</td>
-                        <td className={`${td} text-[#8B98B0]`}>{stat.team}</td>
-                        <td className={`${td} tabular-nums text-[#8B98B0]`}>{stat.kills}/{stat.deaths}</td>
-                        <td className={td}><span className={`rounded px-1.5 py-0.5 text-[11px] ${stat.result === 'Win' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}>{stat.result}</span></td>
-                        <td className={`${td} text-[#8B98B0]`}>{stat.main_class}</td>
-                        <td className={`${td} text-[#8B98B0]`}>{stat.game_mode}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800 rounded-lg p-6">
+            <div className="flex items-center">
+              <BarChart3 className="h-8 w-8 text-green-500 mr-3" />
+              <div>
+                <p className="text-sm text-gray-400">Total Kills</p>
+                <p className="text-2xl font-bold">{totalKills}</p>
               </div>
-              {csvPreview.length > 8 && <p className="px-3 py-2 text-xs text-[#8B98B0]">…and {csvPreview.length - 8} more</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Message Display */}
+        {message && (
+          <div className={`mb-6 p-4 rounded-lg flex items-center ${
+            message.type === 'success' ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+          }`}>
+            {message.type === 'success' ? 
+              <CheckCircle className="h-5 w-5 mr-2" /> : 
+              <AlertCircle className="h-5 w-5 mr-2" />
+            }
+            <pre className="whitespace-pre-wrap">{message.text}</pre>
+          </div>
+        )}
+
+        {/* Season and Arena Selection */}
+        <div className="mb-6 bg-gray-800 rounded-lg p-6">
+          <h2 className="text-xl font-bold mb-4">Import Configuration</h2>
+          <div className="mb-4">
+            <label className="block text-white font-medium mb-2">League</label>
+            <div className="flex flex-wrap gap-2">
+              {leagues.map(league => (
+                <button
+                  key={league.slug}
+                  onClick={() => setSelectedLeague(league.slug)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    selectedLeague === league.slug
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {league.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-white font-medium mb-2">Select Season</label>
+              <select
+                value={selectedSeason}
+                onChange={(e) => setSelectedSeason(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select a season...</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    Season {season.season_number}{season.season_name ? ` - ${season.season_name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-white font-medium mb-2">Arena Name</label>
+              <input
+                type="text"
+                value={selectedArena}
+                onChange={(e) => setSelectedArena(e.target.value)}
+                placeholder="Enter arena name (e.g., OvD, CTF, Siege)"
+                className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-gray-400 text-sm mt-1">
+                Common arenas: OvD, CTF, Siege, Deathball, Hockey
+              </p>
+            </div>
+          </div>
+          
+          {(!selectedSeason || !selectedArena) && (
+            <div className="mt-3 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-yellow-400 mr-2" />
+                <p className="text-yellow-200 text-sm">
+                  Please select both a season and arena before uploading CSV data
+                </p>
+              </div>
             </div>
           )}
         </div>
-      </Panel>
 
-      {/* Fix-ups */}
-      <Panel title="Fix-ups" hint="Bulk corrections to already imported Tournament records, by game id.">
-        <div className="divide-y divide-white/[0.06]">
-          <div className="p-5">
-            <button type="button" onClick={() => setShowBulkEdit((v) => !v)} className="flex items-center gap-1 text-sm text-[#E6EDF7]">
-              <ChevronDown className={`h-4 w-4 text-[#8B98B0] transition-transform ${showBulkEdit ? 'rotate-180' : ''}`} />
-              Set the arena for a game
-            </button>
-            <p className="ml-5 text-xs text-[#8B98B0]">Updates arena_name on every record with that game id. For imports that were missing it.</p>
-            {showBulkEdit && (
-              <div className="ml-5 mt-3 flex flex-wrap items-end gap-3">
-                <label className="block"><span className={labelCls}>Game id</span><input type="text" value={bulkEditGameId} onChange={(e) => setBulkEditGameId(e.target.value)} className={`${inputCls} w-72`} /></label>
-                <label className="block"><span className={labelCls}>Arena</span><input type="text" value={bulkEditArena} onChange={(e) => setBulkEditArena(e.target.value)} className={`${inputCls} w-40`} /></label>
-                <button type="button" onClick={handleBulkUpdate} disabled={!bulkEditGameId || !bulkEditArena || bulkEditing} className={btnPrimary}>{bulkEditing ? 'Updating…' : 'Update arena'}</button>
-              </div>
-            )}
-          </div>
-          <div className="p-5">
-            <button type="button" onClick={() => setShowResultCorrection((v) => !v)} className="flex items-center gap-1 text-sm text-[#E6EDF7]">
-              <ChevronDown className={`h-4 w-4 text-[#8B98B0] transition-transform ${showResultCorrection ? 'rotate-180' : ''}`} />
-              Fix a team&apos;s result
-            </button>
-            <p className="ml-5 text-xs text-[#8B98B0]">Sets Win or Loss for every player whose team name contains the base name, e.g. &ldquo;AP&rdquo; matches AP T and AP C.</p>
-            {showResultCorrection && (
-              <div className="ml-5 mt-3 flex flex-wrap items-end gap-3">
-                <label className="block"><span className={labelCls}>Game id</span><input type="text" value={resultCorrectionGameId} onChange={(e) => setResultCorrectionGameId(e.target.value)} className={`${inputCls} w-72`} /></label>
-                <label className="block"><span className={labelCls}>Team base name</span><input type="text" value={resultCorrectionTeamBase} onChange={(e) => setResultCorrectionTeamBase(e.target.value)} placeholder="AP, Apex, BDS" className={`${inputCls} w-40`} /></label>
-                <div>
-                  <span className={labelCls}>Result</span>
-                  <div className="flex gap-1.5">
-                    <Chip active={resultCorrectionResult === 'Win'} onClick={() => setResultCorrectionResult('Win')}>Win</Chip>
-                    <Chip active={resultCorrectionResult === 'Loss'} onClick={() => setResultCorrectionResult('Loss')}>Loss</Chip>
-                  </div>
-                </div>
-                <button type="button" onClick={handleResultCorrection} disabled={!resultCorrectionGameId || !resultCorrectionTeamBase || bulkEditing} className={btnPrimary}>{bulkEditing ? 'Updating…' : 'Fix result'}</button>
-              </div>
-            )}
-          </div>
+        {/* CSV Upload Zone */}
+        <div className="mb-8">
+          <CSVUploadZone 
+            onFileUpload={handleFileUpload}
+            isProcessing={uploading}
+            error={message?.type === 'error' ? message.text : null}
+            disabled={!selectedSeason || !selectedArena}
+          />
         </div>
-      </Panel>
 
-      {/* Recent records */}
-      <Panel title="Recent Tournament records" hint={`Latest ${stats.length} rows.`}>
-        {loading ? (
-          <Spinner label="Loading…" />
-        ) : stats.length === 0 ? (
-          <Empty>No Tournament records yet.</Empty>
-        ) : (
-          <div className="overflow-x-auto max-h-[40rem] overflow-y-auto">
-            <table className="w-full">
-              <thead className="sticky top-0 bg-[#131A2B]">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-4 mb-8">          
+          <button
+            onClick={exportData}
+            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center"
+          >
+            <Download className="h-5 w-5 mr-2" />
+            Export CSV
+          </button>
+          
+          <button
+            onClick={() => setShowBulkEdit(!showBulkEdit)}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center"
+          >
+            <BarChart3 className="h-5 w-5 mr-2" />
+            Bulk Edit Arena
+          </button>
+          
+          <button
+            onClick={() => setShowResultCorrection(!showResultCorrection)}
+            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg flex items-center"
+          >
+            <Trophy className="h-5 w-5 mr-2" />
+            Fix Team Results
+          </button>
+          
+          <button
+            onClick={fetchStats}
+            disabled={loading}
+            className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <FileText className="h-5 w-5 mr-2" />}
+            Refresh Data
+          </button>
+        </div>
+
+        {/* Bulk Edit Panel */}
+        {showBulkEdit && (
+          <div className="mb-8 bg-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-bold mb-4">Bulk Edit Tournament Data</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-white font-medium mb-2">Game ID (required)</label>
+                <input
+                  type="text"
+                  value={bulkEditGameId}
+                  onChange={(e) => setBulkEditGameId(e.target.value)}
+                  placeholder="Enter game_id to update"
+                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-white font-medium mb-2">New Arena Name</label>
+                <input
+                  type="text"
+                  value={bulkEditArena}
+                  onChange={(e) => setBulkEditArena(e.target.value)}
+                  placeholder="Enter new arena name"
+                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={handleBulkUpdate}
+                disabled={!bulkEditGameId || !bulkEditArena || bulkEditing}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
+              >
+                {bulkEditing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CheckCircle className="h-5 w-5 mr-2" />}
+                Update Arena Name
+              </button>
+              
+              <button
+                onClick={() => setShowBulkEdit(false)}
+                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-900/50 border border-blue-600 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-blue-400 mr-2" />
+                <p className="text-blue-200 text-sm">
+                  This will update the arena_name for ALL records with the specified game_id. 
+                  Use this to fix missing arena names from previous imports.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Result Correction Panel */}
+        {showResultCorrection && (
+          <div className="mb-8 bg-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-bold mb-4">Fix Team Results</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-white font-medium mb-2">Game ID (required)</label>
+                <input
+                  type="text"
+                  value={resultCorrectionGameId}
+                  onChange={(e) => setResultCorrectionGameId(e.target.value)}
+                  placeholder="Enter game_id to update"
+                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-white font-medium mb-2">Team Base Name</label>
+                <input
+                  type="text"
+                  value={resultCorrectionTeamBase}
+                  onChange={(e) => setResultCorrectionTeamBase(e.target.value)}
+                  placeholder="e.g., AP, Apex, BDS"
+                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-gray-400 text-xs mt-1">
+                  Will match "AP T", "AP C", "Apex T", etc.
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-white font-medium mb-2">Correct Result</label>
+                <select
+                  value={resultCorrectionResult}
+                  onChange={(e) => setResultCorrectionResult(e.target.value as 'Win' | 'Loss')}
+                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Win">Win</option>
+                  <option value="Loss">Loss</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={handleResultCorrection}
+                disabled={!resultCorrectionGameId || !resultCorrectionTeamBase || bulkEditing}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
+              >
+                {bulkEditing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Trophy className="h-5 w-5 mr-2" />}
+                Fix Team Results
+              </button>
+              
+              <button
+                onClick={() => setShowResultCorrection(false)}
+                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+            
+            <div className="mt-4 p-3 bg-purple-900/50 border border-purple-600 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="h-5 w-5 text-purple-400 mr-2" />
+                <p className="text-purple-200 text-sm">
+                  This will update the result for ALL players whose team name contains the base name. 
+                  Use this when team members got incorrect results (e.g., "AP T" players got Loss but should have gotten Win).
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CSV Preview */}
+        {showPreview && (
+          <div className="mb-8 bg-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-bold mb-4">CSV Preview ({csvPreview.length} records)</h2>
+            
+            <div className="overflow-x-auto mb-4">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-600">
+                    <th className="text-left p-2">Player</th>
+                    <th className="text-left p-2">Team</th>
+                    <th className="text-left p-2">K/D</th>
+                    <th className="text-left p-2">Result</th>
+                    <th className="text-left p-2">Class</th>
+                    <th className="text-left p-2">Game Mode</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvPreview.slice(0, 5).map((stat, index) => (
+                    <tr key={index} className="border-b border-gray-700">
+                      <td className="p-2">{stat.player_name}</td>
+                      <td className="p-2">{stat.team}</td>
+                      <td className="p-2">{stat.kills}/{stat.deaths}</td>
+                      <td className="p-2">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          stat.result === 'Win' ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+                        }`}>
+                          {stat.result}
+                        </span>
+                      </td>
+                      <td className="p-2">{stat.main_class}</td>
+                      <td className="p-2">{stat.game_mode}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {csvPreview.length > 5 && (
+                <p className="text-gray-400 mt-2">... and {csvPreview.length - 5} more records</p>
+              )}
+            </div>
+            
+            <div className="flex gap-4">
+              <button
+                onClick={importData}
+                disabled={uploading}
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CheckCircle className="h-5 w-5 mr-2" />}
+                Import Data
+              </button>
+              
+              <button
+                onClick={() => setShowPreview(false)}
+                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent Matches Table */}
+        <div className="bg-gray-800 rounded-lg overflow-hidden">
+          <div className="p-6 border-b border-gray-700">
+            <h2 className="text-xl font-bold">Recent Tournament Match Data</h2>
+            <p className="text-gray-400">Latest {stats.length} tournament records</p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-gray-700">
                 <tr>
-                  <th className={th}>Player</th>
-                  <th className={th}>Team</th>
-                  <th className={th}>K / D / C</th>
-                  <th className={th}>Class</th>
-                  <th className={th}>Result</th>
-                  <th className={th}>Arena</th>
-                  <th className={`${th} text-right`}>Acc</th>
-                  <th className={th}>Date</th>
-                  <th className={th}>Season</th>
+                  <th className="text-left p-4">Player</th>
+                  <th className="text-left p-4">Team</th>
+                  <th className="text-left p-4">K/D/C</th>
+                  <th className="text-left p-4">Class</th>
+                  <th className="text-left p-4">Result</th>
+                  <th className="text-left p-4">Mode/Arena</th>
+                  <th className="text-left p-4">Accuracy</th>
+                  <th className="text-left p-4">Date</th>
+                  <th className="text-left p-4">Season</th>
+                  <th className="text-left p-4">Flags</th>
                 </tr>
               </thead>
               <tbody>
                 {stats.map((stat: any) => (
-                  <tr key={stat.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
-                    <td className={`${td} text-[#E6EDF7] whitespace-nowrap`}>
-                      {stat.player_name}
-                      {stat.left_early && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">left early</span>}
+                  <tr key={stat.id} className="border-b border-gray-700 hover:bg-gray-750">
+                    <td className="p-4 font-medium">
+                      <div>{stat.player_name}</div>
+                      {stat.left_early && (
+                        <span className="text-xs text-orange-400 italic">Left Early</span>
+                      )}
                     </td>
-                    <td className={`${td} text-[#8B98B0] whitespace-nowrap`}>{stat.team}</td>
-                    <td className={`${td} tabular-nums text-[#8B98B0] whitespace-nowrap`}>
-                      {stat.kills} / {stat.deaths} / {stat.captures}
-                      {stat.carrier_kills > 0 && <span className="ml-1.5 text-[11px] text-[#22D3EE]">CK {stat.carrier_kills}</span>}
-                      {stat.carry_time_seconds > 0 && <span className="ml-1.5 text-[11px] text-[#F59E0B]">CT {stat.carry_time_seconds}s</span>}
+                    <td className="p-4">{stat.team}</td>
+                    <td className="p-4">
+                      <div className="text-sm">
+                        <div>{stat.kills}/{stat.deaths}/{stat.captures}</div>
+                        {stat.carrier_kills > 0 && (
+                          <div className="text-xs text-blue-300">CK: {stat.carrier_kills}</div>
+                        )}
+                      </div>
                     </td>
-                    <td className={`${td} text-[#8B98B0]`}>{stat.main_class || '—'}</td>
-                    <td className={td}><span className={`rounded px-1.5 py-0.5 text-[11px] ${stat.result === 'Win' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}>{stat.result}</span></td>
-                    <td className={`${td} text-[#8B98B0]`}>{stat.arena_name && stat.arena_name !== 'Unknown' ? stat.arena_name : '—'}</td>
-                    <td className={`${td} text-right tabular-nums text-[#8B98B0]`}>{stat.accuracy ? `${(parseFloat(stat.accuracy) * 100).toFixed(1)}%` : '—'}</td>
-                    <td className={`${td} text-[#8B98B0] whitespace-nowrap`}>{new Date(stat.game_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}</td>
-                    <td className={`${td} text-[#8B98B0] whitespace-nowrap`}>{stat.season}</td>
+                    <td className="p-4 text-sm">{stat.main_class || 'N/A'}</td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        stat.result === 'Win' ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+                      }`}>
+                        {stat.result}
+                      </span>
+                    </td>
+                    <td className="p-4 text-sm">
+                      <div>{stat.game_mode}</div>
+                      {stat.arena_name && stat.arena_name !== 'Unknown' && (
+                        <div className="text-xs text-gray-400">{stat.arena_name}</div>
+                      )}
+                    </td>
+                    <td className="p-4 text-sm">
+                      {stat.accuracy ? `${(parseFloat(stat.accuracy) * 100).toFixed(1)}%` : 'N/A'}
+                    </td>
+                    <td className="p-4 text-sm">{new Date(stat.game_date).toLocaleDateString()}</td>
+                    <td className="p-4 text-sm">{stat.season}</td>
+                    <td className="p-4 text-xs">
+                      {stat.carry_time_seconds > 0 && (
+                        <div className="text-yellow-400">CT: {stat.carry_time_seconds}s</div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </Panel>
-    </StaffShell>
+        </div>
+      </div>
+    </div>
   );
 }

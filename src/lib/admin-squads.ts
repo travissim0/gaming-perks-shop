@@ -5,9 +5,6 @@ export type SquadPatch = Partial<{
   is_legacy: boolean;
   tournament_eligible: boolean;
   league_slug: string | null;
-  name: string;
-  tag: string;
-  description: string | null;
 }>;
 
 /** Staff-only squad update through the service-role API (browser writes are blocked by RLS). */

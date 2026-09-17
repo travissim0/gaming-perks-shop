@@ -64,7 +64,7 @@ const PERIOD_OPTIONS: Array<{ value: Period; label: string }> = [
 const PERIOD_LABEL: Record<Period, string> = { week: 'last 7 days', month: 'last 30 days', year: 'last 365 days', all: 'all time' };
 interface LeaderEntry { alias: string; value: number; display: string; games: number; top_class: string | null; url: string }
 interface ClassLeader { alias: string; games: number; wins: number; losses: number; kills: number; deaths: number; kd_ratio: number; kills_per_game: number; heal_per_game: number; accuracy: number | null; url: string }
-type LeaderBoardKey = 'kills' | 'kd' | 'kills_per_game' | 'win_rate' | 'heal' | 'hits' | 'accuracy' | 'opening_kills' | 'rating_gain';
+type LeaderBoardKey = 'kills' | 'kd' | 'kills_per_game' | 'win_rate' | 'heal' | 'hits' | 'accuracy' | 'opening_kills' | 'rating_gain' | 'games';
 type RecordKey = 'kills' | 'opening_kills' | 'hits' | 'accuracy' | 'heal';
 interface RecordEntry { alias: string; value: number; display: string; game_id: string; map_key: string | null; ended_at: string | null; kills: number; deaths: number; primary_class: string | null; url: string; player_url: string }
 const RECORD_TILES: Array<{ key: RecordKey; label: string; color: string }> = [
@@ -79,7 +79,7 @@ interface Leaders {
   totals: { games: number; players: number };
   top: Record<LeaderBoardKey, LeaderEntry[]>;
   records?: Record<RecordKey, RecordEntry[]>;
-  by_class: Array<{ class_name: string; ranked_by: string; min_games_met: boolean; appearances: number; players: number; leader: ClassLeader; runner_up: ClassLeader | null }>;
+  by_class: Array<{ class_name: string; ranked_by: string; min_games_met: boolean; appearances: number; players: number; leader: ClassLeader | null; runner_up: ClassLeader | null }>;
 }
 /** The six headline categories of the "Top players" panel; the API also has kills_per_game. */
 const LEADER_TILES: Array<{ key: LeaderBoardKey; label: string; hint: (minGames: number) => string; color: string }> = [
@@ -90,7 +90,7 @@ const LEADER_TILES: Array<{ key: LeaderBoardKey; label: string; hint: (minGames:
   { key: 'hits', label: 'Most hits', hint: () => 'shots landed', color: 'text-sky-300' },
   { key: 'accuracy', label: 'Best accuracy', hint: () => 'at least 100 shots and 3 rated games', color: 'text-teal-300' },
   { key: 'opening_kills', label: 'Most opening kills', hint: () => 'first kill of a fight', color: 'text-amber-300' },
-  { key: 'rating_gain', label: 'Biggest rating gain', hint: () => 'rated mixes', color: 'text-purple-300' },
+  { key: 'games', label: 'Most games played', hint: () => 'in the window', color: 'text-gray-200' },
 ];
 
 function LeaderTile({ label, hint, entry, color }: { label: string; hint: string; entry: LeaderEntry | undefined; color: string }) {
@@ -116,6 +116,7 @@ function LeaderTile({ label, hint, entry, color }: { label: string; hint: string
 export default function UslMixOverviewPage() {
   const [map, setMap] = useState('');
   const [kind, setKind] = useState<'all' | 'mix' | 'pub'>('all');
+  const [rated, setRated] = useState<'1' | '0'>('1');   // rated games only by default, like uslzone
   const [insights, setInsights] = useState<Insights | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [games, setGames] = useState<GameRow[]>([]);
@@ -159,7 +160,7 @@ export default function UslMixOverviewPage() {
   useEffect(() => {
     let cancelled = false;
     setLeadersLoading(true);
-    const qs = new URLSearchParams({ period, kind });
+    const qs = new URLSearchParams({ period, kind, rated });
     if (map) qs.set('map', map);
     fetch(`/api/usl-mix/leaders?${qs}`)
       .then((r) => r.json())
@@ -175,7 +176,7 @@ export default function UslMixOverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [period, map, kind]);
+  }, [period, map, kind, rated]);
 
   const sideChart = useMemo(() => {
     if (!insights) return [];
@@ -231,6 +232,14 @@ export default function UslMixOverviewPage() {
             { value: 'pub', label: 'Pub only' },
           ]}
         />
+        <SegmentedControl
+          value={rated}
+          onChange={setRated}
+          options={[
+            { value: '1', label: 'Rated only' },
+            { value: '0', label: 'Include unrated' },
+          ]}
+        />
         {loading && <span className="text-sm text-gray-500 animate-pulse">Loading…</span>}
       </div>
 
@@ -278,7 +287,7 @@ export default function UslMixOverviewPage() {
             </div>
             <div className="lg:col-span-3 min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-2">
-                Best in each class · K/D with 5+ kills per game to qualify, medics by heal per game · at least {leadersData.filters.minGames} games as that class
+                Best in each class · {rated === '1' ? 'rated games only · ' : ''}K/D with 5+ kills per game to qualify, medics by heal per game · at least {leadersData.filters.minGames} games as that class
               </div>
               {leadersData.by_class.length === 0 ? (
                 <p className="text-sm text-gray-500">No class data yet.</p>
@@ -297,18 +306,22 @@ export default function UslMixOverviewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {leadersData.by_class.map((c) => (
+                      {leadersData.by_class.map((c) => c.leader ? (
                         <tr key={c.class_name} className={tableCls.rowStatic}>
                           <td className="py-2 pr-2 whitespace-nowrap"><ClassName name={c.class_name} /></td>
                           <td className="py-2 px-2">
                             <Link href={c.leader.url} className="text-cyan-300 hover:text-cyan-200 font-medium">{c.leader.alias}</Link>
-                            {!c.min_games_met && <span className="ml-1 text-[10px] text-gray-500" title={`nobody has ${leadersData.filters.minGames} games as this class yet`}>(only {c.leader.games})</span>}
                           </td>
                           <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.leader.games}</td>
-                          <td className={`py-2 px-2 text-right tabular-nums ${c.ranked_by === 'kills_per_game' ? 'text-white font-semibold' : 'text-gray-300'}`}>{c.leader.kills_per_game}</td>
-                          <td className="py-2 px-2 text-right tabular-nums text-gray-300">{Number(c.leader.kd_ratio).toFixed(2)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums text-gray-300">{c.leader.kills_per_game}</td>
+                          <td className={`py-2 px-2 text-right tabular-nums ${c.ranked_by === 'kd' ? 'text-white font-semibold' : 'text-gray-300'}`}>{Number(c.leader.kd_ratio).toFixed(2)}</td>
                           <td className={`py-2 px-2 text-right tabular-nums ${c.ranked_by === 'heal_per_game' ? 'text-white font-semibold' : 'text-gray-300'}`}>{c.leader.heal_per_game || '—'}</td>
                           <td className="py-2 pl-2 text-xs text-gray-400">{c.runner_up ? <Link href={c.runner_up.url} className="hover:text-gray-200">{c.runner_up.alias}</Link> : '—'}</td>
+                        </tr>
+                      ) : (
+                        <tr key={c.class_name} className={tableCls.rowStatic}>
+                          <td className="py-2 pr-2 whitespace-nowrap"><ClassName name={c.class_name} /></td>
+                          <td className="py-2 px-2 text-gray-500" colSpan={6} title={`nobody has ${leadersData.filters.minGames} games as this class with 5+ kills/game (medics: games only)`}>—</td>
                         </tr>
                       ))}
                     </tbody>
