@@ -61,6 +61,7 @@ interface Fixture {
   squad_b_name: string | null;
   squad_b_tag: string | null;
   game_id: string | null;
+  participants?: { role: string; alias: string }[];
   result: { a_score: number; b_score: number } | null;
 }
 
@@ -262,6 +263,8 @@ export default function MatchManagerPage() {
     setMatchTitle(f.title && !f.title.includes(' vs ') ? f.title : '');
     setMatchType(f.stage === 'playoff' ? 'Playoffs' : 'Season');
     setMatchKind(f.stage === 'fs' ? 'fs' : 'rs');
+    // A referee or recorder on the crew satisfies the FS "ref or recording" requirement.
+    setVerified((f.participants || []).some((p) => p.role === 'referee' || p.role === 'recording') || !!f.game_id);
     if (f.game_id) setExistingGameId(f.game_id);
     setFromFixture(f);
     setMessage(null);
@@ -493,6 +496,7 @@ export default function MatchManagerPage() {
                   <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">
                     {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {f.squad_b_name}
                   </span>
+                  {(f.participants || []).some((p) => p.role === 'referee') && <span className="text-[10px] uppercase tracking-wide text-[#34D399]" title={(f.participants || []).filter((p) => p.role === 'referee').map((p) => p.alias).join(', ')}>Ref</span>}
                   <button type="button" onClick={() => useFixture(f)} className="text-xs text-[#22D3EE] hover:text-[#67E8F9]">Record result</button>
                 </li>
               );

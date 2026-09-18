@@ -133,6 +133,37 @@ export default function MatchDetailPage() {
   const [scoreB, setScoreB] = useState('');
   const [winner, setWinner] = useState('');
 
+  // Staff crew assignment: which slot is open for search, the query, and results.
+  const [assigning, setAssigning] = useState<Role | null>(null);
+  const [assignQuery, setAssignQuery] = useState('');
+  const [assignResults, setAssignResults] = useState<{ id: string; in_game_alias: string }[]>([]);
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+  const searchCrew = async (role: Role, q: string) => {
+    setAssignQuery(q);
+    if (q.trim().length < 2) { setAssignResults([]); return; }
+    const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/crew?role=${role}&q=${encodeURIComponent(q.trim())}`, { headers: await authHeaders() });
+    const j = r.ok ? await r.json() : { players: [] };
+    setAssignResults(j.players || []);
+  };
+  const crewChange = async (action: 'add' | 'remove', role: Role, playerId: string, alias: string) => {
+    setBusy(`crew-${playerId}`);
+    try {
+      const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/crew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ action, player_id: playerId, role }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not update crew');
+      toast.success(action === 'add' ? `${alias} added as ${role === 'recording' ? 'recorder' : role}` : `${alias} removed`);
+      setAssigning(null); setAssignQuery(''); setAssignResults([]);
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+
   useEffect(() => { setMounted(true); }, []);
 
   const load = useCallback(async () => {
@@ -536,17 +567,49 @@ export default function MatchDetailPage() {
                       <span>{r.plural}</span>
                       <span className="tabular-nums">{people.length}</span>
                     </div>
-                    <div className="text-sm text-[#E6EDF7] mt-0.5 flex flex-wrap gap-x-2">
+                    <div className="text-sm text-[#E6EDF7] mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
                       {people.length === 0 ? <span className="text-[#8B98B0]/60">Nobody yet</span> : people.map((p) => (
-                        <Link key={p.id} href={`/stats/player/${encodeURIComponent(p.in_game_alias)}`} className="hover:text-[#22D3EE]">{p.in_game_alias}</Link>
+                        <span key={p.id} className="inline-flex items-center gap-1">
+                          <Link href={`/stats/player/${encodeURIComponent(p.in_game_alias)}`} className="hover:text-[#22D3EE]">{p.in_game_alias}</Link>
+                          {isStaff && p.player_id !== user?.id && (
+                            <button type="button" onClick={() => crewChange('remove', r.key, p.player_id, p.in_game_alias)} disabled={busy === `crew-${p.player_id}`} className="text-[#8B98B0] hover:text-[#F87171] text-[11px] leading-none" title={`Remove ${p.in_game_alias}`} aria-label={`Remove ${p.in_game_alias}`}>✕</button>
+                          )}
+                        </span>
                       ))}
                     </div>
-                    {user && open && (
-                      me ? (
-                        <button type="button" onClick={() => leave(me)} disabled={busy === me.id} className="mt-1 text-[11px] text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Leave</button>
-                      ) : (
-                        <button type="button" onClick={() => join(r.key)} disabled={!allowed || busy === r.key} title={allowed ? '' : `${r.label} role required`} className="mt-1 text-[11px] text-[#22D3EE] hover:text-[#67E8F9] disabled:opacity-40 disabled:cursor-not-allowed">+ Join as {r.label.toLowerCase()}</button>
-                      )
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3">
+                      {user && open && (
+                        me ? (
+                          <button type="button" onClick={() => leave(me)} disabled={busy === me.id} className="text-[11px] text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Leave</button>
+                        ) : (
+                          <button type="button" onClick={() => join(r.key)} disabled={!allowed || busy === r.key} title={allowed ? '' : `${r.label} role required`} className="text-[11px] text-[#22D3EE] hover:text-[#67E8F9] disabled:opacity-40 disabled:cursor-not-allowed">+ Join as {r.label.toLowerCase()}</button>
+                        )
+                      )}
+                      {isStaff && !notPlayed && (
+                        <button type="button" onClick={() => { setAssigning(assigning === r.key ? null : r.key); setAssignQuery(''); setAssignResults([]); }} className="text-[11px] text-[#F59E0B] hover:text-[#FBBF24]">
+                          {assigning === r.key ? 'Cancel' : `Assign ${r.label.toLowerCase()}`}
+                        </button>
+                      )}
+                    </div>
+                    {isStaff && assigning === r.key && (
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          value={assignQuery}
+                          onChange={(e) => searchCrew(r.key, e.target.value)}
+                          placeholder={r.key === 'referee' ? 'Search referees' : r.key === 'commentator' ? 'Search commentators' : 'Search by alias'}
+                          autoFocus
+                          className={inputCls}
+                        />
+                        {assignResults.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {assignResults.map((p) => (
+                              <button key={p.id} type="button" onClick={() => crewChange('add', r.key, p.id, p.in_game_alias)} disabled={busy === `crew-${p.id}`} className="rounded bg-white/5 px-2 py-1 text-xs text-[#E6EDF7] hover:bg-white/10 disabled:opacity-50">{p.in_game_alias}</button>
+                            ))}
+                          </div>
+                        )}
+                        {assignQuery.trim().length >= 2 && assignResults.length === 0 && <p className="mt-1 text-[11px] text-[#8B98B0]">No one matches{r.key === 'referee' || r.key === 'commentator' ? ' with that role' : ''}.</p>}
+                      </div>
                     )}
                   </div>
                 );
