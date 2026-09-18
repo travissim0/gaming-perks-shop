@@ -525,9 +525,14 @@ export default function LeagueHome() {
     if (c.elapsedMs !== null) return { label: 'Game time', value: mmss(c.elapsedMs + advance), countdown: false };
     return null;
   })();
+  // Bot zones ("… (Bots)") report bots as players, so the server can't tell us how many
+  // humans are there. They stay in the list, greyed and labelled, but out of the total.
+  const isBotZone = (title: string) => /\(bots\)/i.test(title);
   const ctfZones = serverData.zones.filter((z) => isCtfZone(z.title));
-  const otherZones = serverData.zones.filter((z) => !isCtfZone(z.title));
+  const otherZones = serverData.zones.filter((z) => !isCtfZone(z.title) && !isBotZone(z.title));
+  const botZones = serverData.zones.filter((z) => !isCtfZone(z.title) && isBotZone(z.title));
   const ctfPlayers = ctfZones.reduce((n, z) => n + z.playerCount, 0);
+  const humanPlayers = serverData.zones.filter((z) => !isBotZone(z.title)).reduce((n, z) => n + z.playerCount, 0);
 
   const featured = league?.status.featured || null;
   const L = featured?.league || null;
@@ -604,14 +609,14 @@ export default function LeagueHome() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-display text-2xl leading-none text-[#F59E0B] tabular-nums">{serverData.stats.totalPlayers}</div>
+                  <div className="font-display text-2xl leading-none text-[#F59E0B] tabular-nums">{humanPlayers}</div>
                   <div className="text-[11px] uppercase tracking-wide text-[#F59E0B]/70 mt-1">online in game</div>
                 </div>
               </div>
-              {(ctfZones.length > 1 || otherZones.length > 0) && (
+              {(ctfZones.length > 1 || otherZones.length > 0 || botZones.length > 0) && (
                 <ul className="mt-2 space-y-1.5">
                   {[...(ctfZones.length > 1 ? ctfZones : []), ...otherZones].map((z) => {
-                    const max = Math.max(1, ...serverData.zones.map((x) => x.playerCount));
+                    const max = Math.max(1, ...serverData.zones.filter((x) => !isBotZone(x.title)).map((x) => x.playerCount));
                     const pct = Math.round((z.playerCount / max) * 100);
                     const tone = z.playerCount === 0 ? '#4b5563' : isCtfZone(z.title) ? '#22D3EE' : z.playerCount >= 10 ? '#34D399' : '#F59E0B';
                     return (
@@ -626,6 +631,12 @@ export default function LeagueHome() {
                       </li>
                     );
                   })}
+                  {botZones.map((z) => (
+                    <li key={z.title} className="px-1 flex items-center justify-between gap-2 text-xs" title="This zone's server counts its bots as players, so the number includes bots and is left out of the total.">
+                      <span className="truncate text-[#8B98B0]/70">{z.title}</span>
+                      <span className="shrink-0 tabular-nums text-[#8B98B0]/70">{z.playerCount} <span className="text-[10px] uppercase tracking-wide">incl. bots</span></span>
+                    </li>
+                  ))}
                 </ul>
               )}
             </Card>
