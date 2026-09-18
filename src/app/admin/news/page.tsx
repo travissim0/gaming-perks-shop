@@ -15,6 +15,7 @@ interface NewsPost {
   content: any;
   featured_image_url: string;
   author_name: string;
+  author_id?: string | null;
   status: string;
   featured: boolean;
   priority: number;
@@ -45,7 +46,35 @@ export default function AdminNewsPage() {
     status: 'published' as 'draft' | 'published' | 'archived',
     // Who the post is for: 'all' = everywhere (homepage + zones), 'ctf' = CTF pages only.
     audience: 'all' as 'all' | 'ctf',
+    // Byline. Empty = the signed-in poster; otherwise another account's profile id (alias shown).
+    author_id: '',
+    author_alias: '',
   });
+  const EMPTY_FORM = {
+    title: '', subtitle: '', content: '', featured_image_url: '', featured: false, priority: 0, tags: '',
+    status: 'published' as 'draft' | 'published' | 'archived', audience: 'all' as 'all' | 'ctf', author_id: '', author_alias: '',
+  };
+
+  // Author picker
+  const [authorSearch, setAuthorSearch] = useState('');
+  const [authorResults, setAuthorResults] = useState<{ id: string; in_game_alias: string }[]>([]);
+  const searchAuthors = async (term: string) => {
+    setAuthorSearch(term);
+    if (term.trim().length < 2) { setAuthorResults([]); return; }
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, in_game_alias')
+      .ilike('in_game_alias', `%${term.trim()}%`)
+      .not('in_game_alias', 'is', null)
+      .order('in_game_alias')
+      .limit(8);
+    setAuthorResults((data || []) as { id: string; in_game_alias: string }[]);
+  };
+  const pickAuthor = (p: { id: string; in_game_alias: string }) => {
+    setFormData((prev) => ({ ...prev, author_id: p.id, author_alias: p.in_game_alias }));
+    setAuthorSearch('');
+    setAuthorResults([]);
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -130,7 +159,9 @@ export default function AdminNewsPage() {
         subtitle: formData.subtitle,
         content: richContent,
         featured_image_url: formData.featured_image_url || null,
-        // Byline is set server-side from the poster's in-game alias (never the account's real name).
+        // Byline: the server derives author_name from this profile's in-game alias (never a real name).
+        // Blank = credit the signed-in poster.
+        author_id: formData.author_id || user?.id,
         status: formData.status,
         featured: formData.featured,
         priority: formData.priority,
@@ -153,17 +184,7 @@ export default function AdminNewsPage() {
       toast.success(editingPost ? 'Post updated' : 'Post created');
 
       // Reset form and refresh posts
-      setFormData({
-        title: '',
-        subtitle: '',
-        content: '',
-        featured_image_url: '',
-        featured: false,
-        priority: 0,
-        tags: '',
-        status: 'published',
-        audience: 'all',
-      });
+      setFormData({ ...EMPTY_FORM });
       setShowCreateForm(false);
       setEditingPost(null);
       fetchPosts();
@@ -188,7 +209,10 @@ export default function AdminNewsPage() {
       audience: post.metadata?.audience === 'ctf' ? 'ctf' : 'all',
       priority: post.priority,
       tags: post.tags.join(', '),
-      status: post.status as 'draft' | 'published' | 'archived'
+      status: post.status as 'draft' | 'published' | 'archived',
+      // Keep the existing byline unless it's already the editor's own.
+      author_id: post.author_id && post.author_id !== user?.id ? post.author_id : '',
+      author_alias: post.author_id && post.author_id !== user?.id ? post.author_name : '',
     });
     setShowCreateForm(true);
   };
@@ -253,17 +277,7 @@ export default function AdminNewsPage() {
             onClick={() => {
               setShowCreateForm(!showCreateForm);
               setEditingPost(null);
-              setFormData({
-                title: '',
-                subtitle: '',
-                content: '',
-                featured_image_url: '',
-                featured: false,
-                priority: 0,
-                tags: '',
-                status: 'published',
-                audience: 'all',
-              });
+              setFormData({ ...EMPTY_FORM });
             }}
             className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors"
           >
@@ -374,6 +388,34 @@ export default function AdminNewsPage() {
                     <span className="text-sm font-medium">Featured Post</span>
                   </label>
                 </div>
+              </div>
+
+              <div className="relative">
+                <label className="block text-sm font-medium mb-2">Author</label>
+                {formData.author_id ? (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-gray-700 border border-gray-600 px-3 py-2 text-white">{formData.author_alias}</span>
+                    <button type="button" onClick={() => setFormData((prev) => ({ ...prev, author_id: '', author_alias: '' }))} className="text-sm text-gray-400 hover:text-white">Post as me instead</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={authorSearch}
+                      onChange={(e) => searchAuthors(e.target.value)}
+                      placeholder="You. Type an alias to credit someone else (e.g. a post pasted from Discord)"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                    />
+                    {authorResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 shadow-xl">
+                        {authorResults.map((p) => (
+                          <button key={p.id} type="button" onClick={() => pickAuthor(p)} className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-gray-700">{p.in_game_alias}</button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                <p className="text-xs text-gray-400 mt-1">The byline always shows an in-game alias, never a real name.</p>
               </div>
 
               <div>

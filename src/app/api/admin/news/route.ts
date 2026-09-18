@@ -31,7 +31,9 @@ async function gate(request: NextRequest) {
   return { user, alias: (profile!.in_game_alias as string | null)?.trim() || 'Staff' };
 }
 
-// author_name / author_id are set by the server (alias of the signed-in poster), never taken from the client.
+// author_name is always derived server-side from a profile's in-game alias, never taken from the client.
+// The byline can be credited to another account via post.author_id (e.g. a post pasted from Discord on
+// someone's behalf); the server looks the alias up so the real name never leaks.
 const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'status', 'featured', 'priority', 'tags', 'published_at', 'metadata'] as const;
 
 function pick(post: any) {
@@ -40,11 +42,26 @@ function pick(post: any) {
   return out;
 }
 
+/** Resolve a credited author: { author_id, author_name } for a profile id, or an error response. */
+async function creditedAuthor(authorId: unknown) {
+  if (typeof authorId !== 'string' || !authorId) return { error: NextResponse.json({ error: 'author_id must be a profile id' }, { status: 400 }) };
+  const { data: p } = await supabaseAdmin.from('profiles').select('id, in_game_alias').eq('id', authorId).maybeSingle();
+  const alias = (p?.in_game_alias as string | null)?.trim();
+  if (!p || !alias) return { error: NextResponse.json({ error: 'That author has no in-game alias' }, { status: 400 }) };
+  return { author_id: p.id as string, author_name: alias };
+}
+
 export async function POST(request: NextRequest) {
   const g = await gate(request);
   if ('error' in g) return g.error;
   const body = await request.json().catch(() => null);
-  const post: Record<string, any> = { ...pick(body?.post), author_name: g.alias, author_id: g.user.id };
+  let byline: { author_id: string; author_name: string } = { author_id: g.user.id, author_name: g.alias };
+  if (body?.post && 'author_id' in body.post && body.post.author_id) {
+    const a = await creditedAuthor(body.post.author_id);
+    if ('error' in a) return a.error;
+    byline = a;
+  }
+  const post: Record<string, any> = { ...pick(body?.post), ...byline };
   if (!post.title) return NextResponse.json({ error: 'Title is required' }, { status: 400 });
   const { data, error } = await supabaseAdmin.from('news_posts').insert([post]).select('id').single();
   if (error) return NextResponse.json({ error: `${error.message}${error.details ? ` (${error.details})` : ''}` }, { status: 500 });
@@ -56,7 +73,13 @@ export async function PUT(request: NextRequest) {
   if ('error' in g) return g.error;
   const body = await request.json().catch(() => null);
   if (!body?.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
-  const post = pick(body.post);
+  const post: Record<string, any> = pick(body.post);
+  if (body.post && 'author_id' in body.post && body.post.author_id) {
+    const a = await creditedAuthor(body.post.author_id);
+    if ('error' in a) return a.error;
+    post.author_id = a.author_id;
+    post.author_name = a.author_name;
+  }
   const { data, error } = await supabaseAdmin.from('news_posts').update(post).eq('id', body.id).select('id');
   if (error) return NextResponse.json({ error: `${error.message}${error.details ? ` (${error.details})` : ''}` }, { status: 500 });
   if (!data || data.length === 0) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
