@@ -89,6 +89,11 @@
 .s5-thresh span{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8B98B0;margin-top:6px;}
 .s5-thresh em{display:block;font-style:normal;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:20px;font-weight:600;text-transform:uppercase;color:#E6EDF7;margin-top:6px;}
 
+/* STAFF */
+.s5-staff{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 14px;margin-top:8px;}
+.s5-staff div{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:19px;font-weight:600;color:#E6EDF7;padding:5px 0;white-space:nowrap;}
+.s5-staff div span{color:#22D3EE;font-weight:500;}
+
 /* FINAL CTA */
 .s5-final{background:#1B2438;background-image:radial-gradient(circle at 92% 10%, rgba(34,211,238,.16), transparent 45%);}
 .s5-final .s5-title{font-size:32px;margin-bottom:12px;}
@@ -102,6 +107,7 @@
 @media (max-width:640px){
   .s5-hero .s5-title{font-size:36px;}
   .s5-bracket,.s5-thresh,.s5-split{grid-template-columns:1fr;}
+  .s5-staff{grid-template-columns:1fr 1fr;}
   .s5-sched .tag{float:none;display:inline-block;margin:6px 0 0;}
   .s5-card{padding:16px;}
 }
@@ -136,7 +142,7 @@
     <tbody>
       <tr class="hi"><td class="d">Sat Oct 3</td><td class="k"><b>Draft Night.</b> Live, with an audience. <span class="s5-pill s5-pill-cyan tag">Event</span></td></tr>
       <tr class="hi"><td class="d">Sun Oct 4</td><td class="k"><b>Week 1.</b> Yes, the day after the draft.</td></tr>
-      <tr class="off"><td class="d">Oct 10–11</td><td class="k">No matches. Canadian Thanksgiving / Columbus Day. <span class="s5-pill s5-pill-muted tag">Off</span></td></tr>
+      <tr class="off"><td class="d">Oct 10–11</td><td class="k">No CTFDL matches (Canadian Thanksgiving / Columbus Day). <b>Open tournament</b> for all players instead. <span class="s5-pill s5-pill-amber tag">Tournament</span></td></tr>
       <tr><td class="d">Oct 17–18</td><td class="k">Week 2</td></tr>
       <tr><td class="d">Oct 24–25</td><td class="k">Week 3</td></tr>
       <tr><td class="d">Oct 31–Nov 1</td><td class="k">Week 4</td></tr>
@@ -150,8 +156,14 @@
 <ul class="s5-list">
   <li><strong>Matches will be on Saturday or Sunday.</strong> Match day will be set to work around USL's schedule. USL is still going strong and we want both leagues to succeed. Nobody should have to choose.</li>
   <li><strong>We play the day after the draft.</strong> In past seasons we drafted, waited a week, and lost momentum before Week 1. Not this time. You get drafted Saturday night, you play Sunday. Captains, be ready.</li>
-  <li><strong>We are not touching holiday weekends.</strong> US or Canadian. The Oct 10–11 weekend is off, and the whole season wraps before US Thanksgiving. Your family gets you back for the holidays.</li>
+  <li><strong>We are not touching holiday weekends.</strong> US or Canadian. No CTFDL matches on the Oct 10–11 weekend, and the whole season wraps before US Thanksgiving.</li>
+  <li><strong>Holiday weekend tournament.</strong> Oct 10–11 is off for CTFDL, but the servers won't be. We're hosting an organized competitive tournament that weekend for anyone who wants in. It has nothing to do with CTFDL S5 or your drafted team. All players welcome. Details coming in a separate post.</li>
 </ul>
+
+<h2 class="s5-h">USL Players: This Is Your Season</h2>
+<p>We want you here. Not as a courtesy, and not as a numbers play. We want USL players in this draft.</p>
+<p>There has never been a better time for a USLer to give CTF league play a real shot. USL is on a break. CTF is running nightly OvDs and mixes right now, and we have players lined up to train and teach anyone who wants to learn the format between now and draft night. You will not be thrown in cold.</p>
+<p>If you tried CTF years ago and it didn't click, or you've only heard about it secondhand, don't let that decide for you. The league, the map, the rules, and the people running it have all changed. Register, jump into a mix this week, and find out for yourself.</p>
 
 <h2 class="s5-h">Playoffs</h2>
 <p>Top 4 squads by points make it. Seeding follows the standings. Finish first or second and you get two shots at the final. Finish third or fourth and you have to earn it twice in one night. The regular season matters.</p>
@@ -243,11 +255,32 @@
 <h2 class="s5-h">We Still Need People</h2>
 <p>Commentators. CTF[Event] personnel. Audio and video help for pre and post production. If you can do any of that and you can follow through, message me. Staff and some new leadership positions will be announced soon.</p>
 
+<h2 class="s5-h">CTFDL S5 Staff</h2>
+<p>Please welcome some of our CTFDL S5 staff! More introductions and leadership announcements coming soon!</p>
+
+<div class="s5-card">
+  <p class="s5-kicker">Referees</p>
+  <div class="s5-staff">
+    <div><span>CTF[Ref]</span> Soup</div>
+    <div><span>CTF[Ref]</span> Designer</div>
+    <div><span>CTF[Ref]</span> WolveN</div>
+    <div><span>CTF[Ref]</span> Axidus</div>
+    <div><span>CTF[Ref]</span> Mixm</div>
+    <div><span>CTF[Ref]</span> Worth</div>
+    <div><span>CTF[Ref]</span> dp</div>
+    <div><span>CTF[Ref]</span> Waylander</div>
+    <div><span>CTF[Ref]</span> y</div>
+    <div><span>CTF[Ref]</span> Abbath</div>
+    <div><span>CTF[Ref]</span> Decker</div>
+    <div><span>CTF[Ref]</span> Tony Montana</div>
+  </div>
+</div>
+
 <div class="s5-card s5-final">
   <p class="s5-kicker">Do This Now</p>
   <h3 class="s5-title">Three things. Then we play.</h3>
   <ol class="s5-steps">
-    <li><i>1</i><span><b>Register</b> at freeinf.org/league/register with your in-game alias. Deadline is Friday, October 2, 11:59 PM PT. While you're there, connect your Discord on your profile so the bot can drop you into your squad's channels after the draft.</span></li>
+    <li><i>1</i><span><b>Register</b> at freeinf.org/league/register with your in-game alias. Deadline is Friday, October 2, 11:59 PM PT.</span></li>
     <li><i>2</i><span><b>Recruit.</b> Tell someone who hasn't logged in since the last season. Or the last decade.</span></li>
     <li><i>3</i><span><b>Show up.</b> Be in the CTF Discord on Saturday, October 3 for Draft Night.</span></li>
   </ol>
