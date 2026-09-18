@@ -2,7 +2,6 @@ import { Client, GatewayIntentBits, type Guild } from 'discord.js';
 import { config } from './config.js';
 import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
-import { postStaff } from './discord.js';
 import { onInteraction, registerRolePickerCommand } from './rolepicker.js';
 import { deliverNotices } from './notices.js';
 
@@ -55,8 +54,7 @@ client.once('ready', async () => {
 
   await registerRolePickerCommand(guild).catch((e) => console.error('rolepicker command registration:', e?.message || e));
   await runCommands();
-  const first = await reconcile(guild, 'startup');
-  await postStaff(guild, `**FreeInf CTF bot online** · ${first}`);
+  await reconcile(guild, 'startup');
   setInterval(() => reconcile(guild!, 'scheduled'), config.syncIntervalMs);
   setInterval(runCommands, 20_000); // belt and braces if Realtime drops
   await deliverNotices(client, guild);
