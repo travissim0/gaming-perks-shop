@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { toast } from 'react-hot-toast';
+import { Shield, Users, CalendarDays, MessageCircle, Ban, ListOrdered, Lock, BarChart3, Swords, Trophy, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import Navbar from '@/components/Navbar';
 import CTFAdminPanel from '@/components/CTFAdminPanel';
 import AliasAssociationModal from '@/components/AliasAssociationModal';
 import SeasonManagementModal from '@/components/admin/SeasonManagementModal';
 import SquadMaintenanceModal from '@/components/admin/SquadMaintenanceModal';
-import { toast } from 'react-hot-toast';
+import { Panel, Spinner, StaffShell, HeaderStrip } from '@/components/ctf/AdminBits';
+import { btnQuiet } from '@/components/ctf/FormBits';
 
 export type CTFRoleType =
   | 'none'
@@ -24,73 +27,42 @@ interface UserProfile {
   email: string;
   in_game_alias: string;
   is_admin: boolean;
-  is_media_manager: boolean;
-  ctf_role: CTFRoleType;
-  registration_status: string;
-  created_at: string;
-  updated_at: string;
+  ctf_role: string | null;
   avatar_url?: string;
 }
 
-const CTF_ROLE_INFO = {
-  none: { display_name: 'No CTF Role', level: 0, color: 'bg-gray-500 border-gray-600' },
-  ctf_admin: { display_name: 'CTF Administrator', level: 90, color: 'bg-purple-500 border-purple-600' },
-  ctf_head_referee: { display_name: 'CTF Head Referee', level: 80, color: 'bg-blue-500 border-blue-600' },
-  ctf_referee: { display_name: 'CTF Referee', level: 70, color: 'bg-green-500 border-green-600' },
-  ctf_recorder: { display_name: 'CTF Recorder', level: 60, color: 'bg-yellow-500 border-yellow-600' },
-  ctf_commentator: { display_name: 'CTF Commentator', level: 50, color: 'bg-orange-500 border-orange-600' }
+const ROLE_LABEL: Record<string, string> = {
+  ctf_admin: 'CTF admin',
+  ctf_head_referee: 'Head referee',
+  ctf_referee: 'Referee',
+  ctf_recorder: 'Recorder',
+  ctf_commentator: 'Commentator',
+  ctf_analyst: 'Analyst',
+  ctf_analyst_commentator: 'Analyst · Commentator',
+  ctf_analyst_referee: 'Analyst · Referee',
+  ctf_analyst_commentator_referee: 'Analyst · Commentator · Referee',
 };
 
-const NAV_CARDS = [
+type Tool = { href: string; icon: React.ComponentType<{ className?: string }>; title: string; blurb: string; sub?: { href: string; label: string }[] };
+
+const TOOLS: Tool[] = [
   {
-    href: '/admin/ctf-management',
-    icon: '🛡️',
-    title: 'Squad Management',
-    description: 'Manage squads & tournaments',
-    color: 'bg-purple-600 hover:bg-purple-700',
+    href: '/admin/ctf-management', icon: Shield, title: 'CTF management', blurb: 'Squads, player pool, season dates, Discord, bans and tournament flags.',
+    sub: [
+      { href: '/admin/ctf-management?tab=squads', label: 'Squads' },
+      { href: '/admin/ctf-management?tab=pool', label: 'Player pool' },
+      { href: '/admin/ctf-management?tab=season', label: 'Season' },
+      { href: '/admin/ctf-management?tab=discord', label: 'Discord' },
+      { href: '/admin/ctf-management?tab=bans', label: 'Bans' },
+    ],
   },
-  {
-    href: '/admin/ctf-management?tab=free-agents',
-    icon: '🎯',
-    title: 'Free Agent Pool',
-    description: 'Manage available players',
-    color: 'bg-blue-600 hover:bg-blue-700',
-  },
-  {
-    href: '/admin/ctf-management?tab=bans',
-    icon: '🚫',
-    title: 'League Bans',
-    description: 'Manage banned players',
-    color: 'bg-red-600 hover:bg-red-700',
-  },
-  {
-    href: '/admin/roster-lock',
-    icon: '🔒',
-    title: 'Roster Lock',
-    description: 'Season roster management',
-    color: 'bg-orange-600 hover:bg-orange-700',
-  },
-  {
-    href: '/admin/league-stats',
-    icon: '📈',
-    title: 'League Stats',
-    description: 'CSV import & analytics',
-    color: 'bg-teal-600 hover:bg-teal-700',
-  },
-  {
-    href: '/admin/ctf/match-manager',
-    icon: '⚔️',
-    title: 'Match Manager',
-    description: 'Record matches & standings',
-    color: 'bg-indigo-600 hover:bg-indigo-700',
-  },
-  {
-    href: '/matches',
-    icon: '🏆',
-    title: 'View Matches',
-    description: 'Browse match history',
-    color: 'bg-green-600 hover:bg-green-700',
-  },
+  { href: '/admin/ctfdl-draft', icon: ListOrdered, title: 'Draft setup', blurb: 'Create the CTFDL draft, add the squads, rank the pool, run draft night.' },
+  { href: '/league/schedule', icon: CalendarDays, title: 'Schedule', blurb: 'Add fixtures, generate the regular season and playoffs, set home and away.' },
+  { href: '/admin/ctf/match-manager', icon: Swords, title: 'Match manager', blurb: 'Record official results that drive the standings.' },
+  { href: '/admin/roster-lock', icon: Lock, title: 'Roster lock', blurb: 'Lock season rosters so squads can’t change mid-season.' },
+  { href: '/admin/league-stats', icon: BarChart3, title: 'League stats', blurb: 'CSV import and analytics for league games.' },
+  { href: '/matches', icon: Trophy, title: 'Match log', blurb: 'Every scheduled and played match, with crews, videos and setup.' },
+  { href: '/league', icon: ClipboardList, title: 'League page', blurb: 'What players see. Check the strip, standings and community box.' },
 ];
 
 export default function CTFAdminPage() {
@@ -110,23 +82,18 @@ export default function CTFAdminPage() {
         try {
           const { data, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, email, in_game_alias, is_admin, ctf_role, avatar_url')
             .eq('id', user.id)
             .single();
+          if (error) throw error;
 
-          if (error) {
-            throw error;
-          }
-
-          setProfile(data);
-
+          setProfile(data as UserProfile);
           const hasAccess = data && (data.is_admin === true || data.ctf_role === 'ctf_admin');
           if (!hasAccess) {
             router.push('/dashboard');
             toast.error('Unauthorized: CTF Admin access required');
             return;
           }
-
           setIsCTFAdmin(true);
         } catch (error: any) {
           console.error('Error checking CTF admin status:', error);
@@ -137,88 +104,87 @@ export default function CTFAdminPage() {
     };
 
     checkCTFAdmin();
-  }, [user, loading, isCTFAdmin]);
+  }, [user, loading, isCTFAdmin, router]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
-      </div>
-    );
+  if (loading || !user || !isCTFAdmin) {
+    return <StaffShell user={user}><Spinner label="Checking staff access…" /></StaffShell>;
   }
 
-  if (!user || !isCTFAdmin) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-purple-400 font-mono">Checking permissions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const roleInfo = CTF_ROLE_INFO[profile?.ctf_role || 'none'];
+  const roleLabel = profile?.is_admin ? 'Site admin' : ROLE_LABEL[profile?.ctf_role || ''] || 'Staff';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900">
-      <Navbar user={user} />
+    <StaffShell user={user}>
+      <HeaderStrip
+        title="CTF admin"
+        meta={
+          <>
+            <span>Signed in as <span className="text-[#E6EDF7]">{profile?.in_game_alias}</span></span>
+            <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">{roleLabel}</span>
+          </>
+        }
+        actions={
+          <>
+            <Link href="/admin/ctf-management" className={btnQuiet}>CTF management</Link>
+            <Link href="/admin/ctfdl-draft" className={btnQuiet}>Draft setup</Link>
+            <Link href="/league/schedule" className={btnQuiet}>Schedule</Link>
+          </>
+        }
+      />
 
-      <main className="container mx-auto px-2 py-4 sm:px-4 sm:py-6">
-        <div className="max-w-6xl mx-auto space-y-6">
-
-          {/* Compact Header */}
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl sm:text-3xl font-bold text-purple-400 tracking-wider">
-              CTF Admin Panel
-            </h1>
-            <span className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-white ${roleInfo.color}`}>
-              {roleInfo.display_name}
-            </span>
-          </div>
-
-          {/* Admin Tools — Navigation Cards */}
-          <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-purple-500/30 rounded-lg p-4 sm:p-6">
-            <h2 className="text-lg font-semibold text-purple-400 mb-4">Admin Tools</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {NAV_CARDS.map((card) => (
-                <a
-                  key={card.href}
-                  href={card.href}
-                  className={`${card.color} text-white p-4 rounded-lg transition-all duration-200 hover:scale-[1.02] group`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="text-2xl">{card.icon}</div>
-                    <div>
-                      <div className="font-semibold">{card.title}</div>
-                      <div className="text-sm opacity-80">{card.description}</div>
-                    </div>
+      {/* Tools */}
+      <Panel title="Tools" hint="Everything league staff runs, in one place.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/[0.06]">
+          {TOOLS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <div key={t.href} className="bg-[#131A2B] p-4 flex flex-col gap-2">
+                <Link href={t.href} className="group flex items-start gap-3">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#1B2438] text-[#22D3EE]">
+                    <Icon className="h-[18px] w-[18px]" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-display text-lg leading-tight text-[#E6EDF7] group-hover:text-[#22D3EE]">{t.title}</span>
+                    <span className="block text-xs text-[#8B98B0]">{t.blurb}</span>
+                  </span>
+                </Link>
+                {t.sub && (
+                  <div className="flex flex-wrap gap-1 pl-12">
+                    {t.sub.map((s) => (
+                      <Link key={s.href} href={s.href} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#8B98B0] hover:bg-white/10 hover:text-[#E6EDF7]">{s.label}</Link>
+                    ))}
                   </div>
-                </a>
-              ))}
-            </div>
-          </div>
-
-          {/* Inline Tools — Modals */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-cyan-500/30 rounded-lg p-4">
-              <p className="text-xs text-gray-400 mb-2">Link player aliases to profiles</p>
-              <AliasAssociationModal />
-            </div>
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-yellow-500/30 rounded-lg p-4">
-              <p className="text-xs text-gray-400 mb-2">Create and manage league seasons</p>
-              <SeasonManagementModal />
-            </div>
-            <div className="bg-gradient-to-b from-gray-800 to-gray-900 border border-blue-500/30 rounded-lg p-4">
-              <p className="text-xs text-gray-400 mb-2">Rename squads, edit tags & descriptions</p>
-              <SquadMaintenanceModal />
-            </div>
-          </div>
-
-          {/* CTF Role Management Table */}
-          <CTFAdminPanel />
+                )}
+              </div>
+            );
+          })}
         </div>
-      </main>
-    </div>
+      </Panel>
+
+      {/* Quick tools (modals) */}
+      <Panel title="Quick tools" hint="Open in place.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-white/[0.06]">
+          <div className="bg-[#131A2B] p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-[#E6EDF7]"><Users className="h-4 w-4 text-[#22D3EE]" /> Aliases</div>
+            <p className="text-xs text-[#8B98B0]">Link in-game aliases from recorded games to site profiles.</p>
+            <AliasAssociationModal />
+          </div>
+          <div className="bg-[#131A2B] p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-[#E6EDF7]"><CalendarDays className="h-4 w-4 text-[#22D3EE]" /> Seasons</div>
+            <p className="text-xs text-[#8B98B0]">Create seasons and set which one is active.</p>
+            <SeasonManagementModal />
+          </div>
+          <div className="bg-[#131A2B] p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-[#E6EDF7]"><MessageCircle className="h-4 w-4 text-[#22D3EE]" /> Squad details</div>
+            <p className="text-xs text-[#8B98B0]">Rename squads, edit tags and descriptions.</p>
+            <SquadMaintenanceModal />
+          </div>
+        </div>
+      </Panel>
+
+      {/* Role management */}
+      <CTFAdminPanel />
+
+      <p className="text-[11px] text-[#8B98B0] flex items-center gap-1.5"><Ban className="h-3 w-3" /> League bans live under CTF management → Bans.</p>
+    </StaffShell>
   );
 }

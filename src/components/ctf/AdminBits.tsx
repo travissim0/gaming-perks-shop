@@ -31,12 +31,23 @@ export function Panel({ title, hint, actions, children, className = '' }: { titl
   );
 }
 
-export function Modal({ title, children, onClose }: { title: React.ReactNode; children: React.ReactNode; onClose: () => void }) {
+const MODAL_WIDTH = { md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-5xl' } as const;
+
+export function Modal({ title, hint, actions, children, onClose, size = 'md' }: { title: React.ReactNode; hint?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; onClose: () => void; size?: keyof typeof MODAL_WIDTH }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#131A2B] p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-display text-xl text-[#E6EDF7] mb-2">{title}</h3>
-        {children}
+      <div className={`flex w-full ${MODAL_WIDTH[size]} max-h-[90vh] flex-col rounded-xl border border-white/10 bg-[#131A2B] shadow-2xl`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
+          <div>
+            <h3 className="font-display text-xl text-[#E6EDF7]">{title}</h3>
+            {hint && <div className="text-xs text-[#8B98B0]">{hint}</div>}
+          </div>
+          <div className="flex items-center gap-2">
+            {actions}
+            <button type="button" onClick={onClose} className="rounded p-1 text-[#8B98B0] hover:bg-white/10 hover:text-[#E6EDF7]" aria-label="Close">✕</button>
+          </div>
+        </div>
+        <div className="overflow-y-auto px-5 pb-5">{children}</div>
       </div>
     </div>
   );
