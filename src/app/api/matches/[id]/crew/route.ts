@@ -64,15 +64,16 @@ export async function GET(request: NextRequest) {
 }
 
 async function notify(kind: 'crew_added' | 'crew_removed', matchId: string, target: { id: string; alias: string }, role: Role, by: { id: string; alias: string }) {
-  if (role === 'player') return; // pickup sign-ups would only be noise in the crew channel
+  // Only referee changes are announced (#ctf-referee). Commentator/recorder posts are
+  // off until they have a channel of their own; player sign-ups are never announced.
+  if (role !== 'referee') return;
   const m = await matchSummary(matchId);
   if (!m) return;
   const self = by.id === target.id;
   const label = ROLE_LABEL[role];
   await queueNotice({
     user_id: null,        // channel post only, no DM
-    // Referees have their own channel; commentators and recorders go to the staff channel.
-    channel: role === 'referee' ? 'referee' : 'staff',
+    channel: 'referee',
     kind,
     payload: { ...m, role, role_label: label, target_id: target.id, target_alias: target.alias, by_alias: by.alias, self },
     text: '',
