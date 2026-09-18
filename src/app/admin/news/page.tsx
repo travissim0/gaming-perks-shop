@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
 import ImagePicker from '@/components/ImagePicker';
 import NewsPreviewModal from '@/components/admin/NewsPreviewModal';
+import Navbar from '@/components/Navbar';
 import { isHtmlContent, prepareNewsHtml } from '@/lib/newsHtml';
 import { generateHTML } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
@@ -304,6 +305,7 @@ export default function AdminNewsPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <Navbar user={user} />
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-yellow-400">📰 News Management</h1>
