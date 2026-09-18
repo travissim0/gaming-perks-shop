@@ -12,8 +12,8 @@ export const dynamic = 'force-dynamic';
  * POST { action: 'join' | 'leave', role }     the signed-in user, for themselves (role-gated)
  * POST { action: 'add' | 'remove', player_id, role }   staff, on someone's behalf
  *
- * Every add/join/remove queues a notice: a Discord DM to the person (site
- * message if they aren't linked), and referee changes also post in #ctf-referee.
+ * Crew changes (referee, commentator, recorder) post one line in #ctf-referee
+ * so the crew can see what's filled. No DMs — John found them too much.
  */
 
 const supabaseAdmin = createClient(
@@ -64,21 +64,18 @@ export async function GET(request: NextRequest) {
 }
 
 async function notify(kind: 'crew_added' | 'crew_removed', matchId: string, target: { id: string; alias: string }, role: Role, by: { id: string; alias: string }) {
+  if (role === 'player') return; // pickup sign-ups would only be noise in the crew channel
   const m = await matchSummary(matchId);
   if (!m) return;
   const self = by.id === target.id;
   const label = ROLE_LABEL[role];
-  const head = kind === 'crew_added'
-    ? (self ? `You're signed up as ${label}` : `${by.alias} put you down as ${label}`)
-    : (self ? `You left the ${label} slot` : `${by.alias} took you off as ${label}`);
-  const text = `${head} for ${[m.league, m.season_number ? `S${m.season_number}` : null, m.stage_label].filter(Boolean).join(' ')} · ${m.squad_a || 'TBD'} vs ${m.squad_b || 'TBD'} · ${m.scheduled_et}\n${m.url}`;
   await queueNotice({
-    user_id: target.id,
-    channel: role === 'referee' ? 'referee' : null,
+    user_id: null,        // channel post only, no DM
+    // Referees have their own channel; commentators and recorders go to the staff channel.
+    channel: role === 'referee' ? 'referee' : 'staff',
     kind,
-    payload: { ...m, role, role_label: label, target_alias: target.alias, by_alias: by.alias, self },
-    text,
-    subject: kind === 'crew_added' ? `${label[0].toUpperCase()}${label.slice(1)} assignment` : 'Crew change',
+    payload: { ...m, role, role_label: label, target_id: target.id, target_alias: target.alias, by_alias: by.alias, self },
+    text: '',
   });
 }
 

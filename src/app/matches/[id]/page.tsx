@@ -243,7 +243,7 @@ export default function MatchDetailPage() {
     setBusy(role);
     try {
       await crewSelf('join', role);
-      toast.success(`Signed up as ${role === 'recording' ? 'recorder' : role}. Confirmation sent to your Discord.`);
+      toast.success(`Signed up as ${role === 'recording' ? 'recorder' : role}`);
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not join'); } finally { setBusy(null); }
   };

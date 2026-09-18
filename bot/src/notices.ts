@@ -51,6 +51,8 @@ export async function deliverNotices(client: Client, guild: Guild) {
     for (const n of await pendingNotices()) {
       const errors: string[] = [];
       let discordId: string | null = null;
+      // Mention the person in the channel line when we know their Discord, even with no DM.
+      if (!n.user_id && typeof n.payload?.target_id === 'string') discordId = await discordIdFor(n.payload.target_id);
       if (n.user_id) {
         discordId = await discordIdFor(n.user_id);
         if (discordId && !config.dryRun) {
