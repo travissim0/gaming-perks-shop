@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
-import { roundRobin, seedBracket, playoffRoundLabel, addDays, localDateTimeToIso, type TeamRef } from '@/lib/schedule';
+import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, type TeamRef } from '@/lib/schedule';
 import type { Fixture } from '@/app/api/league/schedule/route';
 
 type Tab = 'add' | 'season' | 'playoffs';
@@ -100,6 +100,39 @@ export default function ScheduleStaffTools({
     return roundRobin(teams, Math.min(w, 52));
   }, [teams, weeks]);
 
+  // Breaks: match days to skip (holidays). Every week after a break shifts by seven days.
+  const [breaks, setBreaks] = useState<{ date: string; label: string }[]>([]);
+  const [breakDate, setBreakDate] = useState('');
+  const [breakLabel, setBreakLabel] = useState('');
+  const addBreak = () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(breakDate)) return;
+    if (breaks.some((b) => b.date === breakDate)) { setBreakDate(''); setBreakLabel(''); return; }
+    setBreaks((b) => [...b, { date: breakDate, label: breakLabel.trim() }].sort((x, y) => x.date.localeCompare(y.date)));
+    setBreakDate(''); setBreakLabel('');
+  };
+  const plusDays = (ymd: string, n: number) => {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const t = new Date(y, m - 1, d + n);
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  };
+  /** Calendar slots in order: each week's match day, with any breaks that fall on a match day between them. */
+  const slots = useMemo(() => {
+    const out: ({ kind: 'week'; week: number; date: string } | { kind: 'break'; date: string; label: string })[] = [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDate)) return out;
+    const total = Math.min(Number(weeks) || 0, 52);
+    const skip = new Map(breaks.map((b) => [b.date, b.label]));
+    let week = 1;
+    for (let k = 0; week <= total && k < total + breaks.length + 1; k++) {
+      const date = plusDays(firstDate, k * 7);
+      if (skip.has(date)) { out.push({ kind: 'break', date, label: skip.get(date) || 'Break' }); continue; }
+      out.push({ kind: 'week', week, date });
+      week++;
+    }
+    return out;
+  }, [firstDate, weeks, breaks]);
+  const weekDate = (w: number) => slots.find((s) => s.kind === 'week' && s.week === w)?.date || plusDays(firstDate, (w - 1) * 7);
+  const fmtDay = (ymd: string) => { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); };
+
   /**
    * The /league strip and the FS cutoff read the season's milestone dates. When
    * a date is still blank, the generator fills it in from what it just created.
@@ -123,7 +156,6 @@ export default function ScheduleStaffTools({
     if (regular.length > 0 && !confirm(`${regular.length} regular-season fixtures already exist. Add ${preview.pairings.length} more on top of them?`)) return;
     setBusy(true);
     try {
-      const base = localDateTimeToIso(firstDate, matchTime);
       const res = await api('POST', {
         league: league.slug,
         season: season.season_number,
@@ -132,7 +164,8 @@ export default function ScheduleStaffTools({
           stage: 'regular',
           squad_a_id: p.a.id,
           squad_b_id: p.b.id,
-          scheduled_at: addDays(base, (p.week - 1) * 7),
+          // Breaks push later weeks back, so each week takes its own calendar date.
+          scheduled_at: localDateTimeToIso(weekDate(p.week), matchTime),
         })),
       });
       toast.success(`Created ${res.count} fixtures`);
@@ -315,27 +348,52 @@ export default function ScheduleStaffTools({
                   </button>
                 </div>
               </div>
-              {preview.pairings.length > 0 && (
-                <div className="rounded-lg bg-[#0B0F1A]/60 p-3 max-h-72 overflow-y-auto text-sm">
-                  {Array.from(new Set(preview.pairings.map((p) => p.week))).map((w) => (
-                    <div key={w} className="mb-2 last:mb-0">
-                      <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1">
-                        Week {w}
-                        {firstDate && <span className="ml-2 normal-case tracking-normal">{new Date(addDays(localDateTimeToIso(firstDate, matchTime), (w - 1) * 7)).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>}
-                        {preview.byes.get(w) && <span className="ml-2 normal-case tracking-normal">· bye: {preview.byes.get(w)!.name}</span>}
-                      </div>
-                      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-                        {preview.pairings.filter((p) => p.week === w).map((p, i) => (
-                          <li key={i} className="text-[#E6EDF7]">
-                            {p.a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {p.b.name}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+              {/* Breaks */}
+              <div className="rounded-lg bg-[#0B0F1A]/40 p-3">
+                <div className={labelCls}>Breaks <span className="normal-case tracking-normal text-[#8B98B0]/70">match days to skip, e.g. Thanksgiving</span></div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <input type="date" value={breakDate} onChange={(e) => setBreakDate(e.target.value)} className={`${inputCls} w-44`} style={{ colorScheme: 'dark' }} />
+                  <input type="text" value={breakLabel} onChange={(e) => setBreakLabel(e.target.value)} placeholder="Label (optional)" className={`${inputCls} w-48`} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBreak(); } }} />
+                  <button type="button" onClick={addBreak} disabled={!breakDate} className={btnQuiet}>Add break</button>
+                  {breaks.map((b) => (
+                    <span key={b.date} className="inline-flex items-center gap-1.5 rounded-md bg-[#F59E0B]/15 px-2 py-1 text-xs text-[#F59E0B]">
+                      {fmtDay(b.date)}{b.label ? ` · ${b.label}` : ''}
+                      <button type="button" onClick={() => setBreaks((list) => list.filter((x) => x.date !== b.date))} className="text-[#F59E0B]/70 hover:text-[#F59E0B]" aria-label="Remove break">✕</button>
+                    </span>
                   ))}
                 </div>
+                {breaks.some((b) => !slots.some((s) => s.kind === 'break' && s.date === b.date)) && (
+                  <p className="mt-1 text-[11px] text-[#F59E0B]">A break only takes effect when it falls on a match day (the same weekday as week 1, within the season).</p>
+                )}
+              </div>
+
+              {preview.pairings.length > 0 && (
+                <div className="rounded-lg bg-[#0B0F1A]/60 p-3 max-h-72 overflow-y-auto text-sm">
+                  {slots.map((s) =>
+                    s.kind === 'break' ? (
+                      <div key={`b${s.date}`} className="mb-2 rounded-md bg-[#F59E0B]/10 px-2 py-1 text-[11px] uppercase tracking-wide text-[#F59E0B]">
+                        Break <span className="ml-2 normal-case tracking-normal">{fmtDay(s.date)}{s.label ? ` · ${s.label}` : ''} · no matches</span>
+                      </div>
+                    ) : (
+                      <div key={`w${s.week}`} className="mb-2 last:mb-0">
+                        <div className="text-[11px] uppercase tracking-wide text-[#8B98B0] mb-1">
+                          Week {s.week}
+                          <span className="ml-2 normal-case tracking-normal">{fmtDay(s.date)}</span>
+                          {preview.byes.get(s.week) && <span className="ml-2 normal-case tracking-normal">· bye: {preview.byes.get(s.week)!.name}</span>}
+                        </div>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                          {preview.pairings.filter((p) => p.week === s.week).map((p, i) => (
+                            <li key={i} className="text-[#E6EDF7]">
+                              {p.a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {p.b.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ),
+                  )}
+                </div>
               )}
-              <p className="text-[11px] text-[#8B98B0]">Every match lands on the same weekday and time, one week apart. Move individual matches afterwards with the edit button on each row.</p>
+              <p className="text-[11px] text-[#8B98B0]">Every match lands on the same weekday and time, one week apart, skipping any breaks. Move individual matches afterwards with the edit button on each row.</p>
             </div>
           )}
 
