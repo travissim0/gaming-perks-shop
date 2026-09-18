@@ -564,10 +564,10 @@ export function CTFPLStandingsContent({
         )}
       </section>
 
-      {/* Footnote */}
-      {hasStandings && (
+      {/* Footnote. The scoring rules show even before the table fills in, so captains can read them pre-season. */}
+      {(hasStandings || (pointsMode && scoring)) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-[#8B98B0]">
-          <div className="rounded-xl bg-[#131A2B] px-4 py-3">
+          <div className={`rounded-xl bg-[#131A2B] px-4 py-3 ${!hasStandings ? 'hidden' : ''}`}>
             <div className="text-[11px] uppercase tracking-wide mb-1.5">Columns</div>
             <p>
               {pointsMode
@@ -578,8 +578,8 @@ export function CTFPLStandingsContent({
             </p>
           </div>
           {scoring && (
-            <div className="rounded-xl bg-[#131A2B] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-wide mb-1.5">Scoring</div>
+            <div className={`rounded-xl bg-[#131A2B] px-4 py-3 ${!hasStandings ? 'md:col-span-2' : ''}`}>
+              <div className="text-[11px] uppercase tracking-wide mb-1.5">Scoring{season ? ` · ${seasonTitle(season)}` : ''}</div>
               <ul className="space-y-0.5">
                 {scoring.map((line) => <li key={line}>{line}</li>)}
               </ul>
