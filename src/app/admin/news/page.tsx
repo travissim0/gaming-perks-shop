@@ -7,6 +7,22 @@ import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
 import ImagePicker from '@/components/ImagePicker';
+import NewsPreviewModal from '@/components/admin/NewsPreviewModal';
+import { isHtmlContent, prepareNewsHtml } from '@/lib/newsHtml';
+import { generateHTML } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+
+type ContentMode = 'rich' | 'html';
+
+/** Best-effort HTML for an editor document (used when switching a rich-text post to HTML mode). */
+function docToHtml(content: string): string {
+  try {
+    const doc = JSON.parse(content);
+    if (doc?.type === 'doc') return generateHTML(doc, [StarterKit, Underline]);
+  } catch { /* not a document */ }
+  return content;
+}
 
 interface NewsPost {
   id: string;
@@ -33,6 +49,10 @@ export default function AdminNewsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingPost, setEditingPost] = useState<NewsPost | null>(null);
+  // How the body is written: the rich-text editor (TipTap document) or pasted HTML
+  // (a designed announcement; a whole .html file works, its styles and body are kept).
+  const [mode, setMode] = useState<ContentMode>('rich');
+  const [showPreview, setShowPreview] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -120,6 +140,12 @@ export default function AdminNewsPage() {
 
       if (error) throw error;
       setPosts(data || []);
+      // /news/[id] links here with ?edit=<id>
+      const editId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('edit') : null;
+      if (editId && !editingPost) {
+        const target = (data || []).find((p: NewsPost) => p.id === editId);
+        if (target) handleEdit(target);
+      }
     } catch (error) {
       console.error('Error fetching posts:', error);
       toast.error('Failed to fetch posts');
@@ -137,7 +163,11 @@ export default function AdminNewsPage() {
       // document object (loaded from an existing post), or plain text.
       let richContent: any;
       const raw: any = formData.content;
-      if (raw && typeof raw === 'object') {
+      if (mode === 'html') {
+        // Pasted HTML is stored as a string; every renderer drops it in as-is.
+        richContent = prepareNewsHtml(typeof raw === 'string' ? raw : '');
+        if (!richContent) throw new Error('Paste the post HTML first');
+      } else if (raw && typeof raw === 'object') {
         richContent = raw;
       } else {
         const text = typeof raw === 'string' ? raw : '';
@@ -185,6 +215,7 @@ export default function AdminNewsPage() {
 
       // Reset form and refresh posts
       setFormData({ ...EMPTY_FORM });
+      setMode('rich');
       setShowCreateForm(false);
       setEditingPost(null);
       fetchPosts();
@@ -199,10 +230,13 @@ export default function AdminNewsPage() {
     console.log('Post content:', post.content);
     
     setEditingPost(post);
+    const html = isHtmlContent(post.content);
+    setMode(html ? 'html' : 'rich');
     setFormData({
       title: post.title,
       subtitle: post.subtitle,
       // The editor works with the JSON string form; stored posts hold the parsed document.
+      // Pasted-HTML posts are a plain string and open in HTML mode.
       content: typeof post.content === 'string' ? post.content : JSON.stringify(post.content ?? { type: 'doc', content: [] }),
       featured_image_url: post.featured_image_url || '',
       featured: post.featured,
@@ -277,6 +311,7 @@ export default function AdminNewsPage() {
             onClick={() => {
               setShowCreateForm(!showCreateForm);
               setEditingPost(null);
+              setMode('rich');
               setFormData({ ...EMPTY_FORM });
             }}
             className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors"
@@ -325,16 +360,85 @@ export default function AdminNewsPage() {
               />
 
               <div>
-                <label className="block text-sm font-medium mb-2">Content *</label>
-                <RichTextEditor
-                  content={formData.content}
-                  onChange={(content) => setFormData(prev => ({ ...prev, content }))}
-                  placeholder="Write your news post content here..."
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-400 mt-2">
-                  Use the toolbar above to format your content with headings, lists, quotes, and more.
-                </p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-sm font-medium">Content *</label>
+                  <div className="flex items-center gap-1 rounded-lg bg-gray-700 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (mode === 'rich') return;
+                        if (!confirm('Switching to rich text keeps only basic formatting (headings, lists, bold). Designed blocks and styles are dropped. Continue?')) return;
+                        setMode('rich');
+                      }}
+                      className={`rounded-md px-2.5 py-1 transition-colors ${mode === 'rich' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white'}`}
+                    >
+                      Rich text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (mode === 'html') return;
+                        setFormData((prev) => ({ ...prev, content: docToHtml(typeof prev.content === 'string' ? prev.content : '') }));
+                        setMode('html');
+                      }}
+                      className={`rounded-md px-2.5 py-1 transition-colors ${mode === 'html' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white'}`}
+                      title="Paste a designed post as HTML"
+                    >
+                      HTML
+                    </button>
+                  </div>
+                </div>
+
+                {mode === 'rich' ? (
+                  <>
+                    <RichTextEditor
+                      content={formData.content}
+                      onChange={(content) => setFormData(prev => ({ ...prev, content }))}
+                      placeholder="Write your news post content here..."
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-400 mt-2">
+                      Use the toolbar above to format your content with headings, lists, quotes, and more. For a designed announcement (cards, tables, buttons), switch to HTML.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <textarea
+                      value={typeof formData.content === 'string' ? formData.content : ''}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
+                      spellCheck={false}
+                      placeholder={'Paste the post HTML here. A whole .html file works too: its <style> block and body content are kept, scripts are removed.'}
+                      className="w-full min-h-[22rem] rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-400">
+                      <label className="cursor-pointer rounded-md bg-gray-700 px-2.5 py-1.5 text-gray-200 hover:bg-gray-600">
+                        Load .html file…
+                        <input
+                          type="file"
+                          accept=".html,.htm,text/html"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            const text = await f.text();
+                            setFormData((prev) => ({ ...prev, content: prepareNewsHtml(text) }));
+                            e.target.value = '';
+                            toast.success(`Loaded ${f.name}`);
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, content: prepareNewsHtml(typeof prev.content === 'string' ? prev.content : '') }))}
+                        className="rounded-md bg-gray-700 px-2.5 py-1.5 text-gray-200 hover:bg-gray-600"
+                        title="Strip page wrappers, scripts and inline handlers; point fonts at the site's faces"
+                      >
+                        Clean up
+                      </button>
+                      <span>Styles inside a &lt;style&gt; block are kept. Fonts named Barlow Condensed and Inter map to the site&apos;s. Scripts, forms and page-level CSS are dropped.</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -429,12 +533,20 @@ export default function AdminNewsPage() {
                 />
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <button
                   type="submit"
                   className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-medium transition-colors"
                 >
                   {editingPost ? 'Update Post' : 'Create Post'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(true)}
+                  className="bg-cyan-700 hover:bg-cyan-600 px-6 py-2 rounded-lg font-medium transition-colors"
+                  title="See the post as readers will, before saving"
+                >
+                  Preview
                 </button>
                 <button
                   type="button"
@@ -449,6 +561,20 @@ export default function AdminNewsPage() {
               </div>
             </form>
           </div>
+        )}
+
+        {showPreview && (
+          <NewsPreviewModal
+            title={formData.title}
+            subtitle={formData.subtitle}
+            content={mode === 'html' ? prepareNewsHtml(typeof formData.content === 'string' ? formData.content : '') : formData.content}
+            featuredImageUrl={formData.featured_image_url || undefined}
+            author={formData.author_alias || editingPost?.author_name || 'You'}
+            tags={formData.tags.split(',').map((t) => t.trim()).filter(Boolean)}
+            audience={formData.audience}
+            featured={formData.featured}
+            onClose={() => setShowPreview(false)}
+          />
         )}
 
         {/* Posts List */}

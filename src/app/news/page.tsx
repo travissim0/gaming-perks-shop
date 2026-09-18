@@ -6,7 +6,7 @@ import { ChevronRight, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
-import { renderNewsContent, newsPlainText } from '@/lib/newsContent';
+import { renderNewsContent, newsPlainText, newsProseClass } from '@/lib/newsContent';
 import { displayFont, bodyFont } from '@/lib/fonts';
 
 interface NewsPost {
@@ -191,7 +191,7 @@ export default function NewsPage() {
                       <Meta p={lead} />
                     </div>
                     <div className="relative mt-3">
-                      <div className="rules-prose text-sm overflow-hidden" style={{ maxHeight: openIds.has(lead.id) ? 'none' : 180 }}>
+                      <div className={`${newsProseClass(lead.content)} text-sm overflow-hidden`} style={{ maxHeight: openIds.has(lead.id) ? 'none' : 180 }}>
                         {renderNewsContent(lead.content)}
                       </div>
                       {!openIds.has(lead.id) && <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#131A2B] to-transparent pointer-events-none" />}
@@ -239,7 +239,7 @@ export default function NewsPage() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={p.featured_image_url} alt="" className="rounded-lg max-h-72 object-cover mb-3" />
                             )}
-                            <div className="rules-prose text-sm">{renderNewsContent(p.content)}</div>
+                            <div className={`${newsProseClass(p.content)} text-sm`}>{renderNewsContent(p.content)}</div>
                             <Link href={`/news/${p.id}`} className="inline-flex items-center gap-1 mt-2 text-xs text-[#8B98B0] hover:text-[#22D3EE]">
                               Open post to react <ExternalLink className="w-3 h-3" aria-hidden="true" />
                             </Link>

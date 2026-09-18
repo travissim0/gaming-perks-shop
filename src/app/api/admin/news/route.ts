@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isHtmlContent, prepareNewsHtml } from '@/lib/newsHtml';
 
 /**
  * News post management via service role.
@@ -39,6 +40,8 @@ const ALLOWED = ['title', 'subtitle', 'content', 'featured_image_url', 'status',
 function pick(post: any) {
   const out: Record<string, any> = {};
   for (const k of ALLOWED) if (post && k in post) out[k] = post[k];
+  // Pasted-HTML posts are cleaned here too (scripts, handlers, page-level CSS), whatever the client sent.
+  if (isHtmlContent(out.content)) out.content = prepareNewsHtml(out.content);
   return out;
 }
 

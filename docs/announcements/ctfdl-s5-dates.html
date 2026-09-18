@@ -1,0 +1,261 @@
+<!--
+  CTFDL Season 5 announcement (written by Zmn, restyled to the freeinf.org CTF theme).
+  Paste this whole file into News management → Content → HTML (or "Load .html file").
+  The <style> block travels with the post; scripts/page CSS are stripped on save.
+  Theme tokens: page #0B0F1A · card #131A2B · card-2 #1B2438 · accent #22D3EE · highlight #F59E0B
+                win #34D399 · loss #F87171 · text #E6EDF7 · muted #8B98B0 · display Barlow Condensed · body Inter
+-->
+<style>
+.s5{font-family:var(--font-body), Inter, system-ui, sans-serif;color:#E6EDF7;box-sizing:border-box;}
+.s5 *{box-sizing:border-box;}
+.s5-card{background:#1B2438;border-radius:12px;padding:20px 22px;margin:18px 0;}
+.s5-kicker{font-size:11px;font-weight:600;letter-spacing:.25em;text-transform:uppercase;color:rgba(34,211,238,.85);margin:0 0 6px;}
+.s5-title{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.01em;line-height:1;margin:0;color:#E6EDF7;}
+.s5-btn{display:inline-block;background:#22D3EE;color:#0B0F1A !important;font-weight:500;font-size:14px;text-decoration:none !important;padding:9px 14px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5-btn:hover{background:#67E8F9;}
+.s5-btn-ghost{display:inline-block;background:rgba(255,255,255,.05);color:#E6EDF7 !important;font-weight:500;font-size:14px;text-decoration:none !important;padding:9px 14px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5-btn-ghost:hover{background:rgba(255,255,255,.1);}
+.s5-pill{display:inline-block;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;line-height:1.4;}
+.s5-pill-amber{background:rgba(245,158,11,.15);color:#F59E0B;}
+.s5-pill-green{background:rgba(52,211,153,.15);color:#34D399;}
+.s5-pill-cyan{background:rgba(34,211,238,.15);color:#22D3EE;}
+.s5-pill-muted{background:rgba(255,255,255,.06);color:#8B98B0;}
+.s5-muted{color:#8B98B0;}
+.s5 p{margin:0 0 14px;color:#E6EDF7;line-height:1.6;}
+.s5 p strong,.s5 li strong{color:#E6EDF7;font-weight:600;}
+.s5-h{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.02em;font-size:26px;line-height:1.1;margin:28px 0 10px;color:#E6EDF7;}
+.s5-list{margin:0 0 14px;padding-left:20px;color:#E6EDF7;}
+.s5-list li{margin:0 0 8px;line-height:1.55;}
+
+/* HERO */
+.s5-hero{position:relative;overflow:hidden;background:#1B2438;background-image:radial-gradient(circle at 8% 15%, rgba(34,211,238,.16), transparent 42%);border-radius:12px;padding:28px 26px;margin:0 0 20px;}
+.s5-hero:before{content:"S5";position:absolute;right:-4px;top:-18px;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:160px;line-height:1;color:rgba(255,255,255,.035);pointer-events:none;}
+.s5-hero .s5-title{font-size:46px;}
+.s5-hero-sub{font-size:16px;color:#8B98B0;margin:12px 0 18px;max-width:620px;}
+.s5-hero-stats{display:flex;flex-wrap:wrap;gap:10px 26px;margin:0 0 20px;}
+.s5-hero-stats div{font-size:12px;color:#8B98B0;}
+.s5-hero-stats div b{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:24px;font-weight:600;color:#E6EDF7;line-height:1.1;text-transform:uppercase;}
+.s5-hero-cta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;}
+.s5-hero-deadline{font-size:13px;color:#F59E0B;font-weight:500;}
+
+/* SCHEDULE */
+.s5-sched{width:100%;border-collapse:collapse;font-size:14px;}
+.s5-sched th{text-align:left;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:#8B98B0;padding:0 10px 8px 0;border-bottom:1px solid rgba(255,255,255,.06);}
+.s5-sched td{padding:9px 10px 9px 0;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.s5-sched tr:last-child td{border-bottom:0;}
+.s5-sched .d{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:600;font-size:18px;text-transform:uppercase;white-space:nowrap;color:#E6EDF7;width:1%;padding-right:20px;}
+.s5-sched .k{color:#E6EDF7;}
+.s5-sched .k b{font-weight:600;}
+.s5-sched tr.hi .d{color:#22D3EE;}
+.s5-sched tr.off td{color:#8B98B0;}
+.s5-sched tr.off .d{color:#8B98B0;}
+.s5-sched .tag{float:right;margin-left:10px;}
+
+/* BRACKET */
+.s5-bracket{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px;}
+.s5-round{background:rgba(11,15,26,.55);border-radius:8px;padding:14px;}
+.s5-round-h{font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:#22D3EE;margin:0 0 8px;}
+.s5-round-d{font-size:12px;color:#8B98B0;margin:-6px 0 10px;}
+.s5-match{background:rgba(255,255,255,.04);border-radius:6px;padding:10px 12px;margin:0 0 8px;font-size:13px;}
+.s5-match:last-child{margin-bottom:0;}
+.s5-match b{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:18px;font-weight:600;text-transform:uppercase;display:block;color:#E6EDF7;line-height:1.1;}
+.s5-match small{display:block;color:#8B98B0;font-size:12px;margin-top:3px;}
+.s5-match.final{background:rgba(34,211,238,.12);}
+.s5-match.final b{color:#22D3EE;font-size:22px;}
+
+/* SCORING */
+.s5-score{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px;}
+.s5-score th{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:#8B98B0;padding:0 0 8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:right;}
+.s5-score th:first-child{text-align:left;}
+.s5-score td{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04);color:#E6EDF7;}
+.s5-score td.n{text-align:right;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:21px;font-weight:600;width:90px;color:#E6EDF7;font-variant-numeric:tabular-nums;}
+.s5-score td.n.fs{color:#8B98B0;}
+.s5-score tr:last-child td{border-bottom:0;}
+.s5-score tr.zero td{color:#8B98B0;}
+.s5-score tr.zero td.n{color:#F59E0B;}
+.s5-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 16px;}
+.s5-split .s5-round{padding:14px 16px;}
+.s5-split .s5-round b{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:21px;font-weight:600;text-transform:uppercase;display:block;color:#E6EDF7;}
+.s5-split .s5-round span{font-size:13px;color:#8B98B0;}
+.s5-rule{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(255,255,255,.04);font-size:14px;color:#E6EDF7;}
+.s5-rule:first-of-type{border-top:0;}
+.s5-rule i{font-style:normal;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:600;font-size:18px;color:#22D3EE;min-width:26px;line-height:1.3;}
+.s5-rule b{font-weight:600;color:#E6EDF7;}
+
+/* THRESHOLDS */
+.s5-thresh{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;}
+.s5-thresh div{background:rgba(11,15,26,.55);border-radius:8px;padding:16px;text-align:center;}
+.s5-thresh b{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:42px;font-weight:700;color:#22D3EE;line-height:1;}
+.s5-thresh span{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8B98B0;margin-top:6px;}
+.s5-thresh em{display:block;font-style:normal;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:20px;font-weight:600;text-transform:uppercase;color:#E6EDF7;margin-top:6px;}
+
+/* FINAL CTA */
+.s5-final{background:#1B2438;background-image:radial-gradient(circle at 92% 10%, rgba(34,211,238,.16), transparent 45%);}
+.s5-final .s5-title{font-size:32px;margin-bottom:12px;}
+.s5-steps{list-style:none;margin:0 0 18px;padding:0;}
+.s5-steps li{display:flex;gap:14px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(255,255,255,.05);font-size:14px;color:#E6EDF7;}
+.s5-steps li:first-child{border-top:0;}
+.s5-steps li b{font-weight:600;}
+.s5-steps li i{font-style:normal;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:24px;color:#22D3EE;line-height:1;min-width:26px;}
+.s5-sig{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:21px;font-weight:600;text-transform:uppercase;color:#E6EDF7;margin-top:20px;}
+
+@media (max-width:640px){
+  .s5-hero .s5-title{font-size:36px;}
+  .s5-bracket,.s5-thresh,.s5-split{grid-template-columns:1fr;}
+  .s5-sched .tag{float:none;display:inline-block;margin:6px 0 0;}
+  .s5-card{padding:16px;}
+}
+</style>
+
+<div class="s5">
+
+<div class="s5-hero">
+  <p class="s5-kicker">CTF Draft League · Season 5</p>
+  <h1 class="s5-title">Dates are set.<br>Go register.</h1>
+  <p class="s5-hero-sub">Draft night is Saturday, October 3. First matches are the next day. Championship is the weekend of November 21. Five weeks of regular season, two weeks of playoffs, no holiday weekends, done before Thanksgiving.</p>
+  <div class="s5-hero-stats">
+    <div><b>Sat Oct 3</b>Draft Night</div>
+    <div><b>Sun Oct 4</b>Week 1</div>
+    <div><b>Nov 14–15</b>Playoffs</div>
+    <div><b>Nov 21–22</b>Championship</div>
+  </div>
+  <div class="s5-hero-cta">
+    <a class="s5-btn" href="https://www.freeinf.org/league/register">Register for Season 5</a>
+    <span class="s5-hero-deadline">Deadline: Friday, Oct 2 · 11:59 PM PT</span>
+  </div>
+</div>
+
+<p>Season 5 is locked in. Here's everything you need to know, and the one thing you need to do right now: <strong>register with your in-game alias.</strong> No registration, no draft slot. No exceptions.</p>
+
+<h2 class="s5-h">The Schedule</h2>
+
+<div class="s5-card">
+  <p class="s5-kicker">Season 5 Calendar</p>
+  <table class="s5-sched">
+    <thead><tr><th>Weekend</th><th>What's Happening</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td class="d">Sat Oct 3</td><td class="k"><b>Draft Night.</b> Live, with an audience. <span class="s5-pill s5-pill-cyan tag">Event</span></td></tr>
+      <tr class="hi"><td class="d">Sun Oct 4</td><td class="k"><b>Week 1.</b> Yes, the day after the draft.</td></tr>
+      <tr class="off"><td class="d">Oct 10–11</td><td class="k">No matches. Canadian Thanksgiving / Columbus Day. <span class="s5-pill s5-pill-muted tag">Off</span></td></tr>
+      <tr><td class="d">Oct 17–18</td><td class="k">Week 2</td></tr>
+      <tr><td class="d">Oct 24–25</td><td class="k">Week 3</td></tr>
+      <tr><td class="d">Oct 31–Nov 1</td><td class="k">Week 4</td></tr>
+      <tr><td class="d">Nov 7–8</td><td class="k"><b>Week 5.</b> Final regular season week.</td></tr>
+      <tr class="hi"><td class="d">Nov 14–15</td><td class="k"><b>Playoffs.</b> Top 4 squads. <span class="s5-pill s5-pill-green tag">Playoffs</span></td></tr>
+      <tr class="hi"><td class="d">Nov 21–22</td><td class="k"><b>Championship.</b> <span class="s5-pill s5-pill-amber tag">Title</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<ul class="s5-list">
+  <li><strong>Matches will be on Saturday or Sunday.</strong> Match day will be set to work around USL's schedule. USL is still going strong and we want both leagues to succeed. Nobody should have to choose.</li>
+  <li><strong>We play the day after the draft.</strong> In past seasons we drafted, waited a week, and lost momentum before Week 1. Not this time. You get drafted Saturday night, you play Sunday. Captains, be ready.</li>
+  <li><strong>We are not touching holiday weekends.</strong> US or Canadian. The Oct 10–11 weekend is off, and the whole season wraps before US Thanksgiving. Your family gets you back for the holidays.</li>
+</ul>
+
+<h2 class="s5-h">Playoffs</h2>
+<p>Top 4 squads by points make it. Seeding follows the standings. Finish first or second and you get two shots at the final. Finish third or fourth and you have to earn it twice in one night. The regular season matters.</p>
+
+<div class="s5-card">
+  <p class="s5-kicker">Playoff Format · Top 4</p>
+  <div class="s5-bracket">
+    <div class="s5-round">
+      <p class="s5-round-h">Round 1</p>
+      <p class="s5-round-d">Nov 14–15</p>
+      <div class="s5-match"><b>#1 vs #2</b><small>Winner goes straight to the Championship</small></div>
+      <div class="s5-match"><b>#3 vs #4</b><small>Loser is eliminated</small></div>
+    </div>
+    <div class="s5-round">
+      <p class="s5-round-h">Round 2</p>
+      <p class="s5-round-d">Same night</p>
+      <div class="s5-match"><b>Loser of 1v2<br>vs Winner of 3v4</b><small>Winner takes the last spot in the Championship</small></div>
+    </div>
+    <div class="s5-round">
+      <p class="s5-round-h">Championship</p>
+      <p class="s5-round-d">Nov 21–22</p>
+      <div class="s5-match final"><b>One game.<br>One champion.</b><small>Winner of 1v2 vs Winner of Round 2</small></div>
+    </div>
+  </div>
+</div>
+
+<h2 class="s5-h">How Scoring Works This Season</h2>
+<p>Standings are decided by points, not win-loss record. There are two kinds of matches.</p>
+
+<div class="s5-card">
+  <div class="s5-split">
+    <div class="s5-round"><b>RS · Regular Season</b><span>Your official schedule. Mandatory. Worth the most.</span></div>
+    <div class="s5-round"><b>FS · Free Scheduled</b><span>Optional matches any two captains agree to play. Worth less, but they count.</span></div>
+  </div>
+  <table class="s5-score">
+    <thead><tr><th>Result</th><th>RS</th><th>FS</th></tr></thead>
+    <tbody>
+      <tr><td>Win in under 30 minutes</td><td class="n">30</td><td class="n fs">5</td></tr>
+      <tr><td>Win in overtime (30–45 min)</td><td class="n">27</td><td class="n fs">4</td></tr>
+      <tr><td>Win in double overtime (45+ min)</td><td class="n">24</td><td class="n fs">3</td></tr>
+      <tr><td>Played and lost</td><td class="n">6</td><td class="n fs">1</td></tr>
+      <tr class="zero"><td>Forfeit loss</td><td class="n">0</td><td class="n">0</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><strong>Why we're doing it this way.</strong> We want squads playing. More matches, more reps, more reasons to log in. FS gives you a way to play more games that actually matter without adding to the mandatory schedule. Win fast and you get max points. Play and lose and you still get something for showing up. Forfeit and you get nothing. Activity gets rewarded. Hiding doesn't.</p>
+<p><strong>FS won't carry you.</strong> One RS result is a 24-point swing. It takes five or six FS wins to make that up. But a squad that stays active and wins its FS matches can absolutely climb past a squad that only shows up for its schedule.</p>
+
+<div class="s5-card">
+  <p class="s5-kicker">FS Limits</p>
+  <div class="s5-rule"><i>2</i><span>FS matches per squad per week, max.</span></div>
+  <div class="s5-rule"><i>1</i><span>FS match per week against the same squad, max.</span></div>
+  <div class="s5-rule"><i>3</i><span>FS matches per season against the same squad, max.</span></div>
+  <div class="s5-rule"><i>✓</i><span>FS needs a ref or a recording to count. A forfeited FS is a no-contest.</span></div>
+  <div class="s5-rule"><i>✕</i><span>FS closes when the regular season ends. There is no FS in the playoffs.</span></div>
+  <p class="s5-kicker" style="margin-top:18px">Tiebreakers, in order</p>
+  <p style="margin:0;font-size:14px;color:#E6EDF7">RS head-to-head → RS wins → regulation wins → fewest forfeits → fastest average RS win time.</p>
+</div>
+
+<h2 class="s5-h">Squads and Captains</h2>
+<p>We are prepared to run Season 5 with 4, 5, or 6 squads. Registration numbers decide it.</p>
+
+<div class="s5-card">
+  <p class="s5-kicker">Registered Player Thresholds</p>
+  <div class="s5-thresh">
+    <div><b>56</b><span>Registered</span><em>4 Squads</em></div>
+    <div><b>70</b><span>Registered</span><em>5 Squads</em></div>
+    <div><b>86</b><span>Registered</span><em>6 Squads</em></div>
+  </div>
+  <p class="s5-muted" style="font-size:13px;margin:14px 0 0">Approximate. If we know certain players have attendance issues, the thresholds may shift a little.</p>
+</div>
+
+<p><strong>Captains will be announced this week.</strong> Six will be named: four primary captains and two alternates who step in if registration gets us to five or six squads.</p>
+
+<h2 class="s5-h">Rules</h2>
+<p>The rulebook is being updated and will be posted before the draft. Three things are settled now.</p>
+
+<div class="s5-card">
+  <p class="s5-kicker">Locked In</p>
+  <div class="s5-rule"><i>OT</i><span><b>OT and double OT stay.</b> 30 minutes, then 45. Long games get harder to drag out.</span></div>
+  <div class="s5-rule"><i>2</i><span><b>Max 2 Infils unspecced per team.</b> Same as before.</span></div>
+  <div class="s5-rule"><i>👁</i><span><b>"No spectating allowed" is being disabled.</b> Every player can be spectated in every match. Nothing to hide.</span></div>
+</div>
+
+<h2 class="s5-h">CTFDL Fantasy</h2>
+<p>We're working to bring CTFDL Fantasy back this season. Fantasy scoring will use match stats plus crowd-sourced player ratings. That only works if the alias you register with is the alias you play with. <strong>Register with your in-game alias.</strong> If you don't, you won't exist in Fantasy.</p>
+
+<h2 class="s5-h">We Still Need People</h2>
+<p>Commentators. CTF[Event] personnel. Audio and video help for pre and post production. If you can do any of that and you can follow through, message me. Staff and some new leadership positions will be announced soon.</p>
+
+<div class="s5-card s5-final">
+  <p class="s5-kicker">Do This Now</p>
+  <h3 class="s5-title">Three things. Then we play.</h3>
+  <ol class="s5-steps">
+    <li><i>1</i><span><b>Register</b> at freeinf.org/league/register with your in-game alias. Deadline is Friday, October 2, 11:59 PM PT. While you're there, connect your Discord on your profile so the bot can drop you into your squad's channels after the draft.</span></li>
+    <li><i>2</i><span><b>Recruit.</b> Tell someone who hasn't logged in since the last season. Or the last decade.</span></li>
+    <li><i>3</i><span><b>Show up.</b> Be in the CTF Discord on Saturday, October 3 for Draft Night.</span></li>
+  </ol>
+  <div class="s5-hero-cta">
+    <a class="s5-btn" href="https://www.freeinf.org/league/register">Register Now</a>
+    <a class="s5-btn-ghost" href="https://discord.gg/2avPSyv">Join the CTF Discord</a>
+  </div>
+  <p class="s5-sig">See you on the field. — Zmn</p>
+</div>
+
+</div>

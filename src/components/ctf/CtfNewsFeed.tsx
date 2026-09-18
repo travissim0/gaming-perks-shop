@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { renderNewsContent, newsPlainText } from '@/lib/newsContent';
+import { renderNewsContent, newsPlainText, newsProseClass } from '@/lib/newsContent';
 
 interface Post {
   id: string;
@@ -119,7 +119,7 @@ export default function CtfNewsFeed({ limit = 4 }: { limit?: number }) {
               {open.subtitle && <p className="text-sm text-[#8B98B0] mt-0.5">{open.subtitle}</p>}
               <div className="relative mt-3">
                 <div
-                  className="rules-prose text-sm overflow-hidden transition-[max-height] duration-300"
+                  className={`${newsProseClass(open.content)} text-sm overflow-hidden transition-[max-height] duration-300`}
                   style={{ maxHeight: full ? 'none' : CLAMP_PX }}
                 >
                   {renderNewsContent(open.content)}

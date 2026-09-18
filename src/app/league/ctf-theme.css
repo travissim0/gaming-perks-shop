@@ -197,3 +197,39 @@
   color: var(--ctf-muted);
   margin: 0 0 0.75rem;
 }
+
+/* ---- Pasted-HTML news posts ------------------------------------------------
+   Base typography only, at low specificity (:where), so a post's own <style>
+   block wins on any tie. */
+.ctf-theme .news-html {
+  color: var(--ctf-text);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+:where(.ctf-theme .news-html p) { margin: 0 0 0.75rem; }
+:where(.ctf-theme .news-html strong, .ctf-theme .news-html b) { color: var(--ctf-text); font-weight: 600; }
+:where(.ctf-theme .news-html h1, .ctf-theme .news-html h2, .ctf-theme .news-html h3, .ctf-theme .news-html h4) {
+  font-family: var(--font-display), 'Barlow Condensed', Inter, sans-serif;
+  color: var(--ctf-text);
+  margin: 1.25rem 0 0.5rem;
+  line-height: 1.15;
+}
+:where(.ctf-theme .news-html h1) { font-size: 1.6rem; }
+:where(.ctf-theme .news-html h2) { font-size: 1.35rem; }
+:where(.ctf-theme .news-html h3) { font-size: 1.15rem; }
+:where(.ctf-theme .news-html h4) { font-size: 1rem; }
+:where(.ctf-theme .news-html ul, .ctf-theme .news-html ol) { margin: 0 0 0.75rem; padding-left: 1.5rem; }
+:where(.ctf-theme .news-html ul) { list-style: disc; }
+:where(.ctf-theme .news-html ol) { list-style: decimal; }
+:where(.ctf-theme .news-html li) { margin: 0 0 0.4rem; }
+:where(.ctf-theme .news-html a) { color: var(--ctf-accent); text-decoration: underline; }
+:where(.ctf-theme .news-html blockquote) {
+  border-left: 3px solid var(--ctf-accent);
+  padding-left: 0.85rem;
+  color: var(--ctf-muted);
+  margin: 0 0 0.75rem;
+}
+:where(.ctf-theme .news-html img) { max-width: 100%; height: auto; border-radius: 8px; }
+:where(.ctf-theme .news-html table) { width: 100%; border-collapse: collapse; }
+:where(.ctf-theme .news-html th, .ctf-theme .news-html td) { text-align: left; padding: 0.4rem 0.5rem; vertical-align: top; }
+:where(.ctf-theme .news-html hr) { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); margin: 1rem 0; }

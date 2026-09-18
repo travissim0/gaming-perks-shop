@@ -55,6 +55,17 @@ function block(node: any, key: number): React.ReactNode {
   }
 }
 
+/**
+ * Wrapper class for a post body on CTF pages: editor documents get the
+ * `rules-prose` typography; pasted HTML gets `news-html`, whose base styles
+ * are low-specificity so the post's own `<style>` wins.
+ */
+export function newsProseClass(content: any): 'rules-prose' | 'news-html' {
+  if (typeof content !== 'string') return 'rules-prose';
+  const t = content.trim();
+  return t.startsWith('{') || !/<[a-z][\s\S]*>/i.test(t) ? 'rules-prose' : 'news-html';
+}
+
 export function renderNewsContent(content: any): React.ReactNode {
   if (!content) return null;
   if (typeof content === 'string') {
@@ -100,7 +111,7 @@ export function newsPlainText(content: any, max = 240): string {
   if (typeof content === 'string') {
     const t = content.trim();
     if (t.startsWith('{')) { try { walk(JSON.parse(t)); } catch { parts.push(t); } }
-    else parts.push(t.replace(/<[^>]+>/g, ' '));
+    else parts.push(t.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&middot;/g, '·').replace(/&ndash;/g, '–').replace(/&mdash;/g, '—').replace(/&amp;/g, '&'));
   } else walk(content);
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
