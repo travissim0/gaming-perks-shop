@@ -24,6 +24,7 @@ import {
 } from '@/lib/leagues';
 import { playoffRoundLabel, type TeamRef } from '@/lib/schedule';
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
+import FsProposals from '@/components/ctf/FsProposals';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
 
@@ -150,21 +151,25 @@ function SchedulePage() {
   const phase = league ? seasonPhase(league, season, status, { draftDone }) : null;
   const now = Date.now();
   const isDone = (f: Fixture) => !!f.result || f.status === 'completed';
-  const visible = fixtures.filter((f) => (filter === 'all' ? true : filter === 'results' ? isDone(f) : !isDone(f)));
+  // Pending FS proposals live in the Free scheduled box, not the fixture list.
+  const listed = fixtures.filter((f) => !(f.stage === 'fs' && f.fs_status === 'pending'));
+  const visible = listed.filter((f) => (filter === 'all' ? true : filter === 'results' ? isDone(f) : !isDone(f)));
   const myNext = fixtures.find((f) => !isDone(f) && ((f.squad_a_id && mySquads.has(f.squad_a_id)) || (f.squad_b_id && mySquads.has(f.squad_b_id))));
 
   // Group: regular by week, playoffs by round.
   const groups = useMemo(() => {
     const map = new Map<string, { label: string; sub: string; items: Fixture[]; order: number }>();
     for (const f of visible) {
-      const key = f.stage === 'playoff' ? `p${f.playoff_round || 1}` : `w${f.week || 0}`;
+      const key = f.stage === 'playoff' ? `p${f.playoff_round || 1}` : f.stage === 'fs' ? `fs${f.fs_week_start || f.scheduled_at.slice(0, 10)}` : `w${f.week || 0}`;
       if (!map.has(key)) {
         const inRound = fixtures.filter((x) => x.stage === 'playoff' && x.playoff_round === f.playoff_round).length * 2;
+        // FS groups sort by their Mon–Sun week, between the RS weeks around them.
+        const fsOrder = f.fs_week_start ? 500 + new Date(f.fs_week_start).getTime() / 8.64e7 / 1e6 : 500;
         map.set(key, {
-          label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : `Week ${f.week ?? '–'}`,
-          sub: dayLabel(f.scheduled_at),
+          label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : f.stage === 'fs' ? `Free scheduled · week of ${dayLabel(f.fs_week_start ? `${f.fs_week_start}T12:00:00` : f.scheduled_at)}` : `Week ${f.week ?? '–'}`,
+          sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : dayLabel(f.scheduled_at),
           items: [],
-          order: f.stage === 'playoff' ? 1000 + (f.playoff_round || 1) : f.week || 0,
+          order: f.stage === 'playoff' ? 1000 + (f.playoff_round || 1) : f.stage === 'fs' ? fsOrder : f.week || 0,
         });
       }
       map.get(key)!.items.push(f);
@@ -173,9 +178,9 @@ function SchedulePage() {
   }, [visible, fixtures]);
 
   const counts = {
-    upcoming: fixtures.filter((f) => !isDone(f)).length,
-    results: fixtures.filter(isDone).length,
-    all: fixtures.length,
+    upcoming: listed.filter((f) => !isDone(f)).length,
+    results: listed.filter(isDone).length,
+    all: listed.length,
   };
 
   // ── Render ──────────────────────────────────────────────────────────
@@ -243,6 +248,11 @@ function SchedulePage() {
           ) : (
             <ScheduleStaffTools league={league} season={season} teams={teams} fixtures={fixtures} standings={standings} onChanged={refresh} />
           )
+        )}
+
+        {/* Free-scheduled matches: captains propose, the other side accepts */}
+        {league && season && !pendingSql && league.data_source !== 'ctfpl' && user && (
+          <FsProposals league={league} season={season} teams={teams} fixtures={fixtures} mySquads={mySquads} isStaff={isStaff} onChanged={refresh} />
         )}
 
         {/* Your next match */}
@@ -313,6 +323,7 @@ function SchedulePage() {
                         <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums">
                           <div>{dayLabel(f.scheduled_at)}</div>
                           <div className="text-[#E6EDF7]">{timeLabel(f.scheduled_at)}</div>
+                          {f.stage === 'fs' && <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>}
                         </div>
                         <Link href={f.squad_a_id ? `/squads/${f.squad_a_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${aWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
                           <span className="min-w-0">

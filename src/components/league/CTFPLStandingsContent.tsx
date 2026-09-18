@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Crown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { normalizeRules, describeRules } from '@/lib/scoring';
 import {
   getSeasonDraft,
   formatDateOnly,
@@ -38,6 +39,13 @@ interface Standing {
   squad_tag: string | null;
   banner_url?: string | null;
   captain_alias: string | null;
+  // Points-scoring seasons (add-season-scoring.sql)
+  rs_wins?: number;
+  rs_losses?: number;
+  fs_wins?: number;
+  fs_losses?: number;
+  forfeits?: number;
+  avg_rs_win_minutes?: number | null;
 }
 
 interface Season {
@@ -49,6 +57,7 @@ interface Season {
   end_date: string | null;
   champion_squad_ids?: string[];
   runner_up_squad_ids?: string[];
+  scoring_rules?: unknown;
 }
 
 interface MatchRow {
@@ -246,7 +255,11 @@ export function CTFPLStandingsContent({
   };
 
   const hasStandings = standings.length > 0;
-  const scoring = SCORING[league.slug];
+  // Generic leagues carry their rules on the season; CTFPL keeps the confirmed wording.
+  const rules = !isCTFPL && season ? normalizeRules(season.scoring_rules) : null;
+  const pointsMode = !!rules && rules.preset === 'points';
+  const scoring = isCTFPL ? SCORING[league.slug] : rules ? describeRules(rules) : undefined;
+  const playoffLine = pointsMode ? rules!.playoff_spots : 0;
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -396,12 +409,23 @@ export function CTFPLStandingsContent({
                   <th className="text-left font-normal px-2 py-2">Team</th>
                   <th className="text-left font-normal px-2 py-2 hidden md:table-cell">Captain</th>
                   <th className="text-center font-normal px-2 py-2">MP</th>
-                  <th className="text-center font-normal px-2 py-2">W</th>
-                  <th className="text-center font-normal px-2 py-2">L</th>
-                  {isCTFPL && <th className="text-center font-normal px-2 py-2">NS</th>}
-                  {isCTFPL && <th className="text-center font-normal px-2 py-2">RW</th>}
-                  {isCTFPL && <th className="text-center font-normal px-2 py-2">OTW</th>}
-                  <th className="text-center font-normal px-2 py-2">Win %</th>
+                  {pointsMode ? (
+                    <>
+                      <th className="text-center font-normal px-2 py-2" title="Regular season record">RS</th>
+                      <th className="text-center font-normal px-2 py-2" title="Free-scheduled record">FS</th>
+                      <th className="text-center font-normal px-2 py-2" title="Forfeits">FF</th>
+                      <th className="text-center font-normal px-2 py-2 hidden md:table-cell" title="Average RS win time">Avg win</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="text-center font-normal px-2 py-2">W</th>
+                      <th className="text-center font-normal px-2 py-2">L</th>
+                      {isCTFPL && <th className="text-center font-normal px-2 py-2">NS</th>}
+                      {isCTFPL && <th className="text-center font-normal px-2 py-2">RW</th>}
+                      {isCTFPL && <th className="text-center font-normal px-2 py-2">OTW</th>}
+                      <th className="text-center font-normal px-2 py-2">Win %</th>
+                    </>
+                  )}
                   <th className="text-right font-normal px-2 py-2">Pts</th>
                   {isCTFPL && <th className="text-right font-normal px-2 py-2">K/D</th>}
                   <th className="text-left font-normal px-4 py-2">Form</th>
@@ -411,8 +435,9 @@ export function CTFPLStandingsContent({
                 {standings.map((s) => {
                   const playedAny = s.matches_played > 0;
                   const f = form.get(s.squad_name) || [];
+                  const onLine = playoffLine > 0 && playedAny && s.rank === playoffLine && standings.some((o) => o.rank === playoffLine + 1);
                   return (
-                    <tr key={s.id} className="border-t border-white/[0.06] hover:bg-white/[0.03]">
+                    <tr key={s.id} className={`border-t border-white/[0.06] hover:bg-white/[0.03] ${onLine ? 'border-b-2 border-b-[#F59E0B]/50' : ''}`} title={onLine ? `Top ${playoffLine} make the playoffs` : undefined}>
                       <td className="px-4 py-2.5">
                         <span
                           className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-medium tabular-nums ${
@@ -439,12 +464,23 @@ export function CTFPLStandingsContent({
                       </td>
                       <td className="px-2 py-2.5 text-[#8B98B0] hidden md:table-cell truncate max-w-[140px]">{s.captain_alias || '—'}</td>
                       <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.matches_played}</td>
-                      <td className="px-2 py-2.5 text-center tabular-nums text-[#34D399]">{s.wins}</td>
-                      <td className="px-2 py-2.5 text-center tabular-nums text-[#F87171]">{s.losses}</td>
-                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#F59E0B]">{s.no_shows}</td>}
-                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.regulation_wins}</td>}
-                      {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.overtime_wins}</td>}
-                      <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{playedAny ? `${Math.round(s.win_percentage)}%` : '–'}</td>
+                      {pointsMode ? (
+                        <>
+                          <td className="px-2 py-2.5 text-center tabular-nums whitespace-nowrap"><span className="text-[#34D399]">{s.rs_wins ?? 0}</span><span className="text-white/20">-</span><span className="text-[#F87171]">{s.rs_losses ?? 0}</span></td>
+                          <td className="px-2 py-2.5 text-center tabular-nums whitespace-nowrap text-[#8B98B0]">{(s.fs_wins ?? 0) + (s.fs_losses ?? 0) > 0 ? `${s.fs_wins ?? 0}-${s.fs_losses ?? 0}` : '–'}</td>
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[#F59E0B]">{s.forfeits ?? 0}</td>
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[#8B98B0] hidden md:table-cell">{s.avg_rs_win_minutes != null ? `${Math.round(s.avg_rs_win_minutes)} min` : '–'}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[#34D399]">{s.wins}</td>
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[#F87171]">{s.losses}</td>
+                          {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#F59E0B]">{s.no_shows}</td>}
+                          {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.regulation_wins}</td>}
+                          {isCTFPL && <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{s.overtime_wins}</td>}
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[#E6EDF7]">{playedAny ? `${Math.round(s.win_percentage)}%` : '–'}</td>
+                        </>
+                      )}
                       <td className="px-2 py-2.5 text-right tabular-nums">
                         <span className="text-[#F59E0B] font-medium">{s.points}</span>
                         {s.points_behind > 0 && <span className="text-[11px] text-[#8B98B0] ml-1">−{s.points_behind}</span>}
@@ -534,9 +570,11 @@ export function CTFPLStandingsContent({
           <div className="rounded-xl bg-[#131A2B] px-4 py-3">
             <div className="text-[11px] uppercase tracking-wide mb-1.5">Columns</div>
             <p>
-              MP matches played · W wins · L losses
-              {isCTFPL && ' · NS no-shows · RW regulation wins · OTW overtime wins · K/D kill/death difference'}
+              {pointsMode
+                ? 'MP matches played · RS regular-season record · FS free-scheduled record · FF forfeits · Avg win average length of RS wins'
+                : `MP matches played · W wins · L losses${isCTFPL ? ' · NS no-shows · RW regulation wins · OTW overtime wins · K/D kill/death difference' : ''}`}
               {' · Form last five results, oldest first'}
+              {playoffLine > 0 && ` · the line marks the top ${playoffLine}, who make the playoffs`}
             </p>
           </div>
           {scoring && (

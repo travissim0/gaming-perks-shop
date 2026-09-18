@@ -27,8 +27,12 @@ const supabaseAdmin = createClient(
 export interface Fixture {
   id: string;
   week: number | null;
-  stage: 'regular' | 'playoff';
+  stage: 'regular' | 'playoff' | 'fs';
   playoff_round: number | null;
+  /** Free-scheduled only: pending (awaiting the other captain), accepted, declined, cancelled. */
+  fs_status: 'pending' | 'accepted' | 'declined' | 'cancelled' | null;
+  proposed_by: string | null;
+  fs_week_start: string | null;
   scheduled_at: string;
   status: string;
   title: string;
@@ -75,17 +79,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'league and season are required' }, { status: 400 });
   }
 
-  const { data: rows, error } = await supabaseAdmin
-    .from('matches')
-    .select(`
+  const base = `
       id, title, week, stage, playoff_round, scheduled_at, status, squad_a_id, squad_b_id, game_id, vod_url,
       squad_a:squads!matches_squad_a_id_fkey(name, tag),
       squad_b:squads!matches_squad_b_id_fkey(name, tag),
-      match_participants(role, profiles!match_participants_player_id_fkey(in_game_alias))
-    `)
-    .eq('league_slug', league)
-    .eq('season_number', season)
-    .order('scheduled_at', { ascending: true });
+      match_participants(role, profiles!match_participants_player_id_fkey(in_game_alias))`;
+  const query = (cols: string) =>
+    supabaseAdmin.from('matches').select(cols).eq('league_slug', league).eq('season_number', season).order('scheduled_at', { ascending: true });
+  // FS columns arrive with add-season-scoring.sql; fall back without them.
+  let { data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start`);
+  if (error && /fs_status|proposed_by|fs_week_start/.test(error.message)) ({ data: rows, error } = await query(base));
   if (error) {
     // Columns missing until add-league-schedule.sql runs → empty schedule, not a crash.
     if (/column .*does not exist/i.test(error.message)) return NextResponse.json({ fixtures: [], pending_sql: true });
@@ -139,11 +142,17 @@ export async function GET(request: NextRequest) {
     };
   };
 
-  const fixtures: Fixture[] = (rows || []).map((m: any) => ({
+  const fixtures: Fixture[] = ((rows || []) as any[])
+    // Declined/cancelled FS proposals are history, not fixtures.
+    .filter((m: any) => !(m.stage === 'fs' && (m.fs_status === 'declined' || m.fs_status === 'cancelled')))
+    .map((m: any) => ({
     id: m.id,
     week: m.week ?? null,
-    stage: m.stage === 'playoff' ? 'playoff' : 'regular',
+    stage: m.stage === 'playoff' ? 'playoff' : m.stage === 'fs' ? 'fs' : 'regular',
     playoff_round: m.playoff_round ?? null,
+    fs_status: m.stage === 'fs' ? (m.fs_status ?? 'accepted') : null,
+    proposed_by: m.proposed_by ?? null,
+    fs_week_start: m.fs_week_start ?? null,
     scheduled_at: m.scheduled_at,
     status: m.status,
     title: m.title,

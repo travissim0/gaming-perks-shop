@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { winTypeFromMinutes, type MatchKind, type WinType } from '@/lib/scoring';
+import { loadSeasonRules, rebuildStandings } from '@/lib/standings-server';
+import { fsCapCheck } from '@/lib/fs-server';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -161,6 +164,11 @@ export async function POST(request: NextRequest) {
       match_type,
       match_length,
       mvp,
+      // Season scoring (add-season-scoring.sql): RS/FS, how the win happened, ref/recording present, linked fixture.
+      match_kind: matchKindRaw,
+      win_type: winTypeRaw,
+      verified: verifiedRaw,
+      fixture_id: fixtureId,
     } = body;
 
     // Validate required fields
@@ -246,6 +254,8 @@ export async function POST(request: NextRequest) {
     // league_season_id so CTFDL/OVDL history never lands in CTFPL's table.
     let match: Record<string, unknown> | null = null;
     let matchError: { message: string } | null = null;
+    let genericSeasonId: string | null = null;
+    let scoringNote: string | null = null;
     if (leagueSlug === 'ctfpl') {
       const res = await supabaseAdmin.from('ctfpl_matches').insert(matchInsert).select().single();
       match = res.data;
@@ -258,11 +268,39 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      const res = await supabaseAdmin
-        .from('league_matches')
-        .insert({ ...matchInsert, league_season_id: leagueSeasonId })
-        .select()
-        .single();
+      genericSeasonId = leagueSeasonId;
+
+      // Scoring fields. Only applied when the season has the new columns (add-season-scoring.sql).
+      const rules = await loadSeasonRules(leagueSeasonId);
+      const matchKind: MatchKind = matchKindRaw === 'fs' ? 'fs' : 'rs';
+      const isSeasonMatch = (match_type || 'Season') === 'Season';
+      const forfeit = !!squad_a_no_show || !!squad_b_no_show;
+      const winType: WinType | null =
+        winTypeRaw === 'regulation' || winTypeRaw === 'ot' || winTypeRaw === '2ot'
+          ? winTypeRaw
+          : is_overtime ? 'ot' : winTypeFromMinutes(rules, gameLengthMinutes);
+      const verified = !!verifiedRaw;
+
+      if (matchKind === 'fs' && isSeasonMatch) {
+        if (!rules.fs.enabled) return NextResponse.json({ error: 'This season does not use free-scheduled matches' }, { status: 400 });
+        if (rules.fs.needs_verification && !verified) return NextResponse.json({ error: 'An FS match only counts with a referee or a recording. Tick "Ref or recording" to confirm.' }, { status: 400 });
+        const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null);
+        if (cap) return NextResponse.json({ error: cap }, { status: 409 });
+        if (forfeit && rules.fs.forfeit_no_contest) scoringNote = 'Forfeited FS recorded as a no-contest: neither squad scores.';
+      }
+
+      const scoringCols: Record<string, unknown> = {
+        match_kind: matchKind,
+        win_type: forfeit ? null : winType,
+        no_contest: matchKind === 'fs' && forfeit && rules.fs.forfeit_no_contest,
+        verified,
+        fixture_id: fixtureId || null,
+      };
+      let res = await supabaseAdmin.from('league_matches').insert({ ...matchInsert, league_season_id: leagueSeasonId, ...scoringCols }).select().single();
+      if (res.error && /column .*does not exist/i.test(res.error.message)) {
+        // Schema not migrated yet — record without the scoring columns.
+        res = await supabaseAdmin.from('league_matches').insert({ ...matchInsert, league_season_id: leagueSeasonId }).select().single();
+      }
       match = res.data;
       matchError = res.error;
     }
@@ -294,43 +332,12 @@ export async function POST(request: NextRequest) {
         p_team2_kills: parseInt(squad_b_score) || 0,
       });
       standingsError = result.error;
-    } else {
-      // For non-CTFPL leagues, find league_season_id and use update_league_standings
-      const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
-      const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
-      const { data: leagueData } = await supabaseAdmin
-        .from('leagues')
-        .select('id')
-        .eq('slug', leagueSlug)
-        .single();
-
-      if (leagueData) {
-        const { data: leagueSeason } = await supabaseAdmin
-          .from('league_seasons')
-          .select('id')
-          .eq('league_id', leagueData.id)
-          .eq('season_number', parseInt(season_number))
-          .single();
-
-        if (leagueSeason) {
-          const result = await supabaseAdmin.rpc('update_league_standings', {
-            p_league_season_id: leagueSeason.id,
-            p_team1_squad_id: resolvedSquadAId,
-            p_team2_squad_id: resolvedSquadBId,
-            p_team1_result: rpcTeam1Result,
-            p_team2_result: rpcTeam2Result,
-            p_team1_overtime: is_overtime && rpcTeam1Result === 'win' ? true : false,
-            p_team2_overtime: is_overtime && rpcTeam2Result === 'win' ? true : false,
-            p_team1_kills: parseInt(squad_a_score) || 0,
-            p_team2_kills: parseInt(squad_b_score) || 0,
-          });
-          standingsError = result.error;
-        } else {
-          standingsError = { message: `No season found for ${leagueSlug} season ${season_number}` };
-        }
-      } else {
-        standingsError = { message: `League '${leagueSlug}' not found` };
-      }
+    } else if (genericSeasonId) {
+      // Generic leagues: rebuild the whole table from league_matches under the
+      // season's scoring rules (classic 3/1/0 when none are set). Re-runnable, so
+      // corrections and rule changes never leave stale counters behind.
+      const rebuilt = await rebuildStandings(genericSeasonId);
+      standingsError = rebuilt.error ? { message: rebuilt.error } : null;
     }
 
     if (standingsError) {
@@ -377,6 +384,7 @@ export async function POST(request: NextRequest) {
       match,
       game_id: gameId,
       standings_updated: shouldUpdateStandings,
+      scoring_note: scoringNote,
       stats_inserted: statsInserted,
     });
   } catch (error) {

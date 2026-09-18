@@ -375,7 +375,7 @@ export default function MatchDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.league_slug ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>
-                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ' · Playoffs' : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
+                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ' · Playoffs' : match.stage === 'fs' ? ' · Free scheduled' : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
               </span>
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium inline-flex items-center gap-1 ${statusPill.cls}`}>
                 {live && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}

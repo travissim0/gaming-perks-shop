@@ -26,6 +26,7 @@ import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 import GameClientPanel from '@/components/admin/GameClientPanel';
+import ScoringRulesPanel from '@/components/admin/ScoringRulesPanel';
 
 interface Squad {
   id: string;
@@ -945,6 +946,7 @@ export default function CTFManagementPage() {
       {activeTab === 'season' && (
         <>
           <SeasonSettingsPanel />
+          <ScoringRulesPanel />
           <GameClientPanel />
           {rollover && (
             <Panel

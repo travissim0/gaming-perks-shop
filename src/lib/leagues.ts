@@ -41,6 +41,8 @@ export interface LeagueSeason {
   registration_closes_on?: string | null;
   draft_on?: string | null;
   playoffs_start_on?: string | null;
+  /** Per-season scoring (add-season-scoring.sql). Null = classic 3/1/0. Generic leagues only. */
+  scoring_rules?: unknown;
 }
 
 export interface StandingRow {
@@ -117,7 +119,9 @@ export const seasonTable = (league: LeagueInfo) =>
  * milestone dates when the columns exist and falls back to the basic set.
  */
 async function fetchSeason(league: LeagueInfo, status?: string): Promise<LeagueSeason | null> {
-  for (const cols of [SEASON_DATE_COLS, SEASON_COLS]) {
+  // scoring_rules exists on league_seasons only (add-season-scoring.sql); try richest first.
+  const attempts = league.data_source === 'ctfpl' ? [SEASON_DATE_COLS, SEASON_COLS] : [`${SEASON_DATE_COLS}, scoring_rules`, SEASON_DATE_COLS, SEASON_COLS];
+  for (const cols of attempts) {
     let q = supabase.from(seasonTable(league)).select(cols);
     if (league.data_source !== 'ctfpl') q = q.eq('league_id', league.id);
     if (status) q = q.eq('status', status);

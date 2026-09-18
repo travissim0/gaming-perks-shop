@@ -10,6 +10,7 @@ import { parseCSV, processPlayerStats, validatePlayerStats, ProcessedPlayerStat 
 import { toast } from 'react-hot-toast';
 import { AlertCircle, CheckCircle, Loader2, ChevronDown } from 'lucide-react';
 import { Chip, Panel, Spinner, Empty, StaffShell, HeaderStrip, th, td } from '@/components/ctf/AdminBits';
+import { CLASSIC_RULES, normalizeRules, winTypeFromMinutes, type ScoringRules } from '@/lib/scoring';
 import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
 interface League { id: string; slug: string; name: string }
@@ -48,7 +49,8 @@ interface StandingRow {
 interface Fixture {
   id: string;
   week: number | null;
-  stage: 'regular' | 'playoff';
+  stage: 'regular' | 'playoff' | 'fs';
+  fs_status?: string | null;
   playoff_round: number | null;
   scheduled_at: string;
   title: string;
@@ -108,6 +110,11 @@ export default function MatchManagerPage() {
   const [mvp, setMvp] = useState('');
   const [existingGameId, setExistingGameId] = useState('');
   const [fromFixture, setFromFixture] = useState<Fixture | null>(null);
+  // Season scoring (add-season-scoring.sql)
+  const [matchKind, setMatchKind] = useState<'rs' | 'fs'>('rs');
+  const [winType, setWinType] = useState<'regulation' | 'ot' | '2ot' | ''>('');
+  const [verified, setVerified] = useState(false);
+  const [rules, setRules] = useState<ScoringRules>(CLASSIC_RULES);
 
   // Squad search
   const [squadASearch, setSquadASearch] = useState('');
@@ -177,6 +184,15 @@ export default function MatchManagerPage() {
     })();
   }, [selectedLeague, leagues]);
 
+  // Scoring rules for the selected season (generic leagues only).
+  useEffect(() => {
+    (async () => {
+      if (!selectedSeason || selectedLeague === 'ctfpl') { setRules(CLASSIC_RULES); return; }
+      const { data } = await supabase.from('league_seasons').select('scoring_rules').eq('id', selectedSeason.id).maybeSingle();
+      setRules(normalizeRules((data as any)?.scoring_rules));
+    })();
+  }, [selectedSeason, selectedLeague]);
+
   // Squads
   useEffect(() => {
     (async () => {
@@ -231,7 +247,9 @@ export default function MatchManagerPage() {
   };
 
   const pendingFixtures = useMemo(
-    () => fixtures.filter((f) => !f.result && f.squad_a_name && f.squad_b_name).sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
+    () => fixtures
+      .filter((f) => !f.result && f.squad_a_name && f.squad_b_name && !(f.stage === 'fs' && f.fs_status === 'pending'))
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
     [fixtures],
   );
 
@@ -243,6 +261,7 @@ export default function MatchManagerPage() {
     setPlayedAt(localDate(f.scheduled_at));
     setMatchTitle(f.title && !f.title.includes(' vs ') ? f.title : '');
     setMatchType(f.stage === 'playoff' ? 'Playoffs' : 'Season');
+    setMatchKind(f.stage === 'fs' ? 'fs' : 'rs');
     if (f.game_id) setExistingGameId(f.game_id);
     setFromFixture(f);
     setMessage(null);
@@ -286,6 +305,7 @@ export default function MatchManagerPage() {
     setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
     setPlayedAt(new Date().toISOString().split('T')[0]);
     setFromFixture(null);
+    setMatchKind('rs'); setWinType(''); setVerified(false);
   };
 
   const handleSubmit = async () => {
@@ -323,6 +343,11 @@ export default function MatchManagerPage() {
         match_length: matchLength || undefined,
         mvp: mvp || undefined,
         game_id: existingGameId || undefined,
+        // Season scoring
+        match_kind: matchKind,
+        win_type: winType || undefined,
+        verified,
+        fixture_id: fromFixture?.id || undefined,
       };
       if (csvPreview.length > 0) body.player_stats = csvPreview;
 
@@ -340,6 +365,7 @@ export default function MatchManagerPage() {
 
       const parts = ['Match recorded.'];
       if (data.standings_updated) parts.push('Standings updated.');
+      if (data.scoring_note) parts.push(data.scoring_note);
       if (data.stats_inserted > 0) parts.push(`${data.stats_inserted} player stats imported.`);
       if (data.warning) parts.push(`Warning: ${data.warning}`);
       setMessage({ type: 'success', text: parts.join(' ') });
@@ -361,6 +387,10 @@ export default function MatchManagerPage() {
   }
 
   const seasonLabel = selectedSeason ? `Season ${selectedSeason.season_number}${selectedSeason.season_name ? ` · ${selectedSeason.season_name}` : ''}` : 'No season';
+  const pointsMode = selectedLeague !== 'ctfpl' && rules.preset === 'points';
+  const lengthMinutes = matchLength.includes(':') ? Number(matchLength.split(':')[0]) + (Number(matchLength.split(':')[1]) || 0) / 60 : parseFloat(matchLength);
+  const suggestedWin = pointsMode ? winTypeFromMinutes(rules, Number.isNaN(lengthMinutes) ? null : lengthMinutes) : null;
+  const WIN_LABEL: Record<'regulation' | 'ot' | '2ot', string> = { regulation: `Under ${rules.ot_minutes}`, ot: `OT ${rules.ot_minutes}–${rules.ot2_minutes}`, '2ot': `2OT ${rules.ot2_minutes}+` };
   const leagueName = selectedLeague === 'ctfpl' ? 'CTFPL' : leagues.find((l) => l.slug === selectedLeague)?.name || selectedLeague.toUpperCase();
   const canSubmit = !submitting && !!squadAName && !!squadBName && squadAScore !== '' && squadBScore !== '';
 
@@ -459,7 +489,7 @@ export default function MatchManagerPage() {
                     {when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                     {past ? '' : <span className="ml-1 text-[#F59E0B]">upcoming</span>}
                   </span>
-                  <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[#8B98B0]">{f.stage === 'playoff' ? 'Playoffs' : f.week ? `Week ${f.week}` : ''}</span>
+                  <span className={`w-16 shrink-0 text-[11px] uppercase tracking-wide ${f.stage === 'fs' ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>{f.stage === 'playoff' ? 'Playoffs' : f.stage === 'fs' ? 'FS' : f.week ? `Week ${f.week}` : ''}</span>
                   <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">
                     {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {f.squad_b_name}
                   </span>
@@ -509,10 +539,36 @@ export default function MatchManagerPage() {
                 ))}
               </div>
             </div>
-            <div>
-              <label className={labelCls}>Flags</label>
-              <Chip active={isOvertime} onClick={() => setIsOvertime(!isOvertime)}>Overtime</Chip>
-            </div>
+            {pointsMode ? (
+              <>
+                <div>
+                  <label className={labelCls}>Kind</label>
+                  <div className="flex gap-1.5">
+                    <Chip active={matchKind === 'rs'} onClick={() => setMatchKind('rs')} title="Regular season: the official schedule">RS</Chip>
+                    <Chip active={matchKind === 'fs'} onClick={() => setMatchKind('fs')} title="Free scheduled: captain-agreed extra match" disabled={!rules.fs.enabled}>FS</Chip>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Win type{suggestedWin && !winType ? <span className="ml-1 normal-case tracking-normal text-[#8B98B0]/70">suggested: {WIN_LABEL[suggestedWin]}</span> : null}</label>
+                  <div className="flex gap-1.5">
+                    {(['regulation', 'ot', '2ot'] as const).map((w) => (
+                      <Chip key={w} active={(winType || suggestedWin) === w} onClick={() => setWinType(w)}>{WIN_LABEL[w]}</Chip>
+                    ))}
+                  </div>
+                </div>
+                {matchKind === 'fs' && (
+                  <div>
+                    <label className={labelCls}>FS</label>
+                    <Chip active={verified} tone="warn" onClick={() => setVerified(!verified)} title="An FS match only counts with a referee present or a recording">Ref or recording</Chip>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div>
+                <label className={labelCls}>Flags</label>
+                <Chip active={isOvertime} onClick={() => setIsOvertime(!isOvertime)}>Overtime</Chip>
+              </div>
+            )}
             <label className="block">
               <span className={labelCls}>Date played</span>
               <input type="date" value={playedAt} onChange={(e) => setPlayedAt(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />

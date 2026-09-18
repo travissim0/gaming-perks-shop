@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { normalizeRules } from '@/lib/scoring';
+import { rebuildStandings } from '@/lib/standings-server';
 
 /**
  * Staff-only season/league settings used by the /league hero.
@@ -73,6 +75,19 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true, discord_url: url || null });
+  }
+
+  // Per-season scoring rules (generic leagues only). Saving rebuilds the standings under the new rules.
+  if (body.action === 'scoring_rules') {
+    if (league.data_source === 'ctfpl') return NextResponse.json({ error: 'CTFPL keeps its own scoring' }, { status: 400 });
+    const seasonId = typeof body.season_id === 'string' ? body.season_id : null;
+    if (!seasonId) return NextResponse.json({ error: 'season_id required' }, { status: 400 });
+    const rules = body.rules === null ? null : normalizeRules(body.rules);
+    const { data, error } = await supabaseAdmin.from('league_seasons').update({ scoring_rules: rules }).eq('id', seasonId).eq('league_id', league.id).select('id').maybeSingle();
+    if (error) return NextResponse.json({ error: /scoring_rules/.test(error.message) ? 'Run add-season-scoring.sql in Supabase first' : error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: 'Season not found for this league' }, { status: 404 });
+    const rebuilt = await rebuildStandings(seasonId);
+    return NextResponse.json({ ok: true, rules, rebuilt: rebuilt.rows, rebuild_error: rebuilt.error });
   }
 
   if (body.action === 'season_dates') {
