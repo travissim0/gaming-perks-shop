@@ -227,23 +227,30 @@ export default function MatchDetailPage() {
   };
 
   // ── Actions ─────────────────────────────────────────────────────────
+  // Sign-ups go through the server so the person gets a Discord confirmation.
+  const crewSelf = async (action: 'join' | 'leave', role: Role) => {
+    const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/crew`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ action, role }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Request failed');
+  };
   const join = async (role: Role) => {
     if (!user || !match) return;
     if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator role required' : 'Referee role required'); return; }
     setBusy(role);
     try {
-      const { error } = await supabase.from('match_participants').insert({ match_id: match.id, player_id: user.id, role });
-      if (error) throw error;
-      toast.success(`Signed up as ${role === 'recording' ? 'recorder' : role}`);
+      await crewSelf('join', role);
+      toast.success(`Signed up as ${role === 'recording' ? 'recorder' : role}. Confirmation sent to your Discord.`);
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not join'); } finally { setBusy(null); }
   };
   const leave = async (p: Participant) => {
     setBusy(p.id);
     try {
-      const { error, count } = await supabase.from('match_participants').delete({ count: 'exact' }).eq('id', p.id);
-      if (error) throw error;
-      if (!count) { toast.error('Could not leave that role'); return; }
+      await crewSelf('leave', p.role);
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not leave'); } finally { setBusy(null); }
   };

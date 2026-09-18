@@ -129,6 +129,24 @@ export async function finishCommand(id: string, result: string) {
   await db.from('discord_bot_commands').update({ done_at: new Date().toISOString(), result }).eq('id', id);
 }
 
+/** Outbound notices queued by the site (add-discord-notices.sql). */
+export interface BotNotice { id: string; user_id: string | null; channel: 'referee' | 'staff' | null; kind: string; payload: Record<string, any> }
+
+export async function pendingNotices(): Promise<BotNotice[]> {
+  const { data, error } = await db.from('discord_bot_notices').select('id, user_id, channel, kind, payload').is('sent_at', null).order('created_at').limit(50);
+  if (error) { if (!/does not exist/i.test(error.message)) console.error('notices read failed:', error.message); return []; }
+  return (data || []) as BotNotice[];
+}
+
+export async function finishNotice(id: string, error: string | null) {
+  await db.from('discord_bot_notices').update({ sent_at: new Date().toISOString(), error }).eq('id', id);
+}
+
+export async function discordIdFor(userId: string): Promise<string | null> {
+  const { data } = await db.from('profiles').select('discord_id').eq('id', userId).maybeSingle();
+  return (data as any)?.discord_id || null;
+}
+
 export async function writeState(patch: Record<string, unknown>) {
   const { error } = await db.from('discord_bot_state').upsert({ id: 1, ...patch, updated_at: new Date().toISOString() });
   if (error) console.error(`could not write discord_bot_state: ${error.message}`);

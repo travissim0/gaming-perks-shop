@@ -4,6 +4,7 @@ import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
 import { postStaff } from './discord.js';
 import { onInteraction, registerRolePickerCommand } from './rolepicker.js';
+import { deliverNotices } from './notices.js';
 
 /**
  * FreeInf CTF bot.
@@ -58,8 +59,11 @@ client.once('ready', async () => {
   await postStaff(guild, `**FreeInf CTF bot online** · ${first}`);
   setInterval(() => reconcile(guild!, 'scheduled'), config.syncIntervalMs);
   setInterval(runCommands, 20_000); // belt and braces if Realtime drops
+  await deliverNotices(client, guild);
+  setInterval(() => deliverNotices(client, guild!), 30_000);
 
   db.channel('freeinf-bot')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'discord_bot_notices' }, () => deliverNotices(client, guild!))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'squad_members' }, () => scheduleSync('roster change'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'squads' }, () => scheduleSync('squad change'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_draft_teams' }, () => scheduleSync('draft teams change'))
