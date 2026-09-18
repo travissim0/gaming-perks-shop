@@ -345,9 +345,9 @@ export default function LeagueHome() {
             for (const t of best.teams as any[]) {
               const name = String(t.name || t.side || 'Unknown');
               for (const p of (t.players || []) as any[]) {
-                const lower = name.toLowerCase();
-                const cls = lower === 'spec' || p.spec ? 'Spectator' : lower === 'np' ? 'Not Playing' : String(p.class || 'Unknown');
-                players.push({ alias: String(p.alias || '?'), team: name, class: cls, isOffense: false });
+                // Keep the real class; the 'np' / 'spec' team names drive the greyed treatment
+                // at the bottom of the list, same as the old feed.
+                players.push({ alias: String(p.alias || '?'), team: name, class: String(p.class || 'Unknown'), isOffense: false });
               }
             }
             setGameData({
