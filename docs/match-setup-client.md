@@ -39,6 +39,10 @@ Each squad gets two in-game teams named from its tag: `<TAG> T` and `<TAG> C`.
 Starters go on the team matching their side, unspecced. The bench sits in
 spec on the squad's other team name.
 
+Matches are **10v10**: the site refuses more than 10 starters per squad
+(`starters` in the response gives the number). A captain may submit fewer
+than 10; the client should still place whatever is listed.
+
 Example, KEVI home picking Titan:
 
 | Squad | Side | Starters on | Bench (spec) on |
@@ -59,6 +63,7 @@ Example, KEVI home picking Titan:
   },
   "away": { "…same shape…", "side": "collective", "team_starting": "NSS C", "team_bench": "NSS T" },
   "progress": { "side_picked": true, "home_lineup_set": true, "away_lineup_set": true, "ready": true },
+  "starters": 10,
   "client": {
     "ready": true,                                    // side picked and both starting lineups non-empty
     "teams": [ "KEVI T", "KEVI C", "NSS C", "NSS T" ], // create these four teams
@@ -98,7 +103,7 @@ client can treat a locked document as final.
 `POST` to the same URL with a signed-in user's Bearer token:
 
 - `{ "action": "set_side", "side": "titan" | "collective" | null }` — home captain/co-captain, or staff
-- `{ "action": "set_lineup", "squad_id": "…", "starting": [player_id…], "bench": [player_id…] }` — that squad's captain/co-captain, or staff
+- `{ "action": "set_lineup", "squad_id": "…", "starting": [player_id…], "bench": [player_id…] }` — that squad's captain/co-captain, or staff; at most 10 starters
 - `{ "action": "swap_home" }` — staff; the other team becomes home and the side is cleared
 
 Schema: `add-match-setup.sql` (`match_setup` and `match_lineups`, both RLS

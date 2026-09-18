@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  * GET  /api/matches/[id]/setup
  * POST /api/matches/[id]/setup  (Bearer)
  *   { action: 'set_side', side: 'titan' | 'collective' | null }   home captain/co-captain or staff
- *   { action: 'set_lineup', squad_id, starting: [player_id], bench: [player_id] }   that squad's captain/co-captain or staff
+ *   { action: 'set_lineup', squad_id, starting: [player_id], bench: [player_id] }   that squad's captain/co-captain or staff (max 10 starters)
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
  *
  * Home team = squad_a. Captains can edit until the scheduled time; staff always.
@@ -36,6 +36,8 @@ const supabaseAdmin = createClient(
 );
 
 type Side = 'titan' | 'collective';
+/** Starters per side: matches are 10v10 (John, 2026-09-17). Fewer is allowed, more is not. */
+const STARTERS = 10;
 const LETTER: Record<Side, 'T' | 'C'> = { titan: 'T', collective: 'C' };
 const OTHER: Record<Side, Side> = { titan: 'collective', collective: 'titan' };
 
@@ -174,6 +176,8 @@ function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, 
     away: teamBlock(away, side ? OTHER[side] : null, awayNames, seeAway),
     /** Public progress flags — no values. */
     progress: { side_picked: !!side, home_lineup_set: homeSet, away_lineup_set: awaySet, ready },
+    /** Starters per side (10v10). */
+    starters: STARTERS,
     side_chosen_at: seeSide ? setupRow?.side_chosen_at || null : null,
     /** When the home side becomes visible to the away squad and the public (5 min before the match). */
     side_reveal_at: sideRevealAt(match),
@@ -276,6 +280,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const bench: string[] = Array.isArray(body.bench) ? Array.from(new Set(body.bench.filter((p: string) => p && !starting.includes(p)))) : [];
     const roster = new Set(sq.members.map((m) => m.player_id));
     if ([...starting, ...bench].some((p) => !roster.has(p))) return NextResponse.json({ error: 'Everyone in the lineup must be on the squad roster' }, { status: 400 });
+    if (starting.length > STARTERS) return NextResponse.json({ error: `Matches are ${STARTERS}v${STARTERS}: pick at most ${STARTERS} starters, the rest go on the bench` }, { status: 400 });
 
     const rows = [
       ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, set_by: viewer.id, updated_at: now })),

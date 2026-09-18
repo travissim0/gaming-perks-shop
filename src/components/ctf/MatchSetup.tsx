@@ -32,6 +32,8 @@ interface Setup {
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
+  /** Starters per side (10v10). */
+  starters: number;
   side_reveal_at: string;
   side_released: boolean;
   viewer: { is_staff: boolean; leads_home: boolean; leads_away: boolean; can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean } | null;
@@ -109,12 +111,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const saveLineup = (team: Team) => {
     const slots = slotsFor(team);
     const order = team.roster.map((m) => m.player_id);
+    const starting = order.filter((id) => slots[id] === 'starting');
+    const need = setup?.starters ?? 10;
+    if (starting.length > need) { toast.error(`Matches are ${need}v${need}: pick at most ${need} starters`); return; }
     post({
       action: 'set_lineup',
       squad_id: team.squad_id,
-      starting: order.filter((id) => slots[id] === 'starting'),
+      starting,
       bench: order.filter((id) => slots[id] === 'bench'),
-    }, `${team.tag} lineup saved`);
+    }, starting.length < need ? `${team.tag} lineup saved · ${need - starting.length} starter${need - starting.length === 1 ? '' : 's'} short` : `${team.tag} lineup saved`);
   };
 
   if (loading) return null;
@@ -126,6 +131,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   }
 
   const { home, away, viewer, match, progress } = setup;
+  const starters = setup.starters ?? 10;
   const locked = match.locked;
   const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away);
   const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -175,6 +181,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     const bench = team.roster.filter((m) => slots[m.player_id] === 'bench');
     const dirty = !!draft[team.squad_id];
     const submitted = isHome ? progress.home_lineup_set : progress.away_lineup_set;
+    const full = starting.length >= starters;
+    const over = starting.length > starters;
 
     return (
       <div className="rounded-md bg-[#1B2438] overflow-hidden">
@@ -190,7 +198,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
             </div>
           </div>
           {canSee ? (
-            <div className="text-xs tabular-nums text-[#8B98B0]"><span className="text-[#34D399]">{starting.length}</span> starting · {bench.length} bench</div>
+            <div className="text-xs tabular-nums text-[#8B98B0]"><span className={over ? 'text-[#F87171]' : full ? 'text-[#34D399]' : 'text-[#F59E0B]'}>{starting.length}/{starters}</span> starting · {bench.length} bench</div>
           ) : (
             <Flag on={submitted} label={submitted ? 'Lineup submitted' : 'No lineup yet'} />
           )}
@@ -216,7 +224,9 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
                         key={k}
                         type="button"
                         onClick={() => setSlot(team, m.player_id, k)}
-                        className={`rounded px-2 py-0.5 text-[11px] transition-colors ${s === k
+                        disabled={k === 'starting' && s !== 'starting' && full}
+                        title={k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
+                        className={`rounded px-2 py-0.5 text-[11px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${s === k
                           ? k === 'starting' ? 'bg-[#34D399]/20 text-[#34D399]' : k === 'bench' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/10 text-[#E6EDF7]'
                           : 'text-[#8B98B0] hover:bg-white/5'}`}
                       >
@@ -247,10 +257,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
 
         {canEdit && canSee && team.roster.length > 0 && (
           <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-white/[0.06]">
-            <span className="text-[11px] text-[#8B98B0]">{dirty ? 'Unsaved changes' : submitted ? 'Saved' : 'Not submitted yet'}</span>
+            <span className="text-[11px] text-[#8B98B0]">
+              {over ? <span className="text-[#F87171]">Too many starters · matches are {starters}v{starters}</span>
+                : dirty ? (full ? 'Unsaved changes' : `Unsaved · ${starters - starting.length} starter${starters - starting.length === 1 ? '' : 's'} short`)
+                : submitted ? (full ? 'Saved' : `Saved · ${starters - starting.length} starter${starters - starting.length === 1 ? '' : 's'} short`)
+                : 'Not submitted yet'}
+            </span>
             <div className="flex gap-2">
               {dirty && <button type="button" onClick={() => setDraft((d) => { const n = { ...d }; delete n[team.squad_id]; return n; })} className={btnQuiet}>Discard</button>}
-              <button type="button" onClick={() => saveLineup(team)} disabled={!dirty || busy !== null} className={btnPrimary}>Save lineup</button>
+              <button type="button" onClick={() => saveLineup(team)} disabled={!dirty || over || busy !== null} className={btnPrimary}>Save lineup</button>
             </div>
           </div>
         )}
@@ -301,7 +316,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+          Matches are {starters}v{starters}: pick {starters} starters, everyone else you want at the match goes on the bench. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           When the game client is connected, starters are placed on their team and unspecced, and the bench stays in spec on the other team name.
         </p>
       </div>
