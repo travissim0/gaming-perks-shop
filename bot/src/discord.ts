@@ -194,7 +194,12 @@ export function findOrphans(guild: Guild, currentTeams: TeamRoster[], known: Cha
 }
 
 /** Give the role to linked members, take it from anyone who no longer belongs. Returns who isn't in the server. */
-export async function syncRoleMembers(guild: Guild, role: Role, team: TeamRoster): Promise<{ added: string[]; removed: string[]; notInServer: string[] }> {
+/**
+ * Grant the squad role to every linked roster member; take it away from linked
+ * accounts that are no longer on the roster. Members the site has never heard
+ * of (no Discord link) are left alone, so a captain's manual /squad add sticks.
+ */
+export async function syncRoleMembers(guild: Guild, role: Role, team: TeamRoster, linked: Set<string>): Promise<{ added: string[]; removed: string[]; notInServer: string[] }> {
   const wanted = new Map<string, string>(); // discordId → alias
   team.members.forEach((m) => { if (m.discordId) wanted.set(m.discordId, m.alias); });
 
@@ -213,7 +218,7 @@ export async function syncRoleMembers(guild: Guild, role: Role, team: TeamRoster
   if (config.dryRun) return { added, removed, notInServer };
 
   for (const member of role.members.values()) {
-    if (!wanted.has(member.id)) {
+    if (!wanted.has(member.id) && linked.has(member.id)) {
       await member.roles.remove(role, 'No longer on the squad roster at freeinf.org');
       removed.push(member.displayName);
     }

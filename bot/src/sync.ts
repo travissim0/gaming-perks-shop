@@ -1,7 +1,7 @@
 import type { Guild } from 'discord.js';
 import { createHash } from 'crypto';
 import { config } from './config.js';
-import { deleteMapping, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
+import { deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
 import { ensureTeam, findOrphans, postStaff, syncRoleMembers, teardownTeam } from './discord.js';
 
 let lastUnlinkedHash = '';
@@ -22,6 +22,7 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
     if (!ctx) { await writeState({ last_sync_at: new Date().toISOString(), last_result: 'no season' }); return 'no season'; }
     const teams = await getSeasonTeams(ctx);
     const mappings = await getMappings(guild.id, ctx.season.id);
+    const linked = await getLinkedDiscordIds();
     const byId = new Map(mappings.map((m) => [m.squad_id, m]));
 
     // Make sure member cache is warm so role membership diffs are accurate.
@@ -39,7 +40,7 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
       });
       const role = guild.roles.cache.get(mapping.role_id);
       if (role) {
-        const r = await syncRoleMembers(guild, role, team);
+        const r = await syncRoleMembers(guild, role, team, linked);
         if (r.added.length) lines.push(`${team.name}: +${r.added.join(', ')}`);
         if (r.removed.length) lines.push(`${team.name}: −${r.removed.join(', ')}`);
         r.notInServer.forEach((a) => notInServer.push(`${a} (${team.name})`));

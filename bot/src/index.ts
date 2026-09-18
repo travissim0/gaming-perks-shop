@@ -2,7 +2,8 @@ import { Client, GatewayIntentBits, type Guild } from 'discord.js';
 import { config } from './config.js';
 import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
-import { onInteraction, registerRolePickerCommand } from './rolepicker.js';
+import { onInteraction, rolePickerCommand } from './rolepicker.js';
+import { onSquadInteraction, squadCommand } from './squad.js';
 import { deliverNotices } from './notices.js';
 
 /**
@@ -14,6 +15,7 @@ import { deliverNotices } from './notices.js';
  *   a few seconds.
  * - On a row in discord_bot_commands ('sync' | 'teardown'): run it and mark done.
  * - /rolepicker (staff): posts a button message for self-assignable roles.
+ * - /squad add|remove (captains): squad role for players who won't link Discord.
  */
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
@@ -52,7 +54,7 @@ client.once('ready', async () => {
   }
   console.log(`Serving ${guild.name}`);
 
-  await registerRolePickerCommand(guild).catch((e) => console.error('rolepicker command registration:', e?.message || e));
+  await guild.commands.set([rolePickerCommand(), squadCommand()]).catch((e) => console.error('slash command registration:', e?.message || e));
   await runCommands();
   await reconcile(guild, 'startup');
   setInterval(() => reconcile(guild!, 'scheduled'), config.syncIntervalMs);
@@ -70,7 +72,10 @@ client.once('ready', async () => {
     .subscribe((status) => console.log(`realtime: ${status}`));
 });
 
-client.on('interactionCreate', onInteraction);
+client.on('interactionCreate', (i) => {
+  if (i.isChatInputCommand() && i.commandName === 'squad') return onSquadInteraction(i);
+  return onInteraction(i);
+});
 client.on('error', (e) => console.error('discord client error:', e));
 process.on('unhandledRejection', (e) => console.error('unhandled rejection:', e));
 process.on('SIGTERM', () => { client.destroy(); process.exit(0); });

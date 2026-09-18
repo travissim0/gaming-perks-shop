@@ -4,7 +4,6 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  Guild,
   MessageFlags,
   PermissionFlagsBits,
   Role,
@@ -55,7 +54,7 @@ function notAssignable(role: Role): string | null {
   return null;
 }
 
-export async function registerRolePickerCommand(guild: Guild): Promise<void> {
+export function rolePickerCommand() {
   const cmd = new SlashCommandBuilder()
     .setName('rolepicker')
     .setDescription('Post a message with buttons that let anyone give/remove these roles on themselves')
@@ -67,7 +66,7 @@ export async function registerRolePickerCommand(guild: Guild): Promise<void> {
   cmd.addStringOption((o) => o.setName('title').setDescription('Embed title (default: Pick your roles)').setRequired(false));
   cmd.addStringOption((o) => o.setName('text').setDescription('Text above the buttons').setRequired(false));
   cmd.addStringOption((o) => o.setName('emojis').setDescription('Space-separated emoji, one per role in order (e.g. ⚔️ 🔔 🎥)').setRequired(false));
-  await guild.commands.set([cmd]);
+  return cmd;
 }
 
 async function postPicker(interaction: ChatInputCommandInteraction): Promise<void> {

@@ -151,3 +151,15 @@ export async function writeState(patch: Record<string, unknown>) {
   const { error } = await db.from('discord_bot_state').upsert({ id: 1, ...patch, updated_at: new Date().toISOString() });
   if (error) console.error(`could not write discord_bot_state: ${error.message}`);
 }
+
+/** Discord ids of every site profile that has linked Discord — the accounts the sync is allowed to manage. */
+export async function getLinkedDiscordIds(): Promise<Set<string>> {
+  const { data } = await db.from('profiles').select('discord_id').not('discord_id', 'is', null);
+  return new Set((data || []).map((p: any) => String(p.discord_id)));
+}
+
+/** The site profile linked to a Discord account, or null when that account never linked. */
+export async function getProfileByDiscordId(discordId: string): Promise<{ id: string; alias: string } | null> {
+  const { data } = await db.from('profiles').select('id, in_game_alias').eq('discord_id', discordId).maybeSingle();
+  return data ? { id: data.id, alias: data.in_game_alias || 'Unknown' } : null;
+}
