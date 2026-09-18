@@ -17,7 +17,6 @@ let queued = false;
 export async function reconcile(guild: Guild, reason: string): Promise<string> {
   if (running) { queued = true; return 'queued'; }
   running = true;
-  const started = Date.now();
   try {
     const ctx = await getSeasonContext();
     if (!ctx) { await writeState({ last_sync_at: new Date().toISOString(), last_result: 'no season' }); return 'no season'; }
@@ -72,7 +71,7 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
     }
     lastUnlinkedHash = hash;
 
-    const result = `${teams.length} teams, ${lines.length} changes, ${unlinked.length} unlinked, ${Date.now() - started}ms`;
+    const result = `${teams.length} teams, ${lines.length} changes, ${unlinked.length} unlinked`;
     await writeState({ last_sync_at: new Date().toISOString(), last_result: result, last_error: null, season_id: ctx.season.id, guild_id: guild.id });
     console.log(`sync (${reason}): ${result}`);
     return result;
