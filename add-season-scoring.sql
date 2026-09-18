@@ -31,7 +31,10 @@ ALTER TABLE public.league_standings
   ADD COLUMN IF NOT EXISTS avg_rs_win_minutes NUMERIC,
   ADD COLUMN IF NOT EXISTS computed_rank      INTEGER;
 
-CREATE OR REPLACE VIEW public.league_standings_with_rankings AS
+-- The view's column list changes, so it has to be dropped and rebuilt.
+DROP VIEW IF EXISTS public.league_standings_with_rankings;
+
+CREATE VIEW public.league_standings_with_rankings AS
 SELECT
     s.*,
     sq.name AS squad_name,
