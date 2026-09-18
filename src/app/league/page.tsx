@@ -330,6 +330,36 @@ export default function LeagueHome() {
       } catch (e) { console.error('server-status', e); }
     };
     const fetchGame = async () => {
+      // Prefer the zone's arena snapshots (/api/live, refreshed every second with the
+      // full roster per team). The older roster feed (/api/game-data) is the fallback;
+      // it goes quiet for minutes at a time, which blanked this panel mid-game.
+      try {
+        const r = await fetch('/api/live', { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          const arenas: any[] = Array.isArray(j.arenas) ? j.arenas : [];
+          const fresh = arenas.filter((a) => isCtfZone(a.zone || '') && (a.age_s == null || a.age_s < 120) && Array.isArray(a.teams));
+          const best = fresh.sort((a, b) => (b.players_playing || 0) - (a.players_playing || 0) || (b.players_total || 0) - (a.players_total || 0))[0];
+          if (best) {
+            const players: GamePlayer[] = [];
+            for (const t of best.teams as any[]) {
+              const name = String(t.name || t.side || 'Unknown');
+              for (const p of (t.players || []) as any[]) {
+                const lower = name.toLowerCase();
+                const cls = lower === 'spec' || p.spec ? 'Spectator' : lower === 'np' ? 'Not Playing' : String(p.class || 'Unknown');
+                players.push({ alias: String(p.alias || '?'), team: name, class: cls, isOffense: false });
+              }
+            }
+            setGameData({
+              arenaName: [best.zone, best.state?.label || best.arena].filter(Boolean).join(' · '),
+              gameType: best.state?.phase ? `${best.state.mode ? String(best.state.mode).toUpperCase() : 'Game'} · ${best.state.phase}` : best.game ? String(best.game).toUpperCase() : null,
+              players,
+              lastUpdated: best.updated_at || j.generated_at || null,
+            });
+            return;
+          }
+        }
+      } catch (e) { console.error('live', e); }
       try {
         const r = await fetch('/api/game-data');
         if (r.ok) setGameData(await r.json());
