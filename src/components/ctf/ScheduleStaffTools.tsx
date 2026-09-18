@@ -100,6 +100,24 @@ export default function ScheduleStaffTools({
     return roundRobin(teams, Math.min(w, 52));
   }, [teams, weeks]);
 
+  /**
+   * The /league strip and the FS cutoff read the season's milestone dates. When
+   * a date is still blank, the generator fills it in from what it just created.
+   */
+  const setSeasonDateIfBlank = async (field: 'start_date' | 'playoffs_start_on', ymd: string) => {
+    if (season[field] || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch('/api/league/season', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'season_dates', league_slug: league.slug, season_id: season.id, [field]: ymd }),
+      });
+      toast.success(field === 'start_date' ? `Season start set to ${ymd}` : `Playoffs start set to ${ymd} · FS closes then`);
+    } catch { /* not fatal — staff can set it in CTF management */ }
+  };
+
   const submitSeason = async () => {
     if (preview.pairings.length === 0) return;
     if (regular.length > 0 && !confirm(`${regular.length} regular-season fixtures already exist. Add ${preview.pairings.length} more on top of them?`)) return;
@@ -118,6 +136,7 @@ export default function ScheduleStaffTools({
         })),
       });
       toast.success(`Created ${res.count} fixtures`);
+      await setSeasonDateIfBlank('start_date', firstDate);
       onChanged();
       setTab('add');
     } catch (e: any) {
@@ -185,6 +204,7 @@ export default function ScheduleStaffTools({
         })),
       });
       toast.success(`Created ${res.count} playoff ${res.count === 1 ? 'match' : 'matches'} · ${label}`);
+      if (round === 1) await setSeasonDateIfBlank('playoffs_start_on', poDate);
       onChanged();
     } catch (e: any) {
       toast.error(e.message);

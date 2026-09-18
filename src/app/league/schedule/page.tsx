@@ -25,6 +25,7 @@ import {
 import { playoffRoundLabel, type TeamRef } from '@/lib/schedule';
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
+import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
 
@@ -150,6 +151,15 @@ function SchedulePage() {
   // ── Derived ─────────────────────────────────────────────────────────
   const phase = league ? seasonPhase(league, season, status, { draftDone }) : null;
   const now = Date.now();
+  // Points-scoring seasons label RS/FS and show the Mon–Sun week each match counts against.
+  const pointsMode = !!season && !!league && league.data_source !== 'ctfpl' && normalizeRules(season.scoring_rules).preset === 'points';
+  const weekRange = (ws: string) => {
+    const [y, m, d] = ws.split('-').map(Number);
+    const a = new Date(y, m - 1, d);
+    const [y2, m2, d2] = weekEnd(ws).split('-').map(Number);
+    const b = new Date(y2, m2 - 1, d2);
+    return `${a.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${b.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  };
   const isDone = (f: Fixture) => !!f.result || f.status === 'completed';
   // Pending FS proposals live in the Free scheduled box, not the fixture list.
   const listed = fixtures.filter((f) => !(f.stage === 'fs' && f.fs_status === 'pending'));
@@ -166,8 +176,8 @@ function SchedulePage() {
         // FS groups sort by their Mon–Sun week, between the RS weeks around them.
         const fsOrder = f.fs_week_start ? 500 + new Date(f.fs_week_start).getTime() / 8.64e7 / 1e6 : 500;
         map.set(key, {
-          label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : f.stage === 'fs' ? `Free scheduled · week of ${dayLabel(f.fs_week_start ? `${f.fs_week_start}T12:00:00` : f.scheduled_at)}` : `Week ${f.week ?? '–'}`,
-          sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : dayLabel(f.scheduled_at),
+          label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : f.stage === 'fs' ? `Free scheduled · ${weekRange(f.fs_week_start || weekStart(new Date(f.scheduled_at)))}` : `Week ${f.week ?? '–'}${pointsMode ? ' · RS' : ''}`,
+          sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : pointsMode ? `${dayLabel(f.scheduled_at)} · counts as the ${weekRange(weekStart(new Date(f.scheduled_at)))} week` : dayLabel(f.scheduled_at),
           items: [],
           order: f.stage === 'playoff' ? 1000 + (f.playoff_round || 1) : f.stage === 'fs' ? fsOrder : f.week || 0,
         });
@@ -324,6 +334,7 @@ function SchedulePage() {
                           <div>{dayLabel(f.scheduled_at)}</div>
                           <div className="text-[#E6EDF7]">{timeLabel(f.scheduled_at)}</div>
                           {f.stage === 'fs' && <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>}
+                          {pointsMode && f.stage === 'regular' && <div className="mt-0.5 inline-block rounded bg-[#F59E0B]/15 px-1 text-[10px] uppercase tracking-wide text-[#F59E0B]" title="Regular season: official schedule, full points">RS</div>}
                         </div>
                         <Link href={f.squad_a_id ? `/squads/${f.squad_a_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${aWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
                           <span className="min-w-0">
