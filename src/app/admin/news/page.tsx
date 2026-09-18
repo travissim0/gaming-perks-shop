@@ -8,7 +8,9 @@ import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
 import ImagePicker from '@/components/ImagePicker';
 import NewsPreviewModal from '@/components/admin/NewsPreviewModal';
-import Navbar from '@/components/Navbar';
+import Link from 'next/link';
+import { StaffShell, HeaderStrip, Panel, Chip, Spinner, Empty, th, td, pill } from '@/components/ctf/AdminBits';
+import { inputCls, labelCls, btnPrimary, btnQuiet, btnDanger } from '@/components/ctf/FormBits';
 import { isHtmlContent, prepareNewsHtml } from '@/lib/newsHtml';
 import { generateHTML } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
@@ -297,211 +299,206 @@ export default function AdminNewsPage() {
 
   if (loading || isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
+      <StaffShell user={user} maxWidth="max-w-6xl">
+        <Spinner label="Loading posts…" />
+      </StaffShell>
     );
   }
 
+  const published = posts.filter((p) => p.status === 'published').length;
+  const drafts = posts.filter((p) => p.status === 'draft').length;
+  const openNew = () => {
+    setEditingPost(null);
+    setMode('rich');
+    setFormData({ ...EMPTY_FORM });
+    setShowCreateForm(true);
+  };
+  const closeForm = () => {
+    setShowCreateForm(false);
+    setEditingPost(null);
+  };
+  const statusTone: Record<string, string> = {
+    published: 'bg-[#34D399]/15 text-[#34D399]',
+    draft: 'bg-[#F59E0B]/15 text-[#F59E0B]',
+    archived: 'bg-white/5 text-[#8B98B0]',
+  };
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <Navbar user={user} />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-yellow-400">📰 News Management</h1>
-          <button
-            onClick={() => {
-              setShowCreateForm(!showCreateForm);
-              setEditingPost(null);
-              setMode('rich');
-              setFormData({ ...EMPTY_FORM });
-            }}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            {showCreateForm ? 'Cancel' : '+ Create Post'}
-          </button>
-        </div>
+    <StaffShell user={user} maxWidth="max-w-6xl">
+      <HeaderStrip
+        title="News"
+        meta={
+          <>
+            <span>{posts.length} post{posts.length === 1 ? '' : 's'}</span>
+            <span>· {published} published</span>
+            {drafts > 0 && <span>· {drafts} draft{drafts === 1 ? '' : 's'}</span>}
+            <Link href="/news" className="text-[#22D3EE] hover:text-[#67E8F9]">View the news page →</Link>
+          </>
+        }
+        actions={
+          showCreateForm ? (
+            <button type="button" onClick={closeForm} className={btnQuiet}>Close editor</button>
+          ) : (
+            <button type="button" onClick={openNew} className={btnPrimary}>+ New post</button>
+          )
+        }
+      />
 
-        {/* Create/Edit Form */}
-        {showCreateForm && (
-          <div className="bg-gray-800 rounded-lg p-6 mb-8 border border-gray-700">
-            <h2 className="text-xl font-bold mb-6 text-yellow-400">
-              {editingPost ? 'Edit Post' : 'Create New Post'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-2">Subtitle</label>
-                  <input
-                    type="text"
-                    value={formData.subtitle}
-                    onChange={(e) => setFormData(prev => ({ ...prev, subtitle: e.target.value }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
+      {/* Create / edit */}
+      {showCreateForm && (
+        <Panel
+          title={editingPost ? `Editing: ${editingPost.title}` : 'New post'}
+          hint={editingPost ? `Created ${new Date(editingPost.created_at).toLocaleDateString()} · ${editingPost.view_count} views` : 'Write it in the editor, or paste a designed post as HTML.'}
+          actions={<button type="button" onClick={() => setShowPreview(true)} className={btnQuiet} title="See the post as readers will, before saving">Preview</button>}
+        >
+          <form onSubmit={handleSubmit} className="p-5 space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Title *</label>
+                <input type="text" value={formData.title} onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))} className={inputCls} required />
               </div>
+              <div>
+                <label className={labelCls}>Subtitle</label>
+                <input type="text" value={formData.subtitle} onChange={(e) => setFormData((prev) => ({ ...prev, subtitle: e.target.value }))} className={inputCls} placeholder="One line under the title" />
+              </div>
+            </div>
 
+            <div>
+              <label className={labelCls}>Banner image</label>
               <ImagePicker
                 selectedImage={formData.featured_image_url}
-                onImageSelect={(url) => setFormData(prev => ({ ...prev, featured_image_url: url }))}
+                onImageSelect={(url) => setFormData((prev) => ({ ...prev, featured_image_url: url }))}
                 bucket="avatars"
                 folder="news-banners"
                 allowUpload={true}
               />
+            </div>
 
-              <div>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <label className="block text-sm font-medium">Content *</label>
-                  <div className="flex items-center gap-1 rounded-lg bg-gray-700 p-0.5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (mode === 'rich') return;
-                        if (!confirm('Switching to rich text keeps only basic formatting (headings, lists, bold). Designed blocks and styles are dropped. Continue?')) return;
-                        setMode('rich');
-                      }}
-                      className={`rounded-md px-2.5 py-1 transition-colors ${mode === 'rich' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white'}`}
-                    >
-                      Rich text
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (mode === 'html') return;
-                        setFormData((prev) => ({ ...prev, content: docToHtml(typeof prev.content === 'string' ? prev.content : '') }));
-                        setMode('html');
-                      }}
-                      className={`rounded-md px-2.5 py-1 transition-colors ${mode === 'html' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:text-white'}`}
-                      title="Paste a designed post as HTML"
-                    >
-                      HTML
-                    </button>
-                  </div>
+            <div>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <label className={`${labelCls} mb-0`}>Content *</label>
+                <div className="flex items-center gap-1">
+                  <Chip
+                    active={mode === 'rich'}
+                    onClick={() => {
+                      if (mode === 'rich') return;
+                      if (!confirm('Switching to rich text keeps only basic formatting (headings, lists, bold). Designed blocks and styles are dropped. Continue?')) return;
+                      setMode('rich');
+                    }}
+                  >
+                    Rich text
+                  </Chip>
+                  <Chip
+                    active={mode === 'html'}
+                    title="Paste a designed post as HTML"
+                    onClick={() => {
+                      if (mode === 'html') return;
+                      setFormData((prev) => ({ ...prev, content: docToHtml(typeof prev.content === 'string' ? prev.content : '') }));
+                      setMode('html');
+                    }}
+                  >
+                    HTML
+                  </Chip>
                 </div>
-
-                {mode === 'rich' ? (
-                  <>
-                    <RichTextEditor
-                      content={formData.content}
-                      onChange={(content) => setFormData(prev => ({ ...prev, content }))}
-                      placeholder="Write your news post content here..."
-                      className="w-full"
-                    />
-                    <p className="text-xs text-gray-400 mt-2">
-                      Use the toolbar above to format your content with headings, lists, quotes, and more. For a designed announcement (cards, tables, buttons), switch to HTML.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <textarea
-                      value={typeof formData.content === 'string' ? formData.content : ''}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
-                      spellCheck={false}
-                      placeholder={'Paste the post HTML here. A whole .html file works too: its <style> block and body content are kept, scripts are removed.'}
-                      className="w-full min-h-[22rem] rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 font-mono text-xs leading-relaxed text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                    />
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-400">
-                      <label className="cursor-pointer rounded-md bg-gray-700 px-2.5 py-1.5 text-gray-200 hover:bg-gray-600">
-                        Load .html file…
-                        <input
-                          type="file"
-                          accept=".html,.htm,text/html"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const f = e.target.files?.[0];
-                            if (!f) return;
-                            const text = await f.text();
-                            setFormData((prev) => ({ ...prev, content: prepareNewsHtml(text) }));
-                            e.target.value = '';
-                            toast.success(`Loaded ${f.name}`);
-                          }}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setFormData((prev) => ({ ...prev, content: prepareNewsHtml(typeof prev.content === 'string' ? prev.content : '') }))}
-                        className="rounded-md bg-gray-700 px-2.5 py-1.5 text-gray-200 hover:bg-gray-600"
-                        title="Strip page wrappers, scripts and inline handlers; point fonts at the site's faces"
-                      >
-                        Clean up
-                      </button>
-                      <span>Styles inside a &lt;style&gt; block are kept. Fonts named Barlow Condensed and Inter map to the site&apos;s. Scripts, forms and page-level CSS are dropped.</span>
-                    </div>
-                  </>
-                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Audience</label>
-                  <select
-                    value={formData.audience}
-                    onChange={(e) => setFormData(prev => ({ ...prev, audience: e.target.value as 'all' | 'ctf' }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                    title="Everyone = homepage and every zone. CTF = only the CTF pages."
-                  >
-                    <option value="all">Everyone (homepage + CTF)</option>
-                    <option value="ctf">CTF only</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Priority</label>
-                  <input
-                    type="number"
-                    value={formData.priority}
-                    onChange={(e) => setFormData(prev => ({ ...prev, priority: parseInt(e.target.value) || 0 }))}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                    min="0"
-                    max="100"
+              {mode === 'rich' ? (
+                <>
+                  <RichTextEditor
+                    content={formData.content}
+                    onChange={(content) => setFormData((prev) => ({ ...prev, content }))}
+                    placeholder="Write your news post content here..."
+                    className="w-full"
                   />
-                </div>
+                  <p className="mt-1.5 text-xs text-[#8B98B0]">
+                    Headings, lists, quotes and links from the toolbar. For a designed announcement (cards, tables, buttons), switch to HTML.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <textarea
+                    value={typeof formData.content === 'string' ? formData.content : ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
+                    spellCheck={false}
+                    placeholder={'Paste the post HTML here. A whole .html file works too: its <style> block and body content are kept, scripts are removed.'}
+                    className={`${inputCls} min-h-[22rem] font-mono text-xs leading-relaxed`}
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#8B98B0]">
+                    <label className={`${btnQuiet} cursor-pointer !py-1.5 !text-xs`}>
+                      Load .html file…
+                      <input
+                        type="file"
+                        accept=".html,.htm,text/html"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const text = await f.text();
+                          setFormData((prev) => ({ ...prev, content: prepareNewsHtml(text) }));
+                          e.target.value = '';
+                          toast.success(`Loaded ${f.name}`);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, content: prepareNewsHtml(typeof prev.content === 'string' ? prev.content : '') }))}
+                      className={`${btnQuiet} !py-1.5 !text-xs`}
+                      title="Strip page wrappers, scripts and inline handlers; point fonts at the site's faces"
+                    >
+                      Clean up
+                    </button>
+                    <span className="basis-full sm:basis-auto">Styles in a &lt;style&gt; block are kept. Barlow Condensed and Inter map to the site&apos;s fonts. Scripts, forms and page-level CSS are dropped.</span>
+                  </div>
+                </>
+              )}
+            </div>
 
-                <div className="flex items-center">
-                  <label className="flex items-center space-x-2 mt-6">
-                    <input
-                      type="checkbox"
-                      checked={formData.featured}
-                      onChange={(e) => setFormData(prev => ({ ...prev, featured: e.target.checked }))}
-                      className="h-4 w-4 accent-blue-500"
-                      style={{ WebkitAppearance: 'checkbox', appearance: 'auto' }}
-                    />
-                    <span className="text-sm font-medium">Featured Post</span>
-                  </label>
-                </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className={labelCls}>Status</label>
+                <select value={formData.status} onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as any }))} className={inputCls}>
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </select>
               </div>
+              <div>
+                <label className={labelCls}>Audience</label>
+                <select
+                  value={formData.audience}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, audience: e.target.value as 'all' | 'ctf' }))}
+                  className={inputCls}
+                  title="Everyone = homepage and every zone. CTF = only the CTF pages."
+                >
+                  <option value="all">Everyone</option>
+                  <option value="ctf">CTF pages only</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Priority</label>
+                <input type="number" value={formData.priority} onChange={(e) => setFormData((prev) => ({ ...prev, priority: parseInt(e.target.value) || 0 }))} className={inputCls} min="0" max="100" />
+              </div>
+              <div>
+                <label className={labelCls}>Featured</label>
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, featured: !prev.featured }))}
+                  className={`${pill(formData.featured, 'bg-[#F59E0B]/15 text-[#F59E0B]')} mt-1.5`}
+                  title="Featured posts lead the news page and the league card"
+                >
+                  {formData.featured ? '★ Featured' : 'Not featured'}
+                </button>
+              </div>
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="relative">
-                <label className="block text-sm font-medium mb-2">Author</label>
+                <label className={labelCls}>Author</label>
                 {formData.author_id ? (
                   <div className="flex items-center gap-2">
-                    <span className="rounded-lg bg-gray-700 border border-gray-600 px-3 py-2 text-white">{formData.author_alias}</span>
-                    <button type="button" onClick={() => setFormData((prev) => ({ ...prev, author_id: '', author_alias: '' }))} className="text-sm text-gray-400 hover:text-white">Post as me instead</button>
+                    <span className="rounded-md bg-[#1B2438] px-3 py-2 text-sm text-[#E6EDF7]">{formData.author_alias}</span>
+                    <button type="button" onClick={() => setFormData((prev) => ({ ...prev, author_id: '', author_alias: '' }))} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Post as me instead</button>
                   </div>
                 ) : (
                   <>
@@ -509,165 +506,112 @@ export default function AdminNewsPage() {
                       type="text"
                       value={authorSearch}
                       onChange={(e) => searchAuthors(e.target.value)}
-                      placeholder="You. Type an alias to credit someone else (e.g. a post pasted from Discord)"
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                      placeholder="You. Type an alias to credit someone else"
+                      className={inputCls}
                     />
                     {authorResults.length > 0 && (
-                      <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 shadow-xl">
+                      <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-white/10 bg-[#1B2438] shadow-xl">
                         {authorResults.map((p) => (
-                          <button key={p.id} type="button" onClick={() => pickAuthor(p)} className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-gray-700">{p.in_game_alias}</button>
+                          <button key={p.id} type="button" onClick={() => pickAuthor(p)} className="block w-full px-3 py-2 text-left text-sm text-[#E6EDF7] hover:bg-white/5">{p.in_game_alias}</button>
                         ))}
                       </div>
                     )}
                   </>
                 )}
-                <p className="text-xs text-gray-400 mt-1">The byline always shows an in-game alias, never a real name.</p>
+                <p className="mt-1 text-[11px] text-[#8B98B0]">The byline always shows an in-game alias, never a real name.</p>
               </div>
-
               <div>
-                <label className="block text-sm font-medium mb-2">Tags (comma-separated)</label>
-                <input
-                  type="text"
-                  value={formData.tags}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  placeholder="announcement, update, event"
-                />
+                <label className={labelCls}>Tags</label>
+                <input type="text" value={formData.tags} onChange={(e) => setFormData((prev) => ({ ...prev, tags: e.target.value }))} className={inputCls} placeholder="Announcement, CTFDL, event" />
+                <p className="mt-1 text-[11px] text-[#8B98B0]">Comma-separated. Readers can filter the news page by tag.</p>
               </div>
+            </div>
 
-              <div className="flex flex-wrap gap-4">
-                <button
-                  type="submit"
-                  className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-medium transition-colors"
-                >
-                  {editingPost ? 'Update Post' : 'Create Post'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(true)}
-                  className="bg-cyan-700 hover:bg-cyan-600 px-6 py-2 rounded-lg font-medium transition-colors"
-                  title="See the post as readers will, before saving"
-                >
-                  Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setEditingPost(null);
-                  }}
-                  className="bg-gray-600 hover:bg-gray-700 px-6 py-2 rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+            <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-4">
+              <button type="submit" className={btnPrimary}>{editingPost ? 'Save changes' : formData.status === 'published' ? 'Publish' : 'Create post'}</button>
+              <button type="button" onClick={() => setShowPreview(true)} className={btnQuiet}>Preview</button>
+              <button type="button" onClick={closeForm} className={btnQuiet}>Cancel</button>
+              {editingPost && (
+                <button type="button" onClick={() => handleDelete(editingPost.id)} className={`${btnDanger} ml-auto`}>Delete post</button>
+              )}
+            </div>
+          </form>
+        </Panel>
+      )}
 
-        {showPreview && (
-          <NewsPreviewModal
-            title={formData.title}
-            subtitle={formData.subtitle}
-            content={mode === 'html' ? prepareNewsHtml(typeof formData.content === 'string' ? formData.content : '') : formData.content}
-            featuredImageUrl={formData.featured_image_url || undefined}
-            author={formData.author_alias || editingPost?.author_name || 'You'}
-            tags={formData.tags.split(',').map((t) => t.trim()).filter(Boolean)}
-            audience={formData.audience}
-            featured={formData.featured}
-            onClose={() => setShowPreview(false)}
-          />
-        )}
+      {showPreview && (
+        <NewsPreviewModal
+          title={formData.title}
+          subtitle={formData.subtitle}
+          content={mode === 'html' ? prepareNewsHtml(typeof formData.content === 'string' ? formData.content : '') : formData.content}
+          featuredImageUrl={formData.featured_image_url || undefined}
+          author={formData.author_alias || editingPost?.author_name || 'You'}
+          tags={formData.tags.split(',').map((t) => t.trim()).filter(Boolean)}
+          audience={formData.audience}
+          featured={formData.featured}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
 
-        {/* Posts List */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700">
-          <div className="p-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold">All Posts ({posts.length})</h2>
-          </div>
-          
+      {/* Posts */}
+      <Panel title="All posts" hint="Change a post's status straight from the list.">
+        {posts.length === 0 ? (
+          <Empty>No posts yet. Create the first one above.</Empty>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-700">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Featured</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Views</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  <th className={th}>Post</th>
+                  <th className={th}>Status</th>
+                  <th className={th}>Flags</th>
+                  <th className={`${th} text-right`}>Views</th>
+                  <th className={th}>Created</th>
+                  <th className={`${th} text-right`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
+              <tbody className="divide-y divide-white/[0.04]">
                 {posts.map((post) => (
-                  <tr key={post.id} className="hover:bg-gray-700/50">
-                    <td className="px-4 py-4">
-                      <div>
-                        <div className="font-medium text-white">{post.title}</div>
-                        {post.subtitle && (
-                          <div className="text-sm text-gray-400">{post.subtitle}</div>
-                        )}
+                  <tr key={post.id} className={`hover:bg-white/[0.03] ${editingPost?.id === post.id ? 'bg-[#22D3EE]/5' : ''}`}>
+                    <td className={td}>
+                      <div className="text-[#E6EDF7]">{post.title}</div>
+                      <div className="text-xs text-[#8B98B0]">
+                        {post.subtitle ? <span>{post.subtitle}</span> : null}
+                        {post.author_name && <span>{post.subtitle ? ' · ' : ''}by {post.author_name}</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className={td}>
                       <select
                         value={post.status}
                         onChange={(e) => handleStatusChange(post.id, e.target.value)}
-                        className={`text-xs px-2 py-1 rounded-full bg-gray-700 border-0 ${
-                          post.status === 'published' ? 'text-green-400' :
-                          post.status === 'draft' ? 'text-yellow-400' :
-                          'text-gray-400'
-                        }`}
+                        className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-medium focus:outline-none ${statusTone[post.status] || statusTone.archived}`}
                       >
                         <option value="draft">Draft</option>
                         <option value="published">Published</option>
                         <option value="archived">Archived</option>
                       </select>
                     </td>
-                    <td className="px-4 py-4">
-                      {post.featured ? (
-                        <span className="text-purple-400">⭐ Yes</span>
-                      ) : (
-                        <span className="text-gray-500">No</span>
-                      )}
-                      {post.metadata?.audience === 'ctf' && (
-                        <span className="ml-2 rounded bg-cyan-600/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300" title="Shown on CTF pages only">CTF</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-gray-400">
-                      {post.view_count}
-                    </td>
-                    <td className="px-4 py-4 text-gray-400 text-sm">
-                      {new Date(post.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(post)}
-                          className="text-blue-400 hover:text-blue-300 text-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(post.id)}
-                          className="text-red-400 hover:text-red-300 text-sm"
-                        >
-                          Delete
-                        </button>
+                    <td className={td}>
+                      <div className="flex flex-wrap gap-1">
+                        {post.featured && <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#F59E0B]">Featured</span>}
+                        {post.metadata?.audience === 'ctf' && <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#22D3EE]" title="Shown on CTF pages only">CTF</span>}
+                        {isHtmlContent(post.content) && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#8B98B0]" title="Pasted HTML post">HTML</span>}
                       </div>
+                    </td>
+                    <td className={`${td} text-right tabular-nums text-[#8B98B0]`}>{post.view_count}</td>
+                    <td className={`${td} text-[#8B98B0]`}>{new Date(post.created_at).toLocaleDateString()}</td>
+                    <td className={`${td} text-right whitespace-nowrap`}>
+                      <Link href={`/news/${post.id}`} className="text-xs text-[#8B98B0] hover:text-[#22D3EE] mr-3">View</Link>
+                      <button type="button" onClick={() => { handleEdit(post); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-xs text-[#22D3EE] hover:text-[#67E8F9] mr-3">Edit</button>
+                      <button type="button" onClick={() => handleDelete(post.id)} className="text-xs text-[#F87171] hover:text-[#FCA5A5]">Delete</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          
-          {posts.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              No posts found. Create your first post to get started!
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+        )}
+      </Panel>
+    </StaffShell>
   );
-} 
+}

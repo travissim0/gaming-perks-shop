@@ -80,6 +80,9 @@ interface BannedPlayer {
   is_league_banned: boolean;
   league_ban_reason?: string;
   league_ban_date?: string;
+  /** Profile id of the staff member who banned them (add-ban-audit.sql). */
+  league_banned_by?: string | null;
+  banned_by_alias?: string | null;
 }
 
 type Tab = 'squads' | 'pool' | 'season' | 'discord' | 'tournament' | 'bans';
@@ -353,14 +356,29 @@ export default function CTFManagementPage() {
   const loadBannedPlayers = async () => {
     try {
       setBannedPlayersLoading(true);
-      const { data, error } = await supabase
+      // league_banned_by arrives with add-ban-audit.sql; fall back to the older column list until it's run.
+      let res: { data: any[] | null; error: { message: string } | null } = await supabase
         .from('profiles')
-        .select('id, in_game_alias, email, is_league_banned, league_ban_reason, league_ban_date')
+        .select('id, in_game_alias, email, is_league_banned, league_ban_reason, league_ban_date, league_banned_by')
         .eq('is_league_banned', true)
         .order('league_ban_date', { ascending: false });
-
-      if (error) throw error;
-      setBannedPlayers(data || []);
+      if (res.error && /league_banned_by/.test(res.error.message)) {
+        res = await supabase
+          .from('profiles')
+          .select('id, in_game_alias, email, is_league_banned, league_ban_reason, league_ban_date')
+          .eq('is_league_banned', true)
+          .order('league_ban_date', { ascending: false });
+      }
+      if (res.error) throw res.error;
+      const rows = (res.data || []) as BannedPlayer[];
+      // Who banned them: resolve the staff aliases in one query.
+      const byIds = Array.from(new Set(rows.map((r) => r.league_banned_by).filter(Boolean))) as string[];
+      if (byIds.length > 0) {
+        const { data: staff } = await supabase.from('profiles').select('id, in_game_alias').in('id', byIds);
+        const alias = new Map((staff || []).map((s: any) => [s.id, s.in_game_alias]));
+        rows.forEach((r) => { r.banned_by_alias = r.league_banned_by ? alias.get(r.league_banned_by) || null : null; });
+      }
+      setBannedPlayers(rows);
     } catch (error) {
       console.error('Error loading banned players:', error);
       toast.error('Failed to load banned players');
@@ -371,14 +389,10 @@ export default function CTFManagementPage() {
 
   const banPlayer = async (playerId: string, reason: string) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_league_banned: true,
-          league_ban_reason: reason,
-          league_ban_date: new Date().toISOString()
-        })
-        .eq('id', playerId);
+      const stamp = { is_league_banned: true, league_ban_reason: reason, league_ban_date: new Date().toISOString() };
+      // Record who did it; if add-ban-audit.sql hasn't been run yet, save the ban without it.
+      let { error } = await supabase.from('profiles').update({ ...stamp, league_banned_by: user?.id || null }).eq('id', playerId);
+      if (error && /league_banned_by/.test(error.message)) ({ error } = await supabase.from('profiles').update(stamp).eq('id', playerId));
 
       if (error) throw error;
 
@@ -401,14 +415,9 @@ export default function CTFManagementPage() {
 
   const unbanPlayer = async (playerId: string) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_league_banned: false,
-          league_ban_reason: null,
-          league_ban_date: null
-        })
-        .eq('id', playerId);
+      const clear = { is_league_banned: false, league_ban_reason: null, league_ban_date: null };
+      let { error } = await supabase.from('profiles').update({ ...clear, league_banned_by: null }).eq('id', playerId);
+      if (error && /league_banned_by/.test(error.message)) ({ error } = await supabase.from('profiles').update(clear).eq('id', playerId));
 
       if (error) throw error;
 
@@ -1034,6 +1043,7 @@ export default function CTFManagementPage() {
                     <div className="text-sm font-medium text-[#E6EDF7]">{player.in_game_alias}</div>
                     <div className="text-xs text-[#8B98B0]">
                       Banned {player.league_ban_date ? new Date(player.league_ban_date).toLocaleDateString() : 'on an unknown date'}
+                      {player.banned_by_alias && <> by <span className="text-[#E6EDF7]">{player.banned_by_alias}</span></>}
                     </div>
                     {player.league_ban_reason && <div className="mt-1 text-xs text-[#8B98B0]/80 max-w-xl">{player.league_ban_reason}</div>}
                   </div>
