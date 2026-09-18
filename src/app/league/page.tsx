@@ -39,7 +39,29 @@ interface ServerData {
 }
 
 interface GamePlayer { alias: string; team: string; class: string; isOffense: boolean; weapon?: string }
-interface GameData { arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null }
+/**
+ * Clocks from the arena snapshot, frozen at fetch time. `ageMs` is how old the
+ * snapshot already was when it arrived; the card adds the time since `fetchedAt`
+ * so the numbers keep moving between polls without needing a synced clock.
+ */
+interface GameClock {
+  running: boolean;
+  elapsedMs: number | null;
+  timeLeftMs: number | null;
+  /** In-game ticker lines that count down ("Time Left", "Victory in"), ms remaining at fetch. */
+  countdowns: { text: string; remainingMs: number }[];
+  ageMs: number;
+  fetchedAt: number;
+}
+interface GameData { arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null; clock?: GameClock | null }
+
+const mmss = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+};
 
 interface FeaturedVideo {
   id: string;
@@ -350,11 +372,24 @@ export default function LeagueHome() {
                 players.push({ alias: String(p.alias || '?'), team: name, class: String(p.class || 'Unknown'), isOffense: false });
               }
             }
+            const st = best.state || {};
+            const ageMs = Math.max(0, Number(best.age_s) || 0) * 1000;
+            const countdowns = ((best.tickers || []) as any[])
+              .filter((t) => Number(t.remaining_cs) > 0 && t.text)
+              .map((t) => ({ text: String(t.text).replace(/[:\s]+$/, ''), remainingMs: Number(t.remaining_cs) * 10 }));
             setGameData({
-              arenaName: [best.zone, best.state?.label || best.arena].filter(Boolean).join(' · '),
-              gameType: best.state?.phase ? `${best.state.mode ? String(best.state.mode).toUpperCase() : 'Game'} · ${best.state.phase}` : best.game ? String(best.game).toUpperCase() : null,
+              arenaName: [best.zone, st.label || best.arena].filter(Boolean).join(' · '),
+              gameType: st.phase ? `${st.mode ? String(st.mode).toUpperCase() : 'Game'} · ${st.phase}` : best.game ? String(best.game).toUpperCase() : null,
               players,
               lastUpdated: best.updated_at || j.generated_at || null,
+              clock: {
+                running: st.running !== false,
+                elapsedMs: typeof st.elapsed_ms === 'number' ? st.elapsed_ms : null,
+                timeLeftMs: typeof st.time_left_ms === 'number' ? st.time_left_ms : null,
+                countdowns,
+                ageMs,
+                fetchedAt: Date.now(),
+              },
             });
             return;
           }
@@ -471,6 +506,25 @@ export default function LeagueHome() {
   // ── Derived ──
   const activePlayers = gameData.players.filter((p) => p.class !== 'Spectator' && p.class !== 'Not Playing');
   const hasLiveGame = !!gameData.arenaName && activePlayers.length > 0;
+
+  // Live clock line. OvDs run a countdown (game clock or a "Time Left" / "Victory in"
+  // bubble); mixes have no countdown, so they show how long the game has been going.
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasLiveGame || !gameData.clock) return;
+    const id = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hasLiveGame, gameData.clock]);
+  const clockLine = (() => {
+    const c = gameData.clock;
+    if (!c) return null;
+    const advance = c.running ? c.ageMs + Math.max(0, clockNow - c.fetchedAt) : 0;
+    const bubble = c.countdowns.map((t) => ({ text: t.text, left: t.remainingMs - advance })).find((t) => t.left > 0);
+    if (c.timeLeftMs !== null && c.timeLeftMs - advance > 0) return { label: 'Time left', value: mmss(c.timeLeftMs - advance), countdown: true };
+    if (bubble) return { label: bubble.text, value: mmss(bubble.left), countdown: true };
+    if (c.elapsedMs !== null) return { label: 'Game time', value: mmss(c.elapsedMs + advance), countdown: false };
+    return null;
+  })();
   const ctfZones = serverData.zones.filter((z) => isCtfZone(z.title));
   const otherZones = serverData.zones.filter((z) => !isCtfZone(z.title));
   const ctfPlayers = ctfZones.reduce((n, z) => n + z.playerCount, 0);
@@ -586,8 +640,18 @@ export default function LeagueHome() {
                   </span>
                 }
               >
-                <div className="text-sm text-[#E6EDF7]">{gameData.arenaName}</div>
-                {gameData.gameType && <div className="text-xs text-[#8B98B0]">{gameData.gameType}</div>}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm text-[#E6EDF7]">{gameData.arenaName}</div>
+                    {gameData.gameType && <div className="text-xs text-[#8B98B0]">{gameData.gameType}</div>}
+                  </div>
+                  {clockLine && (
+                    <div className="shrink-0 text-right" title={clockLine.countdown ? 'Counting down' : 'Time since the game started'}>
+                      <div className={`font-display text-2xl leading-none tabular-nums ${clockLine.countdown ? 'text-[#F59E0B]' : 'text-[#E6EDF7]'}`}>{clockLine.value}</div>
+                      <div className="text-[10px] uppercase tracking-wider text-[#8B98B0]">{clockLine.label}</div>
+                    </div>
+                  )}
+                </div>
                 {/* Playing teams first; NP and spec sink to the bottom, greyed (Travis's live-list treatment). */}
                 <div className="mt-2 space-y-1.5">
                   {Object.entries(
