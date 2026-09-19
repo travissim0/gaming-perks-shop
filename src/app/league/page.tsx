@@ -445,7 +445,9 @@ export default function LeagueHome() {
             const modeName = mode === 'ovd' ? 'OvD' : mode === 'mix' ? 'Mix' : mode === 'tt' ? 'Triple Threat' : mode === 'draft' ? 'Draft' : mode === 'pub' ? 'Pub' : (st.mode ? String(st.mode).toUpperCase() : 'Game');
             const sizeText = teamSize > 0 && playing.length >= 2 ? ` ${teamSize}v${teamSize}` : '';
             setGameData({
-              arenaName: [best.zone, st.label || best.arena].filter(Boolean).join(' · '),
+              // Zone on the first line; our mode line below already says what the zone's label
+              // would ("OvD @ A5"), so the label only fills in when the mode is unknown.
+              arenaName: [best.zone, mode === 'idle' && !st.mode ? st.label || best.arena : null].filter(Boolean).join(' · '),
               gameType: [`${modeName}${sizeText}`, base ? `at ${base}` : null, st.phase && st.phase !== 'Running' ? String(st.phase) : null].filter(Boolean).join(' · '),
               players,
               teams,
