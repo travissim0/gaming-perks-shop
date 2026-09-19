@@ -605,10 +605,10 @@ export default function MatchesPage() {
                             </div>
                           </div>
                           <div className="shrink-0 text-right">
-                            {hasScore ? (
-                              <div className="font-display text-xl tabular-nums text-[#E6EDF7]">{m.squad_a_score}<span className="text-white/20 mx-1">:</span>{m.squad_b_score}</div>
-                            ) : m.winner_name ? (
+                            {m.winner_name ? (
                               <div className="text-xs text-[#34D399]">{m.winner_name} won</div>
+                            ) : hasScore ? (
+                              <div className="text-xs text-[#8B98B0]">Played</div>
                             ) : null}
                             <div className="flex gap-2 justify-end text-[11px]">
                               {m.vod_url && <a href={m.vod_url} target="_blank" rel="noopener noreferrer" className="text-[#22D3EE] hover:text-[#67E8F9]">Video</a>}

@@ -277,10 +277,8 @@ export default function MatchDetailPage() {
   const saveResult = async () => {
     setBusy('result');
     try {
-      const a = scoreA === '' ? null : Number(scoreA);
-      const b = scoreB === '' ? null : Number(scoreB);
-      const w = winner || (a != null && b != null && a !== b ? (a > b ? match!.squad_a_id : match!.squad_b_id) : null);
-      await put({ squadAScore: a, squadBScore: b, winnerSquadId: w || null, status: a != null || w ? 'completed' : match!.status });
+      // CTF has no score, only a winner.
+      await put({ winnerSquadId: winner || null, status: winner ? 'completed' : match!.status });
       toast.success('Result saved');
       setPanel('none');
       await load();
@@ -449,20 +447,18 @@ export default function MatchDetailPage() {
       {/* Manage panels */}
       {canManage && panel === 'result' && hasTeams && (
         <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
-            <div><label className={labelCls}>{a?.tag || match.squad_a_name || 'A'} score</label><input type="number" min={0} value={scoreA} onChange={(e) => setScoreA(e.target.value)} className={inputCls} /></div>
-            <div><label className={labelCls}>{b?.tag || match.squad_b_name || 'B'} score</label><input type="number" min={0} value={scoreB} onChange={(e) => setScoreB(e.target.value)} className={inputCls} /></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
             <div>
               <label className={labelCls}>Winner</label>
               <select value={winner} onChange={(e) => setWinner(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
-                <option value="">From the score</option>
+                <option value="">Not decided</option>
                 {match.squad_a_id && <option value={match.squad_a_id}>{a?.name || match.squad_a_name}</option>}
                 {match.squad_b_id && <option value={match.squad_b_id}>{b?.name || match.squad_b_name}</option>}
               </select>
             </div>
             <div className="flex justify-end gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveResult} disabled={busy === 'result'} className={btnPrimary}>Save</button></div>
           </div>
-          {match.league_slug && <p className="text-[11px] text-[#8B98B0] mt-2">This records the score on the match. Standings come from the admin match manager, where the official result is entered.</p>}
+          {match.league_slug && <p className="text-[11px] text-[#8B98B0] mt-2">This marks the winner on the match page. Standings come from the match manager's recorded result, which the zone writes automatically after the game.</p>}
         </section>
       )}
       {canManage && panel === 'link' && (
@@ -527,11 +523,11 @@ export default function MatchDetailPage() {
               </div>
             ))}
             <div className="order-2 text-center px-2">
-              {hasScore ? (
-                <div className="font-display text-5xl tabular-nums leading-none">
-                  <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_b_score}</span>
-                  <span className="text-white/20 mx-2">:</span>
-                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_a_score}</span>
+              {played && (aWon || bWon) ? (
+                <div className="font-display text-5xl leading-none" title="CTF has no score: win or loss">
+                  <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
+                  <span className="text-white/20 mx-2">·</span>
+                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
                 </div>
               ) : match.winner_name ? (
                 <div className="text-sm text-[#34D399]">{match.winner_name} won</div>

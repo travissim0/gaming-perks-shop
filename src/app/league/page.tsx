@@ -922,9 +922,9 @@ export default function LeagueHome() {
                               <div className="flex items-center justify-between gap-2 text-sm">
                                 <span className={`truncate ${bWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_b_name}</span>
                                 <span className="tabular-nums font-medium shrink-0">
-                                  <span className={bWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_b_score ?? '–'}</span>
-                                  <span className="text-white/20 mx-1">:</span>
-                                  <span className={aWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_a_score ?? '–'}</span>
+                                  <span className={bWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWin ? 'W' : 'L'}</span>
+                                  <span className="text-white/20 mx-1">·</span>
+                                  <span className={aWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWin ? 'W' : 'L'}</span>
                                 </span>
                                 <span className={`truncate text-right ${aWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_a_name}</span>
                               </div>

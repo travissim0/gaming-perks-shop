@@ -103,10 +103,10 @@ export default function MatchManagerPage() {
   // Match form
   const [squadAName, setSquadAName] = useState('');
   const [squadAId, setSquadAId] = useState('');
-  const [squadAScore, setSquadAScore] = useState('0');
+  // CTF has no score: staff pick the winner (or mark a no-show).
+  const [winnerSide, setWinnerSide] = useState<'' | 'a' | 'b'>('');
   const [squadBName, setSquadBName] = useState('');
   const [squadBId, setSquadBId] = useState('');
-  const [squadBScore, setSquadBScore] = useState('0');
   const [matchTitle, setMatchTitle] = useState('');
   const [playedAt, setPlayedAt] = useState(new Date().toISOString().split('T')[0]);
   const [isOvertime, setIsOvertime] = useState(false);
@@ -329,8 +329,8 @@ export default function MatchManagerPage() {
   };
 
   const resetForm = () => {
-    setSquadAName(''); setSquadAId(''); setSquadASearch(''); setSquadAScore('0');
-    setSquadBName(''); setSquadBId(''); setSquadBSearch(''); setSquadBScore('0');
+    setSquadAName(''); setSquadAId(''); setSquadASearch(''); setWinnerSide('');
+    setSquadBName(''); setSquadBId(''); setSquadBSearch('');
     setMatchTitle(''); setIsOvertime(false); setSquadANoShow(false); setSquadBNoShow(false);
     setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
     setPlayedAt(new Date().toISOString().split('T')[0]);
@@ -343,8 +343,8 @@ export default function MatchManagerPage() {
       setMessage({ type: 'error', text: 'Season, Squad A, and Squad B are required' });
       return;
     }
-    if (squadAScore === '' || squadBScore === '') {
-      setMessage({ type: 'error', text: 'Scores are required' });
+    if (!winnerSide && !squadANoShow && !squadBNoShow) {
+      setMessage({ type: 'error', text: 'Pick the winner (or mark a no-show)' });
       return;
     }
 
@@ -361,8 +361,7 @@ export default function MatchManagerPage() {
         squad_b_name: squadBName,
         squad_a_id: squadAId || undefined,
         squad_b_id: squadBId || undefined,
-        squad_a_score: parseInt(squadAScore),
-        squad_b_score: parseInt(squadBScore),
+        winner: winnerSide || undefined,
         title: matchTitle || undefined,
         played_at: playedAt ? new Date(playedAt).toISOString() : undefined,
         is_overtime: isOvertime,
@@ -422,11 +421,11 @@ export default function MatchManagerPage() {
   const suggestedWin = pointsMode ? winTypeFromMinutes(rules, Number.isNaN(lengthMinutes) ? null : lengthMinutes) : null;
   const WIN_LABEL: Record<'regulation' | 'ot' | '2ot', string> = { regulation: `Under ${rules.ot_minutes}`, ot: `OT ${rules.ot_minutes}–${rules.ot2_minutes}`, '2ot': `2OT ${rules.ot2_minutes}+` };
   const leagueName = selectedLeague === 'ctfpl' ? 'CTFPL' : leagues.find((l) => l.slug === selectedLeague)?.name || selectedLeague.toUpperCase();
-  const canSubmit = !submitting && !!squadAName && !!squadBName && squadAScore !== '' && squadBScore !== '';
+  const canSubmit = !submitting && !!squadAName && !!squadBName && (winnerSide !== '' || squadANoShow || squadBNoShow);
 
   const squadPicker = (
     label: string, search: string, onInput: (v: string) => void, matchedId: string, open: boolean, setOpen: (v: boolean) => void,
-    list: Squad[], pick: (s: Squad) => void, ref: React.RefObject<HTMLDivElement | null>, score: string, setScore: (v: string) => void, noShow: boolean, setNoShow: (v: boolean) => void,
+    list: Squad[], pick: (s: Squad) => void, ref: React.RefObject<HTMLDivElement | null>, isWinner: boolean, setWinner: () => void, noShow: boolean, setNoShow: (v: boolean) => void,
   ) => (
     <div className="rounded-md bg-[#1B2438] p-3">
       <label className={labelCls}>{label}</label>
@@ -452,17 +451,9 @@ export default function MatchManagerPage() {
             </div>
           )}
         </div>
-        <input
-          type="number"
-          min="0"
-          value={score}
-          onChange={(e) => setScore(e.target.value)}
-          placeholder="0"
-          className="w-20 rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-center font-display text-2xl text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
-          aria-label={`${label} score`}
-        />
       </div>
-      <div className="mt-2">
+      <div className="mt-2 flex items-center gap-1.5">
+        <Chip active={isWinner} onClick={setWinner} title="This squad won">{isWinner ? 'Winner' : 'Won'}</Chip>
         <Chip active={noShow} tone="warn" onClick={() => setNoShow(!noShow)}>No-show</Chip>
       </div>
     </div>
@@ -557,8 +548,8 @@ export default function MatchManagerPage() {
       >
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {squadPicker('Squad A · home', squadASearch, handleSquadAInput, squadAId, showSquadADropdown, setShowSquadADropdown, filteredSquadsA, selectSquadA, squadARef, squadAScore, setSquadAScore, squadANoShow, setSquadANoShow)}
-            {squadPicker('Squad B · away', squadBSearch, handleSquadBInput, squadBId, showSquadBDropdown, setShowSquadBDropdown, filteredSquadsB, selectSquadB, squadBRef, squadBScore, setSquadBScore, squadBNoShow, setSquadBNoShow)}
+            {squadPicker('Squad A · home', squadASearch, handleSquadAInput, squadAId, showSquadADropdown, setShowSquadADropdown, filteredSquadsA, selectSquadA, squadARef, winnerSide === 'a', () => setWinnerSide(winnerSide === 'a' ? '' : 'a'), squadANoShow, setSquadANoShow)}
+            {squadPicker('Squad B · away', squadBSearch, handleSquadBInput, squadBId, showSquadBDropdown, setShowSquadBDropdown, filteredSquadsB, selectSquadB, squadBRef, winnerSide === 'b', () => setWinnerSide(winnerSide === 'b' ? '' : 'b'), squadBNoShow, setSquadBNoShow)}
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -678,7 +669,7 @@ export default function MatchManagerPage() {
                     <tr>
                       <th className={th}>Date</th>
                       <th className={`${th} text-right`}>Away</th>
-                      <th className={`${th} text-center`}>Score</th>
+                      <th className={`${th} text-center`}>W/L</th>
                       <th className={th}>Home</th>
                       <th className={th}>Result</th>
                       <th className={`${th} text-right`}></th>
@@ -694,9 +685,9 @@ export default function MatchManagerPage() {
                           <td className={`${td} whitespace-nowrap text-xs text-[#8B98B0]`}>{m.played_at ? new Date(m.played_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</td>
                           <td className={`${td} text-right ${bWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_b_name}</td>
                           <td className={`${td} text-center font-display text-lg tabular-nums whitespace-nowrap`}>
-                            <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_b_score}</span>
-                            <span className="mx-1 text-white/20">:</span>
-                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_a_score}</span>
+                            <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
+                            <span className="mx-1 text-white/20">·</span>
+                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
                           </td>
                           <td className={`${td} ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
                           <td className={`${td} text-xs text-[#8B98B0] whitespace-nowrap`}>

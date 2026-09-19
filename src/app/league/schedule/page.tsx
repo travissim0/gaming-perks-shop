@@ -346,9 +346,9 @@ function SchedulePage() {
                         <div className="w-24 shrink-0 text-center">
                           {f.result ? (
                             <span className="font-display text-2xl tabular-nums">
-                              <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{f.result.b_score}</span>
-                              <span className="text-white/20 mx-1.5">:</span>
-                              <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{f.result.a_score}</span>
+                              <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
+                              <span className="text-white/20 mx-1.5">·</span>
+                              <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
                             </span>
                           ) : live ? (
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#34D399]/15 text-[#34D399]">

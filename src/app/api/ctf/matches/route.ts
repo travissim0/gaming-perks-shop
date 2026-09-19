@@ -158,8 +158,9 @@ export async function POST(request: NextRequest) {
       squad_b_name,
       squad_a_id,
       squad_b_id,
-      squad_a_score,
-      squad_b_score,
+      squad_a_score: squadAScoreRaw,
+      squad_b_score: squadBScoreRaw,
+      winner, // 'a' | 'b' — CTF has no score, so this is the normal way to say who won
       played_at,
       is_overtime,
       squad_a_no_show,
@@ -181,9 +182,14 @@ export async function POST(request: NextRequest) {
     if (!season_number || !squad_a_name || !squad_b_name) {
       return NextResponse.json({ error: 'season_number, squad_a_name, and squad_b_name are required' }, { status: 400 });
     }
-    if (squad_a_score == null || squad_b_score == null) {
-      return NextResponse.json({ error: 'Scores are required' }, { status: 400 });
+    if (winner !== 'a' && winner !== 'b' && (squadAScoreRaw == null || squadBScoreRaw == null) && !squad_a_no_show && !squad_b_no_show) {
+      return NextResponse.json({ error: 'Say who won (winner: a | b), or mark a no-show' }, { status: 400 });
     }
+    // Kills are kept as the "score" for the record only; nothing on the site shows them as a score any more.
+    const squad_a_score = squadAScoreRaw ?? (winner === 'a' ? 1 : 0);
+    const squad_b_score = squadBScoreRaw ?? (winner === 'b' ? 1 : 0);
+    const aBeatsB = winner === 'a' || (winner !== 'b' && parseInt(squad_a_score) > parseInt(squad_b_score));
+    const bBeatsA = winner === 'b' || (winner !== 'a' && parseInt(squad_b_score) > parseInt(squad_a_score));
 
     // Resolve squad IDs - look up by name if IDs not provided
     let resolvedSquadAId = squad_a_id;
@@ -212,7 +218,7 @@ export async function POST(request: NextRequest) {
 
     if (squad_a_no_show) {
       team1Result = 'No Show';
-    } else if (parseInt(squad_a_score) > parseInt(squad_b_score)) {
+    } else if (aBeatsB) {
       team1Result = 'Win';
     } else {
       team1Result = 'Loss';
@@ -220,7 +226,7 @@ export async function POST(request: NextRequest) {
 
     if (squad_b_no_show) {
       team2Result = 'No Show';
-    } else if (parseInt(squad_b_score) > parseInt(squad_a_score)) {
+    } else if (bBeatsA) {
       team2Result = 'Win';
     } else {
       team2Result = 'Loss';
@@ -324,8 +330,8 @@ export async function POST(request: NextRequest) {
     if (!shouldUpdateStandings) {
       // Skip standings update for Playoffs/Finals
     } else if (leagueSlug === 'ctfpl') {
-      const rpcTeam1Result = squad_a_no_show ? 'no_show' : (parseInt(squad_a_score) > parseInt(squad_b_score) ? 'win' : 'loss');
-      const rpcTeam2Result = squad_b_no_show ? 'no_show' : (parseInt(squad_b_score) > parseInt(squad_a_score) ? 'win' : 'loss');
+      const rpcTeam1Result = squad_a_no_show ? 'no_show' : (aBeatsB ? 'win' : 'loss');
+      const rpcTeam2Result = squad_b_no_show ? 'no_show' : (bBeatsA ? 'win' : 'loss');
       const result = await supabaseAdmin.rpc('update_ctfpl_standings', {
         p_season_number: parseInt(season_number),
         p_team1_squad_id: resolvedSquadAId,
