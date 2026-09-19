@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import Navbar from '@/components/Navbar';
+import Link from 'next/link';
+import { StaffShell, HeaderStrip, Panel, Chip, Spinner, Empty, th, td } from '@/components/ctf/AdminBits';
+import { inputCls, labelCls, btnQuiet } from '@/components/ctf/FormBits';
 import { useAuth } from '@/lib/AuthContext';
 import { getEloTier } from '@/utils/eloTiers';
 
@@ -265,382 +266,229 @@ export default function DuelingPage() {
     return 0;
   });
 
-  const formatPercentage = (num: number) => {
-    return `${(num * 100).toFixed(1)}%`;
-  };
+  const formatPercentage = (num: number) => `${(num * 100).toFixed(1)}%`;
+  const typeLabel = (t: string) => t.replace(/_/g, ' ').replace(/\bbo(\d)\b/i, 'Bo$1').replace(/^\w/, (c) => c.toUpperCase());
+  const sortArrow = (col: string) => (matchSortBy === col ? (matchSortOrder === 'asc' ? ' ↑' : ' ↓') : '');
 
-  if (loading && duelingPlayers.length === 0 && duelingMatches.length === 0) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading dueling statistics...</p>
+  const filters = (
+    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div>
+        <label className={labelCls}>Match type</label>
+        <select value={matchType} onChange={(e) => setMatchType(e.target.value)} className={inputCls}>
+          {MATCH_TYPE_OPTIONS.filter((o) => (activeTab === 'leaderboard' ? o.value !== 'all' : o.value !== 'overall')).map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
+      {activeTab === 'leaderboard' && (
+        <>
+          <div>
+            <label className={labelCls}>Sort by</label>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={inputCls}>
+              {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Order</label>
+            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')} className={inputCls}>
+              <option value="desc">Highest first</option>
+              <option value="asc">Lowest first</option>
+            </select>
+          </div>
+        </>
+      )}
+      <div className={activeTab === 'leaderboard' ? '' : 'sm:col-span-1 lg:col-span-2'}>
+        <label className={labelCls}>Player</label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+            placeholder="Alias…"
+            className={inputCls}
+          />
+          <button type="button" onClick={handleSearch} className={btnQuiet}>Search</button>
+          {playerName && (
+            <button type="button" onClick={() => { setSearchInput(''); setPlayerName(''); }} className={btnQuiet} title="Clear the player filter">✕</button>
+          )}
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
-      <Navbar user={user} />
-
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-3xl font-bold text-purple-400 tracking-wider mb-2">
-            Dueling Arena
-          </h1>
-          <p className="text-gray-400">Compete in 1v1 battles and climb the rankings</p>
-        </motion.div>
-
-        {/* Tabs */}
-        <div className="flex mb-6">
-          <button
-            onClick={() => setActiveTab('leaderboard')}
-            className={`px-6 py-3 rounded-l-lg font-medium transition-colors ${
-              activeTab === 'leaderboard'
-                ? 'bg-cyan-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Leaderboard
-          </button>
-          <button
-            onClick={() => setActiveTab('matches')}
-            className={`px-6 py-3 rounded-r-lg font-medium transition-colors ${
-              activeTab === 'matches'
-                ? 'bg-cyan-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Recent Matches
-          </button>
+    <StaffShell user={user} maxWidth="max-w-7xl">
+      <HeaderStrip
+        title="Dueling"
+        meta={
+          <>
+            <span>1v1 in the CTF zone</span>
+            <span>· Ranked Bo3 and Bo5 count toward ELO</span>
+            {playerName && <span className="text-[#22D3EE]">· showing {playerName}</span>}
+          </>
+        }
+        actions={<Link href="/league" className={btnQuiet}>League page</Link>}
+      >
+        <div className="mt-4 flex flex-wrap gap-1">
+          <Chip active={activeTab === 'leaderboard'} onClick={() => setActiveTab('leaderboard')}>Leaderboard</Chip>
+          <Chip active={activeTab === 'matches'} onClick={() => setActiveTab('matches')}>Recent matches</Chip>
         </div>
+      </HeaderStrip>
 
-        {/* Filters */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 mb-8 border border-purple-500/30"
+      {activeTab === 'leaderboard' ? (
+        <Panel
+          title="Leaderboard"
+          hint={`${pagination.total} player${pagination.total === 1 ? '' : 's'} · sorted by ${SORT_OPTIONS.find((o) => o.value === sortBy)?.label.toLowerCase() || sortBy}`}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            {/* Match Type Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
-              <select
-                value={matchType}
-                onChange={(e) => setMatchType(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-              >
-                {MATCH_TYPE_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value} className="bg-gray-800">
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+          {filters}
+          {loading ? (
+            <Spinner label="Loading leaderboard…" />
+          ) : error ? (
+            <div className="p-8 text-center">
+              <p className="text-sm text-[#F87171] mb-3">{error}</p>
+              <button type="button" onClick={() => fetchLeaderboard(0)} className={btnQuiet}>Retry</button>
             </div>
-
-            {/* Sort By Filter */}
-            {activeTab === 'leaderboard' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-                  >
-                    {SORT_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value} className="bg-gray-800">
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Order</label>
-                  <select
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="desc" className="bg-gray-800">Highest First</option>
-                    <option value="asc" className="bg-gray-800">Lowest First</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            {/* Player Search */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Search Player</label>
-              <div className="flex">
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Player name..."
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded-l-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                />
-                <button
-                  onClick={handleSearch}
-                  className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-r-lg transition-colors"
-                >
-                  Search
-                </button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Content */}
-        {activeTab === 'leaderboard' ? (
-          /* Leaderboard Table */
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden border border-purple-500/30"
-          >
-            {error ? (
-              <div className="p-8 text-center">
-                <p className="text-red-400 mb-4">{error}</p>
-                <button
-                  onClick={() => fetchLeaderboard(0)}
-                  className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-600">
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Rank</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Player</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Type</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Matches</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Win Rate</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">K/D</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">Accuracy</th>
-                      <th className="px-6 py-4 text-left text-sm font-medium text-gray-300">ELO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {duelingPlayers.map((player) => {
-                      const tier = getEloTier(player.current_elo);
-                      return (
-                        <tr key={`${player.player_name}-${player.match_type}`} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
-                          <td className="px-6 py-4">
-                            <span className="text-lg font-bold text-cyan-400">#{player.rank}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-white">{player.player_name}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-1 bg-purple-600/50 rounded text-xs">
-                              {player.match_type.replace('_', ' ').toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-white">{player.total_matches}</div>
-                            <div className="text-xs text-gray-400">{player.matches_won}W-{player.matches_lost}L</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-lg font-bold text-green-400">
-                              {formatPercentage(player.win_rate)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-white">{player.kill_death_ratio.toFixed(2)}</div>
-                            <div className="text-xs text-gray-400">{player.total_kills}K-{player.total_deaths}D</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-white">{formatPercentage(player.overall_accuracy)}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {player.match_type.startsWith('ranked') || player.match_type === 'overall' ? (
-                              <div>
-                                <div className={`font-bold ${tier.tailwind}`}>{player.current_elo}</div>
-                                <div className="text-xs text-gray-400">Peak: {player.peak_elo}</div>
-                                <div className={`text-xs ${tier.tailwind}`}>{tier.name}</div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-500">N/A</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          /* Recent Matches Table */
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden border border-purple-500/30"
-          >
-            {matchesLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-gray-400">Loading recent matches...</p>
-              </div>
-            ) : duelingMatches.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-gray-400">No matches found</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-600">
-                      <th
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase cursor-pointer hover:text-cyan-400"
-                        onClick={() => handleMatchSort('completed_at')}
-                      >
-                        Date {matchSortBy === 'completed_at' && (matchSortOrder === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th
-                        className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase cursor-pointer hover:text-cyan-400"
-                        onClick={() => handleMatchSort('match_type')}
-                      >
-                        Type {matchSortBy === 'match_type' && (matchSortOrder === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Players</th>
-                      <th
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase cursor-pointer hover:text-cyan-400"
-                        onClick={() => handleMatchSort('total_rounds')}
-                      >
-                        Score {matchSortBy === 'total_rounds' && (matchSortOrder === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th
-                        className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase cursor-pointer hover:text-cyan-400"
-                        onClick={() => handleMatchSort('duration_seconds')}
-                      >
-                        Duration {matchSortBy === 'duration_seconds' && (matchSortOrder === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">Player 1 Stats</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">Player 2 Stats</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-300 uppercase">Rounds</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedMatches.map((match) => (
-                      <tr key={match.id} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
-                        <td className="px-4 py-3 text-sm text-gray-400">
-                          {new Date(match.completed_at).toLocaleDateString()}
-                          <div className="text-xs text-gray-500">
-                            {new Date(match.completed_at).toLocaleTimeString()}
-                          </div>
+          ) : duelingPlayers.length === 0 ? (
+            <Empty>No players match these filters.</Empty>
+          ) : (
+            <div className="overflow-x-auto border-t border-white/[0.06]">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/[0.06]">
+                    <th className={`${th} w-14`}>#</th>
+                    <th className={th}>Player</th>
+                    <th className={th}>Type</th>
+                    <th className={`${th} text-right`}>Matches</th>
+                    <th className={`${th} text-right`}>Win rate</th>
+                    <th className={`${th} text-right`}>K/D</th>
+                    <th className={`${th} text-right`}>Accuracy</th>
+                    <th className={`${th} text-right`}>ELO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {duelingPlayers.map((player) => {
+                    const tier = getEloTier(player.current_elo);
+                    const rated = player.match_type.startsWith('ranked') || player.match_type === 'overall';
+                    return (
+                      <tr key={`${player.player_name}-${player.match_type}`} className="hover:bg-white/[0.03]">
+                        <td className={`${td} font-display text-lg tabular-nums ${player.rank <= 3 ? 'text-[#F59E0B]' : 'text-[#8B98B0]'}`}>{player.rank}</td>
+                        <td className={`${td} text-[#E6EDF7]`}>
+                          <Link href={`/stats/player/${encodeURIComponent(player.player_name)}`} className="hover:text-[#22D3EE]">{player.player_name}</Link>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-purple-600/50 rounded text-xs">
-                            {match.match_type.replace('_', ' ').toUpperCase()}
-                          </span>
+                        <td className={td}><span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#8B98B0]">{typeLabel(player.match_type)}</span></td>
+                        <td className={`${td} text-right tabular-nums`}>
+                          <div className="text-[#E6EDF7]">{player.total_matches}</div>
+                          <div className="text-[11px] text-[#8B98B0]"><span className="text-[#34D399]">{player.matches_won}W</span> · <span className="text-[#F87171]">{player.matches_lost}L</span></div>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="space-y-1">
-                            <div className={`text-sm font-medium ${match.winner_name === match.player1_name ? 'text-green-400' : 'text-red-400'}`}>
-                              {match.player1_name} {match.winner_name === match.player1_name ? '👑' : ''}
-                            </div>
-                            <div className="text-xs text-gray-500">vs</div>
-                            <div className={`text-sm font-medium ${match.winner_name === match.player2_name ? 'text-green-400' : 'text-red-400'}`}>
-                              {match.player2_name} {match.winner_name === match.player2_name ? '👑' : ''}
-                            </div>
-                          </div>
+                        <td className={`${td} text-right font-display text-lg tabular-nums ${player.win_rate >= 0.5 ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`}>{formatPercentage(player.win_rate)}</td>
+                        <td className={`${td} text-right tabular-nums`}>
+                          <div className="text-[#E6EDF7]">{player.kill_death_ratio.toFixed(2)}</div>
+                          <div className="text-[11px] text-[#8B98B0]">{player.total_kills}K · {player.total_deaths}D</div>
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="text-lg font-bold text-white">
-                            {match.player1_rounds_won} - {match.player2_rounds_won}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {match.total_rounds} rounds
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center text-sm text-gray-400">
-                          {match.formatted_duration}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="text-xs space-y-1">
-                            {match.match_stats?.player1_accuracy !== undefined && (
-                              <div className="text-green-400">
-                                {(match.match_stats.player1_accuracy * 100).toFixed(1)}% acc
-                              </div>
-                            )}
-                            {match.match_stats?.player1_shots_fired !== undefined && (
-                              <div className="text-gray-400">
-                                {match.match_stats.player1_shots_hit || 0}/{match.match_stats.player1_shots_fired || 0}
-                              </div>
-                            )}
-                            {match.match_stats && (match.match_stats.player1_double_hits || 0) > 0 && (
-                              <div className="text-yellow-400">
-                                {match.match_stats.player1_double_hits}x2
-                              </div>
-                            )}
-                            {match.match_stats && (match.match_stats.player1_triple_hits || 0) > 0 && (
-                              <div className="text-red-400">
-                                {match.match_stats.player1_triple_hits}x3
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="text-xs space-y-1">
-                            {match.match_stats?.player2_accuracy !== undefined && (
-                              <div className="text-green-400">
-                                {(match.match_stats.player2_accuracy * 100).toFixed(1)}% acc
-                              </div>
-                            )}
-                            {match.match_stats?.player2_shots_fired !== undefined && (
-                              <div className="text-gray-400">
-                                {match.match_stats.player2_shots_hit || 0}/{match.match_stats.player2_shots_fired || 0}
-                              </div>
-                            )}
-                            {match.match_stats && (match.match_stats.player2_double_hits || 0) > 0 && (
-                              <div className="text-yellow-400">
-                                {match.match_stats.player2_double_hits}x2
-                              </div>
-                            )}
-                            {match.match_stats && (match.match_stats.player2_triple_hits || 0) > 0 && (
-                              <div className="text-red-400">
-                                {match.match_stats.player2_triple_hits}x3
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {match.rounds_data && match.rounds_data.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 justify-center">
-                              {match.rounds_data.map((round: any, index: number) => (
-                                <div key={index} className="bg-gray-700/50 rounded px-1 py-0.5 text-xs">
-                                  R{round.round_number}: {round.winner_name === match.player1_name ? 'P1' : 'P2'}
-                                  <div className="text-xs text-gray-500">({round.winner_hp}HP)</div>
-                                </div>
-                              ))}
-                            </div>
+                        <td className={`${td} text-right tabular-nums text-[#E6EDF7]`}>{formatPercentage(player.overall_accuracy)}</td>
+                        <td className={`${td} text-right tabular-nums`}>
+                          {rated ? (
+                            <>
+                              <div className="font-display text-lg" style={{ color: tier.color }}>{player.current_elo}</div>
+                              <div className="text-[11px] text-[#8B98B0]"><span style={{ color: tier.color }}>{tier.name}</span> · peak {player.peak_elo}</div>
+                            </>
                           ) : (
-                            <span className="text-gray-500 text-xs">No details</span>
+                            <span className="text-[#8B98B0]/60">—</span>
                           )}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </div>
-    </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      ) : (
+        <Panel title="Recent matches" hint="Newest first. Click a column to sort.">
+          {filters}
+          {matchesLoading ? (
+            <Spinner label="Loading matches…" />
+          ) : duelingMatches.length === 0 ? (
+            <Empty>No matches found.</Empty>
+          ) : (
+            <div className="overflow-x-auto border-t border-white/[0.06]">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/[0.06]">
+                    <th className={`${th} cursor-pointer hover:text-[#22D3EE]`} onClick={() => handleMatchSort('completed_at')}>Date{sortArrow('completed_at')}</th>
+                    <th className={`${th} cursor-pointer hover:text-[#22D3EE]`} onClick={() => handleMatchSort('match_type')}>Type{sortArrow('match_type')}</th>
+                    <th className={th}>Players</th>
+                    <th className={`${th} text-center cursor-pointer hover:text-[#22D3EE]`} onClick={() => handleMatchSort('total_rounds')}>Score{sortArrow('total_rounds')}</th>
+                    <th className={`${th} text-center cursor-pointer hover:text-[#22D3EE]`} onClick={() => handleMatchSort('duration_seconds')}>Length{sortArrow('duration_seconds')}</th>
+                    <th className={`${th} text-center`}>P1 stats</th>
+                    <th className={`${th} text-center`}>P2 stats</th>
+                    <th className={th}>Rounds</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {sortedMatches.map((match) => {
+                    const s = match.match_stats;
+                    const p1Won = match.winner_name === match.player1_name;
+                    const p2Won = match.winner_name === match.player2_name;
+                    const statCell = (acc?: number, hit?: number, fired?: number, dbl?: number, tpl?: number) => (
+                      <div className="text-[11px] tabular-nums space-y-0.5">
+                        {acc !== undefined && <div className="text-[#E6EDF7]">{(acc * 100).toFixed(1)}% acc</div>}
+                        {fired !== undefined && <div className="text-[#8B98B0]">{hit || 0}/{fired || 0}</div>}
+                        {(dbl || 0) > 0 && <div className="text-[#F59E0B]">{dbl}×2</div>}
+                        {(tpl || 0) > 0 && <div className="text-[#F87171]">{tpl}×3</div>}
+                      </div>
+                    );
+                    const when = new Date(match.completed_at);
+                    return (
+                      <tr key={match.id} className="hover:bg-white/[0.03] align-top">
+                        <td className={`${td} whitespace-nowrap`}>
+                          <div className="text-[#E6EDF7]">{when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          <div className="text-[11px] text-[#8B98B0]">{when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</div>
+                        </td>
+                        <td className={td}><span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#8B98B0] whitespace-nowrap">{typeLabel(match.match_type)}</span></td>
+                        <td className={td}>
+                          <div className={`text-sm ${p1Won ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`}>{match.player1_name}{p1Won && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">win</span>}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-[#8B98B0]/60">vs</div>
+                          <div className={`text-sm ${p2Won ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`}>{match.player2_name}{p2Won && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">win</span>}</div>
+                        </td>
+                        <td className={`${td} text-center`}>
+                          <div className="font-display text-xl leading-none tabular-nums text-[#E6EDF7]">{match.player1_rounds_won}–{match.player2_rounds_won}</div>
+                          <div className="mt-1 text-[11px] text-[#8B98B0]">{match.total_rounds} round{match.total_rounds === 1 ? '' : 's'}</div>
+                        </td>
+                        <td className={`${td} text-center tabular-nums text-[#8B98B0]`}>{match.formatted_duration || '—'}</td>
+                        <td className={`${td} text-center`}>{statCell(s?.player1_accuracy, s?.player1_shots_hit, s?.player1_shots_fired, s?.player1_double_hits, s?.player1_triple_hits)}</td>
+                        <td className={`${td} text-center`}>{statCell(s?.player2_accuracy, s?.player2_shots_hit, s?.player2_shots_fired, s?.player2_double_hits, s?.player2_triple_hits)}</td>
+                        <td className={td}>
+                          {match.rounds_data && match.rounds_data.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {match.rounds_data.map((round: any, index: number) => {
+                                const p1 = round.winner_name === match.player1_name;
+                                return (
+                                  <span
+                                    key={index}
+                                    className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${p1 ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}
+                                    title={`Round ${round.round_number}: ${round.winner_name} at ${round.winner_hp} HP`}
+                                  >
+                                    R{round.round_number} {p1 ? 'P1' : 'P2'} <span className="opacity-70">{round.winner_hp}hp</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-[#8B98B0]/60">No round detail</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      )}
+    </StaffShell>
   );
 }
