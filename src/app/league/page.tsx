@@ -38,7 +38,11 @@ interface ServerData {
   lastUpdated: string;
 }
 
-interface GamePlayer { alias: string; team: string; class: string; isOffense: boolean; weapon?: string }
+interface GamePlayer { alias: string; team: string; class: string; isOffense: boolean; weapon?: string; dead?: boolean; captain?: boolean }
+interface GameTeam { name: string; kills: number; deaths: number }
+interface GameFlag { name: string; team: string | null; carrier: string | null }
+/** Mix captain-pick phase, when one is on. */
+interface GameMix { phase: string; captains: string[]; turn: string | null; pool: number; teamSize: number }
 /**
  * Clocks from the arena snapshot, frozen at fetch time. `ageMs` is how old the
  * snapshot already was when it arrived; the card adds the time since `fetchedAt`
@@ -53,7 +57,10 @@ interface GameClock {
   ageMs: number;
   fetchedAt: number;
 }
-interface GameData { arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null; clock?: GameClock | null }
+interface GameData {
+  arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null; clock?: GameClock | null;
+  teams?: GameTeam[]; flags?: GameFlag[]; mix?: GameMix | null;
+}
 
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -364,14 +371,22 @@ export default function LeagueHome() {
           const best = fresh.sort((a, b) => (b.players_playing || 0) - (a.players_playing || 0) || (b.players_total || 0) - (a.players_total || 0))[0];
           if (best) {
             const players: GamePlayer[] = [];
+            const teams: GameTeam[] = [];
             for (const t of best.teams as any[]) {
               const name = String(t.name || t.side || 'Unknown');
+              teams.push({ name, kills: Number(t.kills) || 0, deaths: Number(t.deaths) || 0 });
               for (const p of (t.players || []) as any[]) {
                 // Keep the real class; the 'np' / 'spec' team names drive the greyed treatment
                 // at the bottom of the list, same as the old feed.
-                players.push({ alias: String(p.alias || '?'), team: name, class: String(p.class || 'Unknown'), isOffense: false });
+                players.push({ alias: String(p.alias || '?'), team: name, class: String(p.class || 'Unknown'), isOffense: false, dead: p.dead === true, captain: p.captain === true });
               }
             }
+            const flags: GameFlag[] = ((best.flags || []) as any[]).map((f) => ({ name: String(f.name || 'Flag'), team: f.team ? String(f.team) : null, carrier: f.carrier ? String(f.carrier) : null }));
+            // A mix in its captain-pick stage (phase other than Idle/Running) gets a picking line.
+            const mixes = [best.mix, best.mix2].filter((m: any) => m && m.phase && m.phase !== 'Idle' && m.phase !== 'Running');
+            const mix: GameMix | null = mixes[0]
+              ? { phase: String(mixes[0].phase), captains: (mixes[0].captains || []).filter(Boolean).map(String), turn: mixes[0].turn ? String(mixes[0].turn) : null, pool: Array.isArray(mixes[0].pool) ? mixes[0].pool.length : 0, teamSize: Number(mixes[0].team_size) || 0 }
+              : null;
             const st = best.state || {};
             const ageMs = Math.max(0, Number(best.age_s) || 0) * 1000;
             const countdowns = ((best.tickers || []) as any[])
@@ -381,6 +396,9 @@ export default function LeagueHome() {
               arenaName: [best.zone, st.label || best.arena].filter(Boolean).join(' · '),
               gameType: st.phase ? `${st.mode ? String(st.mode).toUpperCase() : 'Game'} · ${st.phase}` : best.game ? String(best.game).toUpperCase() : null,
               players,
+              teams,
+              flags,
+              mix,
               lastUpdated: best.updated_at || j.generated_at || null,
               clock: {
                 running: st.running !== false,
@@ -663,6 +681,40 @@ export default function LeagueHome() {
                     </div>
                   )}
                 </div>
+                {/* Flags: who holds what, and who is carrying. */}
+                {(gameData.flags?.length || 0) > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {gameData.flags!.map((f) => {
+                      const color = f.team ? (isNonPlayingTeam(f.team) ? '#6b7280' : teamColor(f.team)) : null;
+                      return (
+                        <span
+                          key={f.name}
+                          className="inline-flex items-center gap-1 rounded bg-[#1B2438] px-1.5 py-0.5 text-[10px] font-mono"
+                          title={f.carrier ? `${f.name}: carried by ${f.carrier}` : f.team ? `${f.name}: held by ${f.team}` : `${f.name}: unclaimed`}
+                        >
+                          <span className="inline-block h-1.5 w-1.5 rounded-sm" style={{ background: color || 'rgba(255,255,255,0.18)' }} />
+                          <span className="text-[#8B98B0]">{f.name}</span>
+                          {f.carrier ? (
+                            <span style={{ color: color || '#E6EDF7' }}>{f.carrier}</span>
+                          ) : f.team ? (
+                            <span style={{ color: color || '#E6EDF7' }}>{f.team}</span>
+                          ) : (
+                            <span className="text-[#8B98B0]/60">—</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Mix in its captain-pick stage. */}
+                {gameData.mix && (
+                  <div className="mt-2 rounded bg-[#22D3EE]/10 px-2 py-1 text-[11px] text-[#E6EDF7]">
+                    <span className="text-[#22D3EE]">{gameData.mix.phase}</span>
+                    {gameData.mix.captains.length > 0 && <span> · captains {gameData.mix.captains.join(' vs ')}</span>}
+                    {gameData.mix.turn && <span> · <span className="text-[#F59E0B]">{gameData.mix.turn}</span> to pick</span>}
+                    {gameData.mix.pool > 0 && <span className="text-[#8B98B0]"> · {gameData.mix.pool} in the pool</span>}
+                  </div>
+                )}
                 {/* Playing teams first; NP and spec sink to the bottom, greyed (Travis's live-list treatment). */}
                 <div className="mt-2 space-y-1.5">
                   {Object.entries(
@@ -674,20 +726,28 @@ export default function LeagueHome() {
                     .sort(([a], [b]) => (isNonPlayingTeam(a) ? 1 : 0) - (isNonPlayingTeam(b) ? 1 : 0) || a.localeCompare(b))
                     .map(([team, players]) => {
                       const color = isNonPlayingTeam(team) ? '#6b7280' : teamColor(team);
+                      const playing = !isNonPlayingTeam(team);
+                      const score = playing ? gameData.teams?.find((t) => t.name === team) : undefined;
                       return (
                         <div key={team}>
                           <div className="flex items-baseline justify-between px-1.5 py-[3px] bg-[#1B2438] border-l-2 rounded-sm" style={{ borderColor: color }}>
                             <span className="text-[10px] font-bold uppercase tracking-wider truncate" style={{ color }}>{team}</span>
-                            <span className="text-[9px] font-mono text-[#8B98B0] ml-1.5 shrink-0">{players.length}</span>
+                            <span className="ml-1.5 shrink-0 flex items-baseline gap-2">
+                              {score && (
+                                <span className="font-display text-sm leading-none tabular-nums" style={{ color }} title={`${score.kills} kills · ${score.deaths} deaths`}>{score.kills}</span>
+                              )}
+                              <span className="text-[9px] font-mono text-[#8B98B0]">{players.length}</span>
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-2 px-1.5 pt-0.5">
                             {players.slice(0, 14).map((p, i) => (
                               <span
                                 key={i}
-                                className="text-[10px] font-mono leading-[1.4] truncate"
+                                className={`text-[10px] font-mono leading-[1.4] truncate ${playing && p.dead ? 'opacity-40' : ''}`}
                                 style={getPlayerDisplayStyle(p.class, p.team)}
-                                title={isNonPlayingTeam(p.team) ? `${p.alias} - not in the game (${p.team})` : p.class}
+                                title={isNonPlayingTeam(p.team) ? `${p.alias} - not in the game (${p.team})` : `${p.class}${p.dead ? ' · dead' : ''}${p.captain ? ' · captain' : ''}`}
                               >
+                                {p.captain && <span className="mr-0.5 text-[#F59E0B]" aria-label="captain">★</span>}
                                 {p.alias}
                               </span>
                             ))}
