@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { ChevronRight, ExternalLink, Play, Radio } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
@@ -59,10 +59,22 @@ interface GameClock {
   ageMs: number;
   fetchedAt: number;
 }
+/** What kind of game it is, so the card can show OvD and mix details differently. */
+interface GameInfo {
+  mode: string;               // ovd | mix | pub | draft | tt | idle
+  base: string | null;        // "D7" from the label, or the mix's base
+  teamSize: number;           // players on the larger playing team
+  offense: string | null;     // team name, when known
+  defense: string | null;
+  objective: string | null;   // the flag that decides an OvD (Bridge3)
+  winningTeam: string | null; // from the zone while a victory countdown runs
+  victoryInMs: number | null;
+}
 interface GameData {
   arenaName: string | null; gameType: string | null; players: GamePlayer[]; lastUpdated: string | null; clock?: GameClock | null;
-  teams?: GameTeam[]; flags?: GameFlag[]; mix?: GameMix | null;
+  teams?: GameTeam[]; flags?: GameFlag[]; mix?: GameMix | null; info?: GameInfo | null;
 }
+const OVD_OBJECTIVE = 'Bridge3';
 
 const mmss = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -251,6 +263,8 @@ export default function LeagueHome() {
     lastUpdated: '',
   });
   const [gameData, setGameData] = useState<GameData>({ arenaName: null, gameType: null, players: [], lastUpdated: null });
+  // OvD: which team was holding the objective flag when the current game started (defence sets up first).
+  const ovdDefenseRef = useRef<{ key: string; team: string } | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [recordedGames, setRecordedGames] = useState<RecordedGame[]>([]);
@@ -394,13 +408,50 @@ export default function LeagueHome() {
             const countdowns = ((best.tickers || []) as any[])
               .filter((t) => Number(t.remaining_cs) > 0 && t.text)
               .map((t) => ({ text: String(t.text).replace(/[:\s]+$/, ''), remainingMs: Number(t.remaining_cs) * 10 }));
+
+            // Mode-specific facts. A running mix says which team is offense/defense and the
+            // base. OvD doesn't: the defence sets up holding the base flag first, so the team
+            // holding Bridge3 when a game starts is remembered as defence for that game.
+            const mode = String(st.mode || best.game || 'idle').toLowerCase();
+            const playing = teams.filter((t) => t.side === 'T' || t.side === 'C');
+            const teamSize = Math.max(0, ...playing.map((t) => players.filter((p) => p.team === t.name).length));
+            const runningMix = [best.mix, best.mix2].find((m: any) => m && m.phase === 'Running') as any;
+            let offense: string | null = runningMix?.offense ? String(runningMix.offense) : null;
+            let defense: string | null = runningMix?.defense ? String(runningMix.defense) : null;
+            const labelBase = String(st.label || '').match(/@\s*(\S+)/)?.[1] || null;
+            const base = runningMix?.base ? String(runningMix.base) : labelBase;
+            if (mode === 'ovd' && playing.length >= 2) {
+              // The big tell is the class mix: defence runs Medics and Engineers, offence runs
+              // Squad Leaders. Score each team; the flag holder at game start breaks a tie.
+              const lean = (team: string) => players
+                .filter((p) => p.team === team)
+                .reduce((n, p) => n + (/medic|engineer/i.test(p.class) ? 1 : /squad leader/i.test(p.class) ? -1 : 0), 0);
+              const ranked = [...playing].sort((a, b) => lean(b.name) - lean(a.name));
+              const decisive = lean(ranked[0].name) !== lean(ranked[1].name);
+              const elapsed = typeof st.elapsed_ms === 'number' ? st.elapsed_ms : 0;
+              const gameKey = `${best.key}|${Math.round((Date.now() - ageMs - elapsed) / 60000)}`; // start minute identifies the game
+              const objective = flags.find((f) => f.name === OVD_OBJECTIVE);
+              const holder = objective?.team && playing.some((t) => t.name === objective.team) ? objective.team : null;
+              if (ovdDefenseRef.current?.key !== gameKey) ovdDefenseRef.current = holder ? { key: gameKey, team: holder } : null;
+              defense = decisive ? ranked[0].name : ovdDefenseRef.current?.team || null;
+              offense = defense ? playing.find((t) => t.name !== defense)?.name || null : null;
+            }
+            const info: GameInfo = {
+              mode, base, teamSize, offense, defense,
+              objective: mode === 'ovd' ? OVD_OBJECTIVE : null,
+              winningTeam: st.winning_team ? String(st.winning_team) : null,
+              victoryInMs: typeof st.victory_in_ms === 'number' && st.victory_in_ms > 0 ? st.victory_in_ms : null,
+            };
+            const modeName = mode === 'ovd' ? 'OvD' : mode === 'mix' ? 'Mix' : mode === 'tt' ? 'Triple Threat' : mode === 'draft' ? 'Draft' : mode === 'pub' ? 'Pub' : (st.mode ? String(st.mode).toUpperCase() : 'Game');
+            const sizeText = teamSize > 0 && playing.length >= 2 ? ` ${teamSize}v${teamSize}` : '';
             setGameData({
               arenaName: [best.zone, st.label || best.arena].filter(Boolean).join(' · '),
-              gameType: st.phase ? `${st.mode ? String(st.mode).toUpperCase() : 'Game'} · ${st.phase}` : best.game ? String(best.game).toUpperCase() : null,
+              gameType: [`${modeName}${sizeText}`, base ? `at ${base}` : null, st.phase && st.phase !== 'Running' ? String(st.phase) : null].filter(Boolean).join(' · '),
               players,
               teams,
               flags,
               mix,
+              info,
               lastUpdated: best.updated_at || j.generated_at || null,
               clock: {
                 running: st.running !== false,
@@ -540,6 +591,9 @@ export default function LeagueHome() {
     if (!c) return null;
     const advance = c.running ? c.ageMs + Math.max(0, clockNow - c.fetchedAt) : 0;
     const bubble = c.countdowns.map((t) => ({ text: t.text, left: t.remainingMs - advance })).find((t) => t.left > 0);
+    // A side closing out an OvD: the victory countdown beats the game clock.
+    const v = gameData.info?.victoryInMs;
+    if (v && v - advance > 0) return { label: gameData.info?.winningTeam ? `${gameData.info.winningTeam} wins in` : 'Victory in', value: mmss(v - advance), countdown: true };
     if (c.timeLeftMs !== null && c.timeLeftMs - advance > 0) return { label: 'Time left', value: mmss(c.timeLeftMs - advance), countdown: true };
     if (bubble) return { label: bubble.text, value: mmss(bubble.left), countdown: true };
     if (c.elapsedMs !== null) return { label: 'Game time', value: mmss(c.elapsedMs + advance), countdown: false };
@@ -685,16 +739,20 @@ export default function LeagueHome() {
                 </div>
                 {/* Flags: who holds what, and who is carrying. */}
                 {(gameData.flags?.length || 0) > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {gameData.flags!.map((f) => {
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    {[...gameData.flags!]
+                      // In an OvD the objective flag leads and stands out; the rest follow.
+                      .sort((a, b) => (a.name === gameData.info?.objective ? -1 : 0) - (b.name === gameData.info?.objective ? -1 : 0))
+                      .map((f) => {
                       const holder = f.team ? gameData.teams?.find((t) => t.name === f.team) : undefined;
                       const color = f.team ? (isNonPlayingTeam(f.team) ? '#6b7280' : sideColor(holder?.side) || teamColor(f.team)) : null;
+                      const objective = f.name === gameData.info?.objective;
                       return (
                         <span
                           key={f.name}
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono"
-                          style={{ background: color ? `${color}1f` : '#1B2438' }}
-                          title={f.carrier ? `${f.name}: carried by ${f.carrier}` : f.team ? `${f.name}: held by ${f.team}` : `${f.name}: unclaimed`}
+                          className={`inline-flex items-center gap-1 rounded font-mono ${objective ? 'px-2 py-1 text-[11px] font-bold ring-1 ring-white/10' : 'px-1.5 py-0.5 text-[10px]'}`}
+                          style={{ background: color ? `${color}${objective ? '2e' : '1f'}` : '#1B2438' }}
+                          title={`${objective ? 'Objective · ' : ''}${f.carrier ? `${f.name}: carried by ${f.carrier}` : f.team ? `${f.name}: held by ${f.team}` : `${f.name}: unclaimed`}`}
                         >
                           <span aria-hidden="true" style={{ color: color || 'rgba(255,255,255,0.3)' }}>⚑</span>
                           <span style={{ color: color || '#8B98B0' }}>{f.name}</span>
@@ -736,7 +794,11 @@ export default function LeagueHome() {
                       return (
                         <div key={team}>
                           <div className="flex items-baseline justify-between px-1.5 py-[3px] bg-[#1B2438] border-l-2 rounded-sm" style={{ borderColor: color }}>
-                            <span className="text-[10px] font-bold uppercase tracking-wider truncate" style={{ color }}>{team}</span>
+                            <span className="min-w-0 flex items-baseline gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider truncate" style={{ color }}>{team}</span>
+                              {playing && gameData.info?.offense === team && <span className="rounded bg-white/5 px-1 text-[8px] font-semibold uppercase tracking-wider text-[#8B98B0]" title="Attacking">Offense</span>}
+                              {playing && gameData.info?.defense === team && <span className="rounded bg-white/5 px-1 text-[8px] font-semibold uppercase tracking-wider text-[#8B98B0]" title="Defending">Defense</span>}
+                            </span>
                             <span className="ml-1.5 shrink-0 flex items-baseline gap-2">
                               {score && (
                                 <span className="font-display text-sm leading-none tabular-nums" style={{ color }} title={`${score.kills} kills · ${score.deaths} deaths`}>{score.kills}</span>
