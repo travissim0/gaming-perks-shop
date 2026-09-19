@@ -39,7 +39,9 @@ interface ServerData {
 }
 
 interface GamePlayer { alias: string; team: string; class: string; isOffense: boolean; weapon?: string; dead?: boolean; captain?: boolean }
-interface GameTeam { name: string; kills: number; deaths: number }
+interface GameTeam { name: string; kills: number; deaths: number; side: string | null }
+/** In-game side colours: Titan green, Collective red (theme shades). */
+const sideColor = (side: string | null | undefined): string | null => (side === 'T' ? '#34D399' : side === 'C' ? '#F87171' : null);
 interface GameFlag { name: string; team: string | null; carrier: string | null }
 /** Mix captain-pick phase, when one is on. */
 interface GameMix { phase: string; captains: string[]; turn: string | null; pool: number; teamSize: number }
@@ -374,7 +376,7 @@ export default function LeagueHome() {
             const teams: GameTeam[] = [];
             for (const t of best.teams as any[]) {
               const name = String(t.name || t.side || 'Unknown');
-              teams.push({ name, kills: Number(t.kills) || 0, deaths: Number(t.deaths) || 0 });
+              teams.push({ name, kills: Number(t.kills) || 0, deaths: Number(t.deaths) || 0, side: t.side ? String(t.side) : null });
               for (const p of (t.players || []) as any[]) {
                 // Keep the real class; the 'np' / 'spec' team names drive the greyed treatment
                 // at the bottom of the list, same as the old feed.
@@ -685,22 +687,23 @@ export default function LeagueHome() {
                 {(gameData.flags?.length || 0) > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {gameData.flags!.map((f) => {
-                      const color = f.team ? (isNonPlayingTeam(f.team) ? '#6b7280' : teamColor(f.team)) : null;
+                      const holder = f.team ? gameData.teams?.find((t) => t.name === f.team) : undefined;
+                      const color = f.team ? (isNonPlayingTeam(f.team) ? '#6b7280' : sideColor(holder?.side) || teamColor(f.team)) : null;
                       return (
                         <span
                           key={f.name}
-                          className="inline-flex items-center gap-1 rounded bg-[#1B2438] px-1.5 py-0.5 text-[10px] font-mono"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                          style={{ background: color ? `${color}1f` : '#1B2438' }}
                           title={f.carrier ? `${f.name}: carried by ${f.carrier}` : f.team ? `${f.name}: held by ${f.team}` : `${f.name}: unclaimed`}
                         >
-                          <span className="inline-block h-1.5 w-1.5 rounded-sm" style={{ background: color || 'rgba(255,255,255,0.18)' }} />
-                          <span className="text-[#8B98B0]">{f.name}</span>
-                          {f.carrier ? (
-                            <span style={{ color: color || '#E6EDF7' }}>{f.carrier}</span>
-                          ) : f.team ? (
+                          <span aria-hidden="true" style={{ color: color || 'rgba(255,255,255,0.3)' }}>⚑</span>
+                          <span style={{ color: color || '#8B98B0' }}>{f.name}</span>
+                          {f.team ? (
                             <span style={{ color: color || '#E6EDF7' }}>{f.team}</span>
                           ) : (
                             <span className="text-[#8B98B0]/60">—</span>
                           )}
+                          {f.carrier && <span className="text-[#E6EDF7]">· {f.carrier}</span>}
                         </span>
                       );
                     })}
@@ -725,9 +728,11 @@ export default function LeagueHome() {
                   )
                     .sort(([a], [b]) => (isNonPlayingTeam(a) ? 1 : 0) - (isNonPlayingTeam(b) ? 1 : 0) || a.localeCompare(b))
                     .map(([team, players]) => {
-                      const color = isNonPlayingTeam(team) ? '#6b7280' : teamColor(team);
                       const playing = !isNonPlayingTeam(team);
                       const score = playing ? gameData.teams?.find((t) => t.name === team) : undefined;
+                      const color = !playing ? '#6b7280' : sideColor(score?.side) || teamColor(team);
+                      // Flags this team's players are carrying, by alias.
+                      const carrying = new Map((gameData.flags || []).filter((f) => f.carrier && f.team === team).map((f) => [f.carrier as string, f.name]));
                       return (
                         <div key={team}>
                           <div className="flex items-baseline justify-between px-1.5 py-[3px] bg-[#1B2438] border-l-2 rounded-sm" style={{ borderColor: color }}>
@@ -745,10 +750,11 @@ export default function LeagueHome() {
                                 key={i}
                                 className={`text-[10px] font-mono leading-[1.4] truncate ${playing && p.dead ? 'opacity-40' : ''}`}
                                 style={getPlayerDisplayStyle(p.class, p.team)}
-                                title={isNonPlayingTeam(p.team) ? `${p.alias} - not in the game (${p.team})` : `${p.class}${p.dead ? ' · dead' : ''}${p.captain ? ' · captain' : ''}`}
+                                title={isNonPlayingTeam(p.team) ? `${p.alias} - not in the game (${p.team})` : `${p.class}${p.dead ? ' · dead' : ''}${p.captain ? ' · captain' : ''}${carrying.has(p.alias) ? ` · carrying ${carrying.get(p.alias)}` : ''}`}
                               >
                                 {p.captain && <span className="mr-0.5 text-[#F59E0B]" aria-label="captain">★</span>}
                                 {p.alias}
+                                {carrying.has(p.alias) && <span className="ml-1" style={{ color }} aria-label={`carrying ${carrying.get(p.alias)}`}>⚑</span>}
                               </span>
                             ))}
                             {players.length > 14 && (
