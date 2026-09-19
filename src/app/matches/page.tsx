@@ -289,11 +289,30 @@ export default function MatchesPage() {
   const mine = (m: Match) => !!user && m.participants.some((p) => p.player_id === user.id);
   const myNext = user ? upcoming.find(mine) : null;
 
-  // Calendar
+  // Calendar. The list view's feeds are capped at the newest few dozen rows, which on a busy
+  // week is two days of OvDs, so the calendar loads the whole visible month on its own.
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const blanks = first.getDay();
-  const calendarItems = useMemo(() => [...upcoming, ...past, ...autoLogged], [upcoming, past, autoLogged]);
+  const [monthItems, setMonthItems] = useState<Match[] | null>(null);
+  useEffect(() => {
+    if (view !== 'calendar') return;
+    let cancelled = false;
+    setMonthItems(null);
+    (async () => {
+      try {
+        const from = new Date(month.getFullYear(), month.getMonth(), 1).toISOString();
+        const to = new Date(month.getFullYear(), month.getMonth() + 1, 1).toISOString();
+        const r = await fetch(`/api/matches?status=scheduled,expired,completed,auto_logged&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=1000`, { cache: 'no-store' });
+        const j = r.ok ? await r.json() : { matches: [] };
+        if (!cancelled) setMonthItems((j.matches || []) as Match[]);
+      } catch {
+        if (!cancelled) setMonthItems([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [view, month]);
+  const calendarItems = useMemo(() => monthItems ?? [...upcoming, ...past, ...autoLogged], [monthItems, upcoming, past, autoLogged]);
   const onDay = (d: number) => calendarItems.filter((m) => {
     const x = new Date(m.scheduled_at);
     return x.getFullYear() === month.getFullYear() && x.getMonth() === month.getMonth() && x.getDate() === d;

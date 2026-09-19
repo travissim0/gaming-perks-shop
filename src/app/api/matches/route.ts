@@ -12,9 +12,13 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'scheduled';
-    const limit = parseInt(searchParams.get('limit') || '10');
     const matchId = searchParams.get('id');
     const includeStats = searchParams.get('includeStats') === 'true';
+    // Optional date window (ISO) for calendar views; a window allows a bigger page.
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    const windowed = !!(from && to && !Number.isNaN(Date.parse(from)) && !Number.isNaN(Date.parse(to)));
+    const limit = Math.min(parseInt(searchParams.get('limit') || '10') || 10, windowed ? 1000 : 200);
 
     // Update match statuses first
     await updateMatchStatuses();
@@ -77,6 +81,7 @@ export async function GET(req: NextRequest) {
       } else {
         query = query.eq('status', status);
       }
+      if (windowed) query = query.gte('scheduled_at', new Date(from!).toISOString()).lte('scheduled_at', new Date(to!).toISOString());
     }
 
     let finalQuery = query;
