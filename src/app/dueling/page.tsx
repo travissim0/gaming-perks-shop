@@ -339,7 +339,10 @@ export default function DuelingPage() {
       {activeTab === 'leaderboard' ? (
         <Panel
           title="Leaderboard"
-          hint={`${pagination.total} player${pagination.total === 1 ? '' : 's'} · sorted by ${SORT_OPTIONS.find((o) => o.value === sortBy)?.label.toLowerCase() || sortBy}`}
+          hint={(() => {
+            const n = pagination.total || duelingPlayers.length;
+            return `${n} player${n === 1 ? '' : 's'}${pagination.hasMore ? '+' : ''} · sorted by ${SORT_OPTIONS.find((o) => o.value === sortBy)?.label.toLowerCase() || sortBy}`;
+          })()}
         >
           {filters}
           {loading ? (
