@@ -26,9 +26,10 @@ interface Team {
   /** Only present when the viewer may see this squad's lineup. */
   lineup: { starting: Entry[]; bench: Entry[] } | null;
 }
+interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
 interface Setup {
   pending_sql?: boolean;
-  match: { id: string; scheduled_at: string; status: string; locked: boolean };
+  match: { id: string; scheduled_at: string; status: string; locked: boolean; arena?: string | null; game_id?: string | null };
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
@@ -36,7 +37,12 @@ interface Setup {
   starters: number;
   side_reveal_at: string;
   side_released: boolean;
-  viewer: { is_staff: boolean; leads_home: boolean; leads_away: boolean; can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean } | null;
+  subs?: Sub[];
+  viewer: {
+    is_staff: boolean; is_referee?: boolean; leads_home: boolean; leads_away: boolean;
+    can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean;
+    can_sub_home?: boolean; can_sub_away?: boolean; sub_window?: boolean;
+  } | null;
 }
 
 const SIDE_LABEL: Record<Side, string> = { titan: 'Titan', collective: 'Collective' };
@@ -55,6 +61,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const [busy, setBusy] = useState<string | null>(null);
   // Local edits per squad: player_id → slot. Absent until the user touches a lineup.
   const [draft, setDraft] = useState<Record<string, Record<string, Slot>>>({});
+  // Sub picker per squad: who comes out (a starter) and who goes in (bench or roster).
+  const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
 
   const headers = useCallback(async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -133,7 +141,16 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const { home, away, viewer, match, progress } = setup;
   const starters = setup.starters ?? 10;
   const locked = match.locked;
-  const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away);
+  const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || (!!viewer.is_referee && setup.side_released));
+  const subs = setup.subs || [];
+  const makeSub = (team: Team) => {
+    const pick = subPick[team.squad_id];
+    if (!pick?.out || !pick?.in) { toast.error('Pick who comes out and who goes in'); return; }
+    const outAlias = team.roster.find((m) => m.player_id === pick.out)?.alias || 'player';
+    const inAlias = team.roster.find((m) => m.player_id === pick.in)?.alias || 'player';
+    post({ action: 'sub', squad_id: team.squad_id, out_player_id: pick.out, in_player_id: pick.in }, `${team.tag}: ${inAlias} in for ${outAlias}`);
+    setSubPick((s) => ({ ...s, [team.squad_id]: { out: '', in: '' } }));
+  };
   const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const sidesLine = home.side ? `${home.tag} · ${SIDE_LABEL[home.side]}  ·  ${away.tag} · ${SIDE_LABEL[away.side!]}` : null;
 
@@ -255,6 +272,44 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
           </div>
         )}
 
+        {/* Subs: from side release until the result is in. Captains, staff and referees. */}
+        {canSee && (isHome ? viewer?.can_sub_home : viewer?.can_sub_away) && (
+          <div className="px-3 py-2 border-t border-white/[0.06] space-y-1.5">
+            <div className="text-[10px] uppercase tracking-wide text-[#F59E0B]">Sub</div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <select
+                value={subPick[team.squad_id]?.out || ''}
+                onChange={(e) => setSubPick((s) => ({ ...s, [team.squad_id]: { out: e.target.value, in: s[team.squad_id]?.in || '' } }))}
+                className="rounded-md bg-[#0B0F1A] border border-white/10 px-2 py-1 text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+                aria-label="Player coming out"
+              >
+                <option value="">Out…</option>
+                {starting.map((m) => <option key={m.player_id} value={m.player_id}>{m.alias}</option>)}
+              </select>
+              <span className="text-[#8B98B0]">→</span>
+              <select
+                value={subPick[team.squad_id]?.in || ''}
+                onChange={(e) => setSubPick((s) => ({ ...s, [team.squad_id]: { out: s[team.squad_id]?.out || '', in: e.target.value } }))}
+                className="rounded-md bg-[#0B0F1A] border border-white/10 px-2 py-1 text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+                aria-label="Player going in"
+              >
+                <option value="">In…</option>
+                {bench.map((m) => <option key={m.player_id} value={m.player_id}>{m.alias} (bench)</option>)}
+                {team.roster.filter((m) => slots[m.player_id] === 'out').map((m) => <option key={m.player_id} value={m.player_id}>{m.alias}</option>)}
+              </select>
+              <button type="button" onClick={() => makeSub(team)} disabled={busy !== null || !subPick[team.squad_id]?.out || !subPick[team.squad_id]?.in} className={btnPrimary}>Make sub</button>
+            </div>
+            <p className="text-[11px] text-[#8B98B0]">The zone moves them within a minute: the sub is unspecced onto {team.team_starting || 'the team'}, the player coming out goes to spec on {team.team_bench || 'the bench team'}.</p>
+          </div>
+        )}
+        {canSee && subs.some((s) => s.squad_id === team.squad_id) && (
+          <ul className="px-3 py-2 border-t border-white/[0.06] space-y-0.5 text-[11px] text-[#8B98B0]">
+            {subs.filter((s) => s.squad_id === team.squad_id).map((s) => (
+              <li key={s.id}><span className="text-[#E6EDF7]">{s.in_alias}</span> in for <span className="text-[#E6EDF7]">{s.out_alias}</span> · {new Date(s.created_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{s.by_alias ? ` · by ${s.by_alias}` : ''}</li>
+            ))}
+          </ul>
+        )}
+
         {canEdit && canSee && team.roster.length > 0 && (
           <div className="px-3 py-2 flex items-center justify-between gap-2 border-t border-white/[0.06]">
             <span className="text-[11px] text-[#8B98B0]">
@@ -278,7 +333,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-lg text-[#E6EDF7]">Match setup</h2>
         <div className="flex items-center gap-3 text-xs text-[#8B98B0]">
-          {locked ? <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">Locked</span> : progress.ready ? <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 uppercase tracking-wide text-[#34D399]">Ready</span> : null}
+          {match.arena && <span className="font-mono text-[#E6EDF7]" title="The in-game arena the zone opens for this match">{match.arena}</span>}
+          {locked ? <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">{viewer?.sub_window ? 'Live · subs open' : 'Locked'}</span> : progress.ready ? <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 uppercase tracking-wide text-[#34D399]">Ready</span> : null}
           {viewer?.is_staff && (
             <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
           )}
@@ -317,7 +373,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
 
         <p className="text-[11px] text-[#8B98B0]">
           Matches are {starters}v{starters}: pick {starters} starters, everyone else you want at the match goes on the bench. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
-          When the game client is connected, starters are placed on their team and unspecced, and the bench stays in spec on the other team name.
+          From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
         </p>
       </div>
     </section>

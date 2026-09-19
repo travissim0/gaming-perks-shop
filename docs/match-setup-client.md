@@ -104,7 +104,10 @@ client can treat a locked document as final.
 
 - `{ "action": "set_side", "side": "titan" | "collective" | null }` — home captain/co-captain, or staff
 - `{ "action": "set_lineup", "squad_id": "…", "starting": [player_id…], "bench": [player_id…] }` — that squad's captain/co-captain, or staff; at most 10 starters
+- `{ "action": "sub", "squad_id": "…", "out_player_id": "…", "in_player_id": "…" }` — that squad's captain/co-captain, staff or a referee; from side release until the result is recorded. Swaps the two slots and logs it (`add-match-subs.sql`).
 - `{ "action": "swap_home" }` — staff; the other team becomes home and the side is cleared
+
+The zone's own view of all upcoming matches, with arena names, is `GET /api/matches/zone-queue` — see `docs/zone-match-automation.md`.
 
 Schema: `add-match-setup.sql` (`match_setup` and `match_lineups`, both RLS
 with no policies, so the browser can never read them directly).
