@@ -23,7 +23,7 @@ Response:
   "matches": [
     {
       "id": "…",                              // match id, used by the report call below
-      "arena": "CTFDL - KEVI vs NSS",         // open exactly this arena name; home first
+      "arena": "CTFDL: NSS vs KEVI",          // open exactly this arena name; AWAY first, per the rulebook
       "title": "KEVI vs NSS", "league_slug": "ctfdl", "season_number": 5, "week": 1, "stage": "regular",
       "status": "scheduled",                  // scheduled | in_progress
       "scheduled_at": "2026-10-05T00:00:00Z",
@@ -56,8 +56,10 @@ not listed are not part of the match.
 
 ## Naming
 
-- Arena: `"<LEAGUE> - <HOME TAG> vs <AWAY TAG>"`, e.g. `CTFDL - KEVI vs NSS`.
-  Home is `matches.squad_a`; tags are the squad's tag, upper-cased, first 8 chars.
+- Arena: `"<LEAGUE>: <AWAY TAG> vs <HOME TAG>"`, e.g. `CTFDL: NSS vs KEVI` (the CTFDL
+  rulebook's format: away first, colon after the league). Home is `matches.squad_a`;
+  tags are the squad's tag, upper-cased, first 8 chars. Use the `home` / `away`
+  fields rather than parsing the name.
 - Teams: `<TAG> T` and `<TAG> C` for each squad (the zone already builds these
   from the squads). The home captain picks Titan or Collective; the site puts
   home starters on that letter and away starters on the other. Read

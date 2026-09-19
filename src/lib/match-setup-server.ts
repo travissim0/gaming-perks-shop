@@ -42,10 +42,13 @@ export interface Viewer { id: string | null; alias: string; staff: boolean; refe
 export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase();
 export const missingTable = (msg: string | undefined) => /match_setup|match_lineups|match_lineup_subs|does not exist/i.test(String(msg || ''));
 
-/** The in-game arena the zone opens for a match: "CTFDL - KEVI vs NSS", home first. */
+/**
+ * The in-game arena the zone opens for a match. The CTFDL rulebook fixes the format:
+ * "CTFDL: <Away> vs <Home>" (e.g. "CTFDL: CBC vs 7P"), away first, colon after the league.
+ */
 export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow | null) => {
   const league = String(match.league_slug || 'ctf').toUpperCase();
-  return `${league} - ${home ? tagOf(home) : 'TBD'} vs ${away ? tagOf(away) : 'TBD'}`;
+  return `${league}: ${away ? tagOf(away) : 'TBD'} vs ${home ? tagOf(home) : 'TBD'}`;
 };
 
 export async function loadMatch(id: string) {
