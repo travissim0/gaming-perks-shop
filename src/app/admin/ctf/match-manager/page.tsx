@@ -28,6 +28,13 @@ interface MatchRecord {
   status: string;
   season_number: number;
   game_id?: string;
+  team_a_result?: string | null;
+  team_b_result?: string | null;
+  game_length_minutes?: number | null;
+  match_kind?: string | null;
+  win_type?: string | null;
+  verified?: boolean | null;
+  fixture_id?: string | null;
 }
 
 interface StandingRow {
@@ -217,6 +224,26 @@ export default function MatchManagerPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Staff override for a recorded result (auto or hand-entered): drop it, reopen the fixture, rebuild standings.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const removeResult = async (m: MatchRecord) => {
+    if (!confirm(`Remove the recorded result ${m.squad_b_name} vs ${m.squad_a_name}? The fixture reopens and standings are rebuilt. You can re-enter it with the form.`)) return;
+    setRemoving(m.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sign in again');
+      const res = await fetch(`/api/ctf/matches?id=${encodeURIComponent(m.id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || 'Could not remove the result');
+      toast.success('Result removed; standings rebuilt');
+      await fetchSeasonData();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setRemoving(null);
+    }
+  };
 
   const fetchSeasonData = async () => {
     if (!selectedSeason) return;
@@ -650,15 +677,18 @@ export default function MatchManagerPage() {
                   <thead>
                     <tr>
                       <th className={th}>Date</th>
-                      <th className={`${th} text-right`}>Squad A</th>
+                      <th className={`${th} text-right`}>Away</th>
                       <th className={`${th} text-center`}>Score</th>
-                      <th className={th}>Squad B</th>
+                      <th className={th}>Home</th>
+                      <th className={th}>Result</th>
+                      <th className={`${th} text-right`}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {matches.map((m) => {
-                      const aWon = m.squad_a_score > m.squad_b_score;
-                      const bWon = m.squad_b_score > m.squad_a_score;
+                      const aWon = (m.team_a_result || '').toLowerCase() === 'win' || (!m.team_a_result && m.squad_a_score > m.squad_b_score);
+                      const bWon = (m.team_b_result || '').toLowerCase() === 'win' || (!m.team_b_result && m.squad_b_score > m.squad_a_score);
+                      const auto = !!m.fixture_id && !!m.game_id && !String(m.game_id).startsWith('CTF_Match_');
                       return (
                         <tr key={m.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
                           <td className={`${td} whitespace-nowrap text-xs text-[#8B98B0]`}>{m.played_at ? new Date(m.played_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</td>
@@ -669,6 +699,25 @@ export default function MatchManagerPage() {
                             <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_a_score}</span>
                           </td>
                           <td className={`${td} ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
+                          <td className={`${td} text-xs text-[#8B98B0] whitespace-nowrap`}>
+                            {m.match_kind && <span className="mr-1.5 rounded bg-white/5 px-1 text-[10px] uppercase tracking-wide">{m.match_kind}</span>}
+                            {m.win_type ? (m.win_type === '2ot' ? '2OT' : m.win_type === 'ot' ? 'OT' : 'Reg') : ''}
+                            {m.game_length_minutes ? ` · ${Math.round(m.game_length_minutes)} min` : ''}
+                            {auto && <span className="ml-1.5 rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Recorded automatically from the game the zone ran">Auto</span>}
+                          </td>
+                          <td className={`${td} text-right whitespace-nowrap`}>
+                            {selectedLeague !== 'ctfpl' && (
+                              <button
+                                type="button"
+                                onClick={() => removeResult(m)}
+                                disabled={removing === m.id}
+                                className="text-xs text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50"
+                                title="Remove this result, reopen the fixture and rebuild the standings. Re-enter it with the form if it was wrong."
+                              >
+                                {removing === m.id ? 'Removing…' : 'Remove'}
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}

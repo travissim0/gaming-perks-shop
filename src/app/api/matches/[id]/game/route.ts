@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadMatch, supabaseAdmin, viewerFor } from '@/lib/match-setup-server';
+import { autoRecordFromGame } from '@/lib/match-result-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +9,10 @@ export const dynamic = 'force-dynamic';
  * Header `X-Client-Key` (or staff Bearer).  Body: { game_id, status?: 'in_progress' | 'played' }
  *
  *   in_progress  the arena's game has started: match goes live, game id noted
- *   played       the game ended: game id linked so the match page shows its stats;
- *                staff still record the result (score, win type) in the match manager.
+ *   played       the game ended: game id linked so the match page shows its stats, and the
+ *                result is recorded from the game (winner + length → win type under the
+ *                season's rules), standings rebuilt. Staff can remove/re-enter it in the
+ *                match manager if the game got it wrong. The reply says what happened.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,5 +34,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (status === 'played') {
+    // The zone's stat rows may land a moment after the game ends; the zone can call again.
+    const result = await autoRecordFromGame({ ...match, game_id: gameId }, gameId);
+    return NextResponse.json({ ok: true, match_id: id, game_id: gameId, status: result.recorded ? 'completed' : match.status, result });
+  }
   return NextResponse.json({ ok: true, match_id: id, game_id: gameId, status: patch.status || match.status });
 }

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { winTypeFromMinutes, type MatchKind, type WinType } from '@/lib/scoring';
 import { loadSeasonRules, rebuildStandings } from '@/lib/standings-server';
 import { fsCapCheck } from '@/lib/fs-server';
+import { removeLeagueResult } from '@/lib/match-result-server';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -87,6 +88,11 @@ export async function GET(request: NextRequest) {
       mvp_player_name: m.mvp_player_name,
       match_length: m.match_length,
       mvp: m.mvp,
+      // Scoring columns (generic leagues; absent on CTFPL rows)
+      match_kind: m.match_kind ?? null,
+      win_type: m.win_type ?? null,
+      verified: m.verified ?? null,
+      fixture_id: m.fixture_id ?? null,
     }));
 
     // Fetch standings — different view depending on league
@@ -391,6 +397,22 @@ export async function POST(request: NextRequest) {
     console.error('Error in POST /api/ctf/matches:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+/**
+ * DELETE /api/ctf/matches?id=<league_matches.id>  (staff)
+ * Staff override for a result the zone recorded automatically (or one entered
+ * by mistake): drops the row, reopens its fixture, rebuilds the standings.
+ * Generic leagues only; CTFPL rows are not touched here.
+ */
+export async function DELETE(request: NextRequest) {
+  const user = await verifyAdmin(request);
+  if (!user) return NextResponse.json({ error: 'Unauthorized: CTF Admin access required' }, { status: 401 });
+  const id = new URL(request.url).searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  const out = await removeLeagueResult(id);
+  if (!out.ok) return NextResponse.json({ error: out.error }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }
 
 /** league slug + season number → league_seasons.id (generic leagues only). */
