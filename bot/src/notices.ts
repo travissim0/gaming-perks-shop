@@ -12,7 +12,7 @@ const ROLE_COLOUR: Record<string, number> = { referee: 0xf59e0b, commentator: 0x
 function embedFor(n: BotNotice): EmbedBuilder {
   const p = n.payload;
   const season = [p.league, p.season_number ? `Season ${p.season_number}` : null, p.stage_label].filter(Boolean).join(' · ');
-  const teams = `${p.squad_a || 'TBD'} vs ${p.squad_b || 'TBD'}`;
+  const teams = `${p.squad_b || 'TBD'} vs ${p.squad_a || 'TBD'}`; // away vs home, like the arena names
   const when = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:R>)` : p.scheduled_et || '';
   const e = new EmbedBuilder().setColor(ROLE_COLOUR[p.role] ?? 0x22d3ee);
   if (n.kind === 'crew_added') {
@@ -34,7 +34,7 @@ function embedFor(n: BotNotice): EmbedBuilder {
 function channelLine(n: BotNotice, discordId: string | null): string {
   const p = n.payload;
   const who = discordId ? `<@${discordId}>` : `**${p.target_alias}**`;
-  const teams = `${p.squad_a || 'TBD'} vs ${p.squad_b || 'TBD'}`;
+  const teams = `${p.squad_b || 'TBD'} vs ${p.squad_a || 'TBD'}`; // away vs home, like the arena names
   const season = [p.league, p.season_number ? `S${p.season_number}` : null, p.stage_label].filter(Boolean).join(' ');
   const when = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:f>` : p.scheduled_et || '';
   if (n.kind === 'crew_added') return `${who} ${p.self ? 'signed up' : `was assigned by ${p.by_alias}`} as ${p.role_label} · ${season} · ${teams} · ${when} · <${p.url}>`;

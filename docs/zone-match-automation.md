@@ -24,7 +24,7 @@ Response:
     {
       "id": "…",                              // match id, used by the report call below
       "arena": "CTFDL: NSS vs KEVI",          // open exactly this arena name; AWAY first, per the rulebook
-      "title": "KEVI vs NSS", "league_slug": "ctfdl", "season_number": 5, "week": 1, "stage": "regular",
+      "title": "Week 1 · NSS vs KEVI", "league_slug": "ctfdl", "season_number": 5, "week": 1, "stage": "regular",
       "status": "scheduled",                  // scheduled | in_progress
       "scheduled_at": "2026-10-05T00:00:00Z",
       "side_reveal_at": "2026-10-04T23:55:00Z",

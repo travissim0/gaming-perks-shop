@@ -144,7 +144,7 @@ export default function FsProposals({
               <li key={f.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">Pending</span>
                 <span className="min-w-0 flex-1 text-[#E6EDF7]">
-                  {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {f.squad_b_name}
+                  {f.squad_b_name} <span className="text-[#8B98B0]">vs</span> {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
                   <span className="ml-2 text-xs text-[#8B98B0]">{when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{f.fs_week_start ? ` · week of ${weekLabel(f.fs_week_start)}` : ''}</span>
                 </span>
                 {forMe || isStaff ? (

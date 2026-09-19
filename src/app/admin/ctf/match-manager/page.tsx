@@ -494,7 +494,7 @@ export default function MatchManagerPage() {
                   </span>
                   <span className={`w-16 shrink-0 text-[11px] uppercase tracking-wide ${f.stage === 'fs' ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>{f.stage === 'playoff' ? 'Playoffs' : f.stage === 'fs' ? 'FS' : f.week ? `Week ${f.week}` : ''}</span>
                   <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">
-                    {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {f.squad_b_name}
+                    {f.squad_b_name} <span className="text-[#8B98B0]">vs</span> {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
                   </span>
                   {(f.participants || []).some((p) => p.role === 'referee') && <span className="text-[10px] uppercase tracking-wide text-[#34D399]" title={(f.participants || []).filter((p) => p.role === 'referee').map((p) => p.alias).join(', ')}>Ref</span>}
                   <button type="button" onClick={() => useFixture(f)} className="text-xs text-[#22D3EE] hover:text-[#67E8F9]">Record result</button>
@@ -517,7 +517,7 @@ export default function MatchManagerPage() {
       <div id="record-match">
       <Panel
         title="Record a match"
-        hint={fromFixture ? `Filled from the schedule: ${fromFixture.squad_a_name} vs ${fromFixture.squad_b_name}.` : 'Squads, scores and the date. Everything else is optional.'}
+        hint={fromFixture ? `Filled from the schedule: ${fromFixture.squad_b_name} vs ${fromFixture.squad_a_name} (home).` : 'Squads, scores and the date. Everything else is optional.'}
         actions={
           <>
             {(squadAName || squadBName) && <button type="button" onClick={resetForm} className={btnQuiet}>Clear</button>}
@@ -662,13 +662,13 @@ export default function MatchManagerPage() {
                       return (
                         <tr key={m.id} className="border-t border-white/[0.06] hover:bg-white/[0.02]">
                           <td className={`${td} whitespace-nowrap text-xs text-[#8B98B0]`}>{m.played_at ? new Date(m.played_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</td>
-                          <td className={`${td} text-right ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
+                          <td className={`${td} text-right ${bWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_b_name}</td>
                           <td className={`${td} text-center font-display text-lg tabular-nums whitespace-nowrap`}>
-                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_a_score}</span>
-                            <span className="mx-1 text-white/20">:</span>
                             <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_b_score}</span>
+                            <span className="mx-1 text-white/20">:</span>
+                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.squad_a_score}</span>
                           </td>
-                          <td className={`${td} ${bWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_b_name}</td>
+                          <td className={`${td} ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
                         </tr>
                       );
                     })}

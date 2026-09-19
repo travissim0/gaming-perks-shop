@@ -503,7 +503,8 @@ export default function MatchDetailPage() {
       {hasTeams && (
         <section className="rounded-xl bg-[#131A2B] px-5 py-5">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-            {[{ s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'right' }, { s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'left' }].map((t, i) => (
+            {/* Away on the left, home on the right: the order the rulebook names arenas ("CTFDL: AWAY vs HOME"). */}
+            {[{ s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'right', home: false }, { s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'left', home: true }].map((t, i) => (
               <div key={i} className={`min-w-0 flex items-center gap-3 ${t.align === 'right' ? 'flex-row-reverse text-right' : ''} ${i === 1 ? 'order-3' : ''}`}>
                 <TeamMark tag={t.s?.tag || t.tag} name={t.s?.name || t.name} size="lg" />
                 <div className="min-w-0">
@@ -515,8 +516,8 @@ export default function MatchDetailPage() {
                   {t.s && (
                     <span className="block text-xs text-[#8B98B0]">
                       {match.squad_a_id && match.squad_b_id && (
-                        <span className={`mr-1.5 text-[10px] uppercase tracking-wide ${i === 0 ? 'text-[#F59E0B]/80' : 'text-[#8B98B0]/70'}`} title={i === 0 ? 'Home team picks the side' : undefined}>
-                          {i === 0 ? 'Home' : 'Away'}
+                        <span className={`mr-1.5 text-[10px] uppercase tracking-wide ${t.home ? 'text-[#F59E0B]/80' : 'text-[#8B98B0]/70'}`} title={t.home ? 'Home team picks the side' : undefined}>
+                          {t.home ? 'Home' : 'Away'}
                         </span>
                       )}
                       {t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}
@@ -528,9 +529,9 @@ export default function MatchDetailPage() {
             <div className="order-2 text-center px-2">
               {hasScore ? (
                 <div className="font-display text-5xl tabular-nums leading-none">
-                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_a_score}</span>
-                  <span className="text-white/20 mx-2">:</span>
                   <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_b_score}</span>
+                  <span className="text-white/20 mx-2">:</span>
+                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{match.squad_a_score}</span>
                 </div>
               ) : match.winner_name ? (
                 <div className="text-sm text-[#34D399]">{match.winner_name} won</div>
@@ -541,7 +542,7 @@ export default function MatchDetailPage() {
           </div>
           {(a?.members.length || b?.members.length) ? (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              {[a, b].map((s, i) => s && (
+              {[b, a].map((s, i) => s && (
                 <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
                   <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] mb-1">Roster</div>
                   <div className={`flex flex-wrap gap-1 ${i === 0 ? 'sm:justify-end' : ''}`}>

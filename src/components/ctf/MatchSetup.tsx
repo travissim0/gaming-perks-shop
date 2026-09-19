@@ -152,7 +152,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     setSubPick((s) => ({ ...s, [team.squad_id]: { out: '', in: '' } }));
   };
   const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  const sidesLine = home.side ? `${home.tag} · ${SIDE_LABEL[home.side]}  ·  ${away.tag} · ${SIDE_LABEL[away.side!]}` : null;
+  const sidesLine = home.side ? `${away.tag} · ${SIDE_LABEL[away.side!]}  ·  ${home.tag} · ${SIDE_LABEL[home.side]}` : null;
 
   // Public / uninvolved view: progress flags, plus the sides once released.
   if (!involved) {
@@ -367,8 +367,9 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
 
         {/* Lineups */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {renderTeam(home, !!viewer?.can_edit_home)}
+          {/* Away first, home second: the rulebook's arena order. */}
           {renderTeam(away, !!viewer?.can_edit_away)}
+          {renderTeam(home, !!viewer?.can_edit_home)}
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">

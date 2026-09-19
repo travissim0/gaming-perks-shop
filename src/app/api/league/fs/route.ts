@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('matches')
       .insert({
-        title: `${slug.toUpperCase()} S${seasonNumber} · FS · ${a.name} vs ${b.name}`,
+        title: `${slug.toUpperCase()} S${seasonNumber} · FS · ${b.name} vs ${a.name}`, // away vs home
         description: `${ctx.league.name} Season ${seasonNumber}, free-scheduled match proposed by ${a.name}.`,
         match_type: 'tournament',
         status: 'scheduled',

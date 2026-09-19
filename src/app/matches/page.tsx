@@ -403,7 +403,7 @@ export default function MatchesPage() {
                             m.status === 'scheduled' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : m.status === 'expired' ? 'bg-white/5 text-[#8B98B0] line-through' : 'bg-white/5 text-[#E6EDF7]'
                           }`}
                         >
-                          {m.squad_a_name && m.squad_b_name ? `${m.squad_a_tag || m.squad_a_name} v ${m.squad_b_tag || m.squad_b_name}` : m.title}
+                          {m.squad_a_name && m.squad_b_name ? `${m.squad_b_tag || m.squad_b_name} v ${m.squad_a_tag || m.squad_a_name}` : m.title}
                         </Link>
                       ))}
                       {items.length > 3 && <div className="text-[10px] text-[#8B98B0]">+{items.length - 3}</div>}
@@ -444,7 +444,7 @@ export default function MatchesPage() {
                           </div>
                           {(m.squad_a_name || m.squad_b_name) && (
                             <div className="text-xs text-[#8B98B0] mt-0.5">
-                              {m.squad_a_name || 'TBD'} <span className="text-white/30">vs</span> {m.squad_b_name || 'TBD'}
+                              {m.squad_b_name || 'TBD'} <span className="text-white/30">vs</span> {m.squad_a_name || 'TBD'}
                             </div>
                           )}
                           {m.description && <div className="text-xs text-[#8B98B0] mt-0.5 line-clamp-2">{m.description}</div>}
@@ -600,7 +600,7 @@ export default function MatchesPage() {
                               {m.status === 'expired' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-[#8B98B0] uppercase tracking-wide">Not played</span>}
                             </div>
                             <div className="text-[11px] text-[#8B98B0] mt-0.5">
-                              {m.squad_a_name && m.squad_b_name ? `${m.squad_a_name} vs ${m.squad_b_name}` : m.created_by_alias ? `by ${m.created_by_alias}` : ''}
+                              {m.squad_a_name && m.squad_b_name ? `${m.squad_b_name} vs ${m.squad_a_name}` : m.created_by_alias ? `by ${m.created_by_alias}` : ''}
                               {m.participants.length > 0 && ` · ${m.participants.length} signed up`}
                             </div>
                           </div>

@@ -336,19 +336,19 @@ function SchedulePage() {
                           {f.stage === 'fs' && <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>}
                           {pointsMode && f.stage === 'regular' && <div className="mt-0.5 inline-block rounded bg-[#F59E0B]/15 px-1 text-[10px] uppercase tracking-wide text-[#F59E0B]" title="Regular season: official schedule, full points">RS</div>}
                         </div>
-                        <Link href={f.squad_a_id ? `/squads/${f.squad_a_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${aWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
+                        <Link href={f.squad_b_id ? `/squads/${f.squad_b_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${bWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
                           <span className="min-w-0">
-                            <span className="block text-sm truncate">{f.squad_a_name || 'TBD'}</span>
-                            {f.squad_a_id && <span className="block text-[10px] uppercase tracking-wide text-[#F59E0B]/80" title="Home team picks the side">Home</span>}
+                            <span className="block text-sm truncate">{f.squad_b_name || 'TBD'}</span>
+                            {f.squad_b_id && <span className="block text-[10px] uppercase tracking-wide text-[#8B98B0]/70">Away</span>}
                           </span>
-                          <TeamMark tag={f.squad_a_tag} name={f.squad_a_name} />
+                          <TeamMark tag={f.squad_b_tag} name={f.squad_b_name} />
                         </Link>
                         <div className="w-24 shrink-0 text-center">
                           {f.result ? (
                             <span className="font-display text-2xl tabular-nums">
-                              <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{f.result.a_score}</span>
-                              <span className="text-white/20 mx-1.5">:</span>
                               <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{f.result.b_score}</span>
+                              <span className="text-white/20 mx-1.5">:</span>
+                              <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{f.result.a_score}</span>
                             </span>
                           ) : live ? (
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#34D399]/15 text-[#34D399]">
@@ -362,11 +362,11 @@ function SchedulePage() {
                             <span className="text-xs text-[#8B98B0]">vs</span>
                           )}
                         </div>
-                        <Link href={f.squad_b_id ? `/squads/${f.squad_b_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 ${bWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
-                          <TeamMark tag={f.squad_b_tag} name={f.squad_b_name} />
+                        <Link href={f.squad_a_id ? `/squads/${f.squad_a_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 ${aWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>
+                          <TeamMark tag={f.squad_a_tag} name={f.squad_a_name} />
                           <span className="min-w-0">
-                            <span className="block text-sm truncate">{f.squad_b_name || 'TBD'}</span>
-                            {f.squad_b_id && <span className="block text-[10px] uppercase tracking-wide text-[#8B98B0]/70">Away</span>}
+                            <span className="block text-sm truncate">{f.squad_a_name || 'TBD'}</span>
+                            {f.squad_a_id && <span className="block text-[10px] uppercase tracking-wide text-[#F59E0B]/80" title="Home team picks the side">Home</span>}
                           </span>
                         </Link>
                         <div className="hidden md:flex w-28 shrink-0 items-center justify-end gap-2 text-[11px] text-[#8B98B0]">

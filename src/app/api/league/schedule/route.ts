@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
     const a = names.get(f.squad_a_id)!;
     const b = names.get(f.squad_b_id)!;
     return {
-      title: `${stageTitle(league, season, { ...f, stage })} · ${a.name} vs ${b.name}`,
+      title: `${stageTitle(league, season, { ...f, stage })} · ${b.name} vs ${a.name}`, // away vs home, as the rulebook names arenas
       description: stage === 'playoff'
         ? `${league.toUpperCase()} Season ${season} playoffs${f.label ? `, ${f.label.toLowerCase()}` : ''}.`
         : `${league.toUpperCase()} Season ${season}, week ${f.week}.`,
@@ -275,7 +275,7 @@ export async function PATCH(request: NextRequest) {
   if ('week' in patch || 'squad_a_id' in patch) {
     const names = await squadNames([aId, bId]);
     const week = (patch.week as number) ?? current.week;
-    patch.title = `${stageTitle(current.league_slug, current.season_number, { week, stage: current.stage || 'regular', playoff_round: current.playoff_round })} · ${names.get(aId)?.name || '?'} vs ${names.get(bId)?.name || '?'}`;
+    patch.title = `${stageTitle(current.league_slug, current.season_number, { week, stage: current.stage || 'regular', playoff_round: current.playoff_round })} · ${names.get(bId)?.name || '?'} vs ${names.get(aId)?.name || '?'}`;
   }
 
   const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);

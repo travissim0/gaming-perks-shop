@@ -897,7 +897,7 @@ export default function LeagueHome() {
                               <div className="text-sm text-[#E6EDF7] truncate">
                                 {m.squad_a_name && m.squad_b_name ? (
                                   <>
-                                    {m.squad_a_name} <span className="text-[#8B98B0]">vs</span> {m.squad_b_name}
+                                    {m.squad_b_name} <span className="text-[#8B98B0]">vs</span> {m.squad_a_name}
                                   </>
                                 ) : m.title}
                               </div>
@@ -920,13 +920,13 @@ export default function LeagueHome() {
                           return (
                             <li key={r.id} className="rounded-md bg-[#1B2438] px-3 py-2">
                               <div className="flex items-center justify-between gap-2 text-sm">
-                                <span className={`truncate ${aWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_a_name}</span>
+                                <span className={`truncate ${bWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_b_name}</span>
                                 <span className="tabular-nums font-medium shrink-0">
-                                  <span className={aWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_a_score ?? '–'}</span>
-                                  <span className="text-white/20 mx-1">:</span>
                                   <span className={bWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_b_score ?? '–'}</span>
+                                  <span className="text-white/20 mx-1">:</span>
+                                  <span className={aWin ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{r.squad_a_score ?? '–'}</span>
                                 </span>
-                                <span className={`truncate text-right ${bWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_b_name}</span>
+                                <span className={`truncate text-right ${aWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_a_name}</span>
                               </div>
                               {r.played_at && <div className="text-[11px] text-[#8B98B0] mt-0.5">{relTime(r.played_at)}{r.status && r.status !== 'Season' ? ` · ${r.status}` : ''}</div>}
                             </li>
