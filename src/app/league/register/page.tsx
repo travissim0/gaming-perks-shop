@@ -18,6 +18,7 @@ import {
   leagueRulesHref,
   type LeagueInfo,
   type LeagueSeason,
+  isRegistrationClosed, registrationClosesAt,
 } from '@/lib/leagues';
 
 /**
@@ -143,6 +144,8 @@ export default function LeagueRegisterPage() {
 
   const title = league ? seasonLabel(league, season) : 'League registration';
   const isEdit = !!existing;
+  const closed = isRegistrationClosed(season);
+  const closedOn = registrationClosesAt(season)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
 
   const shell = (children: React.ReactNode) => (
     <div className="ctf-theme min-h-screen">
@@ -183,8 +186,8 @@ export default function LeagueRegisterPage() {
         <div>
           <div className="mb-1 flex items-center gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-[#8B98B0]">{isEdit ? 'Your registration' : 'Register'}</span>
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${season.status === 'active' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}>
-              {season.status === 'active' ? 'Season live' : 'Registration open'}
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${closed ? 'bg-white/5 text-[#8B98B0]' : season.status === 'active' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F59E0B]/15 text-[#F59E0B]'}`}>
+              {closed ? 'Registration closed' : season.status === 'active' ? 'Season live' : 'Registration open'}
             </span>
           </div>
           <h1 className="font-display text-3xl leading-none text-[#E6EDF7] md:text-4xl">{title}</h1>
@@ -199,6 +202,25 @@ export default function LeagueRegisterPage() {
       </div>
     </div>
   );
+
+  // Deadline passed and this person isn't in the pool: no form. Existing registrations stay editable.
+  if (closed && !isEdit) {
+    return shell(
+      <div className="space-y-4">
+        {contextHeader}
+        <div className="rounded-xl bg-[#131A2B] p-8 text-center">
+          <h2 className="font-display text-2xl text-[#E6EDF7]">Registration closed{closedOn ? ` on ${closedOn}` : ''}</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[#8B98B0]">
+            The sign-up deadline for {league.name} has passed. If you still need to be in the pool, message league staff and they can add you by hand.
+          </p>
+          <div className="mt-6 flex justify-center gap-2">
+            <Link href="/free-agents" className="rounded-md bg-[#22D3EE] px-4 py-2 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">See the pool</Link>
+            <Link href="/league" className="rounded-md bg-white/5 px-4 py-2 text-sm text-[#E6EDF7] hover:bg-white/10">Back to CTF</Link>
+          </div>
+        </div>
+      </div>,
+    );
+  }
 
   if (!user) {
     return shell(

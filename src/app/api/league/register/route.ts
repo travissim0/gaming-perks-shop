@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { getLeagues, pickFeatured, getOpenSeason } from '@/lib/leagues';
+import { getLeagues, pickFeatured, getOpenSeason, isRegistrationClosed, registrationClosesAt } from '@/lib/leagues';
 
 /**
  * League registration.
@@ -137,6 +137,14 @@ export async function POST(request: NextRequest) {
   const existing =
     (rows || []).find((r: any) => r.league_slug === league.slug && r.season_number === season.season_number) ||
     (rows || []).find((r: any) => r.league_slug == null && r.is_active);
+
+  // Past the announced deadline, new sign-ups are refused. People already in the pool can
+  // still edit their registration, and staff can still add players from CTF management
+  // (that path writes free_agents directly and never comes through here).
+  if (!existing && isRegistrationClosed(season)) {
+    const when = registrationClosesAt(season)!.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+    return NextResponse.json({ error: `Registration for ${league.name} closed on ${when}. Message league staff if you still need to be added.`, closed: true }, { status: 409 });
+  }
 
   let mode: 'created' | 'updated';
   if (existing) {

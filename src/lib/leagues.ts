@@ -110,6 +110,30 @@ export function pickFeatured(leagues: LeagueInfo[]): LeagueInfo | null {
 const SEASON_COLS = 'id, season_number, season_name, status';
 const SEASON_DATE_COLS = `${SEASON_COLS}, start_date, end_date, registration_closes_on, draft_on, playoffs_start_on`;
 
+/** Registration deadlines are announced in Pacific time ("11:59 PM PT"), so the day ends there. */
+const REGISTRATION_TZ = 'America/Los_Angeles';
+
+/** The instant registration closes: the end of `registration_closes_on` in Pacific time, or null when no date is set. */
+export function registrationClosesAt(season: Pick<LeagueSeason, 'registration_closes_on'> | null | undefined): Date | null {
+  const day = season?.registration_closes_on;
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  // Find the zone's UTC offset on that day (DST-safe), then build the end-of-day instant with it.
+  const probe = new Date(`${day}T20:00:00Z`);
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: REGISTRATION_TZ, timeZoneName: 'shortOffset' })
+    .formatToParts(probe).find((p) => p.type === 'timeZoneName')?.value || 'GMT-8';
+  const m = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const sign = m?.[1] === '-' ? '-' : '+';
+  const hh = String(m?.[2] || '0').padStart(2, '0');
+  const mm = m?.[3] || '00';
+  return new Date(`${day}T23:59:59${sign}${hh}:${mm}`);
+}
+
+/** True once the announced registration deadline has passed. Staff can still add players by hand. */
+export function isRegistrationClosed(season: Pick<LeagueSeason, 'registration_closes_on'> | null | undefined, now = new Date()): boolean {
+  const at = registrationClosesAt(season);
+  return !!at && now.getTime() > at.getTime();
+}
+
 /** Which table holds a league's seasons. */
 export const seasonTable = (league: LeagueInfo) =>
   league.data_source === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
