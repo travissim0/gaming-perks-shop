@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
+import MessageButton from '@/components/MessageButton';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
@@ -1344,6 +1345,10 @@ export default function SquadDetailPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {(() => {
+                const cap = squad.members.find((m) => m.role === 'captain');
+                return cap ? <MessageButton recipientId={cap.player_id} recipientAlias={cap.in_game_alias} label="Message captain" subject={`[${squad.tag}] ${squad.name}`} /> : null;
+              })()}
               {canEditSquadPhotos() && (
                 <button onClick={() => setShowBannerForm(true)} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">
                   {squad.banner_url ? 'Update picture' : 'Add picture'}
@@ -1466,6 +1471,7 @@ export default function SquadDetailPage() {
                                 {member.in_game_alias}
                               </Link>
                               {member.player_id === user?.id && <span className="rounded bg-[#22D3EE]/15 px-1 text-[9px] font-semibold uppercase text-[#22D3EE]">You</span>}
+                              <MessageButton recipientId={member.player_id} recipientAlias={member.in_game_alias} variant="icon" />
                               {member.transitional_player && (
                                 <span className="rounded bg-[#F59E0B]/15 px-1 text-[9px] font-semibold uppercase text-[#F59E0B]" title="Transitional player — exempt from squad size limits">T</span>
                               )}

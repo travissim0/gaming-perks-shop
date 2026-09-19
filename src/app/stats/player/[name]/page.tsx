@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import MessageButton from '@/components/MessageButton';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -367,8 +368,10 @@ export default function PlayerPage() {
                 {lastGame && <span>Last game {fmtDate(lastGame)}</span>}
               </div>
             </div>
-            {isMe && (
+            {isMe ? (
               <Link href="/profile" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Edit profile</Link>
+            ) : (
+              <MessageButton recipientId={profile?.id} recipientAlias={playerName} />
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import MessageButton from '@/components/MessageButton';
 import { useParams } from 'next/navigation';
 import { ChevronLeft, ExternalLink } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -544,7 +545,12 @@ export default function MatchDetailPage() {
                 <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
                   <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] mb-1">Roster</div>
                   <div className={`flex flex-wrap gap-1 ${i === 0 ? 'sm:justify-end' : ''}`}>
-                    {s.members.map((m) => <Link key={m.id} href={`/stats/player/${encodeURIComponent(m.alias)}`} className="px-1.5 py-0.5 rounded bg-[#1B2438] text-[#E6EDF7] hover:text-[#22D3EE]">{m.alias}</Link>)}
+                    {s.members.map((m) => (
+                      <span key={m.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#1B2438] text-[#E6EDF7]">
+                        <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:text-[#22D3EE]">{m.alias}</Link>
+                        <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
+                      </span>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -578,6 +584,7 @@ export default function MatchDetailPage() {
                       {people.length === 0 ? <span className="text-[#8B98B0]/60">Nobody yet</span> : people.map((p) => (
                         <span key={p.id} className="inline-flex items-center gap-1">
                           <Link href={`/stats/player/${encodeURIComponent(p.in_game_alias)}`} className="hover:text-[#22D3EE]">{p.in_game_alias}</Link>
+                          <MessageButton recipientId={p.player_id} recipientAlias={p.in_game_alias} variant="icon" subject={match.title || 'Match'} />
                           {isStaff && p.player_id !== user?.id && (
                             <button type="button" onClick={() => crewChange('remove', r.key, p.player_id, p.in_game_alias)} disabled={busy === `crew-${p.player_id}`} className="text-[#8B98B0] hover:text-[#F87171] text-[11px] leading-none" title={`Remove ${p.in_game_alias}`} aria-label={`Remove ${p.in_game_alias}`}>✕</button>
                           )}

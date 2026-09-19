@@ -9,7 +9,7 @@ import {
   Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X,
   House, Trophy, Wrench, Shield, Target, Swords, Sword, ClipboardCheck, ScrollText, Calendar, Newspaper,
   Table2, ListOrdered, Star, ThumbsUp, FileText, ClipboardList, Crown, Globe, Activity, Monitor, Palette, ShoppingBag,
-  Image as ImageIcon,
+  Image as ImageIcon, MessageCircle,
 } from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
@@ -555,7 +555,9 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   ];
 
   const communityNavItems: NavItem[] = [
-    { href: '/affiliate-sites', label: 'Community Sites', icon: <Globe className="w-4 h-4" /> },
+    // Private messages: the inbox lives under the bell too, but most people never open that.
+    { href: '/messages', label: unreadMessageCount > 0 ? `Messages (${unreadMessageCount > 9 ? '9+' : unreadMessageCount})` : 'Messages', icon: <MessageCircle className="w-4 h-4" /> },
+    { href: '/affiliate-sites', label: 'Community Sites', icon: <Globe className="w-4 h-4" />, divider: true },
     { href: '/community/zone-activity', label: 'Zone Activity', icon: <Activity className="w-4 h-4" /> },
   ];
 
