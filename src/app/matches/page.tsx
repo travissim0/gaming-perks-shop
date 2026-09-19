@@ -296,7 +296,6 @@ export default function MatchesPage() {
   const blanks = first.getDay();
   const [monthItems, setMonthItems] = useState<Match[] | null>(null);
   useEffect(() => {
-    if (view !== 'calendar') return;
     let cancelled = false;
     setMonthItems(null);
     (async () => {
@@ -311,8 +310,11 @@ export default function MatchesPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [view, month]);
+  }, [month]);
   const calendarItems = useMemo(() => monthItems ?? [...upcoming, ...past, ...autoLogged], [monthItems, upcoming, past, autoLogged]);
+  // Header count: everything actually played in the month being shown, not the capped list feeds.
+  const playedThisMonth = monthItems ? monthItems.filter((m) => m.status === 'completed' || m.status === 'auto_logged').length : null;
+  const monthName = month.toLocaleDateString(undefined, { month: 'long' });
   const onDay = (d: number) => calendarItems.filter((m) => {
     const x = new Date(m.scheduled_at);
     return x.getFullYear() === month.getFullYear() && x.getMonth() === month.getMonth() && x.getDate() === d;
@@ -333,7 +335,7 @@ export default function MatchesPage() {
               <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
                 <span><span className="text-[#E6EDF7] tabular-nums">{upcoming.length}</span> upcoming</span>
                 <span className="text-white/20">·</span>
-                <span><span className="text-[#E6EDF7] tabular-nums">{past.length + autoLogged.length}</span> played</span>
+                <span><span className="text-[#E6EDF7] tabular-nums">{playedThisMonth ?? '…'}</span> played in {monthName}</span>
                 <span className="text-white/20">·</span>
                 <span>Times in your zone{tz ? ` (${tz})` : ''}</span>
               </div>
