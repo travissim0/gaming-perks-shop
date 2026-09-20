@@ -30,6 +30,8 @@ export const config = {
   refChannelId: process.env.DISCORD_REF_CHANNEL_ID || null,
   staffRoleId: process.env.DISCORD_STAFF_ROLE_ID || null,
   signupChannelId: process.env.DISCORD_SIGNUP_CHANNEL_ID || null,
+  captainRoleId: process.env.DISCORD_CAPTAIN_ROLE_ID || null,
+  coCaptainRoleId: process.env.DISCORD_COCAPTAIN_ROLE_ID || null,
   supabaseUrl: need('SUPABASE_URL'),
   supabaseKey: need('SUPABASE_SERVICE_ROLE_KEY'),
   syncIntervalMs: Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10)) * 60_000,

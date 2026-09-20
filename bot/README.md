@@ -55,6 +55,10 @@ CTF management → Season settings has **Discord bot** controls: last sync, a **
 
 `/rolepicker` (needs Manage Roles) posts an embed in the current channel with a button per role (up to 10; optional `title`, `text`, and `emojis` — space-separated, one per role in order); clicking toggles that role on the clicker. Roles with moderation permissions, integration-managed roles, and roles at or above the bot's own are refused — both when posting and on every click. To change the lineup, run the command again and delete the old message. The buttons keep working across bot restarts.
 
+## CTF Captain / CTF Co-Captain roles
+
+With `DISCORD_CAPTAIN_ROLE_ID` and `DISCORD_COCAPTAIN_ROLE_ID` set, every sync gives the season's linked captains the first role and linked co-captains the second, following `squads.captain_id` and `squad_members.role`. A linked account that is no longer captain/co-captain on the site loses the role; unlinked members added by hand keep it. Season teardown removes both roles from everyone. The bot's own role must sit above these two. Give the roles access to the captains channel in Discord yourself — the bot only manages membership.
+
 ## Captains: `/squad add` and `/squad remove`
 
 Players who won't link Discord on freeinf.org never get their squad role from the sync. A squad's captain or co-captains (linked, so the bot knows who they are) can hand it out themselves: `/squad add user:@player` gives the role, `/squad remove user:@player` takes it back. The bot makes the change, so captains never need Manage Roles. Staff (Manage Roles or the staff role) can act for any squad with `squad:<name or tag>`; a captain who runs more than one squad names it the same way.

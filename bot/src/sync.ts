@@ -2,7 +2,7 @@ import type { Guild } from 'discord.js';
 import { createHash } from 'crypto';
 import { config } from './config.js';
 import { deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
-import { ensureTeam, findOrphans, postStaff, syncRoleMembers, teardownTeam } from './discord.js';
+import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, syncRoleMembers, teardownTeam } from './discord.js';
 
 let lastUnlinkedHash = '';
 let running = false;
@@ -48,6 +48,8 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
       team.members.filter((m) => !m.discordId).forEach((m) => unlinked.push(`${m.alias} (${team.name})`));
       byId.delete(team.squadId);
     }
+
+    lines.push(...(await syncLeadRoles(guild, teams, linked)));
 
     // Teams that were set up earlier this season but are no longer part of it.
     for (const stale of byId.values()) {
@@ -95,7 +97,8 @@ export async function teardownSeason(guild: Guild, seasonId: string): Promise<st
     await teardownTeam(guild, m);
     if (!config.dryRun) await deleteMapping(guild.id, seasonId, m.squad_id);
   }
-  const msg = `Season teardown: removed ${mappings.length} squad${mappings.length === 1 ? '' : 's'} (roles, categories and channels).`;
+  const leads = await clearLeadRoles(guild);
+  const msg = `Season teardown: removed ${mappings.length} squad${mappings.length === 1 ? '' : 's'} (roles, categories and channels)${leads ? ` and ${leads} captain/co-captain role${leads === 1 ? '' : 's'}` : ''}.`;
   await postStaff(guild, `**freeinf.org** ${msg}`);
   await writeState({ last_result: msg, updated_at: new Date().toISOString() });
   return msg;

@@ -226,6 +226,61 @@ export async function syncRoleMembers(guild: Guild, role: Role, team: TeamRoster
   return { added, removed, notInServer };
 }
 
+/**
+ * Server-wide CTF Captain / CTF Co-Captain roles (config ids), granted to the
+ * linked captains and co-captains of every team in the season. Same rule as
+ * squad roles: only linked accounts that no longer hold the position on the
+ * site lose the role; hand-added unlinked members are left alone.
+ */
+export async function syncLeadRoles(guild: Guild, teams: TeamRoster[], linked: Set<string>): Promise<string[]> {
+  const lines: string[] = [];
+  const specs = [
+    { id: config.captainRoleId, position: 'captain' as const, label: 'captains' },
+    { id: config.coCaptainRoleId, position: 'co_captain' as const, label: 'co-captains' },
+  ];
+  for (const spec of specs) {
+    if (!spec.id) continue;
+    const role = guild.roles.cache.get(spec.id) ?? (await guild.roles.fetch(spec.id).catch(() => null));
+    if (!role) { console.warn(`${spec.label} role ${spec.id} not found`); continue; }
+    const wanted = new Map<string, string>(); // discordId → alias
+    for (const t of teams) for (const m of t.members) if (m.role === spec.position && m.discordId) wanted.set(m.discordId, m.alias);
+
+    const added: string[] = [];
+    const removed: string[] = [];
+    for (const [discordId, alias] of wanted) {
+      const member: GuildMember | null = guild.members.cache.get(discordId) ?? (await guild.members.fetch(discordId).catch(() => null));
+      if (!member || member.roles.cache.has(role.id)) continue;
+      if (!config.dryRun) await member.roles.add(role, 'Squad leadership on freeinf.org').catch((e) => console.warn(`could not give ${role.name} to ${alias}:`, e.message));
+      added.push(alias);
+    }
+    if (!config.dryRun) {
+      for (const member of role.members.values()) {
+        if (wanted.has(member.id) || !linked.has(member.id)) continue;
+        await member.roles.remove(role, 'No longer squad leadership on freeinf.org').catch((e) => console.warn(`could not remove ${role.name} from ${member.displayName}:`, e.message));
+        removed.push(member.displayName);
+      }
+    }
+    if (added.length) lines.push(`${role.name}: +${added.join(', ')}`);
+    if (removed.length) lines.push(`${role.name}: −${removed.join(', ')}`);
+  }
+  return lines;
+}
+
+/** Season over: nobody is a captain or co-captain any more. */
+export async function clearLeadRoles(guild: Guild): Promise<number> {
+  let n = 0;
+  for (const id of [config.captainRoleId, config.coCaptainRoleId]) {
+    if (!id) continue;
+    const role = guild.roles.cache.get(id) ?? (await guild.roles.fetch(id).catch(() => null));
+    if (!role) continue;
+    for (const member of role.members.values()) {
+      if (!config.dryRun) await member.roles.remove(role, 'Season over (freeinf.org)').catch((e) => console.warn(`could not remove ${role.name} from ${member.displayName}:`, e.message));
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Delete a team's channels, category and role. */
 export async function teardownTeam(guild: Guild, m: ChannelMapping) {
   const ids = [m.text_channel_id, m.voice_team_id, m.voice_offense_id, m.voice_defense_id, m.category_id].filter(Boolean) as string[];
