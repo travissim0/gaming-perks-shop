@@ -100,9 +100,11 @@ export const fmtDateTime = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
 export const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+// Calendar days in the viewer's zone, not 24-hour blocks: a 9:48 PM game is "Yesterday" the next morning.
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 export const relDate = (iso: string) => {
   const d = new Date(iso);
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 30) return `${days}d ago`;

@@ -24,9 +24,10 @@ interface Post {
 
 const CLAMP_PX = 260;
 
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 function relDate(iso: string): string {
   const d = new Date(iso);
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days}d ago`;

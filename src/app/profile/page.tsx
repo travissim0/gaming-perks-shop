@@ -326,13 +326,18 @@ export default function ProfilePage() {
 
   // ---------- Alias handling ----------
 
+  // Aliases can contain spaces ("CTF[Ref] Soup"), so only Enter / comma commit one; the box also
+  // commits whatever is left in it on blur so a typed alias isn't lost when Save is clicked.
+  const commitAlias = () => {
+    const next = aliasInput.trim();
+    if (!next) return;
+    if (!aliases.includes(next)) setAliases([...aliases, next]);
+    setAliasInput('');
+  };
   const handleAliasInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === ' ' || e.key === 'Enter') && aliasInput.trim()) {
+    if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
-      if (!aliases.includes(aliasInput.trim())) {
-        setAliases([...aliases, aliasInput.trim()]);
-      }
-      setAliasInput('');
+      commitAlias();
     }
   };
 
@@ -647,8 +652,9 @@ export default function ProfilePage() {
                           value={aliasInput}
                           onChange={(e) => setAliasInput(e.target.value)}
                           onKeyDown={handleAliasInput}
+                          onBlur={commitAlias}
                           className="min-w-[10rem] rounded-md border border-dashed border-white/15 bg-transparent px-2 py-1 text-xs text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
-                          placeholder="Add an old alias, press Enter"
+                          placeholder="Add an old alias, press Enter (spaces are fine)"
                         />
                       </div>
                       <span className="mt-1 block text-xs text-[#8B98B0]">Old names you've played under, so your stats link up. Your main alias is included automatically.</span>

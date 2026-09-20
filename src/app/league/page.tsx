@@ -190,13 +190,19 @@ const youTubeThumb = (url?: string) => {
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
 };
 
+// Minutes/hours while the game is from today (viewer's calendar day); "Yesterday" and dates after that.
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const relTime = (iso: string) => {
-  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 172800) return 'Yesterday';
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
+  if (days <= 0) {
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  }
+  if (days === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
 const whenLabel = (iso: string) => {

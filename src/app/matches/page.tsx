@@ -71,8 +71,10 @@ const TYPE_LABEL: Record<MatchType, string> = { squad_vs_squad: 'Squad match', p
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+// Calendar days in the viewer's zone, not 24-hour blocks: a 9:48 PM game is "Yesterday" the next morning.
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const relTime = (iso: string) => {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  const days = Math.round((dayStart(new Date()) - dayStart(new Date(iso))) / 86_400_000);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days}d ago`;

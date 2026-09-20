@@ -75,9 +75,11 @@ interface Col {
 const pct = (n: number) => `${(Number(n) * 100).toFixed(1)}%`;
 const fix = (n: number, d = 0) => Number(n).toFixed(d);
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+// Calendar days in the viewer's zone, not 24-hour blocks: a 9:48 PM game is "Yesterday" the next morning.
+const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const relDate = (iso: string) => {
   const d = new Date(iso);
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 30) return `${days}d ago`;
