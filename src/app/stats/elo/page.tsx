@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import Navbar from '@/components/Navbar';
 import { displayFont, bodyFont } from '@/lib/fonts';
-import { ELO_TIERS } from '@/utils/eloTiers';
+import { RANKED_TIERS, tierBandLabel, type EloTier } from '@/utils/eloTiers';
 import { Card, Tag, relDate, fmtPct } from '@/components/ctf-stats/CtfStats';
 
 /*
@@ -79,6 +79,7 @@ export default function EloLeaderboardPage() {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pagination, setPagination] = useState<Pagination>({ total: 0, offset: 0, limit: 50, hasMore: false });
+  const [tiers, setTiers] = useState<Array<EloTier & { count: number }>>(RANKED_TIERS.map((t) => ({ ...t, count: 0 })));
 
   const load = useCallback(async (offset: number, signal?: AbortSignal) => {
     offset === 0 ? setLoading(true) : setMore(true);
@@ -91,6 +92,7 @@ export default function EloLeaderboardPage() {
       if (signal?.aborted) return;
       setPlayers((prev) => (offset === 0 ? j.data : [...prev, ...j.data]));
       setPagination(j.pagination);
+      if (Array.isArray(j.tiers) && j.tiers.length) setTiers(j.tiers);
       const available: string[] = j.filters?.availableGameModes || [];
       const rank = (m: string) => { const i = MODE_ORDER.indexOf(m); return i < 0 ? 99 : i; };
       if (available.length) setModes([...new Set(['Combined', ...available])].sort((a, b) => rank(a) - rank(b)));
@@ -294,13 +296,22 @@ export default function EloLeaderboardPage() {
             </Card>
             <Card title="Tiers">
               <ul className="grid grid-cols-1 gap-1 text-sm">
-                {[...ELO_TIERS].reverse().map((t) => (
+                {tiers.map((t) => (
                   <li key={t.name} className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-2" style={{ color: t.color }}><span className="w-2 h-2 rounded-full" style={{ background: t.color }} />{t.name}</span>
-                    <span className="text-xs text-[#8B98B0] tabular-nums">{t.max >= 2500 ? `${t.min}+` : t.min === 0 ? `< ${t.max + 1}` : `${t.min}–${t.max}`}</span>
+                    <span className="text-xs text-[#8B98B0] tabular-nums">
+                      <span className="text-[#E6EDF7]/70">{t.count}</span>
+                      <span className="mx-1 text-white/20">·</span>
+                      {tierBandLabel(t)}
+                    </span>
                   </li>
                 ))}
+                <li className="flex items-center justify-between gap-2 text-[#6B7280]">
+                  <span className="inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#6B7280]" />Placement</span>
+                  <span className="text-xs tabular-nums">under {PLACEMENT_GAMES} games</span>
+                </li>
               </ul>
+              <p className="mt-2 text-[11px] text-[#8B98B0]">Players in each band on the {gameMode === 'Combined' ? 'all-modes' : gameMode} ladder.</p>
             </Card>
           </div>
         </div>

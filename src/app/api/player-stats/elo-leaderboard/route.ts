@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getEloTier } from '@/utils/eloTiers';
+import { getEloTier, tierCounts } from '@/utils/eloTiers';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -110,6 +110,15 @@ export async function GET(request: NextRequest) {
 
     const uniqueGameModes = gameModes ? [...new Set(gameModes.map(gm => gm.game_mode))] : [];
 
+    // Tier card: how many ranked players (10+ games, the placement threshold) sit in each band on
+    // this ladder, so it's visible when the bands no longer fit the spread.
+    const { data: pool } = await supabase
+      .from('elo_leaderboard_agg_with_aliases')
+      .select('weighted_elo')
+      .eq('game_mode', gameMode || 'Combined')
+      .gte('total_games', 10);
+    const tiers = tierCounts((pool || []).map((p) => Math.round(Number(p.weighted_elo || 0))));
+
     // Format the response data
     const formattedData = data?.map((player, index) => ({
       ...player,
@@ -125,6 +134,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data: formattedData,
+      tiers,
       pagination: {
         total: count || 0,
         limit,
