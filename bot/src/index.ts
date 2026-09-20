@@ -4,6 +4,7 @@ import { db, finishCommand, pendingCommands } from './db.js';
 import { reconcile, teardownSeason } from './sync.js';
 import { onInteraction, rolePickerCommand } from './rolepicker.js';
 import { onSquadInteraction, squadCommand } from './squad.js';
+import { checkSignups, onSignupMessage, onSignupsInteraction, signupsCommand, startSignupWatch } from './signups.js';
 import { deliverNotices } from './notices.js';
 
 /**
@@ -16,9 +17,11 @@ import { deliverNotices } from './notices.js';
  * - On a row in discord_bot_commands ('sync' | 'teardown'): run it and mark done.
  * - /rolepicker (staff): posts a button message for self-assignable roles.
  * - /squad add|remove (captains): squad role for players who won't link Discord.
+ * - Sign-up hype in #ctf-signup: shout-out per new registration, nudges for
+ *   @mentioned players who haven't registered, /signups kickoff|status (staff).
  */
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages] });
 
 let guild: Guild | null = null;
 let debounce: NodeJS.Timeout | null = null;
@@ -54,13 +57,14 @@ client.once('ready', async () => {
   }
   console.log(`Serving ${guild.name}`);
 
-  await guild.commands.set([rolePickerCommand(), squadCommand()]).catch((e) => console.error('slash command registration:', e?.message || e));
+  await guild.commands.set([rolePickerCommand(), squadCommand(), signupsCommand()]).catch((e) => console.error('slash command registration:', e?.message || e));
   await runCommands();
   await reconcile(guild, 'startup');
   setInterval(() => reconcile(guild!, 'scheduled'), config.syncIntervalMs);
   setInterval(runCommands, 20_000); // belt and braces if Realtime drops
   await deliverNotices(client, guild);
   setInterval(() => deliverNotices(client, guild!), 30_000);
+  startSignupWatch(guild);
 
   db.channel('freeinf-bot')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'discord_bot_notices' }, () => deliverNotices(client, guild!))
@@ -69,13 +73,16 @@ client.once('ready', async () => {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_draft_teams' }, () => scheduleSync('draft teams change'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'ctfdl_draft_picks' }, () => scheduleSync('draft pick'))
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'discord_bot_commands' }, () => runCommands())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'free_agents' }, () => setTimeout(() => checkSignups(guild!, 'registration'), 2000))
     .subscribe((status) => console.log(`realtime: ${status}`));
 });
 
 client.on('interactionCreate', (i) => {
   if (i.isChatInputCommand() && i.commandName === 'squad') return onSquadInteraction(i);
+  if (i.isChatInputCommand() && i.commandName === 'signups') return onSignupsInteraction(i);
   return onInteraction(i);
 });
+client.on('messageCreate', onSignupMessage);
 client.on('error', (e) => console.error('discord client error:', e));
 process.on('unhandledRejection', (e) => console.error('unhandled rejection:', e));
 process.on('SIGTERM', () => { client.destroy(); process.exit(0); });

@@ -109,3 +109,6 @@ Thumbs.db
 /discord-bot/*
 # CTF Discord bot build output
 /bot/dist/
+
+# bot runtime state (which sign-ups were already announced)
+bot/.signups-state.json

@@ -60,3 +60,13 @@ CTF management → Season settings has **Discord bot** controls: last sync, a **
 Players who won't link Discord on freeinf.org never get their squad role from the sync. A squad's captain or co-captains (linked, so the bot knows who they are) can hand it out themselves: `/squad add user:@player` gives the role, `/squad remove user:@player` takes it back. The bot makes the change, so captains never need Manage Roles. Staff (Manage Roles or the staff role) can act for any squad with `squad:<name or tag>`; a captain who runs more than one squad names it the same way.
 
 The sync only ever removes the role from accounts that have linked Discord and are no longer on the roster, so a manual add sticks. It also means a player added this way is **not** removed automatically when they leave the squad on the site — the captain (or staff) removes them with the command. Linked players stay the site's business: the command refuses to add or remove them and points at the roster on freeinf.org instead, because the next sync would undo it. Every change is posted to the staff channel. Season teardown deletes the role itself, so manual adds go with it.
+
+## Sign-up hype (`#ctf-signup`)
+
+Set `DISCORD_SIGNUP_CHANNEL_ID` to the public sign-up channel and the bot promotes league registration there (needs the Guild Messages intent, which is on by default — no privileged intent):
+
+- **Every new registration** on freeinf.org/league/register (an active `free_agents` row for the open season) gets a shout-out within a minute: who signed up (mention when linked, alias otherwise), their preferred classes, the pool size and the link. Eight different wordings, never the same one twice in a row. Edits and re-registrations of the same row are not re-announced.
+- **@mention nudges:** when someone in that channel tags a player who hasn't registered, the bot replies tagging them with the link (seven wordings, at most once a day per person). Tagging someone who *is* registered gets a short "already in" instead. "Registered" means a linked account with a row for the season, or a display name / username matching a registrant's alias (for players who never linked). Nudges stop once the registration deadline passes.
+- **`/signups kickoff`** (staff) posts the roll-call — everyone in the pool so far, the deadline and the link — to start the channel off. **`/signups status`** shows the pool, who is linked and the deadline, privately.
+
+Which rows were announced and who was nudged when is kept in `bot/.signups-state.json` (gitignored) so a restart never repeats itself. On the first run for a season the existing pool is recorded silently; use `/signups kickoff` to introduce it.

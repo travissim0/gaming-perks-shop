@@ -29,6 +29,7 @@ export const config = {
   /** #ctf-referee: referee sign-ups and assignments are announced here. */
   refChannelId: process.env.DISCORD_REF_CHANNEL_ID || null,
   staffRoleId: process.env.DISCORD_STAFF_ROLE_ID || null,
+  signupChannelId: process.env.DISCORD_SIGNUP_CHANNEL_ID || null,
   supabaseUrl: need('SUPABASE_URL'),
   supabaseKey: need('SUPABASE_SERVICE_ROLE_KEY'),
   syncIntervalMs: Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10)) * 60_000,
