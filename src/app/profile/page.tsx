@@ -205,7 +205,9 @@ export default function ProfilePage() {
             toast.error('Error loading aliases: ' + aliasErr.message);
             setAliases([]);
           } else {
-            setAliases(aliasData?.map(a => a.alias) || []);
+            // The display name is always an alias row (the primary); the chips only show the extras.
+            const main = (data?.in_game_alias || '').trim().toLowerCase();
+            setAliases((aliasData?.map(a => a.alias) || []).filter((a) => a.trim().toLowerCase() !== main));
           }
 
           setEmail(user.email || '');
@@ -412,25 +414,19 @@ export default function ProfilePage() {
         }
       }
 
-      // Update aliases
-      await supabase.from('profile_aliases').delete().eq('profile_id', user.id);
-
-      let allAliases = [...aliases];
-      if (
-        inGameAlias.trim() &&
-        !allAliases.some(a => a.trim().toLowerCase() === inGameAlias.trim().toLowerCase())
-      ) {
-        allAliases.unshift(inGameAlias.trim());
-      }
-      allAliases = Array.from(new Set(allAliases.map(a => a.trim())));
-
-      const aliasRows = allAliases.map(alias => ({
-        profile_id: user.id,
-        alias,
-        is_primary: alias.toLowerCase() === inGameAlias.trim().toLowerCase(),
-        added_by: 'system'
-      }));
-      await supabase.from('profile_aliases').insert(aliasRows);
+      // Aliases go through a server route: the browser client can't write profile_aliases (row
+      // policies), and the old direct write silently did nothing while the toast said "saved".
+      const pendingAlias = aliasInput.trim();
+      const aliasList = pendingAlias && !aliases.includes(pendingAlias) ? [...aliases, pendingAlias] : aliases;
+      const aliasRes = await fetch('/api/profile/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ mainAlias: inGameAlias, aliases: aliasList }),
+      });
+      const aliasJson = await aliasRes.json().catch(() => ({}));
+      if (!aliasRes.ok) throw new Error(aliasJson.error || 'Aliases could not be saved');
+      setAliases(aliasList);
+      setAliasInput('');
 
       // Update profile
       const { error } = await supabase
