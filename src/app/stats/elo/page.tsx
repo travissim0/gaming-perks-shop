@@ -47,7 +47,7 @@ interface Col { key: string; label: string; sort?: string; title?: string }
 const COLUMNS: Col[] = [
   { key: 'elo', label: 'ELO', sort: 'weighted_elo', title: 'Weighted ELO - raw rating pulled toward 1200 until the rating is confident' },
   { key: 'peak', label: 'Peak', sort: 'elo_peak' },
-  { key: 'conf', label: 'Confidence', sort: 'elo_confidence', title: 'How settled the rating is; full after 20 games' },
+  { key: 'conf', label: 'Confidence', sort: 'elo_confidence', title: 'How settled the rating is; builds with games and steady results, close to full around 30 games' },
   { key: 'games', label: 'Games', sort: 'total_games' },
   { key: 'wr', label: 'Win %', sort: 'win_rate' },
   { key: 'kd', label: 'K/D', sort: 'kill_death_ratio' },
@@ -289,7 +289,8 @@ export default function EloLeaderboardPage() {
               <ul className="space-y-1.5 text-sm text-[#8B98B0]">
                 <li>Everyone starts at <span className="text-[#E6EDF7]">1200</span>. A win against a stronger team moves you more than a win against a weaker one.</li>
                 <li>The first <span className="text-[#E6EDF7]">{PLACEMENT_GAMES} games</span> are placement: listed, not ranked.</li>
-                <li>The shown ELO is pulled toward 1200 until the rating is confident, which takes 20 games.</li>
+                <li>The shown ELO is pulled toward 1200 until the rating is confident. Confidence builds with games and steady results; most players are close to full after about 30.</li>
+                <li>Tiers are fixed rating bands. You only move when you play.</li>
                 <li>Each mode has its own ladder. &ldquo;All modes&rdquo; is the rollup.</li>
                 <li>Only games with a recorded winner move the rating.</li>
               </ul>
