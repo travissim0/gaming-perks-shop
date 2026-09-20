@@ -182,9 +182,9 @@ export default function AliasAssociationModal() {
               <>
                 {/* Current aliases */}
                 <div className="rounded-md bg-[#1B2438] overflow-hidden">
-                  <div className="px-3 py-2 flex items-center justify-between border-b border-white/[0.06]">
-                    <span className="text-sm text-[#E6EDF7]">{selectedProfile.in_game_alias || selectedProfile.email}</span>
-                    <span className="text-xs text-[#8B98B0]">{existingAliases.length} alias{existingAliases.length === 1 ? '' : 'es'} · primary {primary ? <span className="text-[#F59E0B]">{primary.alias}</span> : <span className="text-[#F87171]">none</span>}</span>
+                  <div className="px-3 py-1.5 flex items-center justify-between border-b border-white/[0.06] bg-[#0B0F1A]/60">
+                    <span className="text-[11px] uppercase tracking-wide text-[#8B98B0]">Aliases on <span className="text-[#E6EDF7] normal-case tracking-normal">{selectedProfile.in_game_alias || selectedProfile.email}</span>&apos;s account</span>
+                    <span className="text-[11px] text-[#8B98B0]">{existingAliases.length} alias{existingAliases.length === 1 ? '' : 'es'} · primary {primary ? <span className="text-[#F59E0B]">{primary.alias}</span> : <span className="text-[#F87171]">none</span>}</span>
                   </div>
                   {existingAliases.length === 0 ? (
                     <p className="px-3 py-3 text-xs text-[#8B98B0]">No aliases yet. The first one you add becomes primary.</p>
