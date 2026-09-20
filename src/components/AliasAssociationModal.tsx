@@ -56,9 +56,10 @@ export default function AliasAssociationModal() {
       if (error) throw error;
       const aliases = data || [];
       setExistingAliases(aliases);
-      const primaryAlias = aliases.find((a) => a.is_primary);
-      if (primaryAlias) { setAliasToAdd(primaryAlias.alias); setIsPrimary(false); }
-      else { setAliasToAdd(''); setIsPrimary(true); }
+      // The Add box starts empty: it used to be pre-filled with the current primary, which read as
+      // "enter your name again". The primary chip is only forced on when the profile has none yet.
+      setAliasToAdd('');
+      setIsPrimary(!aliases.some((a) => a.is_primary));
     } catch (error) {
       console.error('Error fetching aliases:', error);
       toast.error('Error fetching existing aliases');
