@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar';
 import RulesBody from '@/components/ctf/RulesBody';
 import { getLeagues, pickFeatured, type LeagueInfo } from '@/lib/leagues';
 import { getLeagueRules, type RuleSection } from '@/lib/rules';
+import { REFEREE_GUIDE, REFEREE_SECTION_ID } from '@/lib/refereeGuide';
 
 const ALL = '__all__';
 
@@ -46,9 +47,11 @@ function RulesContent() {
     if (!selectedLeague) return;
     setLoadingRules(true);
     (async () => {
-      const rows = await getLeagueRules(selectedLeague);
+      // The referee guide is the same for every league and always comes last.
+      const rows = [...(await getLeagueRules(selectedLeague)), REFEREE_GUIDE];
       setSections(rows);
-      setActive(rows.length ? rows[0].id : ALL);
+      const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+      setActive(hash && rows.some((r) => r.id === hash) ? hash : rows.length > 1 ? rows[0].id : REFEREE_SECTION_ID);
       setLoadingRules(false);
     })();
   }, [selectedLeague]);
@@ -136,14 +139,15 @@ function RulesContent() {
         {/* Body */}
         {loadingRules ? (
           <div className="text-[#8B98B0] py-16 text-center">Loading rules…</div>
-        ) : sections.length === 0 ? (
-          <div className="rounded-xl bg-[#131A2B] p-12 text-center">
-            <BookOpen className="w-10 h-10 mx-auto text-[#8B98B0] mb-3" aria-hidden="true" />
-            <h2 className="font-display text-2xl text-[#E6EDF7] mb-1">Rules coming soon</h2>
-            <p className="text-[#8B98B0]">The {leagueName} rulebook hasn&apos;t been published yet.</p>
-          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
+            {sections.every((s) => s.id === REFEREE_SECTION_ID) && (
+              <div className="lg:col-span-2 rounded-xl bg-[#131A2B] p-12 text-center">
+                <BookOpen className="w-10 h-10 mx-auto text-[#8B98B0] mb-3" aria-hidden="true" />
+                <h2 className="font-display text-2xl text-[#E6EDF7] mb-1">Rules coming soon</h2>
+                <p className="text-[#8B98B0]">The {leagueName} rulebook hasn&apos;t been published yet.</p>
+              </div>
+            )}
             {/* Category nav */}
             <nav className="lg:sticky lg:top-24 self-start rounded-xl bg-[#131A2B] p-2">
               <button
@@ -158,7 +162,7 @@ function RulesContent() {
               {sections.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setActive(s.id)}
+                  onClick={() => { setActive(s.id); if (s.id === REFEREE_SECTION_ID) window.history.replaceState(null, '', `#${s.id}`); }}
                   className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     active === s.id ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'text-[#E6EDF7] hover:bg-white/5'
                   }`}
@@ -172,7 +176,7 @@ function RulesContent() {
             {/* Content */}
             <div className="space-y-6 min-w-0">
               {visible.map((s) => (
-                <section key={s.id} className="rounded-xl bg-[#131A2B] p-6">
+                <section key={s.id} id={s.id === REFEREE_SECTION_ID ? s.id : undefined} className="rounded-xl bg-[#131A2B] p-6">
                   <div className="mb-4">
                     <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">{s.category}</div>
                     <h2 className="font-display text-2xl text-[#E6EDF7]">{s.title}</h2>
