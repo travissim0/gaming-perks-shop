@@ -8,13 +8,17 @@ import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { useLoadingTimeout } from '@/hooks/useLoadingTimeout';
 
-export type CTFRoleType = 
+export type CTFRoleType =
   | 'none'
   | 'ctf_admin'
   | 'ctf_head_referee'
   | 'ctf_referee'
   | 'ctf_recorder'
-  | 'ctf_commentator';
+  | 'ctf_commentator'
+  | 'ctf_analyst'
+  | 'ctf_analyst_commentator'
+  | 'ctf_analyst_referee'
+  | 'ctf_analyst_commentator_referee';
 
 interface UserProfile {
   id: string;
@@ -36,14 +40,22 @@ interface DailyActivity {
   total_sessions: number;
 }
 
-const CTF_ROLE_INFO = {
+// Every role CTF management can assign (see CTFAdminPanel). A role missing here crashed the page
+// the moment one user held it, so roleInfo() below falls back rather than throwing.
+const CTF_ROLE_INFO: Record<CTFRoleType, { display_name: string; level: number; color: string }> = {
   none: { display_name: 'No CTF Role', level: 0, color: 'bg-gray-500 border-gray-600' },
   ctf_admin: { display_name: 'CTF Administrator', level: 90, color: 'bg-purple-500 border-purple-600' },
   ctf_head_referee: { display_name: 'CTF Head Referee', level: 80, color: 'bg-blue-500 border-blue-600' },
   ctf_referee: { display_name: 'CTF Referee', level: 70, color: 'bg-green-500 border-green-600' },
   ctf_recorder: { display_name: 'CTF Recorder', level: 60, color: 'bg-yellow-500 border-yellow-600' },
-  ctf_commentator: { display_name: 'CTF Commentator', level: 50, color: 'bg-orange-500 border-orange-600' }
+  ctf_commentator: { display_name: 'CTF Commentator', level: 50, color: 'bg-orange-500 border-orange-600' },
+  ctf_analyst: { display_name: 'CTF Analyst', level: 40, color: 'bg-teal-500 border-teal-600' },
+  ctf_analyst_commentator: { display_name: 'CTF Analyst · Commentator', level: 45, color: 'bg-teal-500 border-teal-600' },
+  ctf_analyst_referee: { display_name: 'CTF Analyst · Referee', level: 72, color: 'bg-green-500 border-green-600' },
+  ctf_analyst_commentator_referee: { display_name: 'CTF Analyst · Commentator · Referee', level: 74, color: 'bg-green-500 border-green-600' },
 };
+const roleInfo = (role: string | null | undefined) =>
+  CTF_ROLE_INFO[(role || 'none') as CTFRoleType] || { display_name: role || 'Unknown role', level: 0, color: 'bg-gray-500 border-gray-600' };
 
 export default function AdminUsersPage() {
   const { user, loading } = useAuth();
@@ -358,7 +370,7 @@ export default function AdminUsersPage() {
         return;
       }
 
-      toast.success(`CTF role updated to ${CTF_ROLE_INFO[newCTFRole].display_name} successfully`);
+      toast.success(`CTF role updated to ${roleInfo(newCTFRole).display_name} successfully`);
     } catch (error: any) {
       console.error('❌ Error updating CTF role:', error);
       toast.error('Error updating CTF role: ' + error.message);
@@ -768,7 +780,7 @@ export default function AdminUsersPage() {
                                   <select
                                     value={userProfile.ctf_role}
                                     onChange={(e) => updateCTFRole(userProfile.id, e.target.value as CTFRoleType)}
-                                    className={`text-xs text-white px-2 py-1 rounded border-none ${CTF_ROLE_INFO[userProfile.ctf_role].color}`}
+                                    className={`text-xs text-white px-2 py-1 rounded border-none ${roleInfo(userProfile.ctf_role).color}`}
                                   >
                                     {Object.entries(CTF_ROLE_INFO).map(([key, info]) => (
                                       <option key={key} value={key}>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { ensureProfile } from '@/lib/ensure-profile-server';
 
 /**
  * A signed-in player's own alias list.
@@ -37,6 +38,9 @@ export async function POST(request: NextRequest) {
 
   const mainAlias = typeof body.mainAlias === 'string' ? body.mainAlias.trim() : '';
   if (!mainAlias) return NextResponse.json({ error: 'Display name cannot be blank' }, { status: 400 });
+
+  // profile_aliases has a foreign key to profiles; create the row if web sign-up never did.
+  if (!(await ensureProfile(user))) return NextResponse.json({ error: 'Your profile could not be loaded' }, { status: 500 });
 
   // Wanted list: display name first, then the extras, trimmed, de-duplicated case-insensitively.
   const wanted: string[] = [];

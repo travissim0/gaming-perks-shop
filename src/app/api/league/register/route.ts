@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { getLeagues, pickFeatured, getOpenSeason, isRegistrationClosed, registrationClosesAt } from '@/lib/leagues';
+import { ensureProfile } from '@/lib/ensure-profile-server';
 
 /**
  * League registration.
@@ -88,12 +89,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Pick at least one day you can play' }, { status: 400 });
   }
 
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('id, in_game_alias, is_league_banned')
-    .eq('id', user.id)
-    .maybeSingle();
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+  // Creates the profile row if web sign-up never managed to (see ensureProfile).
+  const profile = await ensureProfile(user);
+  if (!profile) return NextResponse.json({ error: 'Your profile could not be loaded. Try signing out and back in.' }, { status: 500 });
+  if (!profile.in_game_alias) {
+    return NextResponse.json({ error: 'Set your in-game alias on your profile page first, then register.' }, { status: 400 });
+  }
   if (profile.is_league_banned) {
     return NextResponse.json({ error: 'You are banned from CTF leagues and cannot register' }, { status: 403 });
   }
