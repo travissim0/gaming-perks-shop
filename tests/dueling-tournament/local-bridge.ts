@@ -2,14 +2,14 @@
 // Real tournament persistence/RPCs use the disposable localhost PostgreSQL database.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { installTestDatabase } from './install';
 import { z } from 'zod';
 import { databasePool, PostgresTestPort } from './postgres';
 import { testTournament } from '../../src/lib/dueling-tournament/testing';
 import { TournamentError, type Tournament } from '../../src/lib/dueling-tournament/contracts';
 
 const owner = databasePool();
-const runtime = databasePool('dueling_test_runtime');
+const runtime = databasePool('service_role');
 const port = new PostgresTestPort(runtime);
 const signingKey = randomBytes(32);
 const localPassword = 'LocalOnlyTest123!';
@@ -129,7 +129,7 @@ function profile(user: LocalUser) {
 }
 
 async function seedFixtures() {
-  await owner.query(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
+  await installTestDatabase(owner);
   await owner.query(
     'truncate public.dueling_tournament_registration_cooldowns, public.dueling_tournament_history, public.dueling_tournament_notice_reads, public.dueling_tournament_operations, public.dueling_tournament_records, public.dueling_tournament_directors, public.dueling_tournament_rate_buckets',
   );
@@ -152,6 +152,11 @@ async function seedFixtures() {
       metadata: { in_game_alias: name },
     });
   }
+  for (const user of users.values())
+    await owner.query(
+      'insert into public.profiles(id,in_game_alias) values($1,$2) on conflict(id) do update set in_game_alias=excluded.in_game_alias',
+      [user.id, user.alias],
+    );
   await owner.query('insert into public.dueling_tournament_directors(user_id) values($1)', [
     idFor(17),
   ]);

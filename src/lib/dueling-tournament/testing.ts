@@ -3,7 +3,11 @@ import { bracketSizeFor, createBracket } from './bracket';
 import { newTournament } from './transition';
 
 // Test fixtures are imported only by tests, never by pages or API handlers.
-export const testDirector: Actor = { userId: 'director-test', alias: 'Director', director: true };
+export const testDirector: Actor = {
+  userId: '66efeaff-8a9e-4ef3-95d1-acad7f6d402b',
+  alias: 'Director',
+  director: true,
+};
 export const testSettings: Settings = {
   title: 'Local Dueling Test',
   slug: 'local-dueling-test',

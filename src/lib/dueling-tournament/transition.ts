@@ -801,6 +801,8 @@ export async function applyMutation(
       break;
     case 'cancel':
       tournament.phase = 'cancelled';
+      tournament.published = false;
+      tournament.featured = false;
       tournament.paused = true;
       tournament.pauseReason = command.reason;
       tournament.announcements.push({

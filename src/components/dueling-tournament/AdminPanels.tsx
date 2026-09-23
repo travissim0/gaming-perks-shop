@@ -57,7 +57,13 @@ export function OverviewPanel({ event, busy, mutate }: PanelProps) {
         <section className="dt-panel">
           <div className="dt-panel-header">
             <h2>Event controls</h2>
-            <span className="dt-badge">{event.published ? 'Public' : 'Private draft'}</span>
+            <span className="dt-badge">
+              {event.published
+                ? 'Public'
+                : event.phase === 'cancelled'
+                  ? 'Private archive'
+                  : 'Private draft'}
+            </span>
           </div>
           <div className="dt-panel-body dt-form">
             <p className="dt-muted">
@@ -74,7 +80,7 @@ export function OverviewPanel({ event, busy, mutate }: PanelProps) {
                   Finish without a champion
                 </button>
               )}
-              {!event.published && (
+              {!event.published && event.phase !== 'cancelled' && (
                 <button
                   className="dt-button"
                   disabled={busy}
@@ -131,11 +137,13 @@ export function OverviewPanel({ event, busy, mutate }: PanelProps) {
               Check-in: {eventTime(event.settings.checkInOpensAt, true)} to{' '}
               {eventTime(event.settings.checkInClosesAt, true)}.
             </div>
-            {event.paused && <Message>Staff pause reason: {event.pauseReason}</Message>}
+            {event.paused && event.phase !== 'cancelled' && (
+              <Message>Staff pause reason: {event.pauseReason}</Message>
+            )}
           </div>
         </section>
       )}
-      <ArenaQueue event={event} admin />
+      {event.phase !== 'cancelled' && <ArenaQueue event={event} admin />}
       {confirmation && (
         <ConfirmDialog
           busy={busy}
@@ -172,7 +180,7 @@ export function OverviewPanel({ event, busy, mutate }: PanelProps) {
                   ? `This locks participation for seeding. There are ${count} checked-in players. Players who never checked in become no-show. The draw requires 4 to 32 checked-in players.`
                   : 'The published time window must be open. This phase cannot be reversed.'
                 : confirmation === 'cancel'
-                  ? 'This ends the event and publishes your cancellation reason. The event history remains available.'
+                  ? 'This ends the event and removes it from public view. Staff retain the cancellation reason, results and audit history.'
                   : 'Player and match actions stop while paused. Announcements and eligible corrections remain available.'}
         </ConfirmDialog>
       )}

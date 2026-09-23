@@ -6,12 +6,15 @@ on:
     paths:
       - 'src/**/dueling-tournament/**'
       - 'src/app/api/ctf/dueling-tournaments/**'
+      - 'src/app/api/dueling/tournaments/**'
       - 'src/app/auth/**'
       - 'src/lib/auth-return.ts'
       - 'src/lib/AuthContext.tsx'
       - 'src/components/Navbar.tsx'
       - 'src/app/dueling/page.tsx'
       - 'tests/dueling-tournament/**'
+      - 'dueling-tournament-migration.sql'
+      - 'dueling-tournament-drop-legacy.sql'
       - 'package*.json'
       - '*config*'
   workflow_dispatch:
@@ -23,20 +26,23 @@ jobs:
   tournament:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      matrix:
+        postgres: ['15', '17']
     services:
       postgres:
-        image: postgres:18
+        image: postgres:${{ matrix.postgres }}
         env:
-          POSTGRES_USER: dueling_test_admin
+          POSTGRES_USER: postgres
           POSTGRES_DB: infantry_dueling_test
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U dueling_test_admin -d infantry_dueling_test"
+          --health-cmd "pg_isready -U postgres -d infantry_dueling_test"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DUELING_TOURNAMENT_TEST_DATABASE_URL: postgresql://dueling_test_admin@127.0.0.1:5432/infantry_dueling_test
+      DUELING_TOURNAMENT_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/infantry_dueling_test
       NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:56500
       NEXT_PUBLIC_SUPABASE_ANON_KEY: local-dueling-anon-key
       SUPABASE_SERVICE_ROLE_KEY: local-dueling-service-key

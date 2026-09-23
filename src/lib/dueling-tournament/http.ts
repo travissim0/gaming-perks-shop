@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   Actor,
+  accountIdSchema,
   TournamentError,
   auditSchema,
   announcementSchema,
@@ -89,7 +90,14 @@ export async function boundedJson(request: Request): Promise<unknown> {
 export function createTournamentHttp(deps: TournamentHttpDependencies) {
   const admittedActor = async (request: Request, required: boolean) => {
     await deps.readLimit(request);
-    return deps.actor(request, required);
+    const actor = await deps.actor(request, required);
+    if (actor && !accountIdSchema.safeParse(actor.userId).success)
+      throw new TournamentError(
+        'unauthorized',
+        'Your Freeinf account ID could not be verified.',
+        401,
+      );
+    return actor;
   };
   const handle = async (request: Request, operation: () => Promise<Response>) => {
     try {

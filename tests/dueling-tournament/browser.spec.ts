@@ -615,3 +615,30 @@ test('admin capacity accepts 4 through 32 and updates the one-arena workload est
   await capacity.fill('4');
   await expect(page.getByTestId('capacity-workload')).toContainText('1h 2m');
 });
+
+test('cancelled rehearsal disappears publicly and retains its admin audit history', async ({
+  page,
+  request,
+}) => {
+  await login(page, 'director', '/admin/dueling-tournament/local-arena');
+  await page.getByRole('button', { name: 'Cancel event', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Reason (required)').fill('Preview rehearsal finished');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.getByText('cancelled', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Event cancelled.' })).toContainText(
+    'Preview rehearsal finished',
+  );
+  await expect(page.getByRole('button', { name: 'Publish event', exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('cancelled', { exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await expect(page.getByText('Preview rehearsal finished', { exact: true })).toBeVisible();
+  expect((await request.get('/api/ctf/dueling-tournaments/local-arena')).status()).toBe(404);
+  const list = await (await request.get('/api/ctf/dueling-tournaments')).json();
+  expect(list.events.some((event: { id: string }) => event.id === 'local-arena')).toBe(false);
+});
+
+test('retired tournament endpoints are no longer served', async ({ request }) => {
+  expect((await request.get('/api/dueling/tournaments')).status()).toBe(404);
+  expect((await request.get('/api/dueling/tournaments/legacy-event')).status()).toBe(404);
+});

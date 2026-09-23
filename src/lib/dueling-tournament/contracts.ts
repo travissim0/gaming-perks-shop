@@ -8,6 +8,8 @@ export const bracketSizeSchema = z.union([
 ]);
 export type BracketSize = z.infer<typeof bracketSizeSchema>;
 
+export const accountIdSchema = z.uuid();
+
 export const idSchema = z.string().min(1).max(100);
 const instant = z.iso.datetime({ offset: true });
 const shortText = z.string().trim().min(1).max(160);
@@ -265,7 +267,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       reason: z.string().trim().min(1).max(2000),
     })
     .strict(),
-  z.object({ type: z.literal('staff'), userId: idSchema, grant: z.boolean() }).strict(),
+  z.object({ type: z.literal('staff'), userId: accountIdSchema, grant: z.boolean() }).strict(),
   z.object({ type: z.literal('announcement'), body: z.string().trim().min(1).max(4000) }).strict(),
   z.object({ type: z.literal('notice_read'), noticeId: idSchema }).strict(),
   z.object({ type: z.literal('start_match'), matchId: idSchema }).strict(),

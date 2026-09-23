@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { installTestDatabase, migrationSql } from './install';
 import { databasePool, PostgresTestPort } from './postgres';
 import { TournamentRepository } from '../../src/lib/dueling-tournament/repository';
 import { applyMutation, commandFingerprint } from '../../src/lib/dueling-tournament/transition';
@@ -16,20 +17,13 @@ import { champion, resolveBracket } from '../../src/lib/dueling-tournament/brack
 import { createDraw } from '../../src/lib/dueling-tournament/draw';
 
 const owner = databasePool();
-const runtime = databasePool('dueling_test_runtime');
+const runtime = databasePool('service_role');
 const port = new PostgresTestPort(runtime);
 const repo = new TournamentRepository(port);
 const now = '2026-10-04T00:00:00Z';
 
 before(async () => {
-  await owner.query(`do $$ begin
-    if not exists(select 1 from pg_roles where rolname='anon') then create role anon login; end if;
-    if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated login; end if;
-  end $$;
-  grant usage on schema public to anon, authenticated;
-  alter default privileges in schema public grant execute on functions to anon, authenticated;
-  grant execute on all functions in schema public to anon, authenticated;`);
-  await owner.query(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
+  await installTestDatabase(owner);
 });
 beforeEach(async () => {
   await owner.query(
@@ -61,12 +55,18 @@ async function commitProposed(
   });
 }
 
-test('reinstalling the local schema preserves existing rate counters', async () => {
+test('rerunning the exact migration fails atomically and preserves existing rate counters', async () => {
   await port.call('dueling_tournament_rate_check', { p_key: 'request:preserved', p_limit: 1 });
   const before = await owner.query(
     'select * from public.dueling_tournament_rate_buckets order by bucket_key',
   );
-  await owner.query(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
+  const connection = await owner.connect();
+  try {
+    await assert.rejects(connection.query(await migrationSql()), /already exist/);
+    await connection.query('rollback');
+  } finally {
+    connection.release();
+  }
   const after = await owner.query(
     'select * from public.dueling_tournament_rate_buckets order by bucket_key',
   );
@@ -726,7 +726,7 @@ test('large histories remain durable while future actions and old retries keep w
   assert.equal(new Set([...first, ...second].map((row) => row.item.id)).size, 100);
   await assert.rejects(
     repo.history(event.id, { ...testDirector, director: false, userId: 'user-2' }, 'audit', null),
-    /not allowed/,
+    /Tournament not found/,
   );
 });
 
@@ -1064,4 +1064,150 @@ test('SQL accepts legacy 16-slot events without adding size metadata on later sa
   event = await mutate(event, { type: 'announcement', body: 'Legacy compatibility rehearsal' });
   assert.equal(event.bracketSize, undefined);
   assert.deepEqual(event.fixtures, original);
+});
+
+test('migration creates exactly its private objects and service_role can execute only entry RPCs', async () => {
+  const tables = await owner.query(
+    "select relname,relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and relkind='r' and relname ~ '^dueling_tournament_' order by relname",
+  );
+  assert.equal(tables.rows.length, 7);
+  assert.ok(tables.rows.every((row) => row.relrowsecurity));
+  assert.equal(
+    (
+      await owner.query(
+        "select count(*)::int as n from pg_policies where schemaname='public' and tablename ~ '^dueling_tournament_'",
+      )
+    ).rows[0].n,
+    0,
+  );
+  const functions = await owner.query(
+    "select p.oid::regprocedure::text as signature,p.prosecdef,has_function_privilege('service_role',p.oid,'execute') as allowed from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname ~ '^dueling_tournament_'",
+  );
+  assert.equal(functions.rows.length, 15);
+  assert.equal(functions.rows.filter((row) => row.allowed).length, 9);
+  assert.ok(functions.rows.every((row) => row.allowed === row.prosecdef));
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    const client = databasePool(role);
+    try {
+      for (const table of tables.rows)
+        await assert.rejects(
+          client.query(`select * from public.${table.relname}`),
+          /permission denied/,
+        );
+      if (role !== 'service_role')
+        for (const rpc of functions.rows) {
+          const count = rpc.signature
+            .split('(')[1]
+            .replace(')', '')
+            .split(',')
+            .filter(Boolean).length;
+          const name = rpc.signature.split('(')[0];
+          await assert.rejects(
+            client.query(`select ${name}(${Array(count).fill('null').join(',')})`),
+            /permission denied/,
+          );
+        }
+    } finally {
+      await client.end();
+    }
+  }
+  await assert.rejects(
+    owner.query(
+      "insert into dueling_tournament_directors(user_id) values('10000000-0000-4000-8000-999999999999')",
+    ),
+    /foreign key/,
+  );
+});
+
+test('legacy cleanup refuses nonempty tables and outside dependencies; empty cleanup is atomic', async () => {
+  const sql = await readFile(
+    new URL('../../dueling-tournament-drop-legacy.sql', import.meta.url),
+    'utf8',
+  );
+  const client = await owner.connect();
+  try {
+    await client.query(
+      "insert into public.tournaments(id) values('10000000-0000-4000-8000-000000000001')",
+    );
+    await assert.rejects(client.query(sql), /no longer empty/);
+    await client.query('rollback');
+    assert.equal(
+      (await client.query('select count(*)::int as n from public.tournaments')).rows[0].n,
+      1,
+    );
+    await client.query('delete from public.tournaments');
+    await client.query(
+      'create view public.local_legacy_dependency as select id from public.tournaments',
+    );
+    await assert.rejects(client.query(sql), /depend/);
+    await client.query('rollback');
+    await client.query('drop view public.local_legacy_dependency');
+    const marker = '-- Verify cleanup before commit';
+    assert.ok(sql.includes(marker));
+    const tableNames = ['tournaments', 'tournament_participants', 'tournament_matches'];
+    const originalTables = await client.query(
+      "select relname,oid from pg_class where relnamespace='public'::regnamespace and relname=any($1) order by relname",
+      [tableNames],
+    );
+    for (const table of tableNames) {
+      const fault = `create table public.${table}(id uuid primary key);`;
+      await assert.rejects(
+        client.query(sql.replace(marker, `${fault}\n${marker}`)),
+        /Legacy cleanup verification failed/,
+      );
+      await client.query('rollback');
+      assert.deepEqual(
+        (
+          await client.query(
+            "select relname,oid from pg_class where relnamespace='public'::regnamespace and relname=any($1) order by relname",
+            [tableNames],
+          )
+        ).rows,
+        originalTables.rows,
+      );
+    }
+    const results = await client.query(sql);
+    assert.ok(Array.isArray(results));
+    assert.equal(results.at(-2)?.command, 'COMMIT');
+    assert.equal(results.at(-1)?.command, 'SELECT');
+    assert.deepEqual(results.at(-1)?.rows, [
+      {
+        status: 'cleanup_verified',
+        tournaments_removed: true,
+        participants_removed: true,
+        matches_removed: true,
+      },
+    ]);
+    assert.equal(
+      (await client.query("select to_regclass('public.tournaments') as table_name")).rows[0]
+        .table_name,
+      null,
+    );
+    assert.ok(
+      (await client.query("select to_regclass('public.dueling_stats') as table_name")).rows[0]
+        .table_name,
+    );
+    assert.ok(
+      (await client.query("select to_regclass('public.dueling_tournament_records') as table_name"))
+        .rows[0].table_name,
+    );
+  } finally {
+    client.release();
+  }
+});
+
+test('cancelling a preview rehearsal removes public visibility while retaining director history', async () => {
+  let event = testTournament(4);
+  event.featured = true;
+  await seed(event);
+  event = await mutate(event, { type: 'cancel', reason: 'Preview rehearsal finished' });
+  assert.equal(event.published, false);
+  assert.equal(event.featured, false);
+  assert.equal((await repo.list(null)).length, 0);
+  await assert.rejects(repo.get(event.id, null), /not found/);
+  assert.equal((await repo.get(event.id, testDirector)).phase, 'cancelled');
+  assert.equal(
+    ((await repo.history(event.id, testDirector, 'audit', null)) as unknown[]).length,
+    1,
+  );
 });

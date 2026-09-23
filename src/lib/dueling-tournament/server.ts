@@ -1,30 +1,12 @@
 import 'server-only';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { serviceClient } from './service-client';
 import { z } from 'zod';
-import { Actor, TournamentError } from './contracts';
+import { Actor, TournamentError, accountIdSchema } from './contracts';
 import { readerIdentity } from './reader';
 import { RpcPort, TournamentRepository } from './repository';
 
-let client: SupabaseClient | undefined;
-
 export function tournamentEnabled() {
   return process.env.DUELING_TOURNAMENT_ENABLED === 'true';
-}
-
-function serviceClient(): SupabaseClient {
-  if (client) return client;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key)
-    throw new TournamentError(
-      'unavailable',
-      'Tournament services are temporarily unavailable.',
-      503,
-    );
-  client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  return client;
 }
 
 class SupabaseRpcPort implements RpcPort {
@@ -71,9 +53,16 @@ export async function verifiedActor(request: Request, required: boolean): Promis
       'Your session has expired. Please sign in again.',
       401,
     );
-  const userId = data.user.id;
+  const identity = accountIdSchema.safeParse(data.user.id);
+  if (!identity.success)
+    throw new TournamentError(
+      'unauthorized',
+      'Your Freeinf account ID could not be verified.',
+      401,
+    );
+  const userId = identity.data;
   const capabilities = await serverRepository().capabilities(userId);
-  // The owner must confirm the existing profile mapping before production activation.
+  // Owner-confirmed mapping: profiles.id equals auth.users.id; alias is display-only.
   const { data: profile, error: profileError } = await serviceClient()
     .from('profiles')
     .select('in_game_alias')
@@ -96,7 +85,7 @@ export async function verifiedActor(request: Request, required: boolean): Promis
 }
 
 export async function requireExistingStaffAccount(userId: string) {
-  if (!z.uuid().safeParse(userId).success)
+  if (!accountIdSchema.safeParse(userId).success)
     throw new TournamentError('invalid_account', 'Enter the existing Freeinf account ID.', 422);
   const { data, error } = await serviceClient().auth.admin.getUserById(userId);
   if (error || !data.user)

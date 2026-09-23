@@ -45,7 +45,9 @@ export function EventHero({ event }: { event: TournamentView }) {
               <Swords size={15} /> CTF / 1V1 / DOUBLE ELIMINATION{' '}
               <span className="dt-badge dt-badge-cyan">
                 <span className="dt-status-dot" />
-                {event.paused ? 'Paused' : event.phase.replace('_', ' ')}
+                {event.paused && event.phase !== 'cancelled'
+                  ? 'Paused'
+                  : event.phase.replace('_', ' ')}
               </span>
             </div>
             <h1>{event.settings.title}</h1>

@@ -6,7 +6,9 @@ A comprehensive dueling system with tournament brackets, player statistics, and 
 
 ### Database Schema
 
-The dueling system consists of 5 main tables:
+This document describes the legacy dueling statistics and simulator. The competitive tournament feature uses `/dueling-tournament`, `/admin/dueling-tournament`, and `/api/ctf/dueling-tournaments`, with separate `dueling_tournament_*` storage. The old tournament API has been removed; historical table descriptions below are not the new feature contract.
+
+The legacy schema described five tables:
 
 1. **`dueling_stats`** - Individual duel records
 2. **`tournaments`** - Tournament events  
@@ -46,8 +48,6 @@ The system includes:
 
 #### API Endpoints:
 - `GET/POST /api/dueling/stats` - Fetch rankings or record duels
-- `GET/POST /api/dueling/tournaments` - Tournament management
-- `GET/PUT /api/dueling/tournaments/[id]` - Individual tournament operations
 
 ## 🎮 Usage Examples
 
@@ -72,51 +72,6 @@ fetch('/api/dueling/stats', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(duelData)
-});
-```
-
-### Creating a Tournament
-
-```javascript
-const tournamentData = {
-  name: "Weekly Duel Championship",
-  description: "Weekly tournament for all skill levels",
-  tournament_type: "single_elimination",
-  max_participants: 16,
-  prize_pool: 5000, // in cents
-  created_by: "admin-user-id"
-};
-
-fetch('/api/dueling/tournaments', {
-  method: 'POST', 
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(tournamentData)
-});
-```
-
-### Registering for Tournament
-
-```javascript
-fetch(`/api/dueling/tournaments/${tournamentId}`, {
-  method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'register',
-    player_id: "user-uuid",
-    player_alias: "PlayerName"
-  })
-});
-```
-
-### Generating Tournament Bracket
-
-```javascript
-fetch(`/api/dueling/tournaments/${tournamentId}`, {
-  method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'generate_bracket'
-  })
 });
 ```
 

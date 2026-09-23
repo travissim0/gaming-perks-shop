@@ -81,7 +81,12 @@ export function AdminEvent({ id }: { id: string }) {
               </button>
             </Message>
           )}
-          {event.paused && <Message>Event paused. {event.pauseReason}</Message>}
+          {event.paused && (
+            <Message>
+              {event.phase === 'cancelled' ? 'Event cancelled.' : 'Event paused.'}{' '}
+              {event.pauseReason}
+            </Message>
+          )}
           <nav className="dt-tabs" aria-label="Administration sections">
             {tabs.map((value) => (
               <button

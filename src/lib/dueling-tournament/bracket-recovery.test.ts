@@ -19,8 +19,12 @@ const execute = (event: Tournament, command: Command, actor = testDirector) =>
 
 test('repeated unchanged staff grants do not advance the event revision', async () => {
   const event = testTournament();
-  event.refereeIds = ['referee'];
-  const result = await execute(event, { type: 'staff', userId: 'referee', grant: true });
+  event.refereeIds = ['10000000-0000-4000-8000-000000000018'];
+  const result = await execute(event, {
+    type: 'staff',
+    userId: '10000000-0000-4000-8000-000000000018',
+    grant: true,
+  });
   assert.equal(result.tournament.revision, event.revision);
   assert.deepEqual(result.tournament.audit, event.audit);
 });
@@ -47,8 +51,12 @@ test('twenty voided draws do not permanently lock the next draw', async () => {
 
 test('referee projections contain no other participant account identifiers', () => {
   const event = testTournament();
-  event.refereeIds = ['referee'];
-  const view = tournamentView(event, { userId: 'referee', alias: 'Referee', director: false }, now);
+  event.refereeIds = ['10000000-0000-4000-8000-000000000018'];
+  const view = tournamentView(
+    event,
+    { userId: '10000000-0000-4000-8000-000000000018', alias: 'Referee', director: false },
+    now,
+  );
   assert.ok(view.staff);
   assert.ok(!JSON.stringify(view).includes('user-1'));
 });

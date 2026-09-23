@@ -84,7 +84,7 @@ test('HTTP boundary rejects identity spoofing, foreign origins and oversized chu
         if (required) throw new TournamentError('unauthorized', 'Sign in.', 401);
         return null;
       }
-      return { userId: 'user-1', alias: 'Player 1', director: false };
+      return { userId: '10000000-0000-4000-8000-000000000001', alias: 'Player 1', director: false };
     },
     staffAccount: async () => {},
     readLimit: async () => {},
