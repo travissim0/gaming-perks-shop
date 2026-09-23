@@ -129,6 +129,10 @@ test('match desk starts, holds, releases and records a BO5 result once', async (
   request,
 }) => {
   await login(page, 'referee', '/admin/dueling-tournament/local-arena?tab=matches&match=U1');
+  await expect(page.getByText('Top-left corner', { exact: true })).toBeVisible();
+  await expect(page.getByText('Bottom-right corner', { exact: true })).toBeVisible();
+  await expect(page.getByText(/All players must use the DUELER class/)).toBeVisible();
+  await expect(page.getByText(/Players must report to the referee within 2 minutes/)).toBeVisible();
   await page.getByRole('button', { name: 'Start match', exact: true }).click();
   await expect(page.getByText('in progress', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Hold match', exact: true }).click();
@@ -152,6 +156,10 @@ test('match desk starts, holds, releases and records a BO5 result once', async (
   expect(event.fixtures.find((match) => match.id === 'U1')?.result?.scoreA).toBe(3);
   expect(event.fixtures.find((match) => match.id === 'U1')?.result?.scoreB).toBe(1);
   expect(event.revision).toBe(4);
+  await page.goto('/dueling-tournament/local-arena/matches/U1');
+  await expect(page.locator('.dt-versus > div').nth(0)).toContainText('Top-left corner');
+  await expect(page.locator('.dt-versus > div').nth(1)).toContainText('Bottom-right corner');
+  await expect(page.getByText(/All players must use the DUELER class/)).toBeVisible();
 });
 
 test('public bracket and showcase fit laptop and mobile widths; personal responses are private', async ({
@@ -190,9 +198,16 @@ test('director creates a private event, publishes rules, then exposes it and exp
   await expect(page.getByRole('heading', { name: 'October Rehearsal', exact: true })).toBeVisible();
   expect((await request.get('/api/ctf/dueling-tournaments/local-new-event')).status()).toBe(404);
   await page.getByRole('button', { name: 'Rules', exact: true }).click();
-  await page
-    .getByLabel('Tournament rules', { exact: true })
-    .fill('Rehearsal rules. BO5 throughout. Await the referee call. Report disconnects.');
+  const rules = page.getByLabel('Tournament rules', { exact: true });
+  await expect(rules).toHaveValue(/DUELER/);
+  await expect(rules).toHaveValue(/within 2 minutes/);
+  await expect(rules).toHaveValue(/top-left corner/);
+  await rules.fill(`${await rules.inputValue()}\n## Event note\nFollow the referee in the arena.`);
+  await page.getByRole('button', { name: 'Save draft rules', exact: true }).click();
+  await expect(page.getByText('Rulebook saved.')).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Rules', exact: true }).click();
+  await expect(rules).toHaveValue(/Follow the referee in the arena\./);
   await page
     .getByRole('checkbox', { name: 'Publish this rulebook for players to read and accept.' })
     .check();
@@ -207,10 +222,15 @@ test('director creates a private event, publishes rules, then exposes it and exp
   );
   expect(event.published).toBe(true);
   expect(event.rules.publishedAt).not.toBeNull();
+  expect(event.rules.text).toContain('DUELER');
+  expect(event.rules.text).toContain('within 2 minutes');
   await page.getByRole('button', { name: 'Exports', exact: true }).click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Players CSV' }).click();
   expect((await download).suggestedFilename()).toBe('local-new-event-players.csv');
+  await page.goto('/dueling-tournament/local-new-event?tab=rules');
+  await expect(page.getByText(/All players must use the DUELER class/)).toBeVisible();
+  await expect(page.getByText(/Players must report to the referee within 2 minutes/)).toBeVisible();
 });
 
 test('waitlist promotion follows withdrawal and shows the correct account its notice', async ({

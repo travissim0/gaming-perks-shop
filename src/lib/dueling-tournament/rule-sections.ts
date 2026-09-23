@@ -1,3 +1,5 @@
+import { MATCH_ATTENDANCE_RULE, MATCH_CORNER_RULE, MATCH_START_RULE } from './match-procedure';
+
 /** Sections every published rulebook should cover. Directors write them as "## Title" lines. */
 export const RULE_SECTIONS = [
   'Check-in and no-shows',
@@ -8,7 +10,11 @@ export const RULE_SECTIONS = [
 ] as const;
 
 export function ruleSectionTemplate(): string {
-  return RULE_SECTIONS.map((title) => `## ${title}\n`).join('\n');
+  const agreed: Partial<Record<(typeof RULE_SECTIONS)[number], string>> = {
+    'Check-in and no-shows': MATCH_ATTENDANCE_RULE,
+    'Arena and classes': `${MATCH_START_RULE}\n\n${MATCH_CORNER_RULE}`,
+  };
+  return RULE_SECTIONS.map((title) => `## ${title}\n${agreed[title] ?? ''}\n`).join('\n');
 }
 
 export type RuleSection = { title: string; body: string };

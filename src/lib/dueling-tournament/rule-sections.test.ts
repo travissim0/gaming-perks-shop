@@ -21,12 +21,18 @@ test('sections split on ## headings, keep empty ones, and list uncovered standar
   assert.deepEqual(parsed.missing, ['Disconnects', 'Disputes', 'Prizes']);
 });
 
-test('the admin template parses back into every standard section, all unpublished', () => {
+test('the admin template includes agreed procedures and leaves undecided sections empty', () => {
   const parsed = parseRuleSections(ruleSectionTemplate());
   assert.deepEqual(
     parsed.sections.map((section) => section.title),
     [...RULE_SECTIONS],
   );
-  assert.ok(parsed.sections.every((section) => section.body === ''));
+  assert.match(parsed.sections[0].body, /within 2 minutes/);
+  assert.match(parsed.sections[0].body, /series forfeit/);
+  assert.match(parsed.sections[1].body, /DUELER/);
+  assert.match(parsed.sections[1].body, /"GO\."/);
+  assert.match(parsed.sections[1].body, /top-left corner/);
+  assert.match(parsed.sections[1].body, /bottom-right corner/);
+  assert.ok(parsed.sections.slice(2).every((section) => section.body === ''));
   assert.deepEqual(parsed.missing, []);
 });

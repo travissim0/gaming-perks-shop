@@ -2,7 +2,7 @@
 
 import { HistoryArchive } from './HistoryArchive';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Command } from '@/lib/dueling-tournament/contracts';
@@ -189,10 +189,11 @@ export function OverviewPanel({ event, busy, mutate }: PanelProps) {
 }
 
 export function RulesPanel({ event, busy, mutate }: PanelProps) {
-  const [text, setText] = useState(event.rules.text);
+  const locked = event.phase !== 'draft' || !event.me?.director;
+  const [text, setText] = useState(event.rules.text || (locked ? '' : ruleSectionTemplate()));
   const [publish, setPublish] = useState(false);
   const [saved, setSaved] = useState(false);
-  const locked = event.phase !== 'draft' || !event.me?.director;
+  const rulesId = useId();
   return (
     <section className="dt-panel">
       <div className="dt-panel-header">
@@ -210,9 +211,10 @@ export function RulesPanel({ event, busy, mutate }: PanelProps) {
           }}
         >
           <p className="dt-muted">
-            Add the supplied ruleset, including allowed equipment, arena procedure, disconnects,
-            no-shows, disputes, and rest policy. Registration records acceptance of this version.
-            Rules freeze when registration opens.
+            New rulebooks start with DUELER class, referee-controlled starts, seed-assigned corners
+            and a 2-minute arrival limit. Review these rules and complete the remaining sections
+            before publishing. Registration records acceptance of this version. Rules freeze when
+            registration opens.
           </p>
           <p className="dt-muted">
             Start a line with <code>## </code> to begin a section, for example{' '}
@@ -229,14 +231,15 @@ export function RulesPanel({ event, busy, mutate }: PanelProps) {
                   setSaved(false);
                 }}
               >
-                Insert section template
+                Insert tournament rules
               </button>
             </div>
           )}
           {saved && <Message>Rulebook saved.</Message>}
-          <label className="dt-label">
-            Tournament rules
+          <div className="dt-label">
+            <label htmlFor={rulesId}>Tournament rules</label>
             <textarea
+              id={rulesId}
               required
               maxLength={30000}
               className="dt-textarea"
@@ -248,7 +251,7 @@ export function RulesPanel({ event, busy, mutate }: PanelProps) {
                 setSaved(false);
               }}
             />
-          </label>
+          </div>
           {!locked && (
             <>
               <label className="dt-check">

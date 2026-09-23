@@ -326,10 +326,11 @@ export function ArenaQueue({ event, admin = false }: { event: TournamentView; ad
         })
       )}
       <div className="dt-panel-body dt-small">
-        Wait for the referee&apos;s call in {event.settings.callChannel}. A website notice does not
-        start a no-show timer. Estimates allow five {event.settings.estimatedGameSeconds}-second
-        games and {event.settings.estimatedChangeoverMinutes} minutes of changeover per series; they
-        are not referee call times.
+        Report to the referee within 2 minutes of your match being called in{' '}
+        {event.settings.callChannel}. Failure to appear results in a series forfeit. A website
+        notice does not start this limit. Estimates allow five {event.settings.estimatedGameSeconds}
+        -second games and {event.settings.estimatedChangeoverMinutes} minutes of changeover per
+        series; they are not referee call times.
       </div>
     </section>
   );

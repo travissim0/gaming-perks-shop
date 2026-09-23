@@ -4,10 +4,16 @@ import Link from 'next/link';
 import { useTournament, eventTime } from './client';
 import { Loading, Message, TournamentShell } from './Shell';
 import { playerName } from './Bracket';
+import {
+  MATCH_ATTENDANCE_RULE,
+  MATCH_START_RULE,
+  startingCorners,
+} from '@/lib/dueling-tournament/match-procedure';
 
 export function MatchPage({ slug, matchId }: { slug: string; matchId: string }) {
   const { event, error, loading, refresh } = useTournament(slug);
   const fixture = event?.fixtures.find((item) => item.id === matchId);
+  const corners = event && fixture ? startingCorners(event, fixture) : [null, null];
   return (
     <TournamentShell>
       {loading ? (
@@ -64,6 +70,7 @@ export function MatchPage({ slug, matchId }: { slug: string; matchId: string }) 
                         : 'OPPONENT PENDING'}
                   </span>
                   <h2>{playerName(event, slot)}</h2>
+                  {corners[index] && <div className="dt-badge dt-badge-cyan">{corners[index]}</div>}
                   <div className="dt-score">
                     {fixture.result
                       ? ((index ? fixture.result.scoreB : fixture.result.scoreA) ?? '–')
@@ -78,6 +85,8 @@ export function MatchPage({ slug, matchId }: { slug: string; matchId: string }) 
               ))}
             </div>
             <div className="dt-panel-body dt-form">
+              <p className="dt-muted">{MATCH_START_RULE}</p>
+              <p className="dt-muted">{MATCH_ATTENDANCE_RULE}</p>
               {fixture.result && (
                 <p className="dt-muted">
                   Official result: {fixture.result.kind.replaceAll('_', ' ')}. Recorded{' '}

@@ -8,6 +8,8 @@ A comprehensive dueling system with tournament brackets, player statistics, and 
 
 This document describes the legacy dueling statistics and simulator. The competitive tournament feature uses `/dueling-tournament`, `/admin/dueling-tournament`, and `/api/ctf/dueling-tournaments`, with separate `dueling_tournament_*` storage. The old tournament API has been removed; historical table descriptions below are not the new feature contract.
 
+Competitive tournament rulebook drafts start with DUELER class, referee placement and a referee "GO" before movement or attacks. Original tournament seeds determine the starting corners for every game: the smaller seed number goes top left and the larger goes bottom right. Public match details and the admin match desk show these corners once both players and their seeds are known, regardless of bracket slot order. Players have two minutes from the referee's actual match call to report; the referee records a series forfeit for a missed deadline. Website notices and estimated start times do not trigger this limit or automatically award results. Mat exits have no separate referee penalty; the arena handles quicksand. The director must review and save or publish the draft rules. Existing saved rulebooks are preserved, and unconfirmed disconnect, dispute and prize sections remain empty.
+
 The legacy schema described five tables:
 
 1. **`dueling_stats`** - Individual duel records

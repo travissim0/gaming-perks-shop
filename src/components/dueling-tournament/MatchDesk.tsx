@@ -4,6 +4,11 @@ import { useState } from 'react';
 import type { Command } from '@/lib/dueling-tournament/contracts';
 import type { PublicFixture, TournamentView } from '@/lib/dueling-tournament/view';
 import { easternInput, easternToIso } from '@/lib/dueling-tournament/time';
+import {
+  MATCH_ATTENDANCE_RULE,
+  MATCH_START_RULE,
+  startingCorners,
+} from '@/lib/dueling-tournament/match-procedure';
 import { playerName } from './Bracket';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Message } from './Shell';
@@ -42,6 +47,7 @@ function MatchEditor({
     slot.state === 'player' ? event.entries.find((entry) => entry.id === slot.entryId)! : null,
   );
   const impact = event.staff?.correctionImpacts[fixture.id];
+  const corners = startingCorners(event, fixture);
   const eligible = event.queue.find((item) => item.matchId === fixture.id);
   const active = event.fixtures.find((item) => item.startedAt && !item.result);
   const correctable = Boolean(fixture.result && director && !impact?.blocked.length);
@@ -74,6 +80,7 @@ function MatchEditor({
               {players[index]?.seed ? `SEED ${players[index]?.seed}` : 'OPPONENT PENDING'}
             </span>
             <h2>{playerName(event, slot)}</h2>
+            {corners[index] && <div className="dt-badge dt-badge-cyan">{corners[index]}</div>}
             <div className="dt-score">
               {fixture.result
                 ? ((index ? fixture.result.scoreB : fixture.result.scoreA) ?? '–')
@@ -86,6 +93,8 @@ function MatchEditor({
       </div>
       <div className="dt-panel-body dt-form">
         {error && <Message error>{error}</Message>}
+        <p className="dt-muted">{MATCH_START_RULE}</p>
+        <p className="dt-muted">{MATCH_ATTENDANCE_RULE}</p>
         {fixture.state === 'conditional' && (
           <Message>The reset final opens only if the lower-bracket winner wins GF1.</Message>
         )}
