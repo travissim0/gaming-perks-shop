@@ -1,0 +1,85 @@
+# Inactive proposal. Requires repository-owner approval before installation.
+name: Dueling tournament local verification
+
+on:
+  pull_request:
+    paths:
+      - 'src/**/dueling-tournament/**'
+      - 'src/app/api/ctf/dueling-tournaments/**'
+      - 'src/app/auth/**'
+      - 'src/lib/auth-return.ts'
+      - 'src/lib/AuthContext.tsx'
+      - 'src/components/Navbar.tsx'
+      - 'src/app/dueling/page.tsx'
+      - 'tests/dueling-tournament/**'
+      - 'package*.json'
+      - '*config*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tournament:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: dueling_test_admin
+          POSTGRES_DB: infantry_dueling_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dueling_test_admin -d infantry_dueling_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DUELING_TOURNAMENT_TEST_DATABASE_URL: postgresql://dueling_test_admin@127.0.0.1:5432/infantry_dueling_test
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:56500
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: local-dueling-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: local-dueling-service-key
+      DUELING_TOURNAMENT_ENABLED: 'true'
+      DUELING_TOURNAMENT_RATE_SECRET: local-only-request-admission-secret-2026
+      DUELING_TOURNAMENT_LOCAL_TEST: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run format:dueling:check
+      - run: npm run lint:dueling
+      - run: npm run typecheck:dueling
+      - run: npm run test:dueling
+      - name: Required real database tests
+        run: npm run test:dueling:db
+      - run: npm run build
+      - run: npx playwright install chromium --only-shell --with-deps
+      - name: Start isolated browser rehearsal
+        run: |
+          npm run test:dueling:bridge > /tmp/dueling-bridge.log 2>&1 &
+          npm run start -- --hostname 127.0.0.1 --port 56501 > /tmp/dueling-web.log 2>&1 &
+          DUELING_TOURNAMENT_ENABLED=false npm run start -- --hostname 127.0.0.1 --port 56502 > /tmp/dueling-disabled.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:56500/__test/health > /dev/null && curl --fail --silent http://127.0.0.1:56501/dueling-tournament > /dev/null && curl --fail --silent http://127.0.0.1:56502/api/ctf/dueling-tournaments/status > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Local rehearsal services failed to start.'
+          exit 1
+      - run: npm run test:dueling:browser
+
+      - name: Local rehearsal logs on failure
+        if: failure()
+        run: |
+          for log in /tmp/dueling-bridge.log /tmp/dueling-web.log /tmp/dueling-disabled.log; do
+            if test -f "$log"; then
+              tail -n 120 "$log"
+            fi
+          done

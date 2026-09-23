@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase, withRetry } from './supabase';
 import { User } from '@supabase/supabase-js';
 import { toast } from 'react-hot-toast';
+import { authLink, currentAuthReturn } from './auth-return';
 
 interface AuthContextType {
   user: User | null;
@@ -331,6 +332,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: email.trim(),
         password,
         options: {
+          ...(typeof window !== 'undefined' && currentAuthReturn() !== '/' ? {
+            emailRedirectTo: `${window.location.origin}${authLink('/auth/callback', currentAuthReturn())}`,
+          } : {}),
           data: {
             in_game_alias: inGameAlias.trim(),
           },
@@ -519,4 +523,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-} 
+}

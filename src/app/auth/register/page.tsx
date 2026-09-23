@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { authLink, currentAuthReturn, rememberAuthReturn } from '@/lib/auth-return';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -34,6 +35,8 @@ export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const router = useRouter();
   const { signUp } = useAuth();
+  const [returnPath, setReturnPath] = useState('/');
+  useEffect(() => { setReturnPath(rememberAuthReturn()); }, []);
 
   const stars = useMemo(() => ({
     far: generateStars(80, 3),
@@ -90,17 +93,17 @@ export default function Register() {
         } else {
           toast.success('Registration successful! Check your email for verification.');
         }
-        router.push('/auth/login');
+        router.push(authLink('/auth/login', currentAuthReturn()));
         setRetryCount(0);
       } else {
         toast.success('Registration may have succeeded. Please check your email and try signing in.');
-        router.push('/auth/login');
+        router.push(authLink('/auth/login', currentAuthReturn()));
       }
     } catch (error: any) {
       console.error('Registration exception:', error);
       if (error.message?.includes('already registered') || error.message?.includes('already exists')) {
         toast.error('An account with this email already exists. Please sign in instead.');
-        setTimeout(() => router.push('/auth/login'), 2000);
+        setTimeout(() => router.push(authLink('/auth/login', currentAuthReturn())), 2000);
       } else if (error.message?.includes('timeout') && retryCount < 2) {
         setRetryCount(prev => prev + 1);
         toast.error(`Request timed out. Retrying... (${retryCount + 1}/3)`);
@@ -125,7 +128,7 @@ export default function Register() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}${authLink('/auth/callback', rememberAuthReturn())}`,
       },
     });
     if (error) {
@@ -202,7 +205,7 @@ export default function Register() {
           </p>
           <p className="mt-3 text-sm text-gray-500">
             Already have an account?{' '}
-            <Link href="/auth/login" className="font-bold text-cyan-400 hover:text-cyan-300 transition-colors duration-300">
+            <Link href={authLink('/auth/login', returnPath)} className="font-bold text-cyan-400 hover:text-cyan-300 transition-colors duration-300">
               Sign In
             </Link>
           </p>

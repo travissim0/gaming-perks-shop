@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
+import { consumeAuthReturn, rememberAuthReturn } from '@/lib/auth-return';
+
+function registrationReturn() {
+  const path = consumeAuthReturn();
+  return path === '/' ? '/dashboard' : path;
+}
 
 function CompleteRegistrationContent() {
   const router = useRouter();
@@ -18,6 +24,7 @@ function CompleteRegistrationContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    rememberAuthReturn();
     const aliasParam = searchParams.get('alias');
     if (aliasParam) {
       setAlias(decodeURIComponent(aliasParam));
@@ -42,7 +49,7 @@ function CompleteRegistrationContent() {
           // Check if user already has a password set
           if (data.session.user.user_metadata?.password_set) {
             toast.success('Account already completed!');
-            router.push('/dashboard');
+            router.push(registrationReturn());
             return;
           }
         } else {
@@ -143,7 +150,7 @@ function CompleteRegistrationContent() {
       // Add a small delay before redirect to ensure everything is saved
       setTimeout(() => {
         setLoading(false);
-        router.push('/dashboard');
+        router.push(registrationReturn());
       }, 1000);
 
     } catch (error: any) {
@@ -284,4 +291,4 @@ export default function CompleteRegistration() {
       <CompleteRegistrationContent />
     </Suspense>
   );
-} 
+}

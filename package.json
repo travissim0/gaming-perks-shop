@@ -6,7 +6,15 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:dueling": "node --import tsx --test src/lib/dueling-tournament/*.test.ts",
+    "test:dueling:db": "node --import tsx --test tests/dueling-tournament/database.test.ts",
+    "test:dueling:browser": "playwright test --config tests/dueling-tournament/playwright.config.ts",
+    "test:dueling:bridge": "node --import tsx tests/dueling-tournament/local-bridge.ts",
+    "lint:dueling": "eslint src/components/dueling-tournament src/lib/dueling-tournament src/lib/auth-return.ts src/app/dueling-tournament src/app/admin/dueling-tournament src/app/api/ctf/dueling-tournaments tests/dueling-tournament --max-warnings 0",
+    "typecheck:dueling": "node --import tsx tests/dueling-tournament/typecheck.ts",
+    "format:dueling": "prettier --config tests/dueling-tournament/.prettierrc.json --write \"src/lib/dueling-tournament/**/*.ts\" src/lib/auth-return.ts \"src/components/dueling-tournament/**/*.{tsx,ts,css}\" \"src/app/dueling-tournament/**/*.{tsx,ts,css}\" \"src/app/admin/dueling-tournament/**/*.{tsx,ts}\" \"src/app/api/ctf/dueling-tournaments/**/*.ts\" \"tests/dueling-tournament/**/*.{ts,yml}\"",
+    "format:dueling:check": "prettier --config tests/dueling-tournament/.prettierrc.json --check \"src/lib/dueling-tournament/**/*.ts\" src/lib/auth-return.ts \"src/components/dueling-tournament/**/*.{tsx,ts,css}\" \"src/app/dueling-tournament/**/*.{tsx,ts,css}\" \"src/app/admin/dueling-tournament/**/*.{tsx,ts}\" \"src/app/api/ctf/dueling-tournaments/**/*.ts\" \"tests/dueling-tournament/**/*.{ts,yml}\""
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
@@ -33,19 +41,25 @@
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
     "recharts": "^3.7.0",
-    "twilio": "^5.3.5"
+    "twilio": "^5.3.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/mssql": "^12.3.0",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.2",
+    "pg": "^8.23.0",
+    "prettier": "^3.9.8",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3"
   }
 }

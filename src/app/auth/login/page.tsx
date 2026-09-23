@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { authLink, consumeAuthReturn, rememberAuthReturn } from '@/lib/auth-return';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -27,6 +28,8 @@ export default function Login() {
   const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
   const { signIn } = useAuth();
+  const [returnPath, setReturnPath] = useState('/');
+  useEffect(() => { setReturnPath(rememberAuthReturn()); }, []);
 
   const stars = useMemo(() => ({
     far: generateStars(80, 3),
@@ -72,7 +75,7 @@ export default function Login() {
       } else {
         toast.success('Logged in successfully!');
         setRetryCount(0);
-        router.push('/');
+        router.push(consumeAuthReturn());
       }
     } catch (error: any) {
       console.error('Login exception:', error);
@@ -150,7 +153,7 @@ export default function Login() {
           </p>
           <p className="mt-4 text-center text-sm text-gray-500">
             Don't have an account?{' '}
-            <Link href="/auth/register" className="font-bold text-cyan-400 hover:text-cyan-300 transition-colors duration-300 tracking-wide">
+            <Link href={authLink('/auth/register', returnPath)} className="font-bold text-cyan-400 hover:text-cyan-300 transition-colors duration-300 tracking-wide">
               Create Account
             </Link>
           </p>
@@ -238,7 +241,7 @@ export default function Login() {
                       const { error } = await supabase.auth.signInWithOAuth({
                         provider: 'google',
                         options: {
-                          redirectTo: `${window.location.origin}/auth/callback`,
+                          redirectTo: `${window.location.origin}${authLink('/auth/callback', rememberAuthReturn())}`,
                         },
                       });
                       if (error) {
