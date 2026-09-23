@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useTournamentEnabled } from './dueling-tournament/FeatureLink';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, Fragment, type ReactNode } from 'react';
@@ -27,7 +26,6 @@ type NavItem = {
 };
 
 export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobileMenuChange?: (open: boolean) => void }) {
-  const tournamentsEnabled = useTournamentEnabled();
   const router = useRouter();
   const { signOut } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -537,7 +535,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/stats', label: 'Player Stats', icon: <BarChart3 className="w-4 h-4" /> },
     { href: '/stats/elo', label: 'ELO Leaderboard', icon: <Trophy className="w-4 h-4" /> },
     { href: '/dueling', label: 'Dueling', icon: <Sword className="w-4 h-4" /> },
-    ...(tournamentsEnabled ? [{ href: '/dueling-tournament', label: 'Tournaments', icon: <Sword className="w-4 h-4" /> }] : []),
+    { href: '/dueling-tournament', label: 'Tournaments', icon: <Sword className="w-4 h-4" /> },
   ];
 
   // This season first (register → standings → draft → schedule → rules → news),

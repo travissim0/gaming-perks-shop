@@ -12,44 +12,46 @@ import { testTournament } from './testing';
 import { createDraw } from './draw';
 import { publicDraw } from './view';
 
-test('request admission precedes authentication on every data endpoint', async () => {
-  let authCalls = 0;
+test('data reads need no admission configuration while staff endpoints still require authentication', async () => {
+  const event = testTournament();
+  const calls: string[] = [];
   const api = createTournamentHttp({
-    enabled: () => true,
     repository: () =>
       new TournamentRepository({
-        call: async () => {
-          throw new Error('No database access expected');
+        call: async (name) => {
+          calls.push(name);
+          assert.equal(name, 'dueling_tournament_list');
+          return [event];
         },
       }),
-    actor: async () => {
-      authCalls++;
-      return null;
+    actor: async (request) => {
+      const token = request.headers.get('authorization');
+      if (!token) return null;
+      if (token === 'Bearer valid-local-account') return testDirector;
+      throw new TournamentError('unauthorized', 'Invalid session.', 401);
     },
     staffAccount: async () => {},
-    readLimit: async () => {
-      throw new TournamentError('limited', 'Try later', 429);
-    },
     now: () => new Date().toISOString(),
   });
-  const request = () =>
+  const request = (token?: string) =>
     new Request('http://localhost/api/ctf/dueling-tournaments', {
-      headers: {
-        authorization: 'Bearer invalid-token-that-should-not-be-checked',
-        origin: 'http://localhost',
-      },
+      headers: { origin: 'http://localhost', ...(token ? { authorization: token } : {}) },
     });
-  for (const response of [
-    await api.list(request()),
-    await api.detail(request(), 'event'),
-    await api.access(request()),
-    await api.export(request(), 'event'),
-    await api.history(request(), 'event'),
-    await api.create(request()),
-    await api.mutate(request(), 'event'),
-  ])
-    assert.equal(response.status, 429);
-  assert.equal(authCalls, 0);
+  for (const token of [undefined, 'Bearer valid-local-account']) {
+    for (let i = 0; i < 241; i++) {
+      const response = await api.list(request(token));
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).events[0].id, event.id);
+    }
+  }
+  assert.equal(calls.length, 482);
+  for (const token of [undefined, 'Bearer invalid-local-account']) {
+    assert.equal((await api.access(request(token))).status, 401);
+    assert.equal((await api.export(request(token), event.id)).status, 401);
+    assert.equal((await api.create(request(token))).status, 401);
+    assert.equal((await api.mutate(request(token), event.id)).status, 401);
+  }
+  assert.equal(calls.length, 482, 'Rejected actors must not reach the repository');
 });
 
 test('a corrupt event is logged and omitted without suppressing healthy events', async () => {

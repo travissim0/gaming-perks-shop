@@ -43,7 +43,6 @@ test('tournament uses the shared service client and never falls back to the publ
 
 test('invalid verified account IDs and invalid staff IDs are rejected before repository access', async () => {
   const api = createTournamentHttp({
-    enabled: () => true,
     repository: () =>
       new TournamentRepository({
         call: async () => {
@@ -54,7 +53,6 @@ test('invalid verified account IDs and invalid staff IDs are rejected before rep
     staffAccount: async () => {
       throw new Error('No staff lookup expected');
     },
-    readLimit: async () => {},
     now: () => new Date().toISOString(),
   });
   const request = new Request('http://localhost/api');

@@ -339,60 +339,69 @@ test('a stale referee submission refreshes current state while retaining the ent
   ).toBeVisible();
 });
 
-test('dropping cookies or changing a junk token cannot obtain a new request budget', async ({
-  playwright,
+test('reads work past the former request limit while invalid sessions remain rejected', async ({
+  request,
 }) => {
-  const client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:56501' });
-  try {
-    let blocked = false;
-    for (let i = 0; i < 490; i++) {
-      const response = await client.get('/api/ctf/dueling-tournaments/local-arena', {
-        headers: { cookie: `discarded=${i}` },
-      });
-      if (response.status() === 429) {
-        blocked = true;
-        break;
-      }
-      expect(response.ok()).toBe(true);
+  const signIn = await request.post('http://127.0.0.1:56500/auth/v1/token?grant_type=password', {
+    data: { email: 'director@local.invalid', password: 'LocalOnlyTest123!' },
+  });
+  expect(signIn.ok()).toBe(true);
+  const session = await signIn.json();
+  const readers: Record<string, string>[] = [
+    {},
+    { authorization: `Bearer ${session.access_token}` },
+  ];
+  for (const headers of readers) {
+    for (let i = 0; i < 241; i++) {
+      const response = await request.get('/api/ctf/dueling-tournaments', { headers });
+      expect(response.status()).toBe(200);
+      expect((await response.json()).events.length).toBeGreaterThan(0);
     }
-    expect(blocked).toBe(true);
-    const fresh = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:56501' });
-    try {
-      expect(
-        (
-          await fresh.get('/api/ctf/dueling-tournaments/access', {
-            headers: { authorization: 'Bearer another-junk-token-with-no-valid-identity' },
-          })
-        ).status(),
-      ).toBe(429);
-      expect((await fresh.get('/api/ctf/dueling-tournaments/local-arena/export')).status()).toBe(
-        429,
-      );
-    } finally {
-      await fresh.dispose();
-    }
-  } finally {
-    await client.dispose();
   }
+  expect(
+    (
+      await request.get('/api/ctf/dueling-tournaments/access', {
+        headers: { authorization: 'Bearer another-junk-token-with-no-valid-identity' },
+      })
+    ).status(),
+  ).toBe(401);
+  expect((await request.get('/api/ctf/dueling-tournaments/local-arena/export')).status()).toBe(401);
 });
 
-test('disabled runtime hides tournament links on the existing dueling page and navbar', async ({
+test('a legacy false flag cannot hide links or block event data and director actions', async ({
   page,
   request,
 }) => {
-  const status = await request.get('http://127.0.0.1:56502/api/ctf/dueling-tournaments/status');
-  expect(await status.json()).toEqual({ enabled: false });
-  const loaded = page.waitForResponse((response) =>
-    response.url().includes('/dueling-tournaments/status'),
-  );
-  await page.goto('http://127.0.0.1:56502/dueling');
-  await loaded;
-  await expect(page.locator('a[href="/dueling-tournament"]')).toHaveCount(0);
-  const list = await request.get('http://127.0.0.1:56502/api/ctf/dueling-tournaments');
-  expect(await list.json()).toEqual({ events: [], enabled: false });
-  expect(
-    (await request.get('http://127.0.0.1:56502/api/ctf/dueling-tournaments/local-arena')).status(),
-  ).toBe(503);
+  const origin = 'http://127.0.0.1:56502';
+  const api = `${origin}/api/ctf/dueling-tournaments`;
+  expect(await (await request.get(`${api}/status`)).json()).toEqual({ enabled: true });
+  await page.goto(`${origin}/dueling`);
+  await expect(page.locator('a[href="/dueling-tournament"]').first()).toBeVisible();
+  const list = await request.get(api);
+  expect(list.status()).toBe(200);
+  expect((await list.json()).events.length).toBeGreaterThan(0);
+  const detail = await request.get(`${api}/local-arena`);
+  expect(detail.status()).toBe(200);
+  const event = (await detail.json()).event;
+  const signIn = await request.post('http://127.0.0.1:56500/auth/v1/token?grant_type=password', {
+    data: { email: 'director@local.invalid', password: 'LocalOnlyTest123!' },
+  });
+  expect(signIn.ok()).toBe(true);
+  const session = await signIn.json();
+  const headers = { authorization: `Bearer ${session.access_token}`, origin };
+  const access = await request.get(`${api}/access`, { headers });
+  expect(access.status()).toBe(200);
+  expect((await access.json()).director).toBe(true);
+  const saved = await request.post(`${api}/local-arena`, {
+    headers,
+    data: {
+      operationId: crypto.randomUUID(),
+      expectedRevision: event.revision,
+      command: { type: 'announcement', body: 'Legacy flag cannot block the director.' },
+    },
+  });
+  expect(saved.status()).toBe(200);
+  expect((await saved.json()).event.revision).toBe(event.revision + 1);
 });
 
 test('public history masks committed seeds, and personal notices do not change the event revision', async ({
@@ -435,22 +444,44 @@ test('public history masks committed seeds, and personal notices do not change t
   await expect(section).toContainText('Your tournament place is confirmed.');
 });
 
-test('feature discovery makes one request per browsing session, including after navigation and reload', async ({
+test('stale disabled storage cannot hide links and navigation makes no status requests', async ({
   page,
 }) => {
   let requests = 0;
   page.on('request', (request) => {
     if (request.url().endsWith('/dueling-tournaments/status')) requests++;
   });
+  await page.addInitScript(() =>
+    sessionStorage.setItem('freeinf:tournament-visibility:v1', 'false'),
+  );
   await page.clock.install();
   await page.goto('/dueling');
   await expect(page.locator('a[href="/dueling-tournament"]').first()).toBeVisible();
-  expect(requests).toBe(1);
   await page.clock.fastForward(125000);
-  expect(requests).toBe(1);
   await page.goto('/dueling?review=visibility');
   await expect(page.locator('a[href="/dueling-tournament"]').first()).toBeVisible();
-  expect(requests).toBe(1);
+  await page.reload();
+  await expect(page.locator('a[href="/dueling-tournament"]').first()).toBeVisible();
+  for (const width of [390, 1000, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/dueling?viewport=${width}`);
+    if (width < 1280) {
+      await page
+        .locator('nav button')
+        .filter({ has: page.locator('svg.lucide-menu') })
+        .click();
+      await page.getByRole('button', { name: 'Stats', exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: 'Stats', exact: true }).hover();
+    }
+    await expect(
+      page
+        .getByRole('button', { name: 'Stats', exact: true })
+        .locator('..')
+        .getByRole('link', { name: 'Tournaments', exact: true }),
+    ).toBeVisible();
+  }
+  expect(requests).toBe(0);
 });
 
 test('admin resolves both-player absence and can reverse a mistaken availability ruling', async ({

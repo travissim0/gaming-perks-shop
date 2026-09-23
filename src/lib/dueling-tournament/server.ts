@@ -2,12 +2,7 @@ import 'server-only';
 import { serviceClient } from './service-client';
 import { z } from 'zod';
 import { Actor, TournamentError, accountIdSchema } from './contracts';
-import { readerIdentity } from './reader';
 import { RpcPort, TournamentRepository } from './repository';
-
-export function tournamentEnabled() {
-  return process.env.DUELING_TOURNAMENT_ENABLED === 'true';
-}
 
 class SupabaseRpcPort implements RpcPort {
   async call(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -27,8 +22,6 @@ class SupabaseRpcPort implements RpcPort {
 }
 
 export function serverRepository() {
-  if (!tournamentEnabled())
-    throw new TournamentError('unavailable', 'Tournament services are not available yet.', 503);
   return new TournamentRepository(new SupabaseRpcPort());
 }
 
@@ -90,23 +83,4 @@ export async function requireExistingStaffAccount(userId: string) {
   const { data, error } = await serviceClient().auth.admin.getUserById(userId);
   if (error || !data.user)
     throw new TournamentError('invalid_account', 'That Freeinf account could not be found.', 422);
-}
-
-export async function publicReadLimit(request: Request): Promise<void> {
-  const id = readerIdentity(request, {
-    secret: process.env.DUELING_TOURNAMENT_RATE_SECRET,
-    vercel: process.env.VERCEL === '1',
-    localTest: process.env.DUELING_TOURNAMENT_LOCAL_TEST === 'true',
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  });
-  const { data, error } = await serviceClient().rpc('dueling_tournament_rate_check', {
-    p_key: `request:${id}`,
-    p_limit: 240,
-  });
-  if (error || data !== true)
-    throw new TournamentError(
-      'busy',
-      'Too many tournament requests. Please retry shortly.',
-      error ? 503 : 429,
-    );
 }

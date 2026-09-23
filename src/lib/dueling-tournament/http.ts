@@ -15,11 +15,9 @@ import { canOperate } from './transition';
 import { eventCsv, eventExport, eventSummary, publicDraw, tournamentView } from './view';
 
 export interface TournamentHttpDependencies {
-  enabled(): boolean;
   repository(): TournamentRepository;
   actor(request: Request, required: boolean): Promise<Actor | null>;
   staffAccount(userId: string): Promise<void>;
-  readLimit(request: Request): Promise<void>;
   now(): string;
 }
 
@@ -88,8 +86,7 @@ export async function boundedJson(request: Request): Promise<unknown> {
 }
 
 export function createTournamentHttp(deps: TournamentHttpDependencies) {
-  const admittedActor = async (request: Request, required: boolean) => {
-    await deps.readLimit(request);
+  const resolveActor = async (request: Request, required: boolean) => {
     const actor = await deps.actor(request, required);
     if (actor && !accountIdSchema.safeParse(actor.userId).success)
       throw new TournamentError(
@@ -138,12 +135,8 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       );
     }
   };
-  const available = () => {
-    if (!deps.enabled())
-      throw new TournamentError('unavailable', 'Tournament services are not available yet.', 503);
-  };
   const requiredActor = async (request: Request) => {
-    const actor = await admittedActor(request, true);
+    const actor = await resolveActor(request, true);
     if (!actor) throw new TournamentError('unauthorized', 'Sign in to your Freeinf account.', 401);
     return actor;
   };
@@ -159,8 +152,7 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       }),
     list: (request: Request) =>
       handle(request, async () => {
-        if (!deps.enabled()) return json(request, { events: [], enabled: false });
-        const actor = await admittedActor(request, false);
+        const actor = await resolveActor(request, false);
         const offset = z.coerce
           .number()
           .int()
@@ -177,7 +169,6 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       }),
     create: (request: Request) =>
       handle(request, async () => {
-        available();
         sameOrigin(request);
         const actor = await requiredActor(request);
         const input = createSchema.parse(await boundedJson(request));
@@ -188,15 +179,13 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       }),
     detail: (request: Request, locator: string) =>
       handle(request, async () => {
-        available();
         z.string().min(1).max(100).parse(locator);
-        const actor = await admittedActor(request, false);
+        const actor = await resolveActor(request, false);
         const event = await deps.repository().get(locator, actor);
         return json(request, { event: tournamentView(event, actor, deps.now()) });
       }),
     mutate: (request: Request, locator: string) =>
       handle(request, async () => {
-        available();
         sameOrigin(request);
         z.string().min(1).max(100).parse(locator);
         const actor = await requiredActor(request);
@@ -211,8 +200,7 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       }),
     history: (request: Request, locator: string) =>
       handle(request, async () => {
-        available();
-        const actor = await admittedActor(request, false);
+        const actor = await resolveActor(request, false);
         const url = new URL(request.url);
         const kind = z
           .enum(['audit', 'draws', 'notices', 'announcements'])
@@ -243,14 +231,12 @@ export function createTournamentHttp(deps: TournamentHttpDependencies) {
       }),
     access: (request: Request) =>
       handle(request, async () => {
-        available();
         const actor = await requiredActor(request);
         const capabilities = await deps.repository().capabilities(actor.userId);
         return json(request, { ...capabilities, userId: actor.userId });
       }),
     export: (request: Request, locator: string) =>
       handle(request, async () => {
-        available();
         const actor = await requiredActor(request);
         const event = await deps.repository().get(locator, actor);
         if (!canOperate(event, actor))
