@@ -4,7 +4,6 @@ import { Command, Tournament } from './contracts';
 import { applyMutation } from './transition';
 import { testDirector, testTournament } from './testing';
 import { resolveBracket } from './bracket';
-import { readerIdentity } from './reader';
 import { drawMatchesBracket } from './draw';
 import { tournamentView } from './view';
 
@@ -218,34 +217,6 @@ test('both final rounds can recover a double forfeit or finish with no invented 
       'held',
     );
   }
-});
-
-test('network admission ignores cookies and tokens and separates trusted client addresses', () => {
-  const config = { secret: 'a'.repeat(32), vercel: true, localTest: false, supabaseUrl: undefined };
-  const request = (ip: string, cookie = '') =>
-    new Request('https://freeinf.org/api/ctf/dueling-tournaments', {
-      headers: {
-        'x-vercel-forwarded-for': ip,
-        cookie,
-        authorization: 'Bearer arbitrary-' + cookie,
-      },
-    });
-  const first = readerIdentity(request('203.0.113.1'), config);
-  assert.equal(first, readerIdentity(request('203.0.113.1', 'changed-cookie'), config));
-  assert.notEqual(first, readerIdentity(request('203.0.113.2'), config));
-  assert.equal(
-    readerIdentity(request('2001:db8::1'), config),
-    readerIdentity(request('2001:db8::ffff'), config),
-  );
-  assert.throws(
-    () => readerIdentity(request('203.0.113.1'), { ...config, vercel: false }),
-    /unavailable on this host/,
-  );
-  assert.throws(() => readerIdentity(request('not-an-ip'), config), /unavailable on this host/);
-  assert.throws(
-    () => readerIdentity(request('203.0.113.1'), { ...config, secret: undefined }),
-    /not configured/,
-  );
 });
 
 test('seed verification detects a published bracket that differs from the revealed draw', () => {

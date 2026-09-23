@@ -15,6 +15,7 @@ import { testDirector, testTournament } from '../../src/lib/dueling-tournament/t
 import { tournamentView, eventCsv } from '../../src/lib/dueling-tournament/view';
 import { champion, resolveBracket } from '../../src/lib/dueling-tournament/bracket';
 import { createDraw } from '../../src/lib/dueling-tournament/draw';
+import { createTournamentHttp } from '../../src/lib/dueling-tournament/http';
 
 const owner = databasePool();
 const runtime = databasePool('service_role');
@@ -302,6 +303,89 @@ const mutate = (event: Tournament, command: Command, actor: Actor = testDirector
     actor,
     at,
   );
+
+test('account write and notice limits survive removal of request admission and recover in a new window', async () => {
+  // All 120 writes must land in one real database minute, not straddle its edge.
+  const remaining = await owner.query<{ seconds: number }>(
+    'select (60-extract(second from clock_timestamp()))::float8 as seconds',
+  );
+  if (remaining.rows[0].seconds < 20)
+    await new Promise((resolve) => setTimeout(resolve, remaining.rows[0].seconds * 1000 + 100));
+  const windowStart = async () =>
+    (await owner.query("select date_trunc('minute',clock_timestamp())::text as value")).rows[0]
+      .value;
+  const started = await windowStart();
+  let event = testTournament();
+  event.notices = Array.from({ length: 122 }, (_, i) => ({
+    id: `admission-notice-${i}`,
+    userId: testDirector.userId,
+    message: 'Local quota test',
+    createdAt: now,
+    readAt: null,
+  }));
+  await seed(event);
+  for (let i = 0; i < 119; i++)
+    event = await mutate(event, { type: 'announcement', body: `Account write ${i}` });
+  // Creation and commits consume the same account write quota.
+  await repo.create(
+    { ...event.settings, slug: 'quota-draft' },
+    crypto.randomUUID(),
+    testDirector,
+    now,
+  );
+  const api = createTournamentHttp({
+    repository: () => repo,
+    actor: async () => testDirector,
+    staffAccount: async () => {},
+    now: () => now,
+  });
+  const post = (command: Command) =>
+    new Request('http://localhost/api/ctf/dueling-tournaments/local-event', {
+      method: 'POST',
+      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        command,
+        operationId: crypto.randomUUID(),
+        expectedRevision: event.revision,
+      }),
+    });
+  const blocked = await api.mutate(
+    post({ type: 'announcement', body: 'Over write quota' }),
+    event.id,
+  );
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('retry-after'), '60');
+  assert.equal((await repo.get(event.id, testDirector)).revision, event.revision);
+  assert.ok((await repo.list(null)).some((item) => item.id === event.id));
+  for (let i = 0; i < 120; i++)
+    await mutate(event, { type: 'notice_read', noticeId: `admission-notice-${i}` });
+  const noticeBlocked = await api.mutate(
+    post({ type: 'notice_read', noticeId: 'admission-notice-120' }),
+    event.id,
+  );
+  assert.equal(noticeBlocked.status, 429);
+  assert.equal(await windowStart(), started, 'Quota proof must stay within one database minute');
+  const buckets = await owner.query(
+    'select bucket_key,hits from public.dueling_tournament_rate_buckets',
+  );
+  assert.equal(buckets.rows.length, 2);
+  assert.deepEqual(
+    buckets.rows.map((row) => row.hits),
+    [120, 120],
+  );
+  assert.ok(buckets.rows.every((row) => /^(write|notice):/.test(row.bucket_key)));
+  // Age only disposable test rows to exercise the unchanged fixed-window reset.
+  await owner.query(
+    "update public.dueling_tournament_rate_buckets set window_start=window_start-interval '2 minutes'",
+  );
+  event = await mutate(event, { type: 'announcement', body: 'New window' });
+  await mutate(event, { type: 'notice_read', noticeId: 'admission-notice-120' });
+  const recovered = await owner.query('select hits from public.dueling_tournament_rate_buckets');
+  assert.deepEqual(
+    recovered.rows.map((row) => row.hits),
+    [1, 1],
+  );
+});
 
 test('full database rehearsals finish every field from 4 to 32 through the reset final', async () => {
   for (let count = 4; count <= 32; count++) {

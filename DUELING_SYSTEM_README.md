@@ -10,6 +10,16 @@ This document describes the legacy dueling statistics and simulator. The competi
 
 Competitive tournament rulebook drafts start with DUELER class, referee placement and a referee "GO" before movement or attacks. Original tournament seeds determine the starting corners for every game: the smaller seed number goes top left and the larger goes bottom right. Public match details and the admin match desk show these corners once both players and their seeds are known, regardless of bracket slot order. Players have two minutes from the referee's actual match call to report; the referee records a series forfeit for a missed deadline. Website notices and estimated start times do not trigger this limit or automatically award results. Mat exits have no separate referee penalty; the arena handles quicksand. The director must review and save or publish the draft rules. Existing saved rulebooks are preserved, and unconfirmed disconnect, dispute and prize sections remain empty.
 
+### Competitive tournament configuration
+
+The competitive tournament runs with the site's existing Supabase URL, public key and server service key. It no longer reads `DUELING_TOURNAMENT_ENABLED`, `DUELING_TOURNAMENT_RATE_SECRET` or `DUELING_TOURNAMENT_LOCAL_TEST`. Existing values can remain unused. No new migration is needed for this change. Missing service credentials still produce an error rather than falling back to the public key.
+
+Tournament links render directly. `/api/ctf/dueling-tournaments/status` retains `{ "enabled": true }` for compatibility; this is feature availability, not a database or authentication health check. Verify the real event API and authenticated director controls. Freeinf sign-in and tournament staff permissions are unchanged. Publication and opening registration remain explicit director actions.
+
+The network request limit and its hosting-specific address adapter are removed by the event organizer's decision. Anonymous and signed-in reads, including requests that trigger token verification, have no application request cap. Any flood protection depends on the hosting platform's configuration. SQL retains the account-keyed limit of 120 event creations/commits per fixed minute and a separate 120 notice acknowledgements per fixed minute. These bounded hash-slot limits can share quotas on collisions and do not limit all requests. Existing database functions, grants and storage remain unchanged.
+
+The enable variable no longer acts as an off switch. Directors can pause and resume an event while keeping it visible, or cancel it permanently and remove it from public view. There is no reversible Unpublish action.
+
 The legacy schema described five tables:
 
 1. **`dueling_stats`** - Individual duel records

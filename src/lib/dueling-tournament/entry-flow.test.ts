@@ -77,7 +77,6 @@ test('HTTP boundary rejects identity spoofing, foreign origins and oversized chu
   };
   const repo = new TournamentRepository(port);
   const http = createTournamentHttp({
-    enabled: () => true,
     repository: () => repo,
     actor: async (request, required) => {
       if (!request.headers.get('authorization')) {
@@ -87,7 +86,6 @@ test('HTTP boundary rejects identity spoofing, foreign origins and oversized chu
       return { userId: '10000000-0000-4000-8000-000000000001', alias: 'Player 1', director: false };
     },
     staffAccount: async () => {},
-    readLimit: async () => {},
     now: () => '2026-09-27T00:00:00Z',
   });
   const url = 'http://localhost/api/ctf/dueling-tournaments/event';
