@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { TournamentFeatureLink } from '@/components/dueling-tournament/FeatureLink';
 import { StaffShell, HeaderStrip, Panel, Chip, Spinner, Empty, th, td } from '@/components/ctf/AdminBits';
 import { inputCls, labelCls, btnQuiet } from '@/components/ctf/FormBits';
 import { useAuth } from '@/lib/AuthContext';
@@ -328,7 +329,7 @@ export default function DuelingPage() {
             {playerName && <span className="text-[#22D3EE]">· showing {playerName}</span>}
           </>
         }
-        actions={<Link href="/league" className={btnQuiet}>League page</Link>}
+        actions={<><TournamentFeatureLink className={btnQuiet} /><Link href="/league" className={btnQuiet}>League page</Link></>}
       >
         <div className="mt-4 flex flex-wrap gap-1">
           <Chip active={activeTab === 'leaderboard'} onClick={() => setActiveTab('leaderboard')}>Leaderboard</Chip>

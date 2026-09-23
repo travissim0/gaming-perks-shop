@@ -6,7 +6,11 @@ A comprehensive dueling system with tournament brackets, player statistics, and 
 
 ### Database Schema
 
-The dueling system consists of 5 main tables:
+This document describes the legacy dueling statistics and simulator. The competitive tournament feature uses `/dueling-tournament`, `/admin/dueling-tournament`, and `/api/ctf/dueling-tournaments`, with separate `dueling_tournament_*` storage. The old tournament API has been removed; historical table descriptions below are not the new feature contract.
+
+Competitive tournament rulebook drafts start with DUELER class, referee placement and a referee "GO" before movement or attacks. Original tournament seeds determine the starting corners for every game: the smaller seed number goes top left and the larger goes bottom right. Public match details and the admin match desk show these corners once both players and their seeds are known, regardless of bracket slot order. Players have two minutes from the referee's actual match call to report; the referee records a series forfeit for a missed deadline. Website notices and estimated start times do not trigger this limit or automatically award results. Mat exits have no separate referee penalty; the arena handles quicksand. The director must review and save or publish the draft rules. Existing saved rulebooks are preserved, and unconfirmed disconnect, dispute and prize sections remain empty.
+
+The legacy schema described five tables:
 
 1. **`dueling_stats`** - Individual duel records
 2. **`tournaments`** - Tournament events  
@@ -46,8 +50,6 @@ The system includes:
 
 #### API Endpoints:
 - `GET/POST /api/dueling/stats` - Fetch rankings or record duels
-- `GET/POST /api/dueling/tournaments` - Tournament management
-- `GET/PUT /api/dueling/tournaments/[id]` - Individual tournament operations
 
 ## 🎮 Usage Examples
 
@@ -72,51 +74,6 @@ fetch('/api/dueling/stats', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(duelData)
-});
-```
-
-### Creating a Tournament
-
-```javascript
-const tournamentData = {
-  name: "Weekly Duel Championship",
-  description: "Weekly tournament for all skill levels",
-  tournament_type: "single_elimination",
-  max_participants: 16,
-  prize_pool: 5000, // in cents
-  created_by: "admin-user-id"
-};
-
-fetch('/api/dueling/tournaments', {
-  method: 'POST', 
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(tournamentData)
-});
-```
-
-### Registering for Tournament
-
-```javascript
-fetch(`/api/dueling/tournaments/${tournamentId}`, {
-  method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'register',
-    player_id: "user-uuid",
-    player_alias: "PlayerName"
-  })
-});
-```
-
-### Generating Tournament Bracket
-
-```javascript
-fetch(`/api/dueling/tournaments/${tournamentId}`, {
-  method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    action: 'generate_bracket'
-  })
 });
 ```
 

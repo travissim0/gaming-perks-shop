@@ -3,12 +3,14 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { authLink, consumeAuthReturn, currentAuthReturn, rememberAuthReturn } from '@/lib/auth-return';
 
 function CallbackContent() {
   const router = useRouter();
   const [status, setStatus] = useState('Completing sign-in...');
 
   useEffect(() => {
+    rememberAuthReturn();
     let timeoutId: NodeJS.Timeout;
     let subscriptionRef: { unsubscribe: () => void } | null = null;
 
@@ -29,13 +31,13 @@ function CallbackContent() {
               in_game_alias: null,
             });
           }
-          router.push('/auth/complete-profile');
+          router.push(authLink('/auth/complete-profile', currentAuthReturn()));
         } else {
-          router.push('/');
+          router.push(consumeAuthReturn());
         }
       } catch (err) {
         console.error('Profile check error:', err);
-        router.push('/');
+        router.push(consumeAuthReturn());
       }
     };
 
@@ -72,7 +74,7 @@ function CallbackContent() {
       timeoutId = setTimeout(() => {
         subscription.unsubscribe();
         console.error('Auth callback timed out');
-        router.push('/auth/login');
+        router.push(authLink('/auth/login', currentAuthReturn()));
       }, 15000);
     };
 

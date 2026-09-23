@@ -12,9 +12,6 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -112,7 +109,8 @@ const nextConfig: NextConfig = {
     return [
       {
         // Apply to all API routes
-        source: '/api/:path*',
+        // Tournament routes supply private, same-origin response headers.
+        source: '/api/:path((?!ctf/dueling-tournaments(?:/|$)).*)',
         headers: [
           {
             key: 'Access-Control-Allow-Origin',

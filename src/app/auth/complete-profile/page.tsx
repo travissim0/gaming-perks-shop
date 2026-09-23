@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import AvatarSelector from '@/components/AvatarSelector';
 import { getDefaultAvatarUrl } from '@/utils/supabaseHelpers';
+import { authLink, consumeAuthReturn, currentAuthReturn, rememberAuthReturn } from '@/lib/auth-return';
 
 function CompleteProfileContent() {
   const router = useRouter();
@@ -19,11 +20,12 @@ function CompleteProfileContent() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
+    rememberAuthReturn();
     const checkSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push('/auth/login');
+        router.push(authLink('/auth/login', currentAuthReturn()));
         return;
       }
 
@@ -90,7 +92,7 @@ function CompleteProfileContent() {
       }
 
       toast.success('Profile complete! Welcome to Free Infantry.');
-      router.push('/');
+      router.push(consumeAuthReturn());
     } catch (err: any) {
       console.error('Profile completion error:', err);
       setError(err.message || 'Failed to save profile. Please try again.');
