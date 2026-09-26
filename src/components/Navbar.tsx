@@ -569,14 +569,14 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/dueling-tournament', label: 'Tournaments', icon: <Sword className="w-4 h-4" /> },
   ];
 
-  // Tournament and this season first (register → standings → draft → schedule → rules → news),
+  // Current competitions first, then schedule, rules and news,
   // then the reference pages. CTFPL and OVDL are reachable from the league
   // switcher on /league/standings while they're inactive.
   const leagueNavItems: NavItem[] = [
-    { href: '/dueling-tournament/october-2026', label: '2026 Dueling Tournament', icon: <Sword className="w-4 h-4" /> },
     { href: '/league/register', label: 'Register', icon: <ClipboardCheck className="w-4 h-4" /> },
     { href: '/league/standings', label: 'Standings', icon: <Table2 className="w-4 h-4" /> },
     { href: '/league/ctfdl/draft', label: 'CTFDL draft', icon: <ListOrdered className="w-4 h-4" /> },
+    { href: '/dueling-tournament/october-2026', label: '2026 Duels', icon: <Sword className="w-4 h-4" /> },
     { href: '/league/schedule', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
     { href: '/rules', label: 'Rules', icon: <ScrollText className="w-4 h-4" /> },
     { href: '/news', label: 'News', icon: <Newspaper className="w-4 h-4" /> },

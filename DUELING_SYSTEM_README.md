@@ -16,7 +16,7 @@ The competitive tournament runs with the site's existing Supabase URL, public ke
 
 Tournament links render directly. `/api/ctf/dueling-tournaments/status` retains `{ "enabled": true }` for compatibility; this is feature availability, not a database or authentication health check. Verify the real event API and authenticated director controls. Freeinf sign-in and tournament staff permissions are unchanged. Publication and opening registration remain explicit director actions.
 
-The CTF navbar's League menu includes **2026 Dueling Tournament**, linking directly to `/dueling-tournament/october-2026` in both desktop and mobile layouts. Mobile submenu presses are distinguished from outside presses so selecting a link can complete before the menu closes.
+The CTF navbar's League menu includes **2026 Duels** immediately below **CTFDL draft**, linking directly to `/dueling-tournament/october-2026` in both desktop and mobile layouts. Mobile submenu presses are distinguished from outside presses so selecting a link can complete before the menu closes.
 
 The shared site's signed-out navbar preserves the current tournament path and query in both Sign In and Register links, including after switching event tabs. Existing auth-return validation still restricts destinations to public and admin tournament paths. Links from other site pages keep the existing homepage return. Only the two auth links read search parameters inside their own Suspense boundary; the rest of the navbar keeps rendering normally.
 
