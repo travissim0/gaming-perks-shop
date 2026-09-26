@@ -6,6 +6,40 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/*
+ * Every name the player has recorded games under: the requested name plus the other aliases on the
+ * same site profile. A player whose display name has never appeared in a game (aeiownu, whose games
+ * are all under "DIY Roofing" and "GL Spam") used to 404 here while the players list, which reads an
+ * alias-aware view, showed 15 games. The page folds several rows per mode into one, so returning
+ * rows for every alias is enough.
+ */
+async function namesFor(playerName: string): Promise<string[]> {
+  const names = new Set<string>([playerName]);
+  let profileId: string | null = null;
+
+  const { data: aliasHit } = await supabase.from('profile_aliases').select('profile_id').ilike('alias', playerName).limit(1);
+  profileId = aliasHit?.[0]?.profile_id ?? null;
+  if (!profileId) {
+    const { data: prof } = await supabase.from('profiles').select('id').ilike('in_game_alias', playerName).limit(1);
+    profileId = prof?.[0]?.id ?? null;
+  }
+  if (profileId) {
+    const [{ data: aliases }, { data: prof }] = await Promise.all([
+      supabase.from('profile_aliases').select('alias').eq('profile_id', profileId),
+      supabase.from('profiles').select('in_game_alias').eq('id', profileId).maybeSingle(),
+    ]);
+    for (const a of aliases || []) if (a.alias) names.add(a.alias);
+    if (prof?.in_game_alias) names.add(prof.in_game_alias);
+  }
+  // Case-insensitive de-dupe; keep the first spelling seen.
+  const seen = new Set<string>();
+  return [...names].filter((n) => { const k = n.trim().toLowerCase(); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/** PostgREST `or` filter matching player_name against any of the names, case-insensitively. */
+const anyNameFilter = (names: string[]) =>
+  names.map((n) => `player_name.ilike."${n.replace(/["\\]/g, '')}"`).join(',');
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> }
@@ -14,16 +48,19 @@ export async function GET(
     const resolvedParams = await params;
     const playerName = decodeURIComponent(resolvedParams.name);
     const { searchParams } = new URL(request.url);
-    
+
     const gameMode = searchParams.get('gameMode') || 'all';
     const dateFilter = searchParams.get('dateFilter') || 'all';
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
 
-    // Get aggregate stats for the player - using case-insensitive comparison
+    const names = await namesFor(playerName);
+    const nameFilter = anyNameFilter(names);
+
+    // Aggregate stats for every alias (one or more rows per mode; the page folds them)
     let aggregateQuery = supabase
       .from('player_stats_normalized_by_mode')
       .select('*')
-      .ilike('player_name', playerName);
+      .or(nameFilter);
 
     if (gameMode && gameMode !== 'all') {
       aggregateQuery = aggregateQuery.eq('game_mode', gameMode);
@@ -43,7 +80,7 @@ export async function GET(
     let recentGamesQuery = supabase
       .from('player_stats')
       .select('*')
-      .ilike('player_name', playerName)
+      .or(nameFilter)
       .order('game_date', { ascending: false })
       .limit(limit);
 
@@ -92,7 +129,7 @@ export async function GET(
     const { data: gameModeStats, error: gameModeError } = await supabase
       .from('player_stats_normalized_by_mode')
       .select('*')
-      .ilike('player_name', playerName);
+      .or(nameFilter);
 
     if (gameModeError) {
       console.error('Game mode stats error:', gameModeError);
@@ -141,6 +178,7 @@ export async function GET(
       success: true,
       player: {
         name: playerName,
+        names,
         aggregateStats: aggregateStats || [],
         recentGames: recentGames || [],
         gameModeBreakdown: gameModeStats || [],
