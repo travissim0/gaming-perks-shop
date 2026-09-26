@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
-import { useState, useEffect, useRef, Fragment, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { authLink } from '@/lib/auth-return';
+import { useState, useEffect, useRef, Fragment, Suspense, type ReactNode } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import {
   Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X,
@@ -24,6 +25,33 @@ type NavItem = {
   /** Draw a separator above this entry */
   divider?: boolean;
 };
+
+function NavbarAuthLinks({ current = '/' }: { current?: string }) {
+  return (
+    <>
+      <Link
+        href={authLink('/auth/login', current)}
+        className="px-4 py-2 text-sm text-gray-400 hover:text-cyan-400 transition-colors rounded-lg border border-gray-600/40 hover:border-cyan-500/50"
+      >
+        Sign In
+      </Link>
+      <Link
+        href={authLink('/auth/register', current)}
+        className="px-4 py-2 text-sm bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-medium transition-all"
+      >
+        Register
+      </Link>
+    </>
+  );
+}
+
+function CurrentPageAuthLinks() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const query = searchParams?.toString();
+  const current = `${pathname ?? '/'}${query ? `?${query}` : ''}`;
+  return <NavbarAuthLinks current={current} />;
+}
 
 export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobileMenuChange?: (open: boolean) => void }) {
   const router = useRouter();
@@ -51,6 +79,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const notificationRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const adminDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileDropdownRef = useRef<HTMLDivElement>(null);
   const [showAdminDropdown, setShowAdminDropdown] = useState(false);
   
   // Desktop dropdown states for non-authenticated users
@@ -388,7 +417,9 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
         setShowAdminDropdown(false);
       }
       // Close mobile dropdown when clicking outside
-      setActiveMobileDropdown(null);
+      if (mobileDropdownRef.current && !mobileDropdownRef.current.contains(target)) {
+        setActiveMobileDropdown(null);
+      }
     };
 
     const handleMouseDown = (event: MouseEvent) => handleClickOutside(event);
@@ -538,10 +569,11 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/dueling-tournament', label: 'Tournaments', icon: <Sword className="w-4 h-4" /> },
   ];
 
-  // This season first (register → standings → draft → schedule → rules → news),
+  // Tournament and this season first (register → standings → draft → schedule → rules → news),
   // then the reference pages. CTFPL and OVDL are reachable from the league
   // switcher on /league/standings while they're inactive.
   const leagueNavItems: NavItem[] = [
+    { href: '/dueling-tournament/october-2026', label: '2026 Dueling Tournament', icon: <Sword className="w-4 h-4" /> },
     { href: '/league/register', label: 'Register', icon: <ClipboardCheck className="w-4 h-4" /> },
     { href: '/league/standings', label: 'Standings', icon: <Table2 className="w-4 h-4" /> },
     { href: '/league/ctfdl/draft', label: 'CTFDL draft', icon: <ListOrdered className="w-4 h-4" /> },
@@ -591,18 +623,9 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
               </Link>
               
               <div className="flex items-center space-x-4">
-                <Link 
-                  href="/auth/login" 
-                  className="px-4 py-2 text-sm text-gray-400 hover:text-cyan-400 transition-colors rounded-lg border border-gray-600/40 hover:border-cyan-500/50"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/register"
-                  className="px-4 py-2 text-sm bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-medium transition-all"
-                >
-                  Register
-                </Link>
+                <Suspense fallback={<NavbarAuthLinks />}>
+                  <CurrentPageAuthLinks />
+                </Suspense>
                 
                 {/* Mobile Menu Button */}
                 <button
@@ -816,7 +839,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
 
         {/* Mobile Menu for non-logged-in users */}
         {isMobileMenuOpen && (
-          <div className="xl:hidden bg-gray-800 border-t border-gray-700">
+          <div ref={mobileDropdownRef} className="xl:hidden bg-gray-800 border-t border-gray-700">
             <div className="container mx-auto px-4 py-4">
               <div className="space-y-3">
                 <Link
@@ -1015,6 +1038,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
           onClick={() => setActiveMobileDropdown(null)}
         >
           <div 
+            ref={mobileDropdownRef}
             className="absolute top-[120px] left-1/2 transform -translate-x-1/2 w-[90vw] max-w-sm bg-gray-800/95 border border-gray-600/50 rounded-xl shadow-2xl backdrop-blur-sm"
             onClick={(e) => e.stopPropagation()}
           >

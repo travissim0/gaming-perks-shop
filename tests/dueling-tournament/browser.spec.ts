@@ -29,6 +29,142 @@ async function login(page: Page, email: string, next: string) {
   await expect(page).toHaveURL(new RegExp(next.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'));
 }
 
+test('navbar sign-in follows the current tournament tab after client navigation', async ({
+  page,
+}) => {
+  await page.goto('/dueling-tournament/local-registration?tab=overview');
+  const navbar = page
+    .locator('nav')
+    .filter({ has: page.getByRole('link', { name: 'Sign In', exact: true }) });
+  const signIn = navbar.getByRole('link', { name: 'Sign In', exact: true });
+  await expect(signIn).toHaveAttribute(
+    'href',
+    '/auth/login?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Doverview',
+  );
+  await page.getByRole('button', { name: 'Rules', exact: true }).click();
+  await expect(page).toHaveURL(/local-registration\?tab=rules$/);
+  await expect(signIn).toHaveAttribute(
+    'href',
+    '/auth/login?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  await expect(navbar.getByRole('link', { name: 'Register', exact: true })).toHaveAttribute(
+    'href',
+    '/auth/register?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  await signIn.click();
+  await page.locator('#email').fill('newplayer@local.invalid');
+  await page.locator('#password').fill('LocalOnlyTest123!');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:56501/dueling-tournament/local-registration?tab=rules',
+  );
+  await expect(page.getByRole('heading', { name: 'Tournament rules', exact: true })).toBeVisible();
+});
+
+test('navbar sign-in from a non-tournament page retains the homepage return', async ({ page }) => {
+  await page.goto('/stats');
+  const signIn = page.locator('nav').getByRole('link', { name: 'Sign In', exact: true });
+  await expect(signIn).toHaveAttribute('href', '/auth/login');
+  await expect(
+    page.locator('nav').getByRole('link', { name: 'Register', exact: true }),
+  ).toHaveAttribute('href', '/auth/register');
+  await signIn.click();
+  await page.locator('#email').fill('newplayer@local.invalid');
+  await page.locator('#password').fill('LocalOnlyTest123!');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page).toHaveURL('http://127.0.0.1:56501/');
+});
+
+test('navbar registration preserves the tab through simulated signup, callback and profile completion', async ({
+  page,
+  request,
+}) => {
+  // The local bridge has no email/signup service. Reuse its incomplete account
+  // to simulate a successful signup response, then exercise the real local
+  // sign-in, callback, profile form and tournament-return routes.
+  const fixture = await request.post('http://127.0.0.1:56500/auth/v1/token?grant_type=password', {
+    data: { email: 'incomplete@local.invalid', password: 'LocalOnlyTest123!' },
+  });
+  expect(fixture.ok()).toBe(true);
+  const { user } = await fixture.json();
+  let callbackUrl = '';
+  await page.route('http://127.0.0.1:56500/auth/v1/signup**', async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      email: 'incomplete@local.invalid',
+      data: { in_game_alias: 'Aster' },
+    });
+    callbackUrl = new URL(route.request().url()).searchParams.get('redirect_to') ?? '';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...user, email_confirmed_at: null, confirmed_at: null }),
+    });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/dueling-tournament/local-registration?tab=rules');
+  const register = page.locator('nav').getByRole('link', { name: 'Register', exact: true });
+  await expect(register).toHaveAttribute(
+    'href',
+    '/auth/register?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  await register.click();
+  await page.getByRole('button', { name: 'Register with email and password', exact: true }).click();
+  await page.locator('#email').fill('incomplete@local.invalid');
+  await page.locator('#inGameAlias').fill('Aster');
+  await page.locator('#password').fill('LocalOnlyTest123!');
+  await page.getByRole('button', { name: 'Create Account', exact: true }).click();
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:56501/auth/login?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  expect(callbackUrl).toBe(
+    'http://127.0.0.1:56501/auth/callback?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  await page.locator('#email').fill('incomplete@local.invalid');
+  await page.locator('#password').fill('LocalOnlyTest123!');
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:56501/dueling-tournament/local-registration?tab=rules',
+  );
+  await page.goto(callbackUrl);
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:56501/auth/complete-profile?next=%2Fdueling-tournament%2Flocal-registration%3Ftab%3Drules',
+  );
+  await page.locator('#alias').fill('Aster');
+  await page.getByRole('button', { name: 'Complete Setup', exact: true }).click();
+  await expect(page).toHaveURL(
+    'http://127.0.0.1:56501/dueling-tournament/local-registration?tab=rules',
+  );
+  await expect(page.getByRole('heading', { name: 'Tournament rules', exact: true })).toBeVisible();
+});
+
+for (const signedIn of [false, true]) {
+  test(`CTF League event link navigates on desktop and mobile (${signedIn ? 'signed in' : 'signed out'})`, async ({
+    page,
+  }) => {
+    if (signedIn) await login(page, 'newplayer', '/dueling-tournament/local-registration');
+    for (const width of [1440, 1000, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto('/stats');
+      if (width < 1280) {
+        await page
+          .locator('button:visible')
+          .filter({ has: page.locator('svg.lucide-menu') })
+          .click();
+        if (!signedIn) await page.getByRole('button', { name: 'League', exact: true }).click();
+      } else {
+        await page.getByRole('button', { name: 'League', exact: true }).hover();
+      }
+      const eventLink = page
+        .getByRole('link', { name: '2026 Dueling Tournament', exact: true })
+        .filter({ visible: true });
+      await expect(eventLink).toHaveAttribute('href', '/dueling-tournament/october-2026');
+      await eventLink.click();
+      // This checks navigation; the isolated fixture has no production October event.
+      await expect(page).toHaveURL('http://127.0.0.1:56501/dueling-tournament/october-2026');
+    }
+  });
+}
+
 test('existing account returns to the event, accepts rules, registers once, and withdraws', async ({
   page,
   request,
