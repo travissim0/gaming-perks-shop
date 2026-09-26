@@ -155,7 +155,7 @@ for (const signedIn of [false, true]) {
         await page.getByRole('button', { name: 'League', exact: true }).hover();
       }
       const eventLink = page
-        .getByRole('link', { name: '2026 Dueling Tournament', exact: true })
+        .getByRole('link', { name: '2026 Duels', exact: true })
         .filter({ visible: true });
       await expect(eventLink).toHaveAttribute('href', '/dueling-tournament/october-2026');
       await eventLink.click();
