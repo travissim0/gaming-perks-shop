@@ -118,3 +118,71 @@ export async function PATCH(request: NextRequest) {
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 }
+
+/**
+ * DELETE /api/league/season?league_slug=ctfpl&season_id=…
+ *
+ * Undo for a season created or flipped to "upcoming" by mistake. Deliberately narrow: only an
+ * UPCOMING season with nothing attached (no registrations, matches, fixtures, standings, draft or
+ * roster locks) can go. Anything with history is refused; completed seasons are never deleted here.
+ * Foreign keys are the backstop for any table this list misses.
+ */
+export async function DELETE(request: NextRequest) {
+  const user = await requireStaff(request);
+  if (!user) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
+
+  const { searchParams } = new URL(request.url);
+  const slug = searchParams.get('league_slug');
+  const seasonId = searchParams.get('season_id');
+  if (!slug || !seasonId) return NextResponse.json({ error: 'league_slug and season_id required' }, { status: 400 });
+
+  const { data: league } = await supabaseAdmin.from('leagues').select('id, slug, data_source').eq('slug', slug).maybeSingle();
+  if (!league) return NextResponse.json({ error: 'Unknown league' }, { status: 404 });
+
+  const table = league.data_source === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
+  let sq = supabaseAdmin.from(table).select('id, season_number, status').eq('id', seasonId);
+  if (table === 'league_seasons') sq = sq.eq('league_id', league.id);
+  const { data: season } = await sq.maybeSingle();
+  if (!season) return NextResponse.json({ error: 'Season not found for this league' }, { status: 404 });
+  if (season.status !== 'upcoming') {
+    return NextResponse.json({ error: 'Only an upcoming season can be deleted. Active and completed seasons keep their history.' }, { status: 409 });
+  }
+
+  // Anything attached means it isn't a stray test season. A check that errors counts as "attached"
+  // so a mistyped table or column can never wave a delete through.
+  const count = async (t: string, filters: Record<string, string | number>) => {
+    let q = supabaseAdmin.from(t).select('*', { count: 'exact', head: true });
+    for (const [c, v] of Object.entries(filters)) q = q.eq(c, v);
+    const { count: n, error } = await q;
+    if (error) { console.error(`season delete check ${t}:`, error.message); return 1; }
+    return n || 0;
+  };
+  const n = season.season_number;
+  const checks =
+    table === 'ctfpl_seasons'
+      ? [
+          count('ctfpl_matches', { season_number: n }),
+          count('season_roster_locks', { season_id: seasonId }),
+          count('matches', { league_slug: league.slug, season_number: n }),
+          count('free_agents', { league_slug: league.slug, season_number: n }),
+        ]
+      : [
+          count('free_agents', { league_slug: league.slug, season_number: n }),
+          count('matches', { league_slug: league.slug, season_number: n }),
+          count('league_matches', { league_season_id: seasonId }),
+          count('league_standings', { league_season_id: seasonId }),
+          count('ctfdl_drafts', { league_season_id: seasonId }),
+          count('league_season_roster_locks', { league_season_id: seasonId }),
+        ];
+  const attached = (await Promise.all(checks)).reduce((a, b) => a + b, 0);
+  if (attached > 0) {
+    return NextResponse.json({ error: 'This season already has registrations, matches or standings attached, so it can’t be deleted.' }, { status: 409 });
+  }
+
+  const { error } = await supabaseAdmin.from(table).delete().eq('id', seasonId);
+  if (error) {
+    const msg = error.code === '23503' ? 'Other records still point at this season, so it can’t be deleted.' : error.message;
+    return NextResponse.json({ error: msg }, { status: error.code === '23503' ? 409 : 500 });
+  }
+  return NextResponse.json({ ok: true, deleted: { league: league.slug, season_number: season.season_number } });
+}

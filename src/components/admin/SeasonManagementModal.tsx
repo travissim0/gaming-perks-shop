@@ -67,6 +67,30 @@ const SeasonManagementModal = () => {
   const [newLeagueSlug, setNewLeagueSlug] = useState('');
   const [newLeagueName, setNewLeagueName] = useState('');
   const [formData, setFormData] = useState({ ...emptyForm });
+  const [confirmDelete, setConfirmDelete] = useState<Season | null>(null);
+
+  // Undo for an upcoming season created or flipped by mistake. The server refuses anything that
+  // isn't upcoming or already has registrations, matches or standings attached.
+  const deleteSeason = async (season: Season) => {
+    if (!selectedLeague) return;
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/league/season?league_slug=${encodeURIComponent(selectedLeague.slug)}&season_id=${encodeURIComponent(season.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || 'Could not delete the season');
+      toast.success(`Season ${season.season_number} deleted`);
+      setConfirmDelete(null);
+      fetchSeasons();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchLeagues = async () => {
     try {
@@ -323,7 +347,19 @@ const SeasonManagementModal = () => {
                           {season.status !== 'active'
                             ? <button type="button" onClick={() => setActiveStatus(season.id, true)} disabled={loading} className={btnQuiet}>Set active</button>
                             : <button type="button" onClick={() => setActiveStatus(season.id, false)} disabled={loading} className={`${btnQuiet} text-[#F59E0B]`}>Mark completed</button>}
+                          {season.status === 'upcoming' && (
+                            <button type="button" onClick={() => setConfirmDelete(season)} disabled={loading} className={`${btnQuiet} text-[#F87171]`} title="Delete this upcoming season. Only works while nothing is attached to it.">Delete</button>
+                          )}
                         </div>
+                        {confirmDelete?.id === season.id && (
+                          <div className="basis-full flex flex-wrap items-center justify-between gap-2 rounded-md bg-[#F87171]/10 px-3 py-2 text-sm text-[#FCA5A5]">
+                            <span>Delete Season {season.season_number}? This only works while it has no registrations, matches or standings.</span>
+                            <span className="flex gap-2">
+                              <button type="button" onClick={() => setConfirmDelete(null)} className={btnQuiet}>Keep</button>
+                              <button type="button" onClick={() => deleteSeason(season)} disabled={loading} className="rounded-md bg-[#F87171] px-3 py-1.5 text-sm font-medium text-[#0B0F1A] hover:bg-[#FCA5A5] disabled:opacity-50">{loading ? 'Deleting…' : 'Delete season'}</button>
+                            </span>
+                          </div>
+                        )}
                       </li>
                     );
                   })}
