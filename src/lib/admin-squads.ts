@@ -23,3 +23,15 @@ export async function patchSquads(ids: string | string[], patch: SquadPatch): Pr
   if (!res.ok) throw new Error(json.error || `Update failed (${res.status})`);
   return json.updated as number;
 }
+
+/** Disband (delete) a squad. Allowed for its captain and for staff; the server enforces both. */
+export async function disbandSquadById(id: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Session expired — sign in again');
+  const res = await fetch(`/api/admin/squads?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Disband failed (${res.status})`);
+}

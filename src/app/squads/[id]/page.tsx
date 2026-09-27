@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { disbandSquadById } from '@/lib/admin-squads';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import MessageButton from '@/components/MessageButton';
@@ -1151,29 +1152,15 @@ export default function SquadDetailPage() {
   const disbandSquad = async () => {
     if (!confirm('Are you sure you want to disband this squad? This action cannot be undone and will remove all members.')) return;
 
+    if (!squad?.id) return;
     try {
-      // First delete all squad members
-      const { error: membersError } = await supabase
-        .from('squad_members')
-        .delete()
-        .eq('squad_id', squad?.id);
-
-      if (membersError) throw membersError;
-
-      // Then delete the squad
-      const { error: squadError } = await supabase
-        .from('squads')
-        .delete()
-        .eq('id', squad?.id);
-
-      if (squadError) throw squadError;
-
+      // Server-side so league staff can disband too (browser deletes only work for the captain).
+      await disbandSquadById(squad.id);
       toast.success('Squad disbanded successfully');
-      // Navigate back to squads page
       window.location.href = '/squads';
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error disbanding squad:', error);
-      toast.error('Error disbanding squad');
+      toast.error(error?.message || 'Error disbanding squad');
     }
   };
 
