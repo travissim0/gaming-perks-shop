@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const next = teamOnClock(after.draft, after.teams);
     await postSystemMessage(
       draft.id,
-      `#${result?.overall ?? '?'} Clock expired — auto-picked ${candidate.alias} for ${team.squad_name}${queue.includes(candidate.player_id) ? ' (from their queue)' : candidate.staff_rank != null ? ' (staff ranking)' : ' (best self-rating)'}.${result?.complete ? ' Draft complete.' : next ? ` ${next.squad_name} is on the clock.` : ''}`,
+      `#${result?.overall ?? '?'} Clock expired — auto-picked ${candidate.alias} for ${team.squad_name}${queue.includes(candidate.player_id) ? ' (from their queue)' : candidate.staff_rank != null ? ' (Staff ADP)' : ' (best self-rating)'}.${result?.complete ? ' Draft complete.' : next ? ` ${next.squad_name} is on the clock.` : ''}`,
     );
     return NextResponse.json({ ok: true, acted: true, result });
   } catch (e: any) {

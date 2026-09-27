@@ -228,7 +228,12 @@ export default function MockDraftPage() {
                 You're a captain this season, so your board is private. Nobody else sees it, it doesn't count toward the Public ADP, and in the draft room you can sort the pool by it.
               </div>
             )}
-            {data.viewer.in_pool && <div className="text-xs text-[#8B98B0]">You're in the pool yourself, so you're left off your own board.</div>}
+            {data.viewer.feeds_staff_adp && (
+              <div className="rounded-xl bg-[#22D3EE]/10 px-4 py-3 text-sm text-[#22D3EE]">
+                You're staff, so your board also counts toward the Staff ADP. That's the staff ranking captains see in the draft room, and auto-pick uses it when a captain's queue runs out.
+              </div>
+            )}
+            {data.viewer.in_pool &&<div className="text-xs text-[#8B98B0]">You're in the pool yourself, so you're left off your own board.</div>}
             {newSinceSave > 0 && !locked && (
               <div className="rounded-xl bg-[#22D3EE]/10 px-4 py-3 text-sm text-[#22D3EE]">{newSinceSave} player{newSinceSave === 1 ? ' has' : 's have'} joined the pool since you saved. Add them where you think they'll go.</div>
             )}

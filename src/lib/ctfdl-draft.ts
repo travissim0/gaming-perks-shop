@@ -63,6 +63,7 @@ export interface DraftPlayer {
   contact_info: string | null;
   notes: string | null;
   registered_at: string;
+  /** Staff ADP rank: average of staff members' mock-draft boards (null if no staff board places them). */
   staff_rank: number | null;
   /** Set when drafted. */
   picked_team_id: string | null;
@@ -81,6 +82,8 @@ export interface DraftBundle {
   viewer: { user_id: string | null; alias: string | null; is_staff: boolean; my_team_id: string | null };
   /** Only present for the viewer's own team (captain) — ordered player ids. */
   my_queue?: string[];
+  /** How many staff mock-draft boards the staff ranking (Staff ADP) is averaged from. */
+  staff_adp_boards?: number;
 }
 
 /** Someone in the draft room (from Realtime presence). */

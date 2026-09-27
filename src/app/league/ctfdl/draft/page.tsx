@@ -479,7 +479,7 @@ export default function CtfdlDraftLobbyPage() {
               ))}
             </div>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none">
-              <option value="staff">Staff rank</option>
+              <option value="staff">Staff ADP</option>
               {mockOrder.adp && <option value="adp">Public ADP</option>}
               {mockOrder.mine && <option value="mine">My board</option>}
               <option value="rating">Self-rating</option>

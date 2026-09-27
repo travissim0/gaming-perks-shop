@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
  * { action: 'create', league_season_id, order_type?, roster_size?, pick_seconds?, auto_pick? }
  * { action: 'update', draft_id, order_type?, roster_size?, pick_seconds?, auto_pick? }
  * { action: 'set_teams', draft_id, squad_ids: [] }        (in pick order; setup only)
- * { action: 'set_rankings', draft_id, player_ids: [] }    (staff ranking, any time)
+ * { action: 'set_rankings', draft_id, player_ids: [] }    (legacy: nothing reads ctfdl_draft_rankings since
+ *                                                           2026-09-27 — the staff ranking is now Staff ADP,
+ *                                                           averaged from staff mock drafts in loadPlayers)
  * { action: 'start' | 'pause' | 'resume' | 'undo' | 'skip' | 'end' | 'reset' | 'delete', draft_id }
  *   reset  = pull back every pick (and the memberships it created), back to setup
  *   delete = only while in setup (reset first if it has run)

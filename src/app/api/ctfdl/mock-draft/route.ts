@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  supabaseAdmin, userFromRequest, isStaff, resolveDraft, ctfdlLeague, loadTeams, loadPicks, loadPlayers,
+  supabaseAdmin, userFromRequest, isStaff, hasStaffRole, resolveDraft, ctfdlLeague, loadTeams, loadPicks, loadPlayers,
 } from '@/lib/ctfdl-draft-server';
 import { getOpenSeason, getLatestSeason } from '@/lib/leagues';
 import { ensureProfile } from '@/lib/ensure-profile-server';
@@ -41,7 +41,7 @@ async function context() {
   }
   const teams = draft ? await loadTeams(draft.id) : [];
   const picks = draft ? await loadPicks(draft.id) : [];
-  const players = season ? await loadPlayers(draft?.id || '00000000-0000-0000-0000-000000000000', season.season_number, teams, picks) : [];
+  const players = season ? await loadPlayers(draft?.id || '00000000-0000-0000-0000-000000000000', season.season_number, teams, picks, season.id) : [];
   const captainIds = new Set<string>([...teams.map((t) => t.captain_id).filter(Boolean), ...teams.flatMap((t) => t.co_captain_ids)] as string[]);
   const pool: MockPoolPlayer[] = players
     .map((p) => ({ player_id: p.player_id, alias: p.alias, preferred_roles: p.preferred_roles, secondary_roles: p.secondary_roles }))
@@ -59,6 +59,11 @@ export async function GET(request: NextRequest) {
   const poolIds = new Set(ctx.pool.map((p) => p.player_id));
   const inPool = !!user && poolIds.has(user.id);
   const required = requiredCount(ctx.pool.length - (inPool ? 1 : 0));
+  let feedsStaffAdp = false;
+  if (user && !ctx.captainIds.has(user.id)) {
+    const { data: me } = await supabaseAdmin.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle();
+    feedsStaffAdp = !!me && hasStaffRole(me);
+  }
 
   const base: MockResponse = {
     season: ctx.season,
@@ -69,7 +74,7 @@ export async function GET(request: NextRequest) {
     adp: null,
     boards: [],
     scoreboard: null,
-    viewer: { signed_in: !!user, is_staff: staff, is_captain: !!user && ctx.captainIds.has(user.id), in_pool: inPool, required },
+    viewer: { signed_in: !!user, is_staff: staff, is_captain: !!user && ctx.captainIds.has(user.id), in_pool: inPool, feeds_staff_adp: feedsStaffAdp, required },
     mine: null,
   };
   if (!ctx.season) return NextResponse.json(base);

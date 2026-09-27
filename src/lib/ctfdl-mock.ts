@@ -66,6 +66,8 @@ export interface MockResponse {
     /** Drafting captain / co-captain: their board is private to them. */
     is_captain: boolean;
     in_pool: boolean;
+    /** Holds a CTF role (and isn't a captain): their board also feeds the private Staff ADP. */
+    feeds_staff_adp: boolean;
     /** How many players this viewer must place (pool minus themselves, 90%). */
     required: number;
   };

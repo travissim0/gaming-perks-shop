@@ -42,7 +42,6 @@ export default function CtfdlDraftAdminPage() {
 
   const [squads, setSquads] = useState<SquadRow[]>([]);
   const [selected, setSelected] = useState<string[]>([]); // squad ids in pick order
-  const [ranking, setRanking] = useState<string[]>([]);   // player ids in rank order
   const [settings, setSettings] = useState({ order_type: 'snake', roster_size: 5, pick_seconds: '90', auto_pick: true });
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmBox, setConfirmBox] = useState<Confirm>(null);
@@ -93,10 +92,8 @@ export default function CtfdlDraftAdminPage() {
     if (draft) {
       setSettings({ order_type: draft.order_type, roster_size: draft.roster_size, pick_seconds: draft.pick_seconds == null ? '' : String(draft.pick_seconds), auto_pick: draft.auto_pick });
       setSelected([...bundle.teams].sort((a, b) => a.pick_order - b.pick_order).map((t) => t.squad_id));
-      setRanking([...players].filter((p) => p.staff_rank != null).sort((a, b) => a.staff_rank! - b.staff_rank!).map((p) => p.player_id));
     } else {
       setSelected([]);
-      setRanking([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bundle]);
@@ -131,7 +128,6 @@ export default function CtfdlDraftAdminPage() {
       run: () => post({ action: 'set_teams', draft_id: draft.id, squad_ids: selected }, 'Teams saved'),
     });
   };
-  const saveRanking = () => draft && post({ action: 'set_rankings', draft_id: draft.id, player_ids: ranking }, 'Ranking saved');
   const action = (a: string, label: string) => draft && post({ action: a, draft_id: draft.id }, label);
   const ask = (c: NonNullable<Confirm>) => setConfirmBox(c);
 
@@ -141,27 +137,10 @@ export default function CtfdlDraftAdminPage() {
     const next = [...list]; [next[i], next[j]] = [next[j], next[i]]; set(next);
   };
   const shuffleTeams = () => setSelected((s) => [...s].sort(() => Math.random() - 0.5));
-  const autoRank = () => setRanking([...players].sort((a, b) => avgRating(b) - avgRating(a)).map((p) => p.player_id));
-  // Start the staff ranking from the mock drafts' Public ADP; anyone the ADP doesn't cover follows by self-rating.
-  const adpRank = async () => {
-    try {
-      const res = await fetch('/api/ctfdl/mock-draft', { headers: await authHeaders(), cache: 'no-store' });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'Could not load the Public ADP');
-      if (!Array.isArray(j.adp)) { toast.error(`The Public ADP needs at least 5 public mock drafts (${j.public_board_count ?? 0} so far)`); return; }
-      const inPool = new Set(players.map((p) => p.player_id));
-      const fromAdp = (j.adp as Array<{ player_id: string }>).map((r) => r.player_id).filter((id) => inPool.has(id));
-      const covered = new Set(fromAdp);
-      const rest = [...players].filter((p) => !covered.has(p.player_id)).sort((a, b) => avgRating(b) - avgRating(a)).map((p) => p.player_id);
-      setRanking([...fromAdp, ...rest]);
-      toast.success('Ordered by Public ADP. Adjust, then Save ranking.');
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
-
-  const playerById = useMemo(() => Object.fromEntries(players.map((p) => [p.player_id, p])), [players]);
-  const unranked = players.filter((p) => !ranking.includes(p.player_id));
+  // Staff ADP comes from the server (averaged staff mock drafts); this page only shows it.
+  const staffBoards = bundle?.staff_adp_boards ?? 0;
+  const staffRanked = useMemo(() => players.filter((p) => p.staff_rank != null).sort((a, b) => a.staff_rank! - b.staff_rank!), [players]);
+  const staffUnranked = useMemo(() => players.filter((p) => p.staff_rank == null).sort((a, b) => avgRating(b) - avgRating(a)), [players]);
   const setupLocked = !!draft && draft.status !== 'setup';
   const season = seasons.find((s) => s.id === seasonId);
   const teamName = (id: string) => {
@@ -329,61 +308,48 @@ export default function CtfdlDraftAdminPage() {
             </div>
           </Panel>
 
-          {/* Staff ranking */}
+          {/* Staff ADP (the staff ranking) */}
           <Panel
-            title="Staff ranking"
-            hint={`Shown to captains as "Staff #n" and used for auto-pick when a captain has no queue. ${players.length} registered player${players.length === 1 ? '' : 's'}.`}
-            actions={
-              <>
-                <button onClick={adpRank} className={btnQuiet}>Order by ADP</button>
-                <button onClick={autoRank} className={btnQuiet}>Order by self-rating</button>
-                <button onClick={() => setRanking([])} disabled={ranking.length === 0} className={`${btnQuiet} disabled:opacity-40`}>Clear</button>
-                <button onClick={saveRanking} disabled={!!busy} className={btnPrimary}>Save ranking</button>
-              </>
-            }
+            title="Staff ADP"
+            hint={`The staff ranking is the average of every staff member's mock draft (${staffBoards} staff board${staffBoards === 1 ? '' : 's'} so far). Captains see it as "Staff #n", and auto-pick uses it when a captain's queue runs out. Boards lock when the draft starts.`}
+            actions={<Link href="/league/ctfdl/mock-draft" className={btnPrimary}>Post or edit your board</Link>}
           >
             <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/[0.06]">
               <div className="p-4">
-                <div className={labelCls}>Ranked · {ranking.length}</div>
-                {ranking.length === 0 ? (
-                  <p className="text-sm text-[#8B98B0]">No ranking yet. Add players from the right, or order everyone by self-rating.</p>
+                <div className={labelCls}>Ranked · {staffRanked.length}</div>
+                {staffRanked.length === 0 ? (
+                  <p className="text-sm text-[#8B98B0]">No staff boards yet. Once staff post their mock drafts, the average shows here.</p>
                 ) : (
                   <ol className="max-h-[28rem] overflow-y-auto divide-y divide-white/[0.04]">
-                    {ranking.map((id, i) => {
-                      const p = playerById[id]; if (!p) return null;
-                      return (
-                        <li key={id} className="flex items-center gap-3 px-2 py-1.5 text-sm">
-                          <span className="w-6 font-display text-lg text-[#22D3EE] tabular-nums">{i + 1}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="text-[#E6EDF7]">{p.alias}</span>
-                            <span className="ml-2 text-xs text-[#8B98B0]">{p.preferred_roles.join(', ')} · ★{avgRating(p).toFixed(1)}</span>
-                          </span>
-                          <button onClick={() => move(ranking, setRanking, id, -1)} disabled={i === 0} className={iconBtn} title="Move up"><ArrowUp className="h-4 w-4" /></button>
-                          <button onClick={() => move(ranking, setRanking, id, 1)} disabled={i === ranking.length - 1} className={iconBtn} title="Move down"><ArrowDown className="h-4 w-4" /></button>
-                          <button onClick={() => setRanking((r) => r.filter((x) => x !== id))} className={`${iconBtn} hover:text-[#F87171]`} title="Remove from ranking"><X className="h-4 w-4" /></button>
-                        </li>
-                      );
-                    })}
+                    {staffRanked.map((p) => (
+                      <li key={p.player_id} className="flex items-center gap-3 px-2 py-1.5 text-sm">
+                        <span className="w-6 font-display text-lg text-[#22D3EE] tabular-nums">{p.staff_rank}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="text-[#E6EDF7]">{p.alias}</span>
+                          <span className="ml-2 text-xs text-[#8B98B0]">{p.preferred_roles.join(', ')} · ★{avgRating(p).toFixed(1)}</span>
+                        </span>
+                      </li>
+                    ))}
                   </ol>
                 )}
               </div>
               <div className="p-4">
-                <div className={labelCls}>Unranked · {unranked.length}</div>
-                {unranked.length === 0 ? (
-                  <p className="text-sm text-[#8B98B0]">Everyone is ranked.</p>
+                <div className={labelCls}>Not on any staff board · {staffUnranked.length}</div>
+                {staffUnranked.length === 0 ? (
+                  <p className="text-sm text-[#8B98B0]">Everyone is placed.</p>
                 ) : (
                   <ul className="max-h-[28rem] overflow-y-auto divide-y divide-white/[0.04]">
-                    {unranked.map((p: DraftPlayer) => (
+                    {staffUnranked.map((p: DraftPlayer) => (
                       <li key={p.player_id} className="flex items-center gap-3 px-2 py-1.5 text-sm">
                         <span className="min-w-0 flex-1">
                           <span className="text-[#E6EDF7]">{p.alias}</span>
                           <span className="ml-2 text-xs text-[#8B98B0]">{p.preferred_roles.join(', ')} · ★{avgRating(p).toFixed(1)}</span>
                         </span>
-                        <button onClick={() => setRanking((r) => [...r, p.player_id])} className="text-xs text-[#22D3EE] hover:text-[#67E8F9]">Add</button>
                       </li>
                     ))}
                   </ul>
                 )}
+                <p className="mt-3 text-xs text-[#8B98B0]">Auto-pick falls back to the best self-rating for anyone here.</p>
               </div>
             </div>
           </Panel>
