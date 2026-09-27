@@ -300,6 +300,9 @@ export default function CtfdlDraftAdminPage() {
                           </span>
                           <button onClick={() => move(selected, setSelected, id, -1)} disabled={setupLocked || i === 0} className={iconBtn} title="Move up"><ArrowUp className="h-4 w-4" /></button>
                           <button onClick={() => move(selected, setSelected, id, 1)} disabled={setupLocked || i === selected.length - 1} className={iconBtn} title="Move down"><ArrowDown className="h-4 w-4" /></button>
+                          {/* Remove from here too: a squad that was deactivated or disbanded no longer
+                              appears in the active list on the left, so its tick box can't be cleared. */}
+                          <button onClick={() => setSelected((cur) => cur.filter((x) => x !== id))} disabled={setupLocked} className={`${iconBtn} hover:text-[#F87171]`} title="Remove from the draft (then Save teams)"><X className="h-4 w-4" /></button>
                         </li>
                       );
                     })}
