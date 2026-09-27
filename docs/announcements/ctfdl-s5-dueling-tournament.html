@@ -1,0 +1,253 @@
+<!--
+  CTFDL S5 Opening Ceremonies dueling tournament announcement (written by Zmn, restyled to the
+  freeinf.org CTF theme). Classes are prefixed .s5d- so they never collide with the other S5
+  posts on the news list. Paste this whole file into News management -> Content -> HTML.
+-->
+<style>
+.s5d{font-family:var(--font-body), Inter, system-ui, sans-serif;color:#e6edf7;box-sizing:border-box;}
+.s5d *{box-sizing:border-box;}
+:where(.s5d) p{margin:0 0 16px;color:#c9d3e3;font-size:16px;line-height:1.6;}
+:where(.s5d) p strong,:where(.s5d) p b{color:#e6edf7;}
+:where(.s5d) a{color:#22d3ee;}
+.s5d-h{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;text-transform:uppercase;letter-spacing:.02em;font-size:28px;font-weight:700;line-height:1.1;margin:34px 0 10px;color:#e6edf7;}
+.s5d-card{background:#1B2438;border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:22px 24px;margin:20px 0;}
+.s5d-kicker{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#22d3ee;margin:0 0 6px;}
+.s5d-title{font-family:"Barlow Condensed",Inter,sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.01em;line-height:1;margin:0;}
+.s5d-btn{display:inline-block;background:#22d3ee;color:#0b0f1a !important;font-weight:600;font-size:14px;text-decoration:none;padding:11px 18px;border-radius:6px;line-height:1;}
+.s5d-btn:hover{background:#4de0f5;}
+.s5d-btn-red{background:#ef4444;color:#fff !important;}
+.s5d-btn-red:hover{background:#f87171;}
+.s5d-btn-ghost{display:inline-block;background:transparent;color:#e6edf7 !important;border:1px solid rgba(255,255,255,.2);font-weight:500;font-size:14px;text-decoration:none;padding:10px 16px;border-radius:6px;line-height:1;}
+.s5d-btn-ghost:hover{border-color:rgba(255,255,255,.45);}
+
+
+.s5d-bub{position:absolute;z-index:2;font-family:"Barlow Condensed",Inter,sans-serif;font-weight:700;text-transform:none;font-size:22px;line-height:1;padding:8px 13px;border-radius:14px;background:#1b2438;color:#e6edf7;border:1px solid rgba(255,255,255,.12);white-space:nowrap;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.35);}
+.s5d-bub:after{content:"";position:absolute;bottom:-7px;width:12px;height:12px;background:inherit;border-right:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);}
+.s5d-bub.l:after{left:14px;transform:rotate(45deg);}
+.s5d-bub.r:after{right:14px;transform:rotate(45deg);}
+.s5d-bub.red{background:#3a1520;color:#fca5a5;border-color:rgba(239,68,68,.45);}
+.s5d-bub.cy{background:#0f2a33;color:#67e8f9;border-color:rgba(34,211,238,.45);}
+.s5d-bub.am{background:#33240d;color:#fcd34d;border-color:rgba(245,158,11,.45);}
+.s5d-bub.l{animation:s5dinL .55s cubic-bezier(.2,.8,.2,1.2) both;}
+.s5d-bub.r{animation:s5dinR .55s cubic-bezier(.2,.8,.2,1.2) both;}
+@keyframes s5dinL{from{opacity:0;transform:translateX(-60px) scale(.8);}to{opacity:1;transform:none;}}
+@keyframes s5dinR{from{opacity:0;transform:translateX(60px) scale(.8);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){.s5d-bub.l,.s5d-bub.r{animation:none;}}
+
+
+.s5d-hero{background:radial-gradient(ellipse at 50% 120%,rgba(239,68,68,.16),transparent 60%),linear-gradient(135deg,#131a2b 0%,#0f1526 60%,#0b0f1a 100%);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:40px 28px 34px;margin:0 0 24px;position:relative;overflow:hidden;text-align:center;}
+.s5d-hero:before{content:"1v1";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:"Barlow Condensed",Inter,sans-serif;font-weight:700;font-size:300px;line-height:1;color:rgba(255,255,255,.028);pointer-events:none;}
+.s5d-hero .s5d-kicker{color:#f87171;}
+.s5d-hero .s5d-title{font-size:58px;position:relative;z-index:1;}
+.s5d-hero .s5d-title small{display:block;font-size:26px;color:#8b98b0;letter-spacing:.06em;margin:0 0 6px;}
+.s5d .s5d-hero-sub{font-size:17px;color:#c9d3e3;margin:16px auto 22px;max-width:540px;position:relative;z-index:1;}
+.s5d-hero-stats{display:flex;justify-content:center;flex-wrap:wrap;gap:10px 34px;margin:0 0 24px;position:relative;z-index:1;}
+.s5d-hero-stats div{font-size:13px;color:#8b98b0;}
+.s5d-hero-stats div b{display:block;font-family:"Barlow Condensed",Inter,sans-serif;font-size:28px;font-weight:700;color:#e6edf7;line-height:1.1;text-transform:uppercase;}
+.s5d-hero-cta{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;position:relative;z-index:1;}
+
+
+.s5d-host{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center;background:linear-gradient(135deg,rgba(245,158,11,.13),#1B2438 55%);border:1px solid rgba(245,158,11,.35);}
+.s5d-host-badge{width:108px;height:108px;border-radius:50%;border:2px solid #f59e0b;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(11,15,26,.55);text-align:center;}
+.s5d-host-badge span{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#f59e0b;}
+.s5d-host-badge b{font-family:"Barlow Condensed",Inter,sans-serif;font-size:32px;font-weight:700;color:#e6edf7;line-height:1;text-transform:none;}
+.s5d-host .s5d-kicker{color:#f59e0b;}
+.s5d-host .s5d-title{font-size:30px;margin:0 0 10px;}
+.s5d-host p{margin:0 0 10px;font-size:15px;color:#c9d3e3;}
+.s5d-host p:last-child{margin:0;}
+.s5d-host p b{color:#e6edf7;}
+
+
+.s5d-night{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:10px;align-items:stretch;margin-top:14px;}
+.s5d-night div.s{background:rgba(11,15,26,.55);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px;}
+.s5d-night div.s b{display:block;font-family:"Barlow Condensed",Inter,sans-serif;font-size:26px;font-weight:700;color:#e6edf7;line-height:1;}
+.s5d-night div.s em{display:block;font-style:normal;font-family:"Barlow Condensed",Inter,sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;color:#22d3ee;margin:6px 0 4px;}
+.s5d-night div.s span{display:block;font-size:13px;color:#8b98b0;line-height:1.45;}
+.s5d-night div.s.duel{border-color:rgba(239,68,68,.35);}
+.s5d-night div.s.duel em{color:#f87171;}
+.s5d-night div.s.crown em{color:#f59e0b;}
+.s5d-night i{align-self:center;font-style:normal;color:#8b98b0;font-size:20px;}
+
+
+.s5d-odds{width:100%;border-collapse:collapse;font-size:15px;margin-top:6px;}
+.s5d-odds th{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#8b98b0;padding:0 0 10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;}
+.s5d-odds th.n{text-align:right;}
+.s5d-odds td{padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05);color:#c9d3e3;vertical-align:middle;}
+.s5d-odds td b{font-family:"Barlow Condensed",Inter,sans-serif;font-size:21px;font-weight:700;text-transform:uppercase;color:#e6edf7;display:block;line-height:1.1;}
+.s5d-odds td small{font-size:13px;color:#8b98b0;}
+.s5d-odds td.n{text-align:right;font-family:"Barlow Condensed",Inter,sans-serif;font-size:24px;font-weight:700;color:#34d399;width:90px;}
+.s5d-odds tr.long td.n{color:#f59e0b;}
+.s5d-odds tr:last-child td{border-bottom:0;}
+.s5d-fine{font-size:12px;color:#8b98b0;margin:14px 0 0;font-style:italic;}
+
+
+.s5d-challenge{position:relative;overflow:hidden;text-align:center;background:linear-gradient(180deg,#1a1020,#131a2b);border:1px solid rgba(239,68,68,.35);padding:34px 24px;}
+.s5d-challenge .s5d-title{font-size:44px;margin:0 0 10px;}
+.s5d-challenge p{max-width:520px;margin:0 auto 20px;font-size:16px;color:#c9d3e3;}
+.s5d-slots{display:inline-flex;align-items:baseline;gap:8px;margin:0 0 18px;font-family:"Barlow Condensed",Inter,sans-serif;text-transform:uppercase;}
+.s5d-slots b{font-size:48px;font-weight:700;color:#f87171;line-height:1;}
+.s5d-slots span{font-size:18px;font-weight:700;color:#8b98b0;}
+
+
+.s5d-tease{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;background:repeating-linear-gradient(135deg,#131a2b 0 14px,#111827 14px 28px);border:1px dashed rgba(255,255,255,.18);}
+.s5d-tease-date{font-family:"Barlow Condensed",Inter,sans-serif;text-transform:uppercase;text-align:center;min-width:92px;}
+.s5d-tease-date span{display:block;font-size:13px;font-weight:700;color:#8b98b0;letter-spacing:.1em;}
+.s5d-tease-date b{display:block;font-size:52px;font-weight:700;color:#e6edf7;line-height:.95;}
+.s5d-tease-date em{display:block;font-style:normal;font-size:15px;font-weight:700;color:#22d3ee;}
+.s5d-tease div.t{flex:1;min-width:240px;}
+.s5d-tease .s5d-title{font-size:26px;margin:0 0 6px;}
+.s5d-tease p{margin:0;font-size:15px;color:#c9d3e3;}
+.s5d-redact{background:#e6edf7;color:#e6edf7;border-radius:2px;padding:0 4px;user-select:none;}
+
+
+.s5d-rem{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0;}
+.s5d-rem a{display:block;background:#1B2438;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:18px;text-decoration:none;color:#c9d3e3 !important;transition:border-color .15s;}
+.s5d-rem a:hover{border-color:rgba(34,211,238,.45);}
+.s5d-rem a b{display:block;font-family:"Barlow Condensed",Inter,sans-serif;font-size:22px;font-weight:700;text-transform:uppercase;color:#e6edf7;line-height:1.05;margin:0 0 6px;}
+.s5d-rem a span{display:block;font-size:14px;line-height:1.5;}
+.s5d-rem a em{display:block;font-style:normal;font-size:13px;font-weight:600;color:#22d3ee;margin-top:10px;}
+.s5d-rem a.hot{border-color:rgba(245,158,11,.4);}
+.s5d-rem a.hot em{color:#f59e0b;}
+.s5d-sig{font-family:"Barlow Condensed",Inter,sans-serif;font-size:22px;font-weight:700;text-transform:uppercase;color:#e6edf7;margin-top:22px;}
+
+@media (max-width:700px){
+  .s5d-hero{padding:66px 18px 30px;}
+  .s5d-challenge{padding-top:66px;}
+  .s5d-hero .s5d-title{font-size:42px;}
+  .s5d-hero .s5d-title small{font-size:20px;}
+  .s5d-bub{font-size:17px;padding:6px 10px;}
+  .s5d-bub.hm{display:none;}
+  .s5d-host{grid-template-columns:1fr;text-align:left;}
+  .s5d-night{grid-template-columns:1fr;}
+  .s5d-night i{transform:rotate(90deg);justify-self:center;}
+  .s5d-challenge .s5d-title{font-size:34px;}
+  .s5d-rem{grid-template-columns:1fr;}
+}
+</style>
+
+<div class="s5d">
+<div class="s5d s5d-hero">
+  <span class="s5d-bub l red" style="left:18px;top:22px;animation-delay:.5s">60'd</span>
+  <span class="s5d-bub r cy" style="right:22px;top:30px;animation-delay:.8s">ez</span>
+  <span class="s5d-bub l hm" style="left:22px;top:62%;animation-delay:1.1s">#plop</span>
+  <span class="s5d-bub r am hm" style="right:22px;top:62%;animation-delay:1.4s">rekt</span>
+  <span class="s5d-bub l cy hm" style="left:44px;bottom:26px;animation-delay:1.7s">gf</span>
+  <span class="s5d-bub r red hm" style="right:40px;bottom:30px;animation-delay:2s">pwned</span>
+  <p class="s5d-kicker">CTF Draft League &middot; Season 5 &middot; A CTFDL first</p>
+  <h1 class="s5d-title"><small>Opening Ceremonies</small>Dueling Tournament</h1>
+  <p class="s5d-hero-sub">Before a single pick is made, somebody walks into Draft Night as the first champion of Season 5. One on one. No squad to hide behind. No SL to blame.</p>
+  <div class="s5d-hero-stats">
+    <div><b>Sat Oct 3</b>Draft Night</div>
+    <div><b>8:00 PM ET</b>First duel</div>
+    <div><b>32</b>Slots, total</div>
+  </div>
+  <div class="s5d-hero-cta">
+    <a class="s5d-btn s5d-btn-red" href="https://www.freeinf.org/dueling-tournament/october-2026">Sign up to duel</a>
+    <a class="s5d-btn-ghost" href="https://www.freeinf.org/dueling">Dueling hub</a>
+  </div>
+</div>
+
+
+<p>CTFDL has never opened a season like this. On Saturday, October 3, Draft Night kicks off with a live, bracketed, one-on-one dueling tournament. A champion gets crowned, and then we draft. Whoever wins walks into the draft with a title nobody else in the pool has, and every captain watching will know it.</p>
+
+
+<div class="s5d s5d-card s5d-host">
+  <div class="s5d-host-badge"><span>Hosted by</span><b>posty</b></div>
+  <div>
+    <p class="s5d-kicker">Credit where it's due</p>
+    <h2 class="s5d-title">posty stepped up</h2>
+    <p>This tournament exists because <b>posty</b> raised his hand. He's hosting it, he built the entire tournament page on freeinf.org, and he's putting in the prep work to make sure it runs clean on the night it matters most.</p>
+    <p>Nobody asked him to build a registration site. He just did it. When you see him on Draft Night, tell him thanks. Then try to 60 him.</p>
+  </div>
+</div>
+
+
+<h2 class="s5d-h">The Night, in Order</h2>
+
+
+<div class="s5d s5d-card">
+  <p class="s5d-kicker">Saturday, Oct 3 &middot; All times Eastern</p>
+  <div class="s5d-night">
+    <div class="s duel"><b>8:00 PM</b><em>Dueling Tournament</em><span>32-player bracket, called live. Hosted by posty.</span></div>
+    <i>&rsaquo;</i>
+    <div class="s crown"><b>TBD</b><em>Champion Crowned</em><span>First title of Season 5. Before the first pick.</span></div>
+    <i>&rsaquo;</i>
+    <div class="s"><b>9:30 PM</b><em>The Draft</em><span>Captains go on the clock. Rosters are set.</span></div>
+  </div>
+</div>
+
+
+<h2 class="s5d-h">Who Takes the Crown?</h2>
+<p>A CTFer? A USLer? A KBer? A Mouser? It's really two questions: which zone does the champ call home, and is he on a mouse or a keyboard? Somebody check in with Kev. What's the over/under on Kalshi? DraftKings?</p>
+
+
+<div class="s5d s5d-card">
+  <p class="s5d-kicker">Opening lines &middot; Unofficial &middot; Deeply unscientific</p>
+  <table class="s5d-odds">
+    <thead><tr><th>Zone + input</th><th class="n">Line</th></tr></thead>
+    <tbody>
+      <tr><td><b>CTF Mouser</b><small>Home arena, mouse in hand. The chalk pick.</small></td><td class="n">+150</td></tr>
+      <tr><td><b>USL Mouser</b><small>Duels plenty. Dangerous anywhere. Slightly out of his zone.</small></td><td class="n">+200</td></tr>
+      <tr><td><b>CTF KBer</b><small>Knows every inch of the arena. Aims with arrow keys. Believes.</small></td><td class="n">+450</td></tr>
+      <tr><td><b>USL KBer</b><small>Away zone, arrow keys. Here for the story.</small></td><td class="n">+600</td></tr>
+      <tr class="long"><td><b>The Field</b><small>Hasn't dueled since 2011. Signed up anyway.</small></td><td class="n">+2500</td></tr>
+    </tbody>
+  </table>
+  <p class="s5d-fine">Lines are fake. Kev has not responded to our request for comment.</p>
+</div>
+
+
+
+<div class="s5d s5d-card s5d-challenge">
+  <span class="s5d-bub l am" style="left:22px;top:24px;animation-delay:.4s">GG</span>
+  <span class="s5d-bub r red" style="right:24px;top:30px;animation-delay:.7s">owned</span>
+  <span class="s5d-bub l cy hm" style="left:36px;bottom:28px;animation-delay:1s">60</span>
+  <span class="s5d-bub r hm" style="right:32px;bottom:24px;animation-delay:1.3s">ez</span>
+  <p class="s5d-kicker" style="color:#f87171">The challenge</p>
+  <h2 class="s5d-title">Step up or<br>stay quiet</h2>
+  <p>You've been talking in team chat for twenty years. Here's the stage. VIP invites already went out, and a few of you took the bait. Some of you didn't get one. Draw your own conclusions.</p>
+  <div class="s5d-slots"><b>32</b><span>slots. When they're gone, they're gone.</span></div>
+  <div><a class="s5d-btn s5d-btn-red" href="https://www.freeinf.org/dueling-tournament/october-2026">Claim a slot</a></div>
+</div>
+
+
+
+<div class="s5d s5d-card s5d-tease">
+  <div class="s5d-tease-date"><span>Sunday</span><b>11</b><em>October</em></div>
+  <div class="t">
+    <p class="s5d-kicker">Also a CTFDL first</p>
+    <h2 class="s5d-title">The off week isn't a dead week</h2>
+    <p>No CTFDL matches that weekend, but we're not going quiet. A second organized event is coming on Sunday, October 11, for anyone who's around. Hosted by <span class="s5d-redact">redacted</span>. Details soon.</p>
+  </div>
+</div>
+
+
+<h2 class="s5d-h">While You're Here</h2>
+
+
+<div class="s5d s5d-rem">
+  <a class="hot" href="https://www.freeinf.org/league/register">
+    <b>Register for the draft</b>
+    <span>No registration, no draft slot. Dueling doesn't count as registering.</span>
+    <em>Deadline: Fri, Oct 2 &middot; 11:59 PM PT</em>
+  </a>
+  <a class="hot" href="https://www.freeinf.org/league/ctfdl/mock-draft">
+    <b>Finish your mock draft</b>
+    <span>Do it today. Closest board to the real picks gets crowned the #1 drafter.</span>
+    <em>Boards lock Sat, Oct 3 &middot; 9:30 PM ET</em>
+  </a>
+  <a href="https://www.freeinf.org/news">
+    <b>Everything about Season 5</b>
+    <span>Schedule, scoring, playoffs, captains, and the rest.</span>
+    <em>Read the announcements</em>
+  </a>
+  <a href="https://discord.gg/2avPSyv">
+    <b>Join the CTF Discord</b>
+    <span>Draft Night lives here. So does the trash talk.</span>
+    <em>discord.gg/2avPSyv</em>
+  </a>
+</div>
+
+
+<p class="s5d-sig">See you in the arena.<br>&mdash; Zmn</p>
+</div>
