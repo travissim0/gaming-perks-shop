@@ -49,7 +49,7 @@ async function context() {
   const actualOverall: Record<string, number> = {};
   picks.forEach((p) => { if (p.player_id) actualOverall[p.player_id] = p.overall; });
   const locked = !!draft && draft.status !== 'setup';
-  return { draft, season, pool, captainIds, actualOverall, locked };
+  return { draft, season, pool, captainIds, actualOverall, locked, teamCount: teams.length };
 }
 
 export async function GET(request: NextRequest) {
@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
     season: ctx.season,
     draft: ctx.draft ? { id: ctx.draft.id, status: ctx.draft.status } : null,
     locked: ctx.locked,
+    teams: ctx.teamCount,
     pool: ctx.pool,
     public_board_count: 0,
     adp: null,

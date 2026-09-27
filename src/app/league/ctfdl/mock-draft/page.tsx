@@ -84,6 +84,8 @@ export default function MockDraftPage() {
   // is how far the board sits from the consensus (for the "most different" sort).
   const adpRankOf = useMemo(() => Object.fromEntries((data?.adp || []).map((r, i) => [r.player_id, i + 1])), [data?.adp]);
   const hasAdp = !!data?.adp;
+  // Row preview = the first round: one pick per squad in the draft, at least 4 while squads are still being added.
+  const roundSize = Math.max(4, data?.teams || 0);
   const boardRows = useMemo(() => {
     return (data?.boards || []).map((b) => {
       const deltas: Record<string, number> = {};
@@ -416,7 +418,8 @@ export default function MockDraftPage() {
                       </span>
                       {/* Own line on phones so the top 3 isn't squeezed to "1"; inline from sm up. */}
                       <span className="order-last w-full min-w-0 truncate text-sm text-[#8B98B0] sm:order-none sm:w-auto sm:flex-1">
-                        {b.player_ids.slice(0, 3).map((id, i) => (
+                        <span className="mr-2 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]/80">Round 1</span>
+                        {b.player_ids.slice(0, roundSize).map((id, i) => (
                           <span key={id}>{i > 0 && <span className="mx-1.5 text-white/20">·</span>}<span className="text-[#8B98B0]">{i + 1}</span> <span className="text-[#E6EDF7]">{byId[id]?.alias || '—'}</span></span>
                         ))}
                       </span>

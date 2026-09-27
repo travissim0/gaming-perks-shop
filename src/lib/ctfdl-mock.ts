@@ -54,6 +54,8 @@ export interface MockResponse {
   draft: { id: string; status: string } | null;
   /** Boards lock when the draft leaves setup. */
   locked: boolean;
+  /** Squads in the draft = picks in round 1. */
+  teams: number;
   pool: MockPoolPlayer[];
   public_board_count: number;
   adp: MockAdpRow[] | null;
