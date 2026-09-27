@@ -414,7 +414,8 @@ export default function MockDraftPage() {
                       <span className="min-w-[9rem] font-display text-base text-[#E6EDF7]">
                         {b.label}{b.author_alias && <span className="ml-2 font-sans text-xs text-[#F59E0B]">({b.author_alias})</span>}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-sm text-[#8B98B0]">
+                      {/* Own line on phones so the top 3 isn't squeezed to "1"; inline from sm up. */}
+                      <span className="order-last w-full min-w-0 truncate text-sm text-[#8B98B0] sm:order-none sm:w-auto sm:flex-1">
                         {b.player_ids.slice(0, 3).map((id, i) => (
                           <span key={id}>{i > 0 && <span className="mx-1.5 text-white/20">·</span>}<span className="text-[#8B98B0]">{i + 1}</span> <span className="text-[#E6EDF7]">{byId[id]?.alias || '—'}</span></span>
                         ))}
