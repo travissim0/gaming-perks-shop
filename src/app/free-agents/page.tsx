@@ -513,6 +513,9 @@ export default function FreeAgentsPage() {
             <span>
               <span className="font-semibold text-[#34D399]">{flash === 'registered' ? "You're registered." : 'Registration updated.'}</span>{' '}
               {league ? poolBlurb(league) : ''}
+              {league?.slug === 'ctfdl' && (
+                <> <Link href="/league/ctfdl/mock-draft" className="text-[#22D3EE] hover:underline">Now predict the draft order.</Link></>
+              )}
             </span>
             <button type="button" onClick={() => setFlash(null)} className="text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Dismiss">✕</button>
           </div>

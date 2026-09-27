@@ -576,6 +576,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/league/register', label: 'Register', icon: <ClipboardCheck className="w-4 h-4" /> },
     { href: '/league/standings', label: 'Standings', icon: <Table2 className="w-4 h-4" /> },
     { href: '/league/ctfdl/draft', label: 'CTFDL draft', icon: <ListOrdered className="w-4 h-4" /> },
+    { href: '/league/ctfdl/mock-draft', label: 'Mock draft', icon: <ListOrdered className="w-4 h-4" /> },
     { href: '/dueling-tournament/october-2026', label: '2026 Duels', icon: <Sword className="w-4 h-4" /> },
     { href: '/league/schedule', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
     { href: '/rules', label: 'Rules', icon: <ScrollText className="w-4 h-4" /> },

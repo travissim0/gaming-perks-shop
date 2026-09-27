@@ -142,6 +142,23 @@ export default function CtfdlDraftAdminPage() {
   };
   const shuffleTeams = () => setSelected((s) => [...s].sort(() => Math.random() - 0.5));
   const autoRank = () => setRanking([...players].sort((a, b) => avgRating(b) - avgRating(a)).map((p) => p.player_id));
+  // Start the staff ranking from the mock drafts' Public ADP; anyone the ADP doesn't cover follows by self-rating.
+  const adpRank = async () => {
+    try {
+      const res = await fetch('/api/ctfdl/mock-draft', { headers: await authHeaders(), cache: 'no-store' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Could not load the Public ADP');
+      if (!Array.isArray(j.adp)) { toast.error(`The Public ADP needs at least 5 public mock drafts (${j.public_board_count ?? 0} so far)`); return; }
+      const inPool = new Set(players.map((p) => p.player_id));
+      const fromAdp = (j.adp as Array<{ player_id: string }>).map((r) => r.player_id).filter((id) => inPool.has(id));
+      const covered = new Set(fromAdp);
+      const rest = [...players].filter((p) => !covered.has(p.player_id)).sort((a, b) => avgRating(b) - avgRating(a)).map((p) => p.player_id);
+      setRanking([...fromAdp, ...rest]);
+      toast.success('Ordered by Public ADP. Adjust, then Save ranking.');
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
 
   const playerById = useMemo(() => Object.fromEntries(players.map((p) => [p.player_id, p])), [players]);
   const unranked = players.filter((p) => !ranking.includes(p.player_id));
@@ -318,6 +335,7 @@ export default function CtfdlDraftAdminPage() {
             hint={`Shown to captains as "Staff #n" and used for auto-pick when a captain has no queue. ${players.length} registered player${players.length === 1 ? '' : 's'}.`}
             actions={
               <>
+                <button onClick={adpRank} className={btnQuiet}>Order by ADP</button>
                 <button onClick={autoRank} className={btnQuiet}>Order by self-rating</button>
                 <button onClick={() => setRanking([])} disabled={ranking.length === 0} className={`${btnQuiet} disabled:opacity-40`}>Clear</button>
                 <button onClick={saveRanking} disabled={!!busy} className={btnPrimary}>Save ranking</button>

@@ -36,6 +36,7 @@ import { db, getSeasonContext, type SeasonContext } from './db.js';
  */
 
 const REGISTER_URL = 'https://freeinf.org/league/register';
+const MOCK_URL = 'https://freeinf.org/league/ctfdl/mock-draft';
 const STATE_FILE = join(process.cwd(), '.signups-state.json');
 const NUDGE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const POLL_MS = 60_000;
@@ -58,6 +59,7 @@ const SIGNUP_LINES = [
   '📋 {player} registered for {season} as {classes}. Pool is at **{n}**. Get on the board: {link}',
   'The pool just got deeper: {player} is in for {season}. **{n}** strong. Don’t make your squad wait — {link}',
   '{player} said yes to {season}. That’s **{n}**. If you’re reading this and haven’t signed up… {link}',
+  '{player} is in for {season}. **{n}** in the pool. Think you know where they’ll go? Predict the draft: {mock}',
 ];
 
 const NUDGE_LINES = [
@@ -174,7 +176,7 @@ function who(r: Registrant): string {
 
 function vars(season: SeasonInfo, n: number, extra: Record<string, string> = {}): Record<string, string> {
   const d = deadline(season);
-  return { season: season.label, n: String(n), next: String(n + 1), deadline: d ? d.relative : 'soon', link: `<${REGISTER_URL}>`, ...extra };
+  return { season: season.label, n: String(n), next: String(n + 1), deadline: d ? d.relative : 'soon', link: `<${REGISTER_URL}>`, mock: `<${MOCK_URL}>`, ...extra };
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +315,8 @@ export async function onSignupsInteraction(interaction: ChatInputCommandInteract
       `**${pool.length}** players are already in the draft pool: ${names}\n\n` +
       `Captains draft from this pool once registration closes${d ? ` ${d.relative} (${d.absolute})` : ''}. ` +
       `Not on the list? Sign up now — it takes two minutes: <${REGISTER_URL}>\n` +
-      `Tag a friend who should be here and I’ll give them a nudge. 👀`;
+      `Tag a friend who should be here and I’ll give them a nudge. 👀\n` +
+      `Think you know how the draft will go? Post your mock draft: <${MOCK_URL}>`;
     if (config.dryRun) { await interaction.editReply(`DRY RUN — would post:\n${text}`.slice(0, 1900)); return; }
     await ch.send({ content: text.slice(0, 1990), allowedMentions: { users: pool.map((r) => r.discordId).filter((x): x is string => !!x) } });
     // Everyone in the roll-call counts as announced from here on.

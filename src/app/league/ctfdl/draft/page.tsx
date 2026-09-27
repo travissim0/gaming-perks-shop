@@ -33,7 +33,9 @@ export default function CtfdlDraftLobbyPage() {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [dayFilter, setDayFilter] = useState<'any' | 'weekdays' | 'weekends'>('any');
-  const [sortBy, setSortBy] = useState<'staff' | 'rating' | 'name'>('staff');
+  const [sortBy, setSortBy] = useState<'staff' | 'rating' | 'name' | 'adp' | 'mine'>('staff');
+  // Mock-draft orders for sorting: the Public ADP, and the viewer's own board (a captain's is private).
+  const [mockOrder, setMockOrder] = useState<{ adp: Record<string, number> | null; mine: Record<string, number> | null }>({ adp: null, mine: null });
   const [showDetails, setShowDetails] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
@@ -51,6 +53,24 @@ export default function CtfdlDraftLobbyPage() {
   const onClock = teamOnClock(draft, teams);
   const iAmOnClock = !!(onClock && myTeamId === onClock.id);
   const canPick = !!draft && draft.status === 'live' && (isStaff || iAmOnClock);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/ctfdl/mock-draft', { headers: await authHeaders(), cache: 'no-store' });
+        if (!res.ok) return;
+        const j = await res.json();
+        const rank = (ids: string[]) => Object.fromEntries(ids.map((id, i) => [id, i + 1]));
+        if (!cancelled) setMockOrder({
+          adp: Array.isArray(j.adp) ? rank(j.adp.map((r: { player_id: string }) => r.player_id)) : null,
+          mine: Array.isArray(j.mine?.player_ids) ? rank(j.mine.player_ids) : null,
+        });
+      } catch { /* sorting by mock boards is optional */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Keep the local queue in sync with the server copy unless we're mid-edit.
   useEffect(() => {
@@ -161,6 +181,11 @@ export default function CtfdlDraftLobbyPage() {
           if (fr !== 0) return fr;
         }
         if (sortBy === 'name') return a.alias.localeCompare(b.alias);
+        if (sortBy === 'adp' || sortBy === 'mine') {
+          const m = (sortBy === 'adp' ? mockOrder.adp : mockOrder.mine) || {};
+          const ra = m[a.player_id] ?? 999, rb = m[b.player_id] ?? 999;
+          if (ra !== rb) return ra - rb;
+        }
         if (sortBy === 'staff') {
           const ra = a.staff_rank ?? 999, rb = b.staff_rank ?? 999;
           if (ra !== rb) return ra - rb;
@@ -170,7 +195,7 @@ export default function CtfdlDraftLobbyPage() {
         return a.alias.localeCompare(b.alias);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [undrafted, search, classFilter, dayFilter, sortBy]);
+  }, [undrafted, search, classFilter, dayFilter, sortBy, mockOrder]);
 
   // Captains see their queued players pinned on top, in queue order.
   const queuedAvailable = useMemo(() => queue.map((id) => available.find((p) => p.player_id === id)).filter((p): p is DraftPlayer => !!p), [queue, available]);
@@ -280,6 +305,9 @@ export default function CtfdlDraftLobbyPage() {
           )}
           {draft.status === 'complete' && (
             <Link href="/league/ctfdl/draft/recap" className="rounded-md bg-[#22D3EE] px-3 py-2 text-sm font-semibold text-[#0B0F1A] hover:bg-[#67E8F9]">View recap</Link>
+          )}
+          {(draft.status === 'setup' || draft.status === 'complete') && (
+            <Link href="/league/ctfdl/mock-draft" className="rounded-md bg-white/5 px-3 py-2 text-sm text-[#E6EDF7] hover:bg-white/10">{draft.status === 'setup' ? 'Mock draft' : 'Mock draft scores'}</Link>
           )}
         </div>
       </div>
@@ -452,6 +480,8 @@ export default function CtfdlDraftLobbyPage() {
             </div>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="rounded-md border border-white/10 bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none">
               <option value="staff">Staff rank</option>
+              {mockOrder.adp && <option value="adp">Public ADP</option>}
+              {mockOrder.mine && <option value="mine">My board</option>}
               <option value="rating">Self-rating</option>
               <option value="name">Name</option>
             </select>
