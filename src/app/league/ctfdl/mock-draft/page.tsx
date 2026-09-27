@@ -32,6 +32,8 @@ export default function MockDraftPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [openBoard, setOpenBoard] = useState<string | null>(null);
+  const [boardSort, setBoardSort] = useState<'newest' | 'hot' | 'name'>('newest');
+  const [boardSearch, setBoardSearch] = useState('');
 
   const authHeaders = async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -76,6 +78,37 @@ export default function MockDraftPage() {
       .filter((p) => !placed.has(p.player_id))
       .filter((p) => !term || [p.alias, ...roles(p)].join(' ').toLowerCase().includes(term));
   }, [placeable, validOrder, search]);
+
+  // Boards vs the Public ADP. delta > 0 = this board takes the player EARLIER than the consensus
+  // ("▲6" = six spots higher). The biggest |delta| is the board's "hot take"; the average |delta|
+  // is how far the board sits from the consensus (for the "most different" sort).
+  const adpRankOf = useMemo(() => Object.fromEntries((data?.adp || []).map((r, i) => [r.player_id, i + 1])), [data?.adp]);
+  const hasAdp = !!data?.adp;
+  const boardRows = useMemo(() => {
+    return (data?.boards || []).map((b) => {
+      const deltas: Record<string, number> = {};
+      let sum = 0, n = 0;
+      let hot: { id: string; delta: number } | null = null;
+      b.player_ids.forEach((id, i) => {
+        const consensus = adpRankOf[id];
+        if (consensus == null) return;
+        const d = consensus - (i + 1);
+        deltas[id] = d;
+        sum += Math.abs(d); n++;
+        if (!hot || Math.abs(d) > Math.abs(hot.delta)) hot = { id, delta: d };
+      });
+      return { board: b, deltas, divergence: n ? sum / n : 0, hot: hot as { id: string; delta: number } | null };
+    });
+  }, [data?.boards, adpRankOf]);
+  const shownBoards = useMemo(() => {
+    const term = boardSearch.trim().toLowerCase();
+    const rows = boardRows.filter(({ board }) => !term || [board.label, board.author_alias || ''].join(' ').toLowerCase().includes(term));
+    return rows.sort((a, b) => {
+      if (boardSort === 'name') return a.board.label.localeCompare(b.board.label);
+      if (boardSort === 'hot' && hasAdp) return b.divergence - a.divergence || b.board.updated_at.localeCompare(a.board.updated_at);
+      return b.board.updated_at.localeCompare(a.board.updated_at);
+    });
+  }, [boardRows, boardSearch, boardSort, hasAdp]);
 
   const edit = (next: string[]) => { setOrder(next); setDirty(true); };
   const add = (id: string) => !locked && edit([...validOrder, id]);
@@ -344,33 +377,83 @@ export default function MockDraftPage() {
 
       {tab === 'boards' && (
         <section className="rounded-xl bg-[#131A2B] p-4">
-          <h2 className="mb-1 font-display text-lg text-[#E6EDF7]">Everyone's boards</h2>
-          <p className="mb-3 text-xs text-[#8B98B0]">Public boards, newest first.{data.viewer.is_staff ? ' Staff: the real name shows next to anonymous boards.' : ''}</p>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="mb-1 font-display text-lg text-[#E6EDF7]">Everyone's boards</h2>
+              <p className="text-xs text-[#8B98B0]">
+                {hasAdp ? '▲ means they have a player earlier than the Public ADP, ▼ later. ' : 'Once the Public ADP is live, each board shows where it differs from the consensus. '}
+                {data.viewer.is_staff ? 'Staff: the real name shows next to anonymous boards.' : ''}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={boardSearch} onChange={(e) => setBoardSearch(e.target.value)} placeholder="Find a board…" className="w-40 rounded-md border border-white/10 bg-[#0B0F1A] px-2.5 py-1.5 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none" />
+              <div className="flex overflow-hidden rounded-md border border-white/10 text-xs">
+                {([['newest', 'Newest'], ...(hasAdp ? [['hot', 'Most different']] : []), ['name', 'Name']] as Array<[typeof boardSort, string]>).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setBoardSort(k)} className={`px-2.5 py-1.5 ${boardSort === k ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-[#0B0F1A] text-[#8B98B0] hover:text-[#E6EDF7]'}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {data.boards.length === 0 ? (
             <p className="py-8 text-center text-sm text-[#8B98B0]">No boards yet. Be the first.</p>
+          ) : shownBoards.length === 0 ? (
+            <p className="py-8 text-center text-sm text-[#8B98B0]">No board matches that name.</p>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {data.boards.map((b) => {
+            <ul className="divide-y divide-white/[0.05] overflow-hidden rounded-lg bg-[#1B2438]">
+              {shownBoards.map(({ board: b, deltas, divergence, hot }) => {
                 const open = openBoard === b.id;
-                const shown = open ? b.player_ids : b.player_ids.slice(0, 10);
+                const half = Math.ceil(b.player_ids.length / 2);
+                const deltaChip = (d: number | undefined) =>
+                  d == null || d === 0 ? null : (
+                    <span className={`shrink-0 rounded px-1 text-[10px] font-semibold tabular-nums ${d > 0 ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}>{d > 0 ? `▲${d}` : `▼${-d}`}</span>
+                  );
                 return (
-                  <div key={b.id} className="rounded-lg bg-[#1B2438] p-3">
-                    <div className="mb-2 flex items-baseline justify-between gap-2">
-                      <span className="font-display text-base text-[#E6EDF7]">{b.label}{b.author_alias && <span className="ml-2 text-xs text-[#F59E0B]">({b.author_alias})</span>}</span>
+                  <li key={b.id}>
+                    <button type="button" onClick={() => setOpenBoard(open ? null : b.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5 text-left hover:bg-white/[0.03]">
+                      <span className="min-w-[9rem] font-display text-base text-[#E6EDF7]">
+                        {b.label}{b.author_alias && <span className="ml-2 font-sans text-xs text-[#F59E0B]">({b.author_alias})</span>}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-[#8B98B0]">
+                        {b.player_ids.slice(0, 3).map((id, i) => (
+                          <span key={id}>{i > 0 && <span className="mx-1.5 text-white/20">·</span>}<span className="text-[#8B98B0]">{i + 1}</span> <span className="text-[#E6EDF7]">{byId[id]?.alias || '—'}</span></span>
+                        ))}
+                      </span>
+                      {hot && hot.delta !== 0 && (
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Hot take</span>
+                          <span className="text-[#E6EDF7]">{byId[hot.id]?.alias || '—'}</span>
+                          {deltaChip(hot.delta)}
+                        </span>
+                      )}
+                      {hasAdp && <span className="text-[11px] text-[#8B98B0] tabular-nums" title="Average spots away from the Public ADP">±{divergence.toFixed(1)}</span>}
                       <span className="text-[11px] text-[#8B98B0]">{new Date(b.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                    </div>
-                    <ol className="grid grid-cols-1 gap-x-4 text-sm sm:grid-cols-2">
-                      {shown.map((id, i) => (
-                        <li key={id} className="flex gap-2 truncate py-0.5"><span className="w-6 shrink-0 text-right text-[#8B98B0] tabular-nums">{i + 1}</span><span className="truncate text-[#E6EDF7]">{byId[id]?.alias || '—'}</span></li>
-                      ))}
-                    </ol>
-                    {b.player_ids.length > 10 && (
-                      <button type="button" onClick={() => setOpenBoard(open ? null : b.id)} className="mt-2 text-xs text-[#22D3EE] hover:text-[#67E8F9]">{open ? 'Show top 10' : `Show all ${b.player_ids.length}`}</button>
+                      <span className="text-xs text-[#22D3EE]">{open ? 'Hide' : 'View'}</span>
+                    </button>
+                    {open && (
+                      <div className="grid gap-x-6 border-t border-white/[0.05] bg-[#131A2B]/40 px-3 py-3 sm:grid-cols-2">
+                        {[b.player_ids.slice(0, half), b.player_ids.slice(half)].map((col, c) => (
+                          <ol key={c} className="text-sm">
+                            {col.map((id, j) => {
+                              const pos = c * half + j + 1;
+                              const p = byId[id];
+                              return (
+                                <li key={id} className="flex items-center gap-2 py-0.5">
+                                  <span className="w-6 shrink-0 text-right text-[#8B98B0] tabular-nums">{pos}</span>
+                                  <span className="min-w-0 truncate text-[#E6EDF7]">{p?.alias || '—'}</span>
+                                  {p && p.preferred_roles[0] && <span className="shrink-0 text-[10px] uppercase tracking-wide text-[#8B98B0]">{p.preferred_roles[0]}</span>}
+                                  {deltaChip(deltas[id])}
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        ))}
+                      </div>
                     )}
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </section>
       )}
