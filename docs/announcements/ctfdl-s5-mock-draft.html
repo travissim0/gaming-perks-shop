@@ -1,0 +1,144 @@
+<!--
+  CTFDL Season 5 mock draft announcement (written by Soup, restyled to the freeinf.org CTF theme).
+  Paste this whole file into News management → Content → HTML (or "Load .html file").
+  Classes are prefixed .s5m- so they never collide with the S5 dates post (.s5-) or the captains
+  post (.s5c-) when several posts render on the same news page.
+  Theme tokens: page #0B0F1A · card #131A2B · card-2 #1B2438 · accent #22D3EE · highlight #F59E0B
+                text #E6EDF7 · muted #8B98B0 · display Barlow Condensed · body Inter
+-->
+<style>
+.s5m{font-family:var(--font-body), Inter, system-ui, sans-serif;color:#E6EDF7;box-sizing:border-box;}
+.s5m *{box-sizing:border-box;}
+/* :where() keeps these defaults below every .s5m-* rule */
+:where(.s5m) p{margin:0 0 16px;line-height:1.6;color:#C9D3E3;font-size:16px;}
+:where(.s5m) strong,:where(.s5m) b{color:#E6EDF7;font-weight:600;}
+:where(.s5m) a{color:#22D3EE;}
+.s5m-h{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.02em;font-size:28px;line-height:1.1;margin:34px 0 10px;color:#E6EDF7;}
+.s5m-card{background:#1B2438;border-radius:12px;padding:22px 24px;margin:18px 0;}
+.s5m-kicker{font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#22D3EE;margin:0 0 6px;}
+.s5m-title{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.01em;line-height:1;margin:0;color:#E6EDF7;}
+.s5m-btn{display:inline-block;background:#22D3EE;color:#0B0F1A !important;font-weight:600;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5m-btn:hover{background:#67E8F9;}
+.s5m-btn-ghost{display:inline-block;background:rgba(255,255,255,.05);color:#E6EDF7 !important;font-weight:500;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5m-btn-ghost:hover{background:rgba(255,255,255,.1);}
+
+/* HERO */
+.s5m-hero{position:relative;overflow:hidden;background:#1B2438;background-image:radial-gradient(circle at 8% 15%, rgba(34,211,238,.16), transparent 42%);border-radius:12px;padding:28px 26px;margin:0 0 20px;display:grid;grid-template-columns:1.35fr 1fr;gap:26px;align-items:center;}
+.s5m-hero:before{content:"S5";position:absolute;left:-10px;bottom:-40px;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:190px;line-height:1;color:rgba(255,255,255,.03);pointer-events:none;}
+.s5m-hero > div{position:relative;min-width:0;}
+.s5m-hero .s5m-title{font-size:48px;}
+.s5m-hero-sub{font-size:17px;color:#C9D3E3;margin:12px 0 20px;max-width:480px;line-height:1.5;}
+.s5m-hero-cta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;}
+.s5m-hero-lock{font-size:13px;color:#F59E0B;font-weight:600;}
+
+/* MINI BOARD (hero right) */
+.s5m-board{background:rgba(11,15,26,.55);border-radius:10px;padding:14px;}
+.s5m-board-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 10px;}
+.s5m-board-h b{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;color:#E6EDF7;}
+.s5m-board-h span{font-size:12px;color:#8B98B0;}
+.s5m-slot{display:flex;align-items:center;gap:12px;background:#131A2B;border-radius:7px;padding:8px 10px;margin:0 0 6px;}
+.s5m-slot:last-child{margin-bottom:0;}
+.s5m-slot .n{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:20px;color:#22D3EE;min-width:26px;line-height:1;}
+.s5m-slot .bar{flex:1;height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.09) 0 8px,transparent 8px 12px);}
+.s5m-slot .q{font-size:11px;font-weight:600;color:#8B98B0;}
+.s5m-slot.first{background:linear-gradient(135deg,rgba(34,211,238,.2),rgba(34,211,238,.06));box-shadow:inset 0 0 0 1px rgba(34,211,238,.4);}
+.s5m-slot.first .bar{background:none;height:auto;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:18px;font-weight:700;text-transform:uppercase;color:#E6EDF7;line-height:1;}
+
+/* HOW IT WORKS */
+.s5m-rule{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-top:1px solid rgba(255,255,255,.05);font-size:15px;color:#C9D3E3;}
+.s5m-rule.first{border-top:0;}
+.s5m-rule .n{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:24px;color:#22D3EE;min-width:26px;line-height:1.1;}
+
+/* WHY BOTHER */
+.s5m-why{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0;}
+.s5m-why > div{background:#1B2438;border-radius:12px;padding:18px;min-width:0;}
+.s5m-why .h{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:24px;font-weight:700;text-transform:uppercase;color:#E6EDF7;line-height:1.05;margin:0 0 8px;}
+.s5m-why .t{display:block;font-size:14px;color:#C9D3E3;line-height:1.55;}
+.s5m-why .big{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:40px;font-weight:700;color:#22D3EE;line-height:1;margin:0 0 6px;}
+.s5m-why > div.crown{background:#1B2438;background-image:linear-gradient(160deg,rgba(245,158,11,.14),transparent 60%);box-shadow:inset 0 0 0 1px rgba(245,158,11,.4);}
+.s5m-why > div.crown .big{color:#F59E0B;}
+
+/* LOCK BAR */
+.s5m-lock{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.35);border-radius:10px;padding:16px 18px;margin:20px 0;}
+.s5m-lock .s5m-title{font-size:24px;color:#F59E0B;}
+.s5m-lock .when{font-size:14px;color:#C9D3E3;}
+.s5m-lock .s5m-btn{margin-left:auto;}
+
+/* REGISTER */
+.s5m-reg{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;}
+.s5m-reg p{margin:0;font-size:15px;flex:1;min-width:220px;}
+
+@media (max-width:700px){
+  .s5m-hero{grid-template-columns:minmax(0,1fr);padding:24px 20px;}
+  .s5m-hero .s5m-title{font-size:40px;}
+  .s5m-why{grid-template-columns:minmax(0,1fr);}
+  .s5m-lock .s5m-btn{margin-left:0;}
+}
+</style>
+
+<div class="s5m">
+
+  <div class="s5m-hero">
+    <div>
+      <p class="s5m-kicker">CTF Draft League &middot; Season 5 Mock Draft</p>
+      <p class="s5m-title">Predict the<br>Season 5 Draft</p>
+      <p class="s5m-hero-sub">Think you know how Draft Night goes? Prove it. Put the Season 5 pool in the order <strong>you</strong> think they'll get picked, from first overall on down.</p>
+      <div class="s5m-hero-cta">
+        <a class="s5m-btn" href="https://www.freeinf.org/league/ctfdl/mock-draft">Build your board</a>
+        <span class="s5m-hero-lock">Boards lock Sat, Oct 3 &middot; 9:30 PM ET</span>
+      </div>
+    </div>
+    <div class="s5m-board" aria-hidden="true">
+      <div class="s5m-board-h"><b>Your board</b><span>First overall on down</span></div>
+      <div class="s5m-slot first"><span class="n">1</span><span class="bar">Who goes first?</span></div>
+      <div class="s5m-slot"><span class="n">2</span><span class="bar"></span><span class="q">?</span></div>
+      <div class="s5m-slot"><span class="n">3</span><span class="bar"></span><span class="q">?</span></div>
+      <div class="s5m-slot"><span class="n">4</span><span class="bar"></span><span class="q">?</span></div>
+      <div class="s5m-slot"><span class="n">5</span><span class="bar"></span><span class="q">?</span></div>
+    </div>
+  </div>
+
+  <p>The CTFDL Mock Draft is live on the site. Every board you and everyone else builds feeds a community projection of Draft Night, and after the real picks are in, every board gets scored.</p>
+
+  <h2 class="s5m-h">How It Works</h2>
+
+  <div class="s5m-card">
+    <p class="s5m-kicker">Building your board</p>
+    <div class="s5m-rule first"><span class="n">1</span><span><b>Tap players in the order you expect them to go.</b> It works on your phone too.</span></div>
+    <div class="s5m-rule"><span class="n">2</span><span><b>Place at least 90% of the pool, then save.</b> One board per account.</span></div>
+    <div class="s5m-rule"><span class="n">3</span><span><b>Change your mind?</b> Edit your board any time until the draft starts.</span></div>
+    <div class="s5m-rule"><span class="n">4</span><span><b>Keep your takes to yourself if you want.</b> You can post your board anonymously.</span></div>
+  </div>
+
+  <h2 class="s5m-h">Why Bother?</h2>
+
+  <div class="s5m-why">
+    <div>
+      <span class="big">ADP</span>
+      <span class="h">The public draft order</span>
+      <span class="t">Everyone's boards add up to the Public ADP, the community's projected draft order. It goes live once 5 boards are in.</span>
+    </div>
+    <div class="crown">
+      <span class="big">#1</span>
+      <span class="h">Closest board wins</span>
+      <span class="t">After Draft Night, every board gets scored against the real picks. The closest prediction takes the crown, and the bragging rights.</span>
+    </div>
+    <div>
+      <span class="big">vs.</span>
+      <span class="h">Read the captains</span>
+      <span class="t">Captains are drafting from the same pool. Let's see who reads them best.</span>
+    </div>
+  </div>
+
+  <div class="s5m-lock">
+    <span class="s5m-title">Boards lock at draft start</span>
+    <span class="when">Saturday, Oct 3 &middot; 9:30 PM ET</span>
+    <a class="s5m-btn" href="https://www.freeinf.org/league/ctfdl/mock-draft">Build your board</a>
+  </div>
+
+  <div class="s5m-card s5m-reg">
+    <p><b>Not registered yet?</b> Get in the pool first, then come back and mock yourself into the first round.</p>
+    <a class="s5m-btn-ghost" href="https://www.freeinf.org/league/register">Register for Season 5</a>
+  </div>
+
+</div>
