@@ -1,0 +1,192 @@
+<!--
+  CTFDL Season 5 captains announcement (written by Zmn, restyled to the freeinf.org CTF theme).
+  Paste this whole file into News management → Content → HTML (or "Load .html file").
+  Classes are prefixed .s5c- so they never collide with the S5 dates post (.s5-) on the news list.
+  Theme tokens: page #0B0F1A · card #131A2B · card-2 #1B2438 · accent #22D3EE · highlight #F59E0B
+                text #E6EDF7 · muted #8B98B0 · display Barlow Condensed · body Inter
+-->
+<style>
+.s5c{font-family:var(--font-body), Inter, system-ui, sans-serif;color:#E6EDF7;box-sizing:border-box;}
+.s5c *{box-sizing:border-box;}
+/* :where() keeps these defaults below every .s5c-* rule, so titles keep line-height 1 and margin 0 */
+:where(.s5c) p{margin:0 0 14px;line-height:1.6;color:#C9D3E3;}
+:where(.s5c) strong{color:#E6EDF7;font-weight:600;}
+:where(.s5c) a{color:#22D3EE;}
+.s5c-card{background:#1B2438;border-radius:12px;padding:22px 24px;margin:18px 0;}
+.s5c-kicker{font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#22D3EE;margin:0 0 6px;}
+.s5c-kicker.amber{color:#F59E0B;}
+.s5c-kicker.muted{color:#8B98B0;}
+.s5c-title{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;line-height:1;margin:0;color:#E6EDF7;}
+.s5c-h{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;font-size:28px;line-height:1.1;margin:34px 0 10px;color:#E6EDF7;}
+.s5c-btn{display:inline-block;background:#22D3EE;color:#0B0F1A !important;font-weight:600;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5c-btn:hover{background:#67E8F9;}
+.s5c-btn-ghost{display:inline-block;background:rgba(255,255,255,.05);color:#E6EDF7 !important;font-weight:500;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.s5c-btn-ghost:hover{background:rgba(255,255,255,.1);}
+.s5c-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:0 0 12px;}
+
+/* tiles: wrap on narrow screens instead of squeezing four across */
+.s5c-tiles{display:grid;gap:10px;margin:0 0 20px;}
+.s5c-tiles.four{grid-template-columns:repeat(4,minmax(0,1fr));}
+.s5c-tiles.three{grid-template-columns:repeat(3,minmax(0,1fr));}
+.s5c-tiles.two{grid-template-columns:repeat(2,minmax(0,1fr));}
+.s5c-tile{background:rgba(11,15,26,.55);border-radius:10px;padding:14px 14px;min-width:0;}
+.s5c-tile.cyan{box-shadow:inset 0 0 0 1px rgba(34,211,238,.25);}
+.s5c-tile.amber{box-shadow:inset 0 0 0 1px rgba(245,158,11,.4);}
+.s5c-tile-label{display:block;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#22D3EE;margin:0 0 4px;}
+.s5c-tile-label.amber{color:#F59E0B;}
+.s5c-tile-name{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:28px;font-weight:700;text-transform:uppercase;color:#E6EDF7;line-height:1;overflow-wrap:anywhere;}
+.s5c-tile-num{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:32px;font-weight:700;color:#E6EDF7;line-height:1;}
+.s5c-tile-num.cyan{color:#22D3EE;}
+.s5c-tile-sub{display:block;font-size:12px;color:#8B98B0;margin:2px 0 12px;}
+.s5c-tile-text{display:block;font-size:13px;color:#C9D3E3;line-height:1.4;}
+@media (max-width:640px){
+  .s5c-tiles.four{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .s5c-tiles.three,.s5c-tiles.two{grid-template-columns:minmax(0,1fr);}
+}
+
+/* hero */
+.s5c-hero{position:relative;overflow:hidden;background:#1B2438;background-image:radial-gradient(circle at 8% 15%, rgba(34,211,238,.16), transparent 42%);border-radius:12px;padding:28px 26px;margin:0 0 16px;}
+.s5c-hero .s5c-title{font-size:46px;}
+.s5c-hero-sub{font-size:17px;color:#C9D3E3;margin:12px 0 20px;max-width:620px;line-height:1.5;}
+.s5c-deadline{font-size:13px;color:#F59E0B;font-weight:600;}
+.s5c-small{font-size:13px;color:#8B98B0;margin:0;}
+
+/* draft night */
+.s5c-draft{background:#1B2438;border-left:4px solid #F59E0B;border-radius:12px;padding:22px 24px;margin:0 0 24px;}
+.s5c-draft .s5c-title{font-size:34px;margin:0 0 10px;}
+.s5c-times{display:flex;flex-wrap:wrap;gap:12px 28px;}
+.s5c-time-v{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:26px;font-weight:700;line-height:1.1;color:#E6EDF7;}
+.s5c-time-v.amber{color:#F59E0B;}
+
+/* threshold bar */
+.s5c-progress{margin:20px 0 0;}
+.s5c-progress-count{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:24px;font-weight:700;color:#22D3EE;}
+.s5c-bar{background:#0B0F1A;border-radius:999px;height:12px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
+.s5c-bar-fill{height:100%;background:linear-gradient(90deg,#22D3EE,#0EA5B7);border-radius:999px;}
+.s5c-ticks{position:relative;height:16px;font-size:11px;color:#8B98B0;margin-top:4px;}
+.s5c-ticks span{position:absolute;top:0;transform:translateX(-100%);}
+
+/* call-out */
+.s5c-callout{background:#1B2438;background-image:linear-gradient(135deg, rgba(34,211,238,.12), transparent 60%);box-shadow:inset 0 0 0 1px rgba(34,211,238,.35);border-radius:12px;padding:24px;margin:24px 0;}
+.s5c-callout .s5c-title{font-size:30px;line-height:1.05;margin:0 0 10px;}
+
+/* staff list + key/value rows */
+.s5c-rows{width:100%;border-collapse:collapse;font-size:14px;color:#C9D3E3;}
+.s5c-rows td{padding:9px 14px 9px 0;vertical-align:top;border-top:1px solid rgba(255,255,255,.05);}
+.s5c-rows tr:first-child td{border-top:0;}
+.s5c-rows td.k{width:44%;color:#8B98B0;}
+.s5c-rows td.v{color:#E6EDF7;font-weight:600;padding-right:0;}
+.s5c-rows td.key{width:1%;white-space:nowrap;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:19px;text-transform:uppercase;color:#22D3EE;padding-right:18px;}
+.s5c-rows td.num{width:34px;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;font-size:20px;color:#22D3EE;}
+.s5c-rows td.num.amber{color:#F59E0B;}
+.s5c-rows.big{font-size:15px;}
+@media (max-width:640px){ .s5c-rows td.k{width:48%;} .s5c-rows td.key{white-space:normal;} }
+</style>
+
+<div class="s5c">
+
+  <div class="s5c-hero">
+    <p class="s5c-kicker">CTF Draft League &middot; Season 5</p>
+    <p class="s5c-title">Your Season 5<br>Captains.</p>
+    <p class="s5c-hero-sub">You've been asking. Here they are. These four build Season 5 from scratch on Draft Night, Saturday, October 3.</p>
+    <div class="s5c-tiles four">
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Captain</span><span class="s5c-tile-name">Mountain</span></div>
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Captain</span><span class="s5c-tile-name">Mixm</span></div>
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Captain</span><span class="s5c-tile-name">ron</span></div>
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Captain</span><span class="s5c-tile-name">Thiz</span></div>
+    </div>
+    <div class="s5c-actions">
+      <a class="s5c-btn" href="https://www.freeinf.org/league/register">Register for Season 5</a>
+      <span class="s5c-deadline">Deadline: Friday, Oct 2 &middot; 11:59 PM PT</span>
+    </div>
+    <p class="s5c-small">Missed the season dates? <a href="https://www.freeinf.org/news/a00ffe3c-1f60-4dde-bcdb-86dc457a0d64">Full Season 5 schedule here.</a></p>
+  </div>
+
+  <div class="s5c-draft">
+    <p class="s5c-kicker amber">Draft Night &middot; Sat, Oct 3</p>
+    <p class="s5c-title">Something's Happening<br>Before the First Pick.</p>
+    <p style="max-width:640px;">Season 5 opens with something CTFDL has never done before. One-on-one. Only 32 get in. Full reveal tomorrow.</p>
+    <div class="s5c-times">
+      <div><span class="s5c-kicker muted" style="margin:0;">Draft Night Events</span><span class="s5c-time-v amber">8:00 PM ET</span></div>
+      <div><span class="s5c-kicker muted" style="margin:0;">The Draft</span><span class="s5c-time-v">9:30 PM ET</span></div>
+    </div>
+  </div>
+
+  <h2 class="s5c-h">Get to Know Them</h2>
+  <p>Between now and Draft Day we're doing a deep dive on each captain. Who they are, their history in Infantry, what they believe about CTF, what they want out of this season, and what they're looking for in the players they draft. If there's a captain you want to play for, pay attention.</p>
+
+  <h2 class="s5c-h">Two More <em>Worthy</em> Captains on <em>Deck</em></h2>
+  <p>Worth and Decker didn't wait to be asked. Both are ready to captain the moment registration gets us there. We just have to give them squads to lead.</p>
+
+  <div class="s5c-card">
+    <p class="s5c-kicker" style="margin-bottom:14px;">Registered Player Thresholds</p>
+    <div class="s5c-tiles three" style="margin:0;">
+      <div class="s5c-tile cyan"><span class="s5c-tile-num cyan">56</span><span class="s5c-tile-sub">Registered &middot; 4 Squads</span><span class="s5c-tile-label">4 Captains</span><span class="s5c-tile-text">Mountain, Mixm, ron, Thiz</span></div>
+      <div class="s5c-tile amber"><span class="s5c-tile-num">70</span><span class="s5c-tile-sub">Registered &middot; 5 Squads</span><span class="s5c-tile-label amber">5th Captain</span><span class="s5c-tile-name" style="font-size:30px;">Worth</span></div>
+      <div class="s5c-tile amber"><span class="s5c-tile-num">86</span><span class="s5c-tile-sub">Registered &middot; 6 Squads</span><span class="s5c-tile-label amber">6th Captain</span><span class="s5c-tile-name" style="font-size:30px;">Decker</span></div>
+    </div>
+    <div class="s5c-progress">
+      <p style="font-size:14px;margin:0 0 8px;"><span class="s5c-progress-count">47</span> <strong>registered so far.</strong> 9 more locks in four squads. 23 more puts Worth in the draft. 39 more brings Decker.</p>
+      <div class="s5c-bar"><div class="s5c-bar-fill" style="width:55%;"></div></div>
+      <div class="s5c-ticks"><span style="left:65%;">56</span><span style="left:81%;">70</span><span style="left:100%;">86</span></div>
+    </div>
+  </div>
+
+  <div class="s5c-callout">
+    <p class="s5c-title">That Part Is On All of Us.</p>
+    <p>More squads means more roster spots, more matchups, and more of the league. See who's already registered in the CTF Discord, then tag the people who haven't. <strong>Nudge them. Nag them. Whatever it takes.</strong></p>
+    <div class="s5c-actions" style="margin:0;"><a class="s5c-btn" href="https://discord.com/channels/374782525647749131/1329268222343774292">See Who's Registered</a></div>
+  </div>
+
+  <h2 class="s5c-h">Welcome to the S5 Staff</h2>
+  <p>We promised more staff and leadership announcements. Here they are. Please welcome everyone below, and give Designer and WolveN a hard time about their new titles.</p>
+
+  <div class="s5c-card">
+    <div class="s5c-tiles two">
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Head Referee</span><span class="s5c-tile-name" style="font-size:32px;">Designer</span></div>
+      <div class="s5c-tile cyan"><span class="s5c-tile-label">Assistant Head Referee</span><span class="s5c-tile-name" style="font-size:32px;">WolveN</span></div>
+    </div>
+    <table class="s5c-rows" cellpadding="0" cellspacing="0">
+      <tr><td class="k">League &amp; In-Game Dev</td><td class="v">Axidus</td></tr>
+      <tr><td class="k">Website &amp; Operations Dev, #1 Assistant to the Administrator</td><td class="v">Soup</td></tr>
+      <tr><td class="k">CTF Discord Manager</td><td class="v">Revenge</td></tr>
+      <tr><td class="k">Special Advisor to the Administrator</td><td class="v">Beso</td></tr>
+      <tr><td class="k">Strategic Advisor to the Administrator</td><td class="v">albert</td></tr>
+      <tr><td class="k">Administrator, Ex Officio</td><td class="v">Emperor</td></tr>
+      <tr><td class="k">Match Reporters</td><td class="v">Abbath, Salov</td></tr>
+      <tr><td class="k">Commentators</td><td class="v">Herthbul, yosh, Mecca</td></tr>
+      <tr><td class="k">New Referees</td><td class="v">CTF[Ref] Trooper, CTF[Ref] Salov, CTF[Ref] posty, CTF[Ref] vin</td></tr>
+      <tr><td class="k">Referee Emeritus</td><td class="v">spark</td></tr>
+    </table>
+  </div>
+
+  <h2 class="s5c-h">Coming Before Draft Day</h2>
+  <div class="s5c-card">
+    <table class="s5c-rows big" cellpadding="0" cellspacing="0">
+      <tr><td class="key">Draft Order</td><td>Set by random draw. Coming soon.</td></tr>
+      <tr><td class="key">Team Names</td><td>Revealed in the lead-up to Draft Day.</td></tr>
+      <tr><td class="key">Captain Profiles</td><td>One per captain, before the first pick.</td></tr>
+    </table>
+  </div>
+
+  <div class="s5c-tiles two" style="margin-top:28px;">
+    <div class="s5c-card" style="margin:0;"><p class="s5c-kicker">USL Players</p><p style="font-size:14px;margin:0;">You're on a rare break, and the invitation still stands. Played CTF before or never touched it, there's a draft slot with your name on it, and staff and vets will help anyone new get up to speed.</p></div>
+    <div class="s5c-card" style="margin:0;"><p class="s5c-kicker">Still Recruiting</p><p style="font-size:14px;margin:0;">We still need people for audio and video recording, post-production, and match reports. If you can do it and you'll follow through, message Zmn.</p></div>
+  </div>
+
+  <div class="s5c-callout" style="margin-top:32px;">
+    <p class="s5c-kicker">Do This Now</p>
+    <table class="s5c-rows big" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+      <tr><td class="num">1</td><td><strong>Register for CTFDL</strong> with your in-game alias. Deadline is Friday, October 2, 11:59 PM PT.</td></tr>
+      <tr><td class="num amber">2</td><td><strong>Block off Saturday, October 3.</strong> Draft Night events start at 8 PM ET. The draft starts at 9:30 PM ET.</td></tr>
+      <tr><td class="num">3</td><td><strong>Tag a friend</strong> who hasn't registered yet. Let's get Worth and Decker their squads.</td></tr>
+    </table>
+    <div class="s5c-actions">
+      <a class="s5c-btn" href="https://www.freeinf.org/league/register">Register Now</a>
+      <a class="s5c-btn-ghost" href="https://discord.com/channels/374782525647749131/1329268222343774292">Who's Registered</a>
+      <a class="s5c-btn-ghost" href="https://www.freeinf.org/news/a00ffe3c-1f60-4dde-bcdb-86dc457a0d64">Season 5 Schedule</a>
+    </div>
+    <p class="s5c-small">See you on Draft Night. &mdash; Zmn</p>
+  </div>
+
+</div>
