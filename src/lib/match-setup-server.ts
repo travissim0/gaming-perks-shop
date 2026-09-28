@@ -211,8 +211,18 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
     side_released: released,
     /** Substitutions made so far (visible to whoever may see that squad's lineup). */
     subs: subsOut,
-    /** Latest change to the desired placement; the zone re-reads when this moves. */
-    updated_at: [setupRow?.updated_at, ...lineupRows.map((l: any) => l.updated_at), ...subs.map((s) => s.created_at)].filter(Boolean).sort().pop() || null,
+    /**
+     * Latest change to the desired placement; the zone re-reads when this moves. The side release
+     * counts as a change: before it the zone may not place anyone, and a zone that skips unchanged
+     * matches would otherwise never notice the release (found in the first live test, 2026-09-27).
+     */
+    updated_at: (() => {
+      const stamps = [setupRow?.updated_at, ...lineupRows.map((l: any) => l.updated_at), ...subs.map((s) => s.created_at), released ? sideRevealAt(match) : null]
+        .filter(Boolean)
+        .map((t) => new Date(t as string).getTime())
+        .filter((n) => Number.isFinite(n));
+      return stamps.length ? new Date(Math.max(...stamps)).toISOString() : null;
+    })(),
     client: full
       ? { ready, teams: side && home && away ? [homeNames.starting, homeNames.bench, awayNames.starting, awayNames.bench] : [], players }
       : null,
