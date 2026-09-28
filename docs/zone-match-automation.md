@@ -98,7 +98,7 @@ spec quiet, placement, subs and both game reports all worked once these were sor
 | a player enters the arena | Place them per the desired state at once (or on the next poll). Not in the list → spec. |
 | the game starts | `POST /api/matches/<id>/game` `{ "game_id": "<the zone's game id>", "status": "in_progress" }` with the key. Marks the match live. |
 | the game ends | `POST /api/matches/<id>/game` `{ "game_id": "…", "status": "played" }`. The site links the game's stats to the match and **records the result itself**: the winning team from the stat rows, the win type (regulation / OT / 2OT) from the game length under the season's rules, standings rebuilt. The reply's `result.recorded` says whether it worked; if the stat rows haven't landed yet (`reason: "no stat rows for this game yet"`), call again a minute later. Staff can remove a wrong result in the match manager and re-enter it. |
-| the match leaves the queue (completed/cancelled) | Unlock, stop reconciling. Empty named arenas close themselves when the last player leaves. |
+| the match leaves the queue (completed/cancelled/deleted) | Unlock, stop reconciling, and **close the arena yourself if it's empty** (`arena.close()`). The server only closes an arena when a player *leaves* it empty, so an arena nobody ever entered stays in the list until a restart (seen after the first test: the 19-char "CTFDL: TSTB vs TSTA" sat at 0 players). If players are still inside, it closes when the last one leaves. |
 
 An arena closes when its last player leaves (Arena `TotalPlayerCount == 0`), so
 if a ref opens it early and leaves, just re-open it on the next poll.
