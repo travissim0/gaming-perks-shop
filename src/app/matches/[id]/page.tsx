@@ -426,7 +426,8 @@ export default function MatchDetailPage() {
               </span>
             </div>
             <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">
-              {hasTeams ? `${a?.name || match.squad_a_name || 'TBD'} vs ${b?.name || match.squad_b_name || 'TBD'}` : match.title}
+              {/* Away first, home second, like the rulebook's arena names and every other CTF page. */}
+              {hasTeams ? `${b?.name || match.squad_b_name || 'TBD'} vs ${a?.name || match.squad_a_name || 'TBD'}` : match.title}
             </h1>
             <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
               <span className="text-[#E6EDF7]">{when.day}</span>
