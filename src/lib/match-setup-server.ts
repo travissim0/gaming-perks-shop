@@ -207,7 +207,17 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
 
   const subsOut = subs
     .filter((s) => full || (s.squad_id === home?.id && seeHome) || (s.squad_id === away?.id && seeAway))
-    .map((s) => ({ ...s, out_alias: aliasOf.get(s.out_player_id) || 'Unknown', in_alias: aliasOf.get(s.in_player_id) || 'Unknown' }));
+    .map((s) => {
+      const out_alias = aliasOf.get(s.out_player_id) || 'Unknown';
+      const in_alias = aliasOf.get(s.in_player_id) || 'Unknown';
+      const sq = squads[s.squad_id];
+      const squad_tag = sq ? tagOf(sq) : null;
+      const team = s.squad_id === home?.id ? homeNames.starting : s.squad_id === away?.id ? awayNames.starting : null;
+      // Ready-made arena line so the zone can announce each new sub (keyed by id) instead of a
+      // generic "lineup updated": "[TSTA] Sub: anjro out, Soup in".
+      const message = `${squad_tag ? `[${squad_tag}] ` : ''}Sub: ${out_alias} out, ${in_alias} in`;
+      return { ...s, out_alias, in_alias, squad_tag, team, message };
+    });
 
   return {
     match: {

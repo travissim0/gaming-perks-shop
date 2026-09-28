@@ -107,8 +107,20 @@ if a ref opens it early and leaves, just re-open it on the next poll.
 
 Captains, co-captains, league staff and referees can sub on the match page from
 side release until the result is recorded. A sub swaps one starter with one
-bench (or roster) player; the site logs who did it. The zone needs no special
+bench (or roster) player; the site logs who did it. Placement needs no special
 handling beyond reconciling the desired state.
+
+**Announce subs by name.** Each entry in the queue's `subs` array carries `id`, `squad_tag`,
+`team` (that squad's playing team, e.g. `TSTA T`), `out_alias`, `in_alias`, `by_alias`,
+`created_at` and a ready-made `message`:
+
+```jsonc
+{ "id": "…", "squad_tag": "TSTA", "team": "TSTA T", "out_alias": "anjro", "in_alias": "Soup",
+  "by_alias": "Soup", "created_at": "…", "message": "[TSTA] Sub: anjro out, Soup in" }
+```
+
+Keep the ids you've already announced per match; for each new one, send `message` to the
+arena instead of a generic "Lineup updated from freeinf.org (1 player moved)".
 
 ## Server calls used
 
