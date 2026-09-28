@@ -68,6 +68,26 @@ not listed are not part of the match.
   home starters on that letter and away starters on the other. Read
   `team_starting` / `team_bench` per squad rather than deriving it.
 
+## First live test (2026-09-27) — what we learned
+
+Soup, Kev and anjro ran a test match ("CTFDL TSTB-TSTA"). Queue polling, arena open, lock,
+spec quiet, placement, subs and both game reports all worked once these were sorted:
+
+1. **Arena names ≤ 15 chars** (site fixed; see Naming). The old 19-char name made every click
+   join a second, cut-off arena.
+2. **Place players through the normal team-join path.** Players moved onto teams by the zone
+   were on the team but the game script didn't count them ("Not enough players"); the game only
+   started after someone unlocked, re-specced and rejoined by hand. Use whatever the script
+   hooks (the same path as a player picking a team), not a raw team assignment. *(zone)*
+3. **Report `played` only for a game with a winner.** A no-winner game is aborted and will be
+   replayed; the zone already does this. After a `played` report the site now ignores further
+   `in_progress` reports for that match, so the arena auto-starting its next game can't take it
+   over. *(site fixed)*
+4. **Tag league-match games as league, not `Pub`.** Every test game landed in `player_stats`
+   with `game_mode: "Pub"`, so a real match would count toward pub stats and pub ELO. Give
+   games in a match arena their league mode (e.g. `"CTFDL"`). *(zone)*
+5. `updated_at` now also moves at the side release (see Reconcile). *(site fixed)*
+
 ## What to do, by time
 
 | When | Do |

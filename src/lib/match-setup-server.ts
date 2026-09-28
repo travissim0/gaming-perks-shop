@@ -72,7 +72,7 @@ export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow |
 export async function loadMatch(id: string) {
   const { data, error } = await supabaseAdmin
     .from('matches')
-    .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id')
+    .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time')
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);
