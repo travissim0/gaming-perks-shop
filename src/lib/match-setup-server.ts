@@ -43,12 +43,30 @@ export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase(
 export const missingTable = (msg: string | undefined) => /match_setup|match_lineups|match_lineup_subs|does not exist/i.test(String(msg || ''));
 
 /**
- * The in-game arena the zone opens for a match. The CTFDL rulebook fixes the format:
- * "CTFDL: <Away> vs <Home>" (e.g. "CTFDL: CBC vs 7P"), away first, colon after the league.
+ * The in-game arena the zone opens for a match: "<LEAGUE> <AWAY>-<HOME>", away first
+ * (e.g. "CTFDL TSTB-TSTA").
+ *
+ * Hard limit: 15 characters. The client's arena-join packet carries the name in a 16-byte field
+ * (CS_ArenaJoin.ReadString(16) in the server source), so a longer name is cut off on join and the
+ * server opens a SECOND arena under the cut name. Found in the first live test, 2026-09-27, when
+ * the rulebook's "CTFDL: TSTB vs TSTA" (19) put everyone into "CTFDL: TSTB vs" while the zone's
+ * arena sat empty. Tags are trimmed (longer one first) until the name fits.
  */
+export const ARENA_NAME_MAX = 15;
 export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow | null) => {
-  const league = String(match.league_slug || 'ctf').toUpperCase();
-  return `${league}: ${away ? tagOf(away) : 'TBD'} vs ${home ? tagOf(home) : 'TBD'}`;
+  const league = String(match.league_slug || 'ctf').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let a = away ? tagOf(away) : 'TBD';
+  let h = home ? tagOf(home) : 'TBD';
+  const clean = (t: string) => t.replace(/\s+/g, '');
+  a = clean(a); h = clean(h);
+  const room = ARENA_NAME_MAX - league.length - 2; // space + hyphen
+  if (room < 2) return `${a}-${h}`.slice(0, ARENA_NAME_MAX); // absurdly long league slug: drop it
+  while (a.length + h.length > room) {
+    if (a.length >= h.length && a.length > 1) a = a.slice(0, -1);
+    else if (h.length > 1) h = h.slice(0, -1);
+    else break;
+  }
+  return `${league} ${a}-${h}`;
 };
 
 export async function loadMatch(id: string) {

@@ -506,7 +506,7 @@ export default function MatchDetailPage() {
       {hasTeams && (
         <section className="rounded-xl bg-[#131A2B] px-5 py-5">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-            {/* Away on the left, home on the right: the order the rulebook names arenas ("CTFDL: AWAY vs HOME"). */}
+            {/* Away on the left, home on the right: the order arenas are named ("CTFDL AWAY-HOME"). */}
             {[{ s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'right', home: false }, { s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'left', home: true }].map((t, i) => (
               <div key={i} className={`min-w-0 flex items-center gap-3 ${t.align === 'right' ? 'flex-row-reverse text-right' : ''} ${i === 1 ? 'order-3' : ''}`}>
                 <TeamMark tag={t.s?.tag || t.tag} name={t.s?.name || t.name} size="lg" />

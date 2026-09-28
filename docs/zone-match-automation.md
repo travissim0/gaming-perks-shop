@@ -23,7 +23,7 @@ Response:
   "matches": [
     {
       "id": "…",                              // match id, used by the report call below
-      "arena": "CTFDL: NSS vs KEVI",          // open exactly this arena name; AWAY first, per the rulebook
+      "arena": "CTFDL NSS-KEVI",              // open exactly this arena name; AWAY first; always <= 15 chars
       "title": "Week 1 · NSS vs KEVI", "league_slug": "ctfdl", "season_number": 5, "week": 1, "stage": "regular",
       "status": "scheduled",                  // scheduled | in_progress
       "scheduled_at": "2026-10-05T00:00:00Z",
@@ -56,9 +56,12 @@ not listed are not part of the match.
 
 ## Naming
 
-- Arena: `"<LEAGUE>: <AWAY TAG> vs <HOME TAG>"`, e.g. `CTFDL: NSS vs KEVI` (the CTFDL
-  rulebook's format: away first, colon after the league). Home is `matches.squad_a`;
-  tags are the squad's tag, upper-cased, first 8 chars. Use the `home` / `away`
+- Arena: `"<LEAGUE> <AWAY TAG>-<HOME TAG>"`, e.g. `CTFDL NSS-KEVI`, away first. **Never more
+  than 15 characters**: the client's arena-join packet holds the name in a 16-byte field
+  (`CS_ArenaJoin` reads `ReadString(16)`), so a longer name is cut off when a player clicks it
+  and the server opens a second arena under the cut name (first live test, 2026-09-27:
+  "CTFDL: TSTB vs TSTA" put everyone into "CTFDL: TSTB vs"). The site trims tags to fit, so
+  just open the `arena` value as given. Home is `matches.squad_a`. Use the `home` / `away`
   fields rather than parsing the name.
 - Teams: `<TAG> T` and `<TAG> C` for each squad (the zone already builds these
   from the squads). The home captain picks Titan or Collective; the site puts
