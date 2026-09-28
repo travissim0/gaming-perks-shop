@@ -591,7 +591,8 @@ export default function MatchesPage() {
                 {showPast && (
                   <ul className="divide-y divide-white/[0.06]">
                     {past.map((m) => {
-                      const hasScore = m.squad_a_score != null && m.squad_b_score != null;
+                      // Scores default to 0–0 on new fixtures; only a completed match's score counts.
+                      const hasScore = m.status === 'completed' && m.squad_a_score != null && m.squad_b_score != null;
                       return (
                         <li key={m.id} className="px-4 py-2.5 flex items-center gap-3">
                           <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums">{dayLabel(m.scheduled_at)}</div>

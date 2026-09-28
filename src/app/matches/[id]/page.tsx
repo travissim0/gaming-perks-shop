@@ -346,8 +346,14 @@ export default function MatchDetailPage() {
   const a = match?.squad_a_id ? squads[match.squad_a_id] : null;
   const b = match?.squad_b_id ? squads[match.squad_b_id] : null;
   const hasTeams = !!(match && (match.squad_a_id || match.squad_b_id));
-  const hasScore = match?.squad_a_score != null && match?.squad_b_score != null;
-  const played = !!match && (match.status === 'completed' || !!match.game_id || hasScore);
+  // Score columns default to 0–0 when a fixture is created, so a score alone never means "played"
+  // (every new fixture used to show as Played with its setup card hidden). The zone attaches the
+  // game id at kick-off, so that doesn't mean played either while the match is live: subs must stay
+  // open. Played = completed, or the zone reported the game over, or an old game linked by hand.
+  const completed = match?.status === 'completed';
+  const gameOver = !!(match as any)?.actual_end_time;
+  const hasScore = completed && match?.squad_a_score != null && match?.squad_b_score != null;
+  const played = !!match && (completed || gameOver || (!!match.game_id && match.status !== 'scheduled' && match.status !== 'in_progress'));
   const notPlayed = match?.status === 'expired' || match?.status === 'cancelled';
   const live = match?.status === 'in_progress';
   const aWon = !!match && (match.winner_squad_id ? match.winner_squad_id === match.squad_a_id : hasScore && match.squad_a_score! > match.squad_b_score!);
