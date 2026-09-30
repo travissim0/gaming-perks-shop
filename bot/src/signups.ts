@@ -249,32 +249,45 @@ export async function onSignupMessage(message: Message): Promise<void> {
     if (!season || closed(season)) return;
     const pool = await registrants(season);
     const now = Date.now();
-    const lines: string[] = [];
-    const pings: string[] = [];
+    const lines: { text: string; ping: string | null }[] = [];
 
     for (const user of mentioned) {
       const member = message.guild.members.cache.get(user.id) ?? (await message.guild.members.fetch(user.id).catch(() => null));
       if (!member) continue;
       if (isRegistered(member, pool)) {
         const { text } = pick(ALREADY_LINES, -1);
-        lines.push(fill(text, vars(season, pool.length, { player: `**${member.displayName}**` })));
+        lines.push({ text: fill(text, vars(season, pool.length, { player: `**${member.displayName}**` })), ping: null });
         continue;
       }
       const last = state.nudged[user.id] ? new Date(state.nudged[user.id]).getTime() : 0;
       if (now - last < NUDGE_COOLDOWN_MS) continue;
       const { text, idx } = pick(NUDGE_LINES, state.lastNudgeTemplate);
       state.lastNudgeTemplate = idx;
-      lines.push(fill(text, vars(season, pool.length, { player: `<@${user.id}>` })));
-      pings.push(user.id);
-      state.nudged[user.id] = new Date(now).toISOString();
+      lines.push({ text: fill(text, vars(season, pool.length, { player: `<@${user.id}>` })), ping: user.id });
     }
     if (!lines.length) return;
-    saveState(state);
-    console.log(`signups nudge in #${(message.channel as any).name} by ${message.author.tag}: ${lines.join(' | ')}`);
+    console.log(`signups nudge in #${(message.channel as any).name} by ${message.author.tag}: ${lines.map((l) => l.text).join(' | ')}`);
     if (config.dryRun) return;
-    const payload = { content: lines.join('\n'), allowedMentions: { users: pings, repliedUser: false } };
-    // Reply-quote needs Read Message History; fall back to a plain post if that's missing.
-    await message.reply(payload).catch(() => (message.channel as any).send(payload)).catch((e: any) => console.warn('nudge failed:', e.message));
+
+    // One tag-everyone message can produce more than Discord's 2000 characters: split into several posts.
+    const chunks: (typeof lines)[] = [[]];
+    let size = 0;
+    for (const line of lines) {
+      if (size + line.text.length + 1 > 1900 && chunks[chunks.length - 1].length) { chunks.push([]); size = 0; }
+      chunks[chunks.length - 1].push(line);
+      size += line.text.length + 1;
+    }
+    for (let i = 0; i < chunks.length; i++) {
+      const pings = chunks[i].map((l) => l.ping).filter((x): x is string => !!x);
+      const payload = { content: chunks[i].map((l) => l.text).join('\n'), allowedMentions: { users: pings, repliedUser: false } };
+      // First post quotes the tagging message; reply-quote needs Read Message History, so fall back to a plain post.
+      const sent = await (i === 0 ? message.reply(payload).catch(() => (message.channel as any).send(payload)) : (message.channel as any).send(payload))
+        .then(() => true)
+        .catch((e: any) => { console.warn('nudge failed:', e.message); return false; });
+      // Only people who actually got nudged start their 24h cooldown.
+      if (sent) for (const id of pings) state.nudged[id] = new Date(now).toISOString();
+    }
+    saveState(state);
   } catch (e: any) {
     console.error('signup nudge failed:', e?.message || e);
   }
