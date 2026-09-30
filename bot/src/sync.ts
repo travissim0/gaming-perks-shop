@@ -2,7 +2,7 @@ import type { Guild } from 'discord.js';
 import { createHash } from 'crypto';
 import { config } from './config.js';
 import { deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
-import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, syncRoleMembers, teardownTeam } from './discord.js';
+import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, syncRoleMembers, teardownTeam, vouchedLeads } from './discord.js';
 
 let lastUnlinkedHash = '';
 let running = false;
@@ -35,7 +35,11 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
     const notInServer: string[] = [];
 
     for (const team of teams) {
-      const mapping = await ensureTeam(guild, team, byId.get(team.squadId) ?? null, async (m) => {
+      const existing = byId.get(team.squadId) ?? null;
+      const heldRole = existing ? guild.roles.cache.get(existing.role_id) : undefined;
+      const vouched = heldRole ? vouchedLeads(heldRole, linked).filter((id) => !team.leadDiscordIds.includes(id)) : [];
+      const withLeads = vouched.length ? { ...team, leadDiscordIds: [...team.leadDiscordIds, ...vouched] } : team;
+      const mapping = await ensureTeam(guild, withLeads, existing, async (m) => {
         if (!config.dryRun) await saveMapping(guild.id, ctx.season.id, m);
       });
       const role = guild.roles.cache.get(mapping.role_id);

@@ -59,6 +59,8 @@ CTF management → Season settings has **Discord bot** controls: last sync, a **
 
 With `DISCORD_CAPTAIN_ROLE_ID` and `DISCORD_COCAPTAIN_ROLE_ID` set, every sync gives the season's linked captains the first role and linked co-captains the second, following `squads.captain_id` and `squad_members.role`. A linked account that is no longer captain/co-captain on the site loses the role; unlinked members added by hand keep it. Season teardown removes both roles from everyone. The bot's own role must sit above these two. Give the roles access to the captains channel in Discord yourself — the bot only manages membership.
 
+**Captains who won't link:** give them CTF Captain (or Co-Captain) *and* their squad's role by hand. For members with no freeinf.org link, that pair counts as captaincy of that squad: they can use `/squad add|remove` for it, and the next sync (a few seconds after the role change) gives them the captain extras in the squad's channels. Linked accounts always follow the site instead.
+
 ## Captains: `/squad add` and `/squad remove`
 
 Players who won't link Discord on freeinf.org never get their squad role from the sync. A squad's captain or co-captains (linked, so the bot knows who they are) can hand it out themselves: `/squad add user:@player` gives the role, `/squad remove user:@player` takes it back. The bot makes the change, so captains never need Manage Roles. Staff (Manage Roles or the staff role) can act for any squad with `squad:<name or tag>`; a captain who runs more than one squad names it the same way.

@@ -8,7 +8,7 @@ import {
   SlashCommandBuilder,
 } from 'discord.js';
 import { config } from './config.js';
-import { getMappings, getProfileByDiscordId, getSeasonContext, getSeasonTeams, type TeamRoster } from './db.js';
+import { getMappings, getProfileByDiscordId, getSeasonContext, getSeasonTeams, type ChannelMapping, type TeamRoster } from './db.js';
 import { postStaff } from './discord.js';
 
 /**
@@ -20,6 +20,10 @@ import { postStaff } from './discord.js';
  * from the roster, and would undo a manual change within minutes, so the command
  * refuses and points at freeinf.org instead. Staff (Manage Roles or the staff
  * role) can act for any squad by naming it.
+ *
+ * Captains who refuse to link can still use it: staff give them CTF Captain or
+ * CTF Co-Captain plus their squad's role, and that pair counts as captaincy of
+ * that squad (for unlinked members only — linked ones follow the site).
  */
 
 export function squadCommand() {
@@ -50,9 +54,15 @@ function matchSquad(teams: TeamRoster[], text: string): TeamRoster | null {
     ?? null;
 }
 
+function holdsLeadRole(member: GuildMember): boolean {
+  return [config.captainRoleId, config.coCaptainRoleId].some((id) => !!id && member.roles.cache.has(id));
+}
+
 /** Which squad the invoker may act for, or a reason they can't. */
-function pickTeam(teams: TeamRoster[], member: GuildMember, squadArg: string | null): { team: TeamRoster } | { error: string } {
-  const mine = teams.filter((t) => t.leadDiscordIds.includes(member.id));
+function pickTeam(teams: TeamRoster[], mappings: ChannelMapping[], member: GuildMember, selfLinked: boolean, squadArg: string | null): { team: TeamRoster } | { error: string } {
+  const roleOf = new Map(mappings.map((m) => [m.squad_id, m.role_id]));
+  const vouched = !selfLinked && holdsLeadRole(member);
+  const mine = teams.filter((t) => t.leadDiscordIds.includes(member.id) || (vouched && !!roleOf.get(t.squadId) && member.roles.cache.has(roleOf.get(t.squadId)!)));
   const staff = isStaff(member);
   if (squadArg) {
     const pool = staff ? teams : mine;
@@ -63,7 +73,7 @@ function pickTeam(teams: TeamRoster[], member: GuildMember, squadArg: string | n
   if (mine.length === 1) return { team: mine[0] };
   if (mine.length > 1) return { error: `You run more than one squad — add \`squad:\` with the name (${mine.map((t) => t.name).join(', ')}).` };
   if (staff) return { error: 'Add `squad:` with the squad name or tag.' };
-  return { error: 'Only a squad’s captain or co-captains can do this. Captains: make sure you’ve linked Discord on freeinf.org so I know who you are.' };
+  return { error: 'Only a squad’s captain or co-captains can do this. Captains: link Discord on freeinf.org so I know who you are, or ask staff for the CTF Captain / Co-Captain role alongside your squad role.' };
 }
 
 async function run(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -79,11 +89,13 @@ async function run(interaction: ChatInputCommandInteraction): Promise<void> {
   const ctx = await getSeasonContext();
   if (!ctx) { await interaction.editReply('No season is running right now.'); return; }
   const teams = await getSeasonTeams(ctx);
-  const picked = pickTeam(teams, interaction.member, interaction.options.getString('squad'));
+  const mappings = await getMappings(guild.id, ctx.season.id);
+  const selfLinked = !!(await getProfileByDiscordId(interaction.member.id));
+  const picked = pickTeam(teams, mappings, interaction.member, selfLinked, interaction.options.getString('squad'));
   if ('error' in picked) { await interaction.editReply(picked.error); return; }
   const { team } = picked;
 
-  const mapping = (await getMappings(guild.id, ctx.season.id)).find((m) => m.squad_id === team.squadId);
+  const mapping = mappings.find((m) => m.squad_id === team.squadId);
   const role: Role | null = mapping ? guild.roles.cache.get(mapping.role_id) ?? (await guild.roles.fetch(mapping.role_id).catch(() => null)) : null;
   if (!role) { await interaction.editReply(`**${team.name}** doesn’t have its Discord role yet — try again after the next sync.`); return; }
 

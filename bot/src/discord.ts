@@ -266,6 +266,20 @@ export async function syncLeadRoles(guild: Guild, teams: TeamRoster[], linked: S
   return lines;
 }
 
+/**
+ * Captains staff vouched for by hand: members who never linked Discord on
+ * freeinf.org but hold the CTF Captain or CTF Co-Captain role together with
+ * this squad's role. Treated like the squad's linked captains (category
+ * extras, /squad). Linked accounts are left to the site's roster.
+ */
+export function vouchedLeads(squadRole: Role, linked: Set<string>): string[] {
+  const leadRoles = [config.captainRoleId, config.coCaptainRoleId].filter((x): x is string => !!x);
+  if (!leadRoles.length) return [];
+  return [...squadRole.members.values()]
+    .filter((m) => !m.user.bot && !linked.has(m.id) && leadRoles.some((id) => m.roles.cache.has(id)))
+    .map((m) => m.id);
+}
+
 /** Season over: nobody is a captain or co-captain any more. */
 export async function clearLeadRoles(guild: Guild): Promise<number> {
   let n = 0;

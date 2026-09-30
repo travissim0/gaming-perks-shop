@@ -83,6 +83,11 @@ client.on('interactionCreate', (i) => {
   return onInteraction(i);
 });
 client.on('messageCreate', onSignupMessage);
+// Staff handing out (or taking back) CTF Captain / Co-Captain changes who gets the category extras.
+client.on('guildMemberUpdate', (before, after) => {
+  const ids = [config.captainRoleId, config.coCaptainRoleId].filter((x): x is string => !!x);
+  if (ids.some((id) => before.roles.cache.has(id) !== after.roles.cache.has(id))) scheduleSync('captain role change', 5000);
+});
 client.on('error', (e) => console.error('discord client error:', e));
 process.on('unhandledRejection', (e) => console.error('unhandled rejection:', e));
 process.on('SIGTERM', () => { client.destroy(); process.exit(0); });
