@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
 import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, playByIso, type TeamRef } from '@/lib/schedule';
+import { leagueDate } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
 
 type Tab = 'add' | 'season' | 'playoffs';
@@ -516,7 +517,8 @@ export default function ScheduleStaffTools({
 export function FixtureEditor({ fixture, teams, onDone }: { fixture: Fixture; teams: TeamRef[]; onDone: () => void }) {
   const local = new Date(fixture.scheduled_at);
   const pad = (n: number) => String(n).padStart(2, '0');
-  const [date, setDate] = useState(`${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`);
+  // A TBD fixture's play-by day is a league-calendar date, not the viewer's.
+  const [date, setDate] = useState(fixture.time_tbd ? leagueDate(local) : `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`);
   // A TBD fixture's stored time is only its play-by placeholder; offer the usual slot instead.
   const [time, setTime] = useState(fixture.time_tbd ? '20:00' : `${pad(local.getHours())}:${pad(local.getMinutes())}`);
   const [tbd, setTbd] = useState(!!fixture.time_tbd);

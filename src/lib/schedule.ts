@@ -3,6 +3,8 @@
  * playoffs. Pure functions — the page turns the output into fixtures.
  */
 
+import { LEAGUE_TZ } from '@/lib/scoring';
+
 export interface TeamRef {
   id: string;
   name: string;
@@ -122,7 +124,21 @@ export function localDateTimeToIso(date: string, time: string): string {
  * (lineup lock, side release, the zone's arena) may run off it.
  */
 export const TBD_LABEL = 'Time TBD';
-export const playByIso = (date: string) => localDateTimeToIso(date, '23:59');
-/** "by Sun, Oct 11" for a TBD fixture's play-by day. */
+/**
+ * End of the play-by day in LEAGUE time (23:59 Eastern), whatever zone staff are in. The Mon–Sun
+ * week a match counts toward is worked out in league time, so 23:59 Pacific on a Sunday would
+ * already be Monday there and land the fixture in the following week.
+ */
+export function playByIso(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  // 23:59 Eastern is 03:59 UTC (EDT) or 04:59 UTC (EST) the next day; keep whichever reads 23:xx there.
+  for (const h of [3, 4]) {
+    const t = new Date(Date.UTC(y, m - 1, d + 1, h, 59));
+    const hour = new Intl.DateTimeFormat('en-US', { timeZone: LEAGUE_TZ, hour: '2-digit', hourCycle: 'h23' }).format(t);
+    if (Number(hour) === 23) return t.toISOString();
+  }
+  return new Date(Date.UTC(y, m - 1, d + 1, 4, 59)).toISOString();
+}
+/** "by Sun, Oct 11" for a TBD fixture's play-by day: a league-calendar date, the same for every viewer. */
 export const playByLabel = (iso: string) =>
-  `by ${new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`;
+  `by ${new Date(iso).toLocaleDateString(undefined, { timeZone: LEAGUE_TZ, weekday: 'short', month: 'short', day: 'numeric' })}`;
