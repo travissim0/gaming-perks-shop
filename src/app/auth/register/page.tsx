@@ -53,8 +53,8 @@ export default function Register() {
     }
     if (!inGameAlias || inGameAlias.trim().length === 0) {
       errors.inGameAlias = 'Username is required';
-    } else if (inGameAlias.trim().length < 2) {
-      errors.inGameAlias = 'Must be at least 2 characters';
+    } else if (inGameAlias.trim().length < 1) {
+      errors.inGameAlias = 'Must be at least 1 character';
     } else if (inGameAlias.trim().length > 30) {
       errors.inGameAlias = 'Must be less than 30 characters';
     } else if (!/^[a-zA-Z0-9_-]+$/.test(inGameAlias.trim())) {

@@ -81,8 +81,8 @@ function CompleteRegistrationContent() {
         return;
       }
 
-      if (alias.trim().length < 2) {
-        setError('In-game alias must be at least 2 characters long');
+      if (alias.trim().length < 1) {
+        setError('In-game alias must be at least 1 character long');
         setLoading(false);
         return;
       }

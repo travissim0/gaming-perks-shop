@@ -28,10 +28,10 @@ export async function POST(req: NextRequest) {
 
     // Validate alias format and length
     const trimmedAlias = alias.trim();
-    if (trimmedAlias.length < 2) {
+    if (trimmedAlias.length < 1) {
       console.error('❌ Alias too short');
       return NextResponse.json(
-        { error: 'In-game alias must be at least 2 characters' },
+        { error: 'In-game alias must be at least 1 character' },
         { status: 400 }
       );
     }
