@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { weekStart, weekEnd } from '@/lib/scoring';
 import { loadSeasonRules } from '@/lib/standings-server';
 import { fsCapCheck, fsCountsFor } from '@/lib/fs-server';
+import { announceMatchTime } from '@/lib/notices-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
       }
       const { error } = await supabaseAdmin.from('matches').update({ fs_status: 'accepted' }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await announceMatchTime(id); // both captains agreed: an FS match needs a ref (or a recording) to count
       return NextResponse.json({ ok: true });
     }
     const { error } = await supabaseAdmin.from('matches').update({ fs_status: 'declined', status: 'cancelled' }).eq('id', id);

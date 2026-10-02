@@ -55,6 +55,34 @@ export async function matchSummary(matchId: string): Promise<MatchSummary | null
   };
 }
 
+/**
+ * Tell #ctf-referee that a league match has a confirmed time (or that its time moved), with who
+ * is reffing it or that it still needs someone. One referee is enough; more are extras.
+ * The bot sends a separate reminder on the day if nobody has signed up (bot/src/refReminders.ts).
+ * Skipped for TBD and past matches.
+ */
+export async function announceMatchTime(matchId: string, moved = false): Promise<void> {
+  try {
+    const m = await matchSummary(matchId);
+    if (!m || !m.scheduled_at || new Date(m.scheduled_at).getTime() <= Date.now()) return;
+    const { data: refs } = await supabaseAdmin
+      .from('match_participants')
+      .select('profiles!match_participants_player_id_fkey(in_game_alias)')
+      .eq('match_id', matchId)
+      .eq('role', 'referee');
+    const refAliases = ((refs || []) as any[]).map((r) => r.profiles?.in_game_alias).filter(Boolean);
+    await queueNotice({
+      user_id: null,
+      channel: 'referee',
+      kind: moved ? 'match_time_moved' : 'match_time_set',
+      payload: { ...m, ref_aliases: refAliases },
+      text: '',
+    });
+  } catch (e) {
+    console.error('announceMatchTime threw', e);
+  }
+}
+
 export interface Notice {
   /** Who to DM. Omit for a channel-only post. */
   user_id?: string | null;

@@ -6,6 +6,7 @@ import { onInteraction, rolePickerCommand } from './rolepicker.js';
 import { onSquadInteraction, squadCommand } from './squad.js';
 import { checkSignups, onSignupMessage, onSignupsInteraction, signupsCommand, startSignupWatch } from './signups.js';
 import { deliverNotices } from './notices.js';
+import { queueRefReminders } from './refReminders.js';
 
 /**
  * FreeInf CTF bot.
@@ -19,6 +20,8 @@ import { deliverNotices } from './notices.js';
  * - /squad add|remove (captains): squad role for players who won't link Discord.
  * - Sign-up hype in #ctf-signup: shout-out per new registration, nudges for
  *   @mentioned players who haven't registered, /signups kickoff|status (staff).
+ * - #ctf-referee: crew changes and match-time posts queued by the site, plus a
+ *   day-of reminder for any league match that still has no referee.
  */
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages] });
@@ -64,6 +67,8 @@ client.once('ready', async () => {
   setInterval(runCommands, 20_000); // belt and braces if Realtime drops
   await deliverNotices(client, guild);
   setInterval(() => deliverNotices(client, guild!), 30_000);
+  await queueRefReminders();
+  setInterval(queueRefReminders, 10 * 60_000); // day-of "needs a referee" posts
   startSignupWatch(guild);
 
   db.channel('freeinf-bot')

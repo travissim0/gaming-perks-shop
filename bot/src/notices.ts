@@ -39,6 +39,13 @@ function channelLine(n: BotNotice, discordId: string | null): string {
   const when = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:f>` : p.scheduled_et || '';
   if (n.kind === 'crew_added') return `${who} ${p.self ? 'signed up' : `was assigned by ${p.by_alias}`} as ${p.role_label} · ${season} · ${teams} · ${when} · <${p.url}>`;
   if (n.kind === 'crew_removed') return `${who} ${p.self ? 'stepped down' : `was removed by ${p.by_alias}`} as ${p.role_label} · ${season} · ${teams} · ${when}`;
+  // Match time confirmed / moved, and the day-of reminder. One referee is enough; more are extras.
+  const whenLong = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:R>)` : when;
+  const refs: string[] = Array.isArray(p.ref_aliases) ? p.ref_aliases : [];
+  const refLine = refs.length ? `Referee: ${refs.join(', ')}.` : `**Needs a referee.** Sign up on the match page: <${p.url}>`;
+  if (n.kind === 'match_time_set') return `**Match time set** · ${season} · ${teams}\n${whenLong}\n${refLine}`;
+  if (n.kind === 'match_time_moved') return `**Match time moved** · ${season} · ${teams}\nNow ${whenLong}\n${refLine}`;
+  if (n.kind === 'ref_reminder') return `**Referee needed today** · ${season} · ${teams}\n${whenLong}\nNobody has signed up to ref this one yet. Sign up on the match page: <${p.url}>`;
   return `${p.title || n.kind} · ${teams} · ${when}`;
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { announceMatchTime } from '@/lib/notices-server';
 
 /**
  * League schedule (fixtures).
@@ -248,6 +249,9 @@ export async function POST(request: NextRequest) {
     if (/time_tbd/.test(error.message)) return NextResponse.json({ error: 'Run add-match-time-tbd.sql in Supabase to use “Time TBD”.' }, { status: 400 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  // One match added with a real time: let the referees know. A generated season stays quiet
+  // (a dozen posts at once); the day-of reminder covers those.
+  if (rows.length === 1 && items[0].time_tbd !== true && data?.[0]?.id) await announceMatchTime(data[0].id);
   return NextResponse.json({ ok: true, ids: (data || []).map((r: any) => r.id), count: rows.length });
 }
 
@@ -258,11 +262,12 @@ export async function PATCH(request: NextRequest) {
   const id = body?.id;
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-  const { data: current } = await supabaseAdmin
-    .from('matches')
-    .select('id, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, scheduled_at')
-    .eq('id', id)
-    .maybeSingle();
+  const curCols = 'id, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, scheduled_at, status';
+  const cur = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
+  // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+  let curRes = await cur(`${curCols}, time_tbd`);
+  if (curRes.error && /time_tbd/.test(curRes.error.message)) curRes = await cur(curCols);
+  const current = curRes.data as any;
   if (!current || !current.league_slug) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
@@ -299,6 +304,13 @@ export async function PATCH(request: NextRequest) {
     if (/time_tbd/.test(error.message)) return NextResponse.json({ error: 'Run add-match-time-tbd.sql in Supabase to use “Time TBD”.' }, { status: 400 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // A time was just confirmed (TBD → set) or an existing time moved: tell the referees.
+  const wasTbd = current.time_tbd === true;
+  const nowTbd = 'time_tbd' in patch ? patch.time_tbd === true : wasTbd;
+  const timeChanged = 'scheduled_at' in patch && new Date(patch.scheduled_at as string).getTime() !== new Date(current.scheduled_at).getTime();
+  if (!nowTbd && current.status === 'scheduled' && (wasTbd || timeChanged)) await announceMatchTime(id, !wasTbd);
+
   return NextResponse.json({ ok: true });
 }
 
