@@ -12,6 +12,7 @@ import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
+import { canFillCrewRole } from '@/lib/crewRoles';
 
 /*
  * Match detail — where the schedule and the match log land. Crew sign-ups,
@@ -222,12 +223,7 @@ export default function MatchDetailPage() {
   // ── Permissions ─────────────────────────────────────────────────────
   const isStaff = isAdmin || (ctfRole || '').toLowerCase() === 'ctf_admin';
   const canManage = !!user && !!match && (match.created_by === user.id || isStaff);
-  const canJoinRole = (role: Role) => {
-    const r = (ctfRole || '').toLowerCase();
-    if (role === 'commentator') return r === 'commentator' || r === 'ctf_admin';
-    if (role === 'referee') return r === 'head referee' || r === 'referee' || r === 'ctf_admin';
-    return true;
-  };
+  const canJoinRole = (role: Role) => canFillCrewRole(role, ctfRole, isAdmin);
 
   // ── Actions ─────────────────────────────────────────────────────────
   // Sign-ups go through the server so the person gets a Discord confirmation.

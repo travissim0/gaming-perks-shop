@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { matchSummary, queueNotice } from '@/lib/notices-server';
+import { canFillCrewRole } from '@/lib/crewRoles';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +27,7 @@ const ROLES: Role[] = ['player', 'commentator', 'recording', 'referee'];
 const ROLE_LABEL: Record<Role, string> = { player: 'player', commentator: 'commentator', recording: 'recorder', referee: 'referee' };
 
 /** Which CTF staff roles may fill each crew slot (players and recorders are open). */
-const eligible = (role: Role, ctfRole: string | null | undefined) => {
-  const r = (ctfRole || '').toLowerCase();
-  if (role === 'referee') return r === 'ctf_admin' || r.includes('referee');
-  if (role === 'commentator') return r === 'ctf_admin' || r.includes('commentator');
-  return true;
-};
+const eligible = (role: Role, ctfRole: string | null | undefined, isAdmin = false) => canFillCrewRole(role, ctfRole, isAdmin);
 
 async function viewer(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');
@@ -39,7 +35,7 @@ async function viewer(request: NextRequest) {
   const { data: { user }, error } = await supabase.auth.getUser(authHeader.slice(7));
   if (error || !user) return null;
   const { data: p } = await supabaseAdmin.from('profiles').select('in_game_alias, is_admin, ctf_role').eq('id', user.id).maybeSingle();
-  return { id: user.id, alias: (p as any)?.in_game_alias || 'Staff', ctfRole: (p as any)?.ctf_role as string | null, staff: !!p && (p.is_admin === true || p.ctf_role === 'ctf_admin') };
+  return { id: user.id, alias: (p as any)?.in_game_alias || 'Staff', ctfRole: (p as any)?.ctf_role as string | null, isAdmin: (p as any)?.is_admin === true, staff: !!p && (p.is_admin === true || p.ctf_role === 'ctf_admin') };
 }
 
 export async function GET(request: NextRequest) {
@@ -51,13 +47,13 @@ export async function GET(request: NextRequest) {
   if (q.length < 2) return NextResponse.json({ players: [] });
   const { data } = await supabaseAdmin
     .from('profiles')
-    .select('id, in_game_alias, ctf_role')
+    .select('id, in_game_alias, ctf_role, is_admin')
     .ilike('in_game_alias', `%${q}%`)
     .not('in_game_alias', 'is', null)
     .order('in_game_alias')
     .limit(20);
   const players = (data || [])
-    .filter((p: any) => eligible(role, p.ctf_role))
+    .filter((p: any) => eligible(role, p.ctf_role, p.is_admin === true))
     .slice(0, 8)
     .map((p: any) => ({ id: p.id, in_game_alias: p.in_game_alias, ctf_role: p.ctf_role }));
   return NextResponse.json({ players });
@@ -97,23 +93,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Who is being changed, and by whom.
-  let target: { id: string; alias: string; ctfRole: string | null };
+  let target: { id: string; alias: string; ctfRole: string | null; isAdmin?: boolean };
   if (action === 'join' || action === 'leave') {
-    target = { id: v.id, alias: v.alias, ctfRole: v.ctfRole };
+    target = { id: v.id, alias: v.alias, ctfRole: v.ctfRole, isAdmin: v.isAdmin };
     if (action === 'join' && !['scheduled', 'in_progress'].includes(match.status)) return NextResponse.json({ error: 'Sign-ups are closed for this match' }, { status: 409 });
   } else if (action === 'add' || action === 'remove') {
     if (!v.staff) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
     const playerId = body?.player_id;
     if (!playerId) return NextResponse.json({ error: 'player_id is required' }, { status: 400 });
-    const { data: p } = await supabaseAdmin.from('profiles').select('id, in_game_alias, ctf_role').eq('id', playerId).maybeSingle();
+    const { data: p } = await supabaseAdmin.from('profiles').select('id, in_game_alias, ctf_role, is_admin').eq('id', playerId).maybeSingle();
     if (!p) return NextResponse.json({ error: 'Unknown player' }, { status: 404 });
-    target = { id: p.id, alias: p.in_game_alias || 'Player', ctfRole: p.ctf_role };
+    target = { id: p.id, alias: p.in_game_alias || 'Player', ctfRole: p.ctf_role, isAdmin: p.is_admin === true };
   } else {
     return NextResponse.json({ error: 'action must be join, leave, add or remove' }, { status: 400 });
   }
 
   if (action === 'join' || action === 'add') {
-    if (!eligible(role, target.ctfRole)) {
+    if (!eligible(role, target.ctfRole, target.isAdmin)) {
       return NextResponse.json({ error: action === 'join' ? `${ROLE_LABEL[role]} role required` : `${target.alias} doesn't hold the ${ROLE_LABEL[role]} role` }, { status: 403 });
     }
     const { data: dup } = await supabaseAdmin.from('match_participants').select('id').eq('match_id', matchId).eq('player_id', target.id).eq('role', role).maybeSingle();

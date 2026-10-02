@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
 import { localDateTimeToIso, playByLabel, TBD_LABEL } from '@/lib/schedule';
+import { canFillCrewRole } from '@/lib/crewRoles';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { getClassColor } from '@/utils/classColors';
 
@@ -123,6 +124,7 @@ export default function MatchesPage() {
   const [userSquad, setUserSquad] = useState<UserSquad | null>(null);
   const [squads, setSquads] = useState<SquadRef[]>([]);
   const [ctfRole, setCtfRole] = useState<string | null>(null);
+  const [isSiteAdmin, setIsSiteAdmin] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   // Create form
@@ -137,12 +139,7 @@ export default function MatchesPage() {
   const [time, setTime] = useState('21:00');
 
   const isStaff = (ctfRole || '').toLowerCase() === 'ctf_admin';
-  const canJoinRole = (role: Role) => {
-    const r = (ctfRole || '').toLowerCase();
-    if (role === 'commentator') return r === 'commentator' || r === 'ctf_admin';
-    if (role === 'referee') return r === 'head referee' || r === 'referee' || r === 'ctf_admin';
-    return true;
-  };
+  const canJoinRole = (role: Role) => canFillCrewRole(role, ctfRole, isSiteAdmin);
 
   const fetchList = async (status: string, limit: number, stats = false) => {
     const r = await fetch(`/api/matches?status=${status}&limit=${limit}${stats ? '&includeStats=true' : ''}`, { cache: 'no-store' });
@@ -188,29 +185,41 @@ export default function MatchesPage() {
   }, []);
 
   useEffect(() => {
-    if (!user) { setUserSquad(null); setCtfRole(null); return; }
+    if (!user) { setUserSquad(null); setCtfRole(null); setIsSiteAdmin(false); return; }
     (async () => {
       const [{ data: sm }, { data: p }, { data: sq }] = await Promise.all([
         supabase.from('squad_members').select('role, squads!inner(id, name, tag, is_active, is_legacy)').eq('player_id', user.id).eq('status', 'active'),
-        supabase.from('profiles').select('ctf_role').eq('id', user.id).maybeSingle(),
+        supabase.from('profiles').select('ctf_role, is_admin').eq('id', user.id).maybeSingle(),
         supabase.from('squads').select('id, name, tag').eq('is_active', true).order('name'),
       ]);
       const mine = (sm || []).map((r: any) => r.squads).find((s: any) => s && s.is_active && !s.is_legacy);
       const row = (sm || []).find((r: any) => r.squads?.id === mine?.id);
       setUserSquad(mine ? { id: mine.id, name: mine.name, tag: mine.tag ?? null, role: row?.role || 'member' } : null);
       setCtfRole((p as any)?.ctf_role || null);
+      setIsSiteAdmin((p as any)?.is_admin === true);
       setSquads(((sq || []) as any[]).map((s) => ({ id: s.id, name: s.name, tag: s.tag ?? null })));
     })();
   }, [user]);
 
   // ── Actions ─────────────────────────────────────────────────────────
+  // Sign-ups go through the server, like the match page: the same role rule applies, the write
+  // isn't subject to the browser's row policies, and a referee sign-up posts in #ctf-referee.
+  const crewSelf = async (matchId: string, action: 'join' | 'leave', role: Role) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/crew`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ action, role }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Request failed');
+  };
   const join = async (matchId: string, role: Role) => {
     if (!user) { toast.error('Sign in to join a match'); return; }
     if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator role required' : 'Referee role required'); return; }
     setBusy(`${matchId}:${role}`);
     try {
-      const { error } = await supabase.from('match_participants').insert({ match_id: matchId, player_id: user.id, role });
-      if (error) throw error;
+      await crewSelf(matchId, 'join', role);
       await load();
     } catch (e: any) {
       toast.error(e.message || 'Could not join');
@@ -218,11 +227,10 @@ export default function MatchesPage() {
       setBusy(null);
     }
   };
-  const leave = async (participantId: string) => {
+  const leave = async (matchId: string, participantId: string, role: Role) => {
     setBusy(participantId);
     try {
-      const { error } = await supabase.from('match_participants').delete().eq('id', participantId);
-      if (error) throw error;
+      await crewSelf(matchId, 'leave', role);
       await load();
     } catch (e: any) {
       toast.error(e.message || 'Could not leave');
@@ -479,7 +487,7 @@ export default function MatchesPage() {
                                   </div>
                                   {user && m.status === 'scheduled' && (
                                     me ? (
-                                      <button type="button" onClick={() => leave(me.id)} disabled={busy === me.id} className="mt-1 text-[11px] text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Leave</button>
+                                      <button type="button" onClick={() => leave(m.id, me.id, r.key)} disabled={busy === me.id} className="mt-1 text-[11px] text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Leave</button>
                                     ) : (
                                       <button
                                         type="button"
