@@ -13,6 +13,8 @@ import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
 import { canFillCrewRole } from '@/lib/crewRoles';
+import { localDateTimeToIso, playByIso } from '@/lib/schedule';
+import { leagueDate } from '@/lib/scoring';
 
 /*
  * Match detail — where the schedule and the match log land. Crew sign-ups,
@@ -128,7 +130,11 @@ export default function MatchDetailPage() {
   const [mounted, setMounted] = useState(false);
 
   // Manage panel
-  const [panel, setPanel] = useState<'none' | 'link' | 'video' | 'result'>('none');
+  const [panel, setPanel] = useState<'none' | 'link' | 'video' | 'result' | 'time'>('none');
+  // Staff "Set time" on a league fixture (same PATCH the schedule page's fixture editor uses).
+  const [timeDate, setTimeDate] = useState('');
+  const [timeTime, setTimeTime] = useState('20:00');
+  const [timeTbd, setTimeTbd] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [gameIdInput, setGameIdInput] = useState('');
   const [vodUrl, setVodUrl] = useState('');
@@ -252,6 +258,32 @@ export default function MatchDetailPage() {
       await crewSelf('leave', p.role);
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not leave'); } finally { setBusy(null); }
+  };
+  const openTime = () => {
+    if (!match) return;
+    const d = new Date(match.scheduled_at);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // A TBD fixture only stores its play-by day (a league-calendar date); offer the usual slot.
+    setTimeDate(match.time_tbd ? leagueDate(d) : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    setTimeTime(match.time_tbd ? '20:00' : `${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    setTimeTbd(false);
+    setPanel('time');
+  };
+  const saveTime = async () => {
+    if (!match || !timeDate || (!timeTbd && !timeTime)) return;
+    setBusy('time');
+    try {
+      const r = await fetch('/api/league/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ id: match.id, scheduled_at: timeTbd ? playByIso(timeDate) : localDateTimeToIso(timeDate, timeTime), time_tbd: timeTbd }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not set the time');
+      toast.success(timeTbd ? 'Time set back to TBD' : 'Match time set');
+      setPanel('none');
+      await load();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   };
   const put = async (body: Record<string, unknown>) => {
     if (!user || !match) return;
@@ -449,6 +481,9 @@ export default function MatchDetailPage() {
           </div>
           {canManage && (
             <div className="flex flex-wrap gap-2 lg:justify-end">
+              {isStaff && match.league_slug && !played && !notPlayed && !live && (
+                <button type="button" onClick={() => (panel === 'time' ? setPanel('none') : openTime())} className={btnQuiet}>{match.time_tbd ? 'Set time' : 'Change time'}</button>
+              )}
               <button type="button" onClick={() => setPanel(panel === 'result' ? 'none' : 'result')} className={btnQuiet} disabled={!hasTeams}>Set result</button>
               <button type="button" onClick={() => (panel === 'link' ? setPanel('none') : openLink())} className={btnQuiet}>{match.game_id ? 'Change game' : 'Link game'}</button>
               <button type="button" onClick={() => setPanel(panel === 'video' ? 'none' : 'video')} className={btnQuiet}>{match.vod_url ? 'Edit video' : 'Add video'}</button>
@@ -459,6 +494,30 @@ export default function MatchDetailPage() {
       </section>
 
       {/* Manage panels */}
+      {isStaff && panel === 'time' && (
+        <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className={labelCls}>{timeTbd ? 'Play by' : 'Date'}</label>
+              <input type="date" value={timeDate} onChange={(e) => setTimeDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+            </div>
+            <div>
+              <label className={labelCls}>Time (your zone{when.tz ? `, ${when.tz}` : ''})</label>
+              {timeTbd ? (
+                <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+              ) : (
+                <input type="time" value={timeTime} onChange={(e) => setTimeTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+              )}
+            </div>
+            <label className="inline-flex items-center gap-1.5 text-xs text-[#E6EDF7] cursor-pointer select-none pb-2.5" title="The captains haven’t agreed a time yet. Lineups stay open and no arena opens until a time is set.">
+              <input type="checkbox" checked={timeTbd} onChange={(e) => setTimeTbd(e.target.checked)} className="accent-[#22D3EE]" />
+              Time TBD
+            </label>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveTime} disabled={busy === 'time' || !timeDate || (!timeTbd && !timeTime)} className={btnPrimary}>{busy === 'time' ? 'Saving…' : 'Save'}</button></div>
+          </div>
+          <p className="text-[11px] text-[#8B98B0] mt-2">Enter the time in your own zone; everyone sees it in theirs. Saving posts the time in the referee channel.</p>
+        </section>
+      )}
       {canManage && panel === 'result' && hasTeams && (
         <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
@@ -572,7 +631,8 @@ export default function MatchDetailPage() {
 
       {/* Side + lineups (both teams set, not yet played) */}
       {match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
-        <MatchSetup matchId={match.id} user={user} />
+        // Re-mount when the time changes so the lock and side-release wording follow it.
+        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
