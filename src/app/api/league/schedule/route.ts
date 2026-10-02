@@ -11,8 +11,9 @@ import { supabase } from '@/lib/supabase';
  *        ctfpl_matches) by game_id, else by the two squads on the same day.
  *
  * Staff only (is_admin or ctf_role = 'ctf_admin'):
- * POST   { league, season, week, squad_a_id, squad_b_id, scheduled_at }
- * PATCH  { id, week?, squad_a_id?, squad_b_id?, scheduled_at? }
+ * POST   { league, season, week, squad_a_id, squad_b_id, scheduled_at, time_tbd? }
+ * PATCH  { id, week?, squad_a_id?, squad_b_id?, scheduled_at?, time_tbd? }
+ *        time_tbd: the captains haven't agreed a time; scheduled_at is then the end of the play-by day.
  * DELETE ?id=<match id>   (only while still scheduled)
  *
  * Fixtures are ordinary `matches` rows (match_type 'tournament'), so the match
@@ -34,6 +35,8 @@ export interface Fixture {
   proposed_by: string | null;
   fs_week_start: string | null;
   scheduled_at: string;
+  /** Captains haven't agreed a time yet: scheduled_at is only the end of the play-by day (see lib/schedule). */
+  time_tbd: boolean;
   status: string;
   title: string;
   squad_a_id: string | null;
@@ -86,8 +89,9 @@ export async function GET(request: NextRequest) {
       match_participants(role, profiles!match_participants_player_id_fkey(in_game_alias))`;
   const query = (cols: string) =>
     supabaseAdmin.from('matches').select(cols).eq('league_slug', league).eq('season_number', season).order('scheduled_at', { ascending: true });
-  // FS columns arrive with add-season-scoring.sql; fall back without them.
-  let { data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start`);
+  // FS columns arrive with add-season-scoring.sql, time_tbd with add-match-time-tbd.sql; fall back without them.
+  let { data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start, time_tbd`);
+  if (error && /time_tbd/.test(error.message)) ({ data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start`));
   if (error && /fs_status|proposed_by|fs_week_start/.test(error.message)) ({ data: rows, error } = await query(base));
   if (error) {
     // Columns missing until add-league-schedule.sql runs → empty schedule, not a crash.
@@ -126,7 +130,8 @@ export async function GET(request: NextRequest) {
       results.find((r) => {
         if (used.has(r.id) || !m.squad_a_id || !m.squad_b_id) return false;
         const pair = new Set([r.team_a_squad_id, r.team_b_squad_id]);
-        return pair.has(m.squad_a_id) && pair.has(m.squad_b_id) && sameDay(r.match_date, m.scheduled_at);
+        // A TBD fixture has no real day to match on; its result links by game id or by hand.
+        return !m.time_tbd && pair.has(m.squad_a_id) && pair.has(m.squad_b_id) && sameDay(r.match_date, m.scheduled_at);
       });
     if (!hit) return null;
     used.add(hit.id);
@@ -154,6 +159,7 @@ export async function GET(request: NextRequest) {
     proposed_by: m.proposed_by ?? null,
     fs_week_start: m.fs_week_start ?? null,
     scheduled_at: m.scheduled_at,
+    time_tbd: m.time_tbd === true,
     status: m.status,
     title: m.title,
     squad_a_id: m.squad_a_id,
@@ -201,9 +207,11 @@ export async function POST(request: NextRequest) {
     if (!Number.isInteger(f.week) || f.week < 1 || f.week > 52) return NextResponse.json({ error: 'Week must be 1–52' }, { status: 400 });
     if (!f.squad_a_id || !f.squad_b_id) return NextResponse.json({ error: 'Pick both teams' }, { status: 400 });
     if (f.squad_a_id === f.squad_b_id) return NextResponse.json({ error: 'A team can’t play itself' }, { status: 400 });
-    if (!validIso(f.scheduled_at)) return NextResponse.json({ error: 'Pick a date and time' }, { status: 400 });
+    if (!validIso(f.scheduled_at)) return NextResponse.json({ error: f.time_tbd ? 'Pick a play-by date' : 'Pick a date and time' }, { status: 400 });
     if (f.stage && f.stage !== 'regular' && f.stage !== 'playoff') return NextResponse.json({ error: 'Bad stage' }, { status: 400 });
+    if ('time_tbd' in f && typeof f.time_tbd !== 'boolean') return NextResponse.json({ error: 'time_tbd must be true or false' }, { status: 400 });
   }
+  const anyTbd = items.some((f) => f.time_tbd === true);
 
   const ids = Array.from(new Set(items.flatMap((f) => [f.squad_a_id, f.squad_b_id])));
   const names = await squadNames(ids);
@@ -229,12 +237,15 @@ export async function POST(request: NextRequest) {
       week: f.week,
       stage,
       playoff_round: stage === 'playoff' ? (Number.isInteger(f.playoff_round) ? f.playoff_round : 1) : null,
+      // Only sent when used, so plain fixtures still save before add-match-time-tbd.sql has run.
+      ...(anyTbd ? { time_tbd: f.time_tbd === true } : {}),
     };
   });
 
   const { data, error } = await supabaseAdmin.from('matches').insert(rows).select('id');
   if (error) {
     console.error('schedule POST failed', error);
+    if (/time_tbd/.test(error.message)) return NextResponse.json({ error: 'Run add-match-time-tbd.sql in Supabase to use “Time TBD”.' }, { status: 400 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ ok: true, ids: (data || []).map((r: any) => r.id), count: rows.length });
@@ -263,6 +274,10 @@ export async function PATCH(request: NextRequest) {
     if (!validIso(body.scheduled_at)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     patch.scheduled_at = body.scheduled_at;
   }
+  if ('time_tbd' in body) {
+    if (typeof body.time_tbd !== 'boolean') return NextResponse.json({ error: 'time_tbd must be true or false' }, { status: 400 });
+    patch.time_tbd = body.time_tbd;
+  }
   const aId = body.squad_a_id ?? current.squad_a_id;
   const bId = body.squad_b_id ?? current.squad_b_id;
   if ('squad_a_id' in body || 'squad_b_id' in body) {
@@ -281,6 +296,7 @@ export async function PATCH(request: NextRequest) {
   const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);
   if (error) {
     console.error('schedule PATCH failed', error);
+    if (/time_tbd/.test(error.message)) return NextResponse.json({ error: 'Run add-match-time-tbd.sql in Supabase to use “Time TBD”.' }, { status: 400 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ ok: true });

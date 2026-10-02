@@ -23,20 +23,23 @@ export interface MatchSummary {
   stage_label: string;          // "Week 3" | "Playoffs" | "Free scheduled"
   squad_a: string | null;
   squad_b: string | null;
-  scheduled_at: string;
-  scheduled_et: string;         // "Sun, Oct 4 · 8:00 PM ET"
+  /** null while the match's time is TBD: the bot then shows scheduled_et instead of a Discord timestamp. */
+  scheduled_at: string | null;
+  scheduled_et: string;         // "Sun, Oct 4 · 8:00 PM ET", or "Time TBD"
 }
 
 const fmtEt = (iso: string) =>
   `${new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' })} · ${new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`;
 
 export async function matchSummary(matchId: string): Promise<MatchSummary | null> {
-  const { data: m } = await supabaseAdmin
-    .from('matches')
-    .select('id, title, scheduled_at, league_slug, season_number, week, stage, squad_a:squads!matches_squad_a_id_fkey(name, tag), squad_b:squads!matches_squad_b_id_fkey(name, tag)')
-    .eq('id', matchId)
-    .maybeSingle();
+  const cols = 'id, title, scheduled_at, league_slug, season_number, week, stage, squad_a:squads!matches_squad_a_id_fkey(name, tag), squad_b:squads!matches_squad_b_id_fkey(name, tag)';
+  const one = (c: string) => supabaseAdmin.from('matches').select(c).eq('id', matchId).maybeSingle();
+  // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+  let { data, error } = await one(`${cols}, time_tbd`);
+  if (error && /time_tbd/.test(error.message)) ({ data } = await one(cols));
+  const m = data as any;
   if (!m) return null;
+  const tbd = m.time_tbd === true;
   const a: any = m.squad_a, b: any = m.squad_b;
   const name = (s: any) => (s ? (s.tag ? `[${s.tag}] ${s.name}` : s.name) : null);
   return {
@@ -47,8 +50,8 @@ export async function matchSummary(matchId: string): Promise<MatchSummary | null
     stage_label: m.stage === 'playoff' ? 'Playoffs' : m.stage === 'fs' ? 'Free scheduled' : m.week ? `Week ${m.week}` : (m.title || 'Match'),
     squad_a: name(a),
     squad_b: name(b),
-    scheduled_at: m.scheduled_at,
-    scheduled_et: fmtEt(m.scheduled_at),
+    scheduled_at: tbd ? null : m.scheduled_at,
+    scheduled_et: tbd ? 'Time TBD' : fmtEt(m.scheduled_at),
   };
 }
 

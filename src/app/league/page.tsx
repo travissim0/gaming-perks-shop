@@ -117,6 +117,7 @@ interface UpcomingMatch {
   id: string;
   title: string;
   scheduled_at: string;
+  time_tbd?: boolean;
   squad_a_name?: string;
   squad_b_name?: string;
   match_type: string;
@@ -518,18 +519,23 @@ export default function LeagueHome() {
     };
     const fetchUpcoming = async () => {
       try {
-        const { data, error } = await supabase
+        const cols = 'id, title, scheduled_at, status, match_type, squad_a:squads!matches_squad_a_id_fkey(name), squad_b:squads!matches_squad_b_id_fkey(name)';
+        const run = (c: string) => supabase
           .from('matches')
-          .select('id, title, scheduled_at, status, match_type, squad_a:squads!matches_squad_a_id_fkey(name), squad_b:squads!matches_squad_b_id_fkey(name)')
+          .select(c)
           .gte('scheduled_at', new Date().toISOString())
           .eq('status', 'scheduled')
           .order('scheduled_at', { ascending: true })
           .limit(6);
+        // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+        let { data, error } = await run(`${cols}, time_tbd`);
+        if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(cols));
         if (!error && data) {
           setUpcoming((data as any[]).map((m) => ({
             id: m.id,
             title: m.title,
             scheduled_at: m.scheduled_at,
+            time_tbd: m.time_tbd === true,
             match_type: m.match_type,
             squad_a_name: m.squad_a?.name,
             squad_b_name: m.squad_b?.name,
@@ -907,7 +913,7 @@ export default function LeagueHome() {
                                   </>
                                 ) : m.title}
                               </div>
-                              <div className="text-[11px] text-[#8B98B0]">{whenLabel(m.scheduled_at)}</div>
+                              <div className="text-[11px] text-[#8B98B0]">{m.time_tbd ? 'Time TBD' : whenLabel(m.scheduled_at)}</div>
                             </Link>
                           </li>
                         ))}

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
-import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, type TeamRef } from '@/lib/schedule';
+import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, playByIso, type TeamRef } from '@/lib/schedule';
 import type { Fixture } from '@/app/api/league/schedule/route';
 
 type Tab = 'add' | 'season' | 'playoffs';
@@ -16,6 +16,16 @@ const btnPrimary = 'px-3.5 py-2 rounded-md text-sm font-medium bg-[#22D3EE] text
 const btnQuiet = 'px-3 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** "Time TBD" tick box: the captains haven't agreed a time, so only a play-by date is picked. */
+function TbdToggle({ checked, onChange, label = 'Time TBD' }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+  return (
+    <label className="inline-flex items-center gap-1.5 text-xs text-[#E6EDF7] cursor-pointer select-none" title="The captains haven’t agreed a time yet. Lineups stay open and no arena opens until a time is set.">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[#22D3EE]" />
+      {label}
+    </label>
+  );
+}
 
 async function api(method: 'POST' | 'PATCH' | 'DELETE', body?: unknown, query = '') {
   const { data: { session } } = await supabase.auth.getSession();
@@ -65,6 +75,7 @@ export default function ScheduleStaffTools({
   const [addB, setAddB] = useState('');
   const [addDate, setAddDate] = useState(todayIso());
   const [addTime, setAddTime] = useState('20:00');
+  const [addTbd, setAddTbd] = useState(false);
   const [addStage, setAddStage] = useState<'regular' | 'playoff'>('regular');
 
   const submitAdd = async () => {
@@ -78,9 +89,10 @@ export default function ScheduleStaffTools({
         playoff_round: addStage === 'playoff' ? (playoffs.reduce((n, f) => Math.max(n, f.playoff_round || 0), 0) || 1) : undefined,
         squad_a_id: addA,
         squad_b_id: addB,
-        scheduled_at: localDateTimeToIso(addDate, addTime),
+        scheduled_at: addTbd ? playByIso(addDate) : localDateTimeToIso(addDate, addTime),
+        ...(addTbd ? { time_tbd: true } : {}),
       });
-      toast.success('Match added');
+      toast.success(addTbd ? 'Match added · time TBD' : 'Match added');
       setAddA(''); setAddB('');
       onChanged();
     } catch (e: any) {
@@ -94,6 +106,7 @@ export default function ScheduleStaffTools({
   const [weeks, setWeeks] = useState(String(Math.max(1, teams.length - 1)));
   const [firstDate, setFirstDate] = useState(season.start_date || todayIso());
   const [matchTime, setMatchTime] = useState('20:00');
+  const [seasonTbd, setSeasonTbd] = useState(false);
   const preview = useMemo(() => {
     const w = Number(weeks);
     if (!w || teams.length < 2) return { pairings: [], byes: new Map() };
@@ -165,7 +178,8 @@ export default function ScheduleStaffTools({
           squad_a_id: p.a.id,
           squad_b_id: p.b.id,
           // Breaks push later weeks back, so each week takes its own calendar date.
-          scheduled_at: localDateTimeToIso(weekDate(p.week), matchTime),
+          scheduled_at: seasonTbd ? playByIso(weekDate(p.week)) : localDateTimeToIso(weekDate(p.week), matchTime),
+          ...(seasonTbd ? { time_tbd: true } : {}),
         })),
       });
       toast.success(`Created ${res.count} fixtures`);
@@ -300,24 +314,30 @@ export default function ScheduleStaffTools({
                 <label className={labelCls}>Week</label>
                 <input type="number" min={1} max={52} value={addWeek} onChange={(e) => setAddWeek(e.target.value)} className={inputCls} />
               </div>
-              <div className="col-span-2 md:col-span-1">
-                <label className={labelCls}>Home team <span className="normal-case tracking-normal text-[#8B98B0]/70">picks the side</span></label>
-                <TeamSelect value={addA} onChange={setAddA} exclude={addB} />
-              </div>
+              {/* Away first, home second: the order every CTF page and arena name uses. */}
               <div className="col-span-2 md:col-span-1">
                 <label className={labelCls}>Away team</label>
                 <TeamSelect value={addB} onChange={setAddB} exclude={addA} />
               </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className={labelCls}>Home team <span className="normal-case tracking-normal text-[#8B98B0]/70">picks the side</span></label>
+                <TeamSelect value={addA} onChange={setAddA} exclude={addB} />
+              </div>
               <div>
-                <label className={labelCls}>Date</label>
+                <label className={labelCls}>{addTbd ? 'Play by' : 'Date'}</label>
                 <input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
               </div>
               <div>
                 <label className={labelCls}>Time (your zone)</label>
-                <input type="time" value={addTime} onChange={(e) => setAddTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                {addTbd ? (
+                  <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                ) : (
+                  <input type="time" value={addTime} onChange={(e) => setAddTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                )}
               </div>
-              <div className="col-span-2 md:col-span-6 flex justify-end">
-                <button type="button" onClick={submitAdd} disabled={busy || !addA || !addB || !addDate || !addTime} className={btnPrimary}>
+              <div className="col-span-2 md:col-span-6 flex items-center justify-end gap-4">
+                <TbdToggle checked={addTbd} onChange={setAddTbd} />
+                <button type="button" onClick={submitAdd} disabled={busy || !addA || !addB || !addDate || (!addTbd && !addTime)} className={btnPrimary}>
                   {busy ? 'Adding…' : 'Add match'}
                 </button>
               </div>
@@ -335,12 +355,17 @@ export default function ScheduleStaffTools({
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Week 1 date</label>
+                  <label className={labelCls}>{seasonTbd ? 'Week 1 play-by date' : 'Week 1 date'}</label>
                   <input type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
                 </div>
                 <div>
                   <label className={labelCls}>Match time (your zone)</label>
-                  <input type="time" value={matchTime} onChange={(e) => setMatchTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                  {seasonTbd ? (
+                    <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                  ) : (
+                    <input type="time" value={matchTime} onChange={(e) => setMatchTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                  )}
+                  <div className="mt-1"><TbdToggle checked={seasonTbd} onChange={setSeasonTbd} label="Times TBD (captains agree each one)" /></div>
                 </div>
                 <div className="flex justify-end">
                   <button type="button" onClick={submitSeason} disabled={busy || preview.pairings.length === 0 || !firstDate} className={btnPrimary}>
@@ -384,7 +409,7 @@ export default function ScheduleStaffTools({
                         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
                           {preview.pairings.filter((p) => p.week === s.week).map((p, i) => (
                             <li key={i} className="text-[#E6EDF7]">
-                              {p.a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {p.b.name}
+                              {p.b.name} <span className="text-[#8B98B0]">vs</span> {p.a.name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
                             </li>
                           ))}
                         </ul>
@@ -393,7 +418,11 @@ export default function ScheduleStaffTools({
                   )}
                 </div>
               )}
-              <p className="text-[11px] text-[#8B98B0]">Every match lands on the same weekday and time, one week apart, skipping any breaks. Move individual matches afterwards with the edit button on each row.</p>
+              <p className="text-[11px] text-[#8B98B0]">
+                {seasonTbd
+                  ? 'Every match is created without a time, to be played by that week’s date. Set each time with the edit button on its row once the captains agree.'
+                  : 'Every match lands on the same weekday and time, one week apart, skipping any breaks. Move individual matches afterwards with the edit button on each row.'}
+              </p>
             </div>
           )}
 
@@ -488,7 +517,9 @@ export function FixtureEditor({ fixture, teams, onDone }: { fixture: Fixture; te
   const local = new Date(fixture.scheduled_at);
   const pad = (n: number) => String(n).padStart(2, '0');
   const [date, setDate] = useState(`${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`);
-  const [time, setTime] = useState(`${pad(local.getHours())}:${pad(local.getMinutes())}`);
+  // A TBD fixture's stored time is only its play-by placeholder; offer the usual slot instead.
+  const [time, setTime] = useState(fixture.time_tbd ? '20:00' : `${pad(local.getHours())}:${pad(local.getMinutes())}`);
+  const [tbd, setTbd] = useState(!!fixture.time_tbd);
   const [week, setWeek] = useState(String(fixture.week || 1));
   const [a, setA] = useState(fixture.squad_a_id || '');
   const [b, setB] = useState(fixture.squad_b_id || '');
@@ -497,8 +528,13 @@ export function FixtureEditor({ fixture, teams, onDone }: { fixture: Fixture; te
   const save = async () => {
     setBusy(true);
     try {
-      await api('PATCH', { id: fixture.id, week: Number(week), squad_a_id: a, squad_b_id: b, scheduled_at: localDateTimeToIso(date, time) });
-      toast.success('Match updated');
+      await api('PATCH', {
+        id: fixture.id, week: Number(week), squad_a_id: a, squad_b_id: b,
+        scheduled_at: tbd ? playByIso(date) : localDateTimeToIso(date, time),
+        // Only sent when it matters, so plain edits still save before add-match-time-tbd.sql has run.
+        ...(tbd || fixture.time_tbd ? { time_tbd: tbd } : {}),
+      });
+      toast.success(fixture.time_tbd && !tbd ? 'Match time set' : 'Match updated');
       onDone();
     } catch (e: any) {
       toast.error(e.message);
@@ -539,14 +575,19 @@ export function FixtureEditor({ fixture, teams, onDone }: { fixture: Fixture; te
         </select>
       </div>
       <div>
-        <label className={labelCls}>Date</label>
+        <label className={labelCls}>{tbd ? 'Play by' : 'Date'}</label>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
       </div>
       <div>
         <label className={labelCls}>Time</label>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+        {tbd ? (
+          <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+        ) : (
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+        )}
       </div>
-      <div className="col-span-2 md:col-span-6 flex justify-end gap-2">
+      <div className="col-span-2 md:col-span-6 flex items-center justify-end gap-2">
+        <span className="mr-2"><TbdToggle checked={tbd} onChange={setTbd} /></span>
         <button type="button" onClick={remove} disabled={busy || !!fixture.result} className="px-3 py-2 rounded-md text-sm text-[#F87171] hover:bg-[#F87171]/10 disabled:opacity-40" title={fixture.result ? 'Has a result — unlink it first' : ''}>
           Remove
         </button>

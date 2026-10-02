@@ -286,7 +286,8 @@ export default function MatchManagerPage() {
     const b = squads.find((s) => s.id === f.squad_b_id);
     setSquadAName(a?.name || f.squad_a_name || ''); setSquadAId(a?.id || f.squad_a_id || ''); setSquadASearch(a?.name || f.squad_a_name || '');
     setSquadBName(b?.name || f.squad_b_name || ''); setSquadBId(b?.id || f.squad_b_id || ''); setSquadBSearch(b?.name || f.squad_b_name || '');
-    setPlayedAt(localDate(f.scheduled_at));
+    // A TBD fixture's scheduled_at is only its play-by day, so default to today instead.
+    setPlayedAt(localDate((f as any).time_tbd ? new Date().toISOString() : f.scheduled_at));
     setMatchTitle(f.title && !f.title.includes(' vs ') ? f.title : '');
     setMatchType(f.stage === 'playoff' ? 'Playoffs' : 'Season');
     setMatchKind(f.stage === 'fs' ? 'fs' : 'rs');
@@ -507,8 +508,8 @@ export default function MatchManagerPage() {
               return (
                 <li key={f.id} className={`flex flex-wrap items-center gap-3 px-5 py-2 ${fromFixture?.id === f.id ? 'bg-[#22D3EE]/[0.06]' : ''}`}>
                   <span className="w-28 shrink-0 text-xs tabular-nums text-[#8B98B0]">
-                    {when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {past ? '' : <span className="ml-1 text-[#F59E0B]">upcoming</span>}
+                    {(f as any).time_tbd ? 'Time TBD' : when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                    {past || (f as any).time_tbd ? '' : <span className="ml-1 text-[#F59E0B]">upcoming</span>}
                   </span>
                   <span className={`w-16 shrink-0 text-[11px] uppercase tracking-wide ${f.stage === 'fs' ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>{f.stage === 'playoff' ? 'Playoffs' : f.stage === 'fs' ? 'FS' : f.week ? `Week ${f.week}` : ''}</span>
                   <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">

@@ -22,7 +22,7 @@ import {
   type SeasonStatus,
   type StandingRow,
 } from '@/lib/leagues';
-import { playoffRoundLabel, type TeamRef } from '@/lib/schedule';
+import { playoffRoundLabel, playByLabel, TBD_LABEL, type TeamRef } from '@/lib/schedule';
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
@@ -169,6 +169,12 @@ function SchedulePage() {
   // Group: regular by week, playoffs by round.
   const groups = useMemo(() => {
     const map = new Map<string, { label: string; sub: string; items: Fixture[]; order: number }>();
+    // A week's day label comes from a fixture with a real time when it has one.
+    const daySub = (f: Fixture) => {
+      const dated = visible.find((x) => x.stage === f.stage && x.week === f.week && x.playoff_round === f.playoff_round && !x.time_tbd);
+      const day = dated ? dayLabel(dated.scheduled_at) : `Times TBD · play ${playByLabel(f.scheduled_at)}`;
+      return pointsMode ? `${day} · counts as the ${weekRange(weekStart(new Date((dated || f).scheduled_at)))} week` : day;
+    };
     for (const f of visible) {
       const key = f.stage === 'playoff' ? `p${f.playoff_round || 1}` : f.stage === 'fs' ? `fs${f.fs_week_start || f.scheduled_at.slice(0, 10)}` : `w${f.week || 0}`;
       if (!map.has(key)) {
@@ -177,7 +183,7 @@ function SchedulePage() {
         const fsOrder = f.fs_week_start ? 500 + new Date(f.fs_week_start).getTime() / 8.64e7 / 1e6 : 500;
         map.set(key, {
           label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : f.stage === 'fs' ? `Free scheduled · ${weekRange(f.fs_week_start || weekStart(new Date(f.scheduled_at)))}` : `Week ${f.week ?? '–'}${pointsMode ? ' · RS' : ''}`,
-          sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : pointsMode ? `${dayLabel(f.scheduled_at)} · counts as the ${weekRange(weekStart(new Date(f.scheduled_at)))} week` : dayLabel(f.scheduled_at),
+          sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : daySub(f),
           items: [],
           order: f.stage === 'playoff' ? 1000 + (f.playoff_round || 1) : f.stage === 'fs' ? fsOrder : f.week || 0,
         });
@@ -270,9 +276,9 @@ function SchedulePage() {
           <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#22D3EE]/40 px-4 py-3 flex items-center gap-3 flex-wrap">
             <span className="text-[11px] uppercase tracking-wide text-[#22D3EE]">Your next match</span>
             <span className="text-sm text-[#E6EDF7]">
-              {myNext.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span> <span className="text-[#8B98B0]">vs</span> {myNext.squad_b_name}
+              {myNext.squad_b_name} <span className="text-[#8B98B0]">vs</span> {myNext.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
             </span>
-            <span className="text-sm text-[#8B98B0]">{dayLabel(myNext.scheduled_at)} · {timeLabel(myNext.scheduled_at)}</span>
+            <span className="text-sm text-[#8B98B0]">{myNext.time_tbd ? `${TBD_LABEL} · play ${playByLabel(myNext.scheduled_at)}` : `${dayLabel(myNext.scheduled_at)} · ${timeLabel(myNext.scheduled_at)}`}</span>
             <Link href={`/matches/${myNext.id}`} className="ml-auto text-xs text-[#22D3EE] hover:text-[#67E8F9]">Details</Link>
           </section>
         )}
@@ -322,7 +328,8 @@ function SchedulePage() {
                 {g.items.map((f) => {
                   const done = isDone(f);
                   const live = !done && f.status === 'in_progress';
-                  const soon = !done && !live && new Date(f.scheduled_at).getTime() - now < 3 * 3600 * 1000 && new Date(f.scheduled_at).getTime() > now - 2 * 3600 * 1000;
+                  const tbd = f.time_tbd && !done && !live;
+                  const soon = !done && !live && !tbd && new Date(f.scheduled_at).getTime() - now < 3 * 3600 * 1000 && new Date(f.scheduled_at).getTime() > now - 2 * 3600 * 1000;
                   const aWon = f.result ? /win/i.test(f.result.a_result || '') || f.result.a_score > f.result.b_score : false;
                   const bWon = f.result ? /win/i.test(f.result.b_result || '') || f.result.b_score > f.result.a_score : false;
                   const mine = (f.squad_a_id && mySquads.has(f.squad_a_id)) || (f.squad_b_id && mySquads.has(f.squad_b_id));
@@ -331,8 +338,18 @@ function SchedulePage() {
                     <li key={f.id} className={`px-4 py-2.5 ${mine ? 'bg-[#22D3EE]/[0.04]' : ''}`}>
                       <div className="flex items-center gap-3">
                         <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums">
-                          <div>{dayLabel(f.scheduled_at)}</div>
-                          <div className="text-[#E6EDF7]">{timeLabel(f.scheduled_at)}</div>
+                          {tbd ? (
+                            <>
+                              <div className="text-[#F59E0B]" title="The captains haven’t agreed a time yet">{TBD_LABEL}</div>
+                              <div>{playByLabel(f.scheduled_at)}</div>
+                            </>
+                          ) : (
+                            <>
+                              {/* Played without a time ever being set: show the day it was played, no kick-off time. */}
+                              <div>{dayLabel(f.time_tbd && f.result ? f.result.played_at : f.scheduled_at)}</div>
+                              <div className="text-[#E6EDF7]">{f.time_tbd ? '' : timeLabel(f.scheduled_at)}</div>
+                            </>
+                          )}
                           {f.stage === 'fs' && <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>}
                           {pointsMode && f.stage === 'regular' && <div className="mt-0.5 inline-block rounded bg-[#F59E0B]/15 px-1 text-[10px] uppercase tracking-wide text-[#F59E0B]" title="Regular season: official schedule, full points">RS</div>}
                         </div>

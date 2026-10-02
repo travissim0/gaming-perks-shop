@@ -28,20 +28,27 @@ export async function GET(request: NextRequest) {
   const league = (q.get('league') || '').trim().toLowerCase();
 
   const now = Date.now();
-  let query = supabaseAdmin
-    .from('matches')
-    .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id')
-    .in('status', ['scheduled', 'in_progress'])
-    .not('squad_a_id', 'is', null)
-    .not('squad_b_id', 'is', null)
-    .gte('scheduled_at', new Date(now - past * 3_600_000).toISOString())
-    .lte('scheduled_at', new Date(now + hours * 3_600_000).toISOString())
-    .order('scheduled_at', { ascending: true })
-    .limit(50);
-  if (league) query = query.eq('league_slug', league);
-  else query = query.not('league_slug', 'is', null);
+  const run = (tbdColumn: boolean) => {
+    let query = supabaseAdmin
+      .from('matches')
+      .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id')
+      .in('status', ['scheduled', 'in_progress'])
+      .not('squad_a_id', 'is', null)
+      .not('squad_b_id', 'is', null)
+      .gte('scheduled_at', new Date(now - past * 3_600_000).toISOString())
+      .lte('scheduled_at', new Date(now + hours * 3_600_000).toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(50);
+    // "Time TBD" fixtures have no kick-off time (scheduled_at is only their play-by day), so the
+    // zone must not open an arena for them. They join the queue once staff set a real time.
+    if (tbdColumn) query = query.eq('time_tbd', false);
+    if (league) query = query.eq('league_slug', league);
+    else query = query.not('league_slug', 'is', null);
+    return query;
+  };
 
-  const { data, error } = await query;
+  let { data, error } = await run(true);
+  if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(false)); // before add-match-time-tbd.sql
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const matches = [];

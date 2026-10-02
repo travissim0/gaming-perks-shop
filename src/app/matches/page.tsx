@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { toast } from 'react-hot-toast';
-import { localDateTimeToIso } from '@/lib/schedule';
+import { localDateTimeToIso, playByLabel, TBD_LABEL } from '@/lib/schedule';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { getClassColor } from '@/utils/classColors';
 
@@ -34,6 +34,8 @@ interface Match {
   title: string;
   description: string | null;
   scheduled_at: string;
+  /** League fixture whose time the captains haven't agreed: scheduled_at is only the play-by day. */
+  time_tbd?: boolean;
   match_type: MatchType;
   status: Status;
   game_mode?: string | null;
@@ -358,8 +360,8 @@ export default function MatchesPage() {
           <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#22D3EE]/40 px-4 py-3 flex items-center gap-3 flex-wrap">
             <span className="text-[11px] uppercase tracking-wide text-[#22D3EE]">You’re signed up</span>
             <span className="text-sm text-[#E6EDF7] truncate">{myNext.title}</span>
-            <span className="text-sm text-[#8B98B0]">{dayLabel(myNext.scheduled_at)} · {timeLabel(myNext.scheduled_at)}</span>
-            <span className="text-xs text-[#8B98B0]">as {myNext.participants.filter((p) => p.player_id === user!.id).map((p) => ROLES.find((r) => r.key === p.role)?.label.toLowerCase()).join(', ')}</span>
+            <span className="text-sm text-[#8B98B0]">{myNext.time_tbd ? `${TBD_LABEL} · play ${playByLabel(myNext.scheduled_at)}` : `${dayLabel(myNext.scheduled_at)} · ${timeLabel(myNext.scheduled_at)}`}</span>
+            <span className="text-xs text-[#8B98B0]">as{myNext.participants.filter((p) => p.player_id === user!.id).map((p) => ROLES.find((r) => r.key === p.role)?.label.toLowerCase()).join(', ')}</span>
             <Link href={`/matches/${myNext.id}`} className="ml-auto text-xs text-[#22D3EE] hover:text-[#67E8F9]">Details</Link>
           </section>
         )}
@@ -400,7 +402,7 @@ export default function MatchesPage() {
                         <Link
                           key={m.id}
                           href={`/matches/${m.id}`}
-                          title={`${m.title} · ${timeLabel(m.scheduled_at)}`}
+                          title={`${m.title} · ${m.time_tbd ? `${TBD_LABEL}, play ${playByLabel(m.scheduled_at)}` : timeLabel(m.scheduled_at)}`}
                           className={`block text-[10px] leading-tight truncate rounded px-1 py-0.5 ${
                             m.status === 'scheduled' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : m.status === 'expired' ? 'bg-white/5 text-[#8B98B0] line-through' : 'bg-white/5 text-[#E6EDF7]'
                           }`}
@@ -433,8 +435,17 @@ export default function MatchesPage() {
                     <li key={m.id} className={`px-4 py-3 ${mine(m) ? 'bg-[#22D3EE]/[0.04]' : ''}`}>
                       <div className="flex items-start gap-3">
                         <div className="w-24 shrink-0 text-xs text-[#8B98B0] tabular-nums pt-0.5">
-                          <div>{dayLabel(m.scheduled_at)}</div>
-                          <div className="text-[#E6EDF7]">{timeLabel(m.scheduled_at)}</div>
+                          {m.time_tbd && m.status !== 'in_progress' ? (
+                            <>
+                              <div className="text-[#F59E0B]" title="The captains haven’t agreed a time yet">{TBD_LABEL}</div>
+                              <div>{playByLabel(m.scheduled_at)}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div>{dayLabel(m.scheduled_at)}</div>
+                              <div className="text-[#E6EDF7]">{m.time_tbd ? '' : timeLabel(m.scheduled_at)}</div>
+                            </>
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">

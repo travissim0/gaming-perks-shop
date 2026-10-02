@@ -50,6 +50,9 @@ Response:
 }
 ```
 
+A league fixture whose time the captains haven't agreed yet ("Time TBD" on the schedule) is
+**never in the queue**: it has no kick-off time. It appears once staff set its time.
+
 `client.players` is the **desired state**: every listed player, the team they
 belong on, and whether they sit in spec. It already reflects subs. Players
 not listed are not part of the match.

@@ -114,3 +114,15 @@ export function localDateTimeToIso(date: string, time: string): string {
   const [hh, mm] = time.split(':').map(Number);
   return new Date(y, m - 1, d, hh || 0, mm || 0).toISOString();
 }
+
+/**
+ * "Time TBD" fixtures (matches.time_tbd): the captains haven't agreed a time yet. scheduled_at
+ * then holds the END of the play-by day, so the fixture still sorts into its week and counts
+ * toward that Mon–Sun week. It is not a kick-off time: never show it as one, and nothing timed
+ * (lineup lock, side release, the zone's arena) may run off it.
+ */
+export const TBD_LABEL = 'Time TBD';
+export const playByIso = (date: string) => localDateTimeToIso(date, '23:59');
+/** "by Sun, Oct 11" for a TBD fixture's play-by day. */
+export const playByLabel = (iso: string) =>
+  `by ${new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`;

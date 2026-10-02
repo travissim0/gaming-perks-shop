@@ -27,6 +27,8 @@ interface Match {
   title: string;
   description: string | null;
   scheduled_at: string;
+  /** League fixture whose time the captains haven't agreed: scheduled_at is only the play-by day. */
+  time_tbd?: boolean;
   match_type: 'squad_vs_squad' | 'pickup' | 'tournament';
   status: string;
   map_name?: string | null;
@@ -430,9 +432,18 @@ export default function MatchDetailPage() {
               {hasTeams ? `${b?.name || match.squad_b_name || 'TBD'} vs ${a?.name || match.squad_a_name || 'TBD'}` : match.title}
             </h1>
             <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
-              <span className="text-[#E6EDF7]">{when.day}</span>
-              <span className="text-white/20">·</span>
-              <span className="text-[#E6EDF7]">{when.time}</span>{when.tz && <span>{when.tz}</span>}
+              {match.time_tbd ? (
+                // No kick-off time was ever agreed: say so while it's unplayed, show nothing timed after.
+                played || live || notPlayed
+                  ? <span className="text-[#E6EDF7]">{live ? 'Live now' : 'No set time'}</span>
+                  : <><span className="text-[#F59E0B]">Time TBD</span><span className="text-white/20">·</span><span className="text-[#E6EDF7]">play by {when.day}</span></>
+              ) : (
+                <>
+                  <span className="text-[#E6EDF7]">{when.day}</span>
+                  <span className="text-white/20">·</span>
+                  <span className="text-[#E6EDF7]">{when.time}</span>{when.tz && <span>{when.tz}</span>}
+                </>
+              )}
               {(match.map_name || match.game_mode) && (<><span className="text-white/20">·</span><span>{[match.game_mode, match.map_name].filter(Boolean).join(' · ')}</span></>)}
               <span className="text-white/20">·</span>
               <span>Created by {match.created_by_alias}</span>

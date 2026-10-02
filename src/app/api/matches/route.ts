@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     // Update match statuses first
     await updateMatchStatuses();
 
+    const run = (withTbd: boolean) => {
     let query = supabase
       .from('matches')
       .select(`
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
         league_slug,
         season_number,
         week,
-        stage,
+        stage,${withTbd ? '\n        time_tbd,' : ''}
         profiles!matches_created_by_fkey(in_game_alias),
         squad_a:squads!matches_squad_a_id_fkey(name, tag, banner_url),
         squad_b:squads!matches_squad_b_id_fkey(name, tag, banner_url),
@@ -90,14 +91,19 @@ export async function GET(req: NextRequest) {
       finalQuery = finalQuery.order('scheduled_at', { ascending: status === 'scheduled' });
     }
     
-    const { data, error } = await finalQuery.limit(limit);
+    return finalQuery.limit(limit);
+    };
+
+    // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+    let { data, error } = await run(true);
+    if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(false));
 
     if (error) {
       console.error('Error fetching matches:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const matches = await Promise.all(data.map(async (match: any) => {
+    const matches = await Promise.all(((data || []) as any[]).map(async (match: any) => {
       const baseMatch = {
         ...match,
         created_by_alias: match.profiles?.in_game_alias || 'Unknown',
@@ -147,13 +153,19 @@ async function updateMatchStatuses() {
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
-    // Mark expired scheduled matches as 'expired'
-    await supabaseAdmin
-      .from('matches')
-      .update({ status: 'expired' })
-      .eq('status', 'scheduled')
-      .lt('scheduled_at', twoHoursAgo.toISOString())
-      .is('game_id', null);
+    // Mark expired scheduled matches as 'expired'. "Time TBD" fixtures have no kick-off time
+    // (scheduled_at is only their play-by day), so they never expire on their own.
+    const expire = (tbdColumn: boolean) => {
+      const q = supabaseAdmin
+        .from('matches')
+        .update({ status: 'expired' })
+        .eq('status', 'scheduled')
+        .lt('scheduled_at', twoHoursAgo.toISOString())
+        .is('game_id', null);
+      return tbdColumn ? q.eq('time_tbd', false) : q;
+    };
+    const { error: expireErr } = await expire(true);
+    if (expireErr && /time_tbd/.test(expireErr.message)) await expire(false); // before add-match-time-tbd.sql
 
     // Mark matches with game_id as 'completed' if they're still 'scheduled'
     await supabaseAdmin

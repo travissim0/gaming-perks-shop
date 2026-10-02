@@ -29,7 +29,7 @@ interface Team {
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
 interface Setup {
   pending_sql?: boolean;
-  match: { id: string; scheduled_at: string; status: string; locked: boolean; arena?: string | null; game_id?: string | null };
+  match: { id: string; scheduled_at: string; time_tbd?: boolean; status: string; locked: boolean; arena?: string | null; game_id?: string | null };
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
@@ -152,6 +152,9 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     setSubPick((s) => ({ ...s, [team.squad_id]: { out: '', in: '' } }));
   };
   const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  // While the match time is TBD there is no reveal time to quote yet.
+  const revealAt = match.time_tbd ? 'five minutes before the match, once its time is set' : `at ${revealTime}, five minutes before the match`;
+  const revealUntil = match.time_tbd ? 'five minutes before the match, once its time is set' : `${revealTime}, five minutes before the match`;
   const sidesLine = home.side ? `${away.tag} · ${SIDE_LABEL[away.side!]}  ·  ${home.tag} · ${SIDE_LABEL[home.side]}` : null;
 
   // Public / uninvolved view: progress flags, plus the sides once released.
@@ -168,7 +171,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
         <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
-          {setup.side_released ? 'Sides are out. ' : `Sides are released at ${revealTime}, five minutes before the match. `}
+          {setup.side_released ? 'Sides are out. ' : `Sides are released ${revealAt}. `}
           Lineups stay private to each squad's captains and league staff.
         </p>
       </section>
@@ -179,15 +182,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     if (home.side) {
       const base = `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
       if (viewer?.is_staff) return base;
-      if (viewer?.leads_home) return setup.side_released ? `${base} ${away.tag} can see this now.` : `${base} Hidden from ${away.tag} and the public until ${revealTime}, five minutes before the match.`;
+      if (viewer?.leads_home) return setup.side_released ? `${base} ${away.tag} can see this now.` : `${base} Hidden from ${away.tag} and the public until ${revealUntil}.`;
       return base; // away leads, after release
     }
-    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side. Your pick stays hidden from ${away.tag} and the public until ${revealTime}, five minutes before the match.`;
+    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side. Your pick stays hidden from ${away.tag} and the public until ${revealUntil}.`;
     if (viewer?.leads_home) return `${home.tag} is home and picks the side.`;
     // Away leads before release: the pick itself is hidden from them.
     return progress.side_picked
-      ? `${home.tag} (home) has picked a side. It is released to you at ${revealTime}, five minutes before the match.`
-      : `Waiting on ${home.name} (home) to pick a side. It is released to you at ${revealTime}, five minutes before the match.`;
+      ? `${home.tag} (home) has picked a side. It is released to you ${revealAt}.`
+      : `Waiting on ${home.name} (home) to pick a side. It is released to you ${revealAt}.`;
   })();
 
   const renderTeam = (team: Team, canEdit: boolean) => {

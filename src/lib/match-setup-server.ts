@@ -69,15 +69,22 @@ export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow |
   return `${league} ${a}-${h}`;
 };
 
+export const MATCH_COLS = 'id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time';
+
 export async function loadMatch(id: string) {
-  const { data, error } = await supabaseAdmin
-    .from('matches')
-    .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time')
-    .eq('id', id)
-    .maybeSingle();
+  const one = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
+  // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+  let { data, error } = await one(`${MATCH_COLS}, time_tbd`);
+  if (error && /time_tbd/.test(error.message)) ({ data, error } = await one(MATCH_COLS));
   if (error) throw new Error(error.message);
   return data as any | null;
 }
+
+/**
+ * "Time TBD": the captains haven't agreed a time, and scheduled_at is only the end of the play-by
+ * day. Nothing timed runs off it: lineups stay open, the side stays hidden, the zone opens no arena.
+ */
+export const isTimeTbd = (match: any) => match?.time_tbd === true;
 
 export async function loadSquads(ids: string[]): Promise<Record<string, Squad>> {
   if (ids.length === 0) return {};
@@ -129,7 +136,8 @@ export const leads = (sq: Squad | null | undefined, userId: string | null) =>
   !!sq && !!userId && (sq.captain_id === userId || sq.members.some((m) => m.player_id === userId && m.role !== 'player'));
 
 export const isLocked = (match: any) =>
-  match.status === 'completed' || match.status === 'cancelled' || match.status === 'expired' || Date.now() >= new Date(match.scheduled_at).getTime();
+  match.status === 'completed' || match.status === 'cancelled' || match.status === 'expired' ||
+  (!isTimeTbd(match) && Date.now() >= new Date(match.scheduled_at).getTime());
 
 /** Subs are allowed from side release until the match is recorded. */
 export const isSubWindow = (match: any) =>
@@ -138,7 +146,7 @@ export const isSubWindow = (match: any) =>
 /** The home side is released to the away squad and the public this long before the scheduled time. */
 export const SIDE_REVEAL_MS = 5 * 60 * 1000;
 export const sideRevealAt = (match: any) => new Date(new Date(match.scheduled_at).getTime() - SIDE_REVEAL_MS).toISOString();
-export const sideReleased = (match: any) => Date.now() >= new Date(match.scheduled_at).getTime() - SIDE_REVEAL_MS;
+export const sideReleased = (match: any) => !isTimeTbd(match) && Date.now() >= new Date(match.scheduled_at).getTime() - SIDE_REVEAL_MS;
 
 export interface SubRow { id: string; squad_id: string; out_player_id: string; in_player_id: string; by_id: string | null; by_alias: string | null; created_at: string; out_alias?: string; in_alias?: string }
 
@@ -221,7 +229,7 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
 
   return {
     match: {
-      id: match.id, title: match.title, scheduled_at: match.scheduled_at, status: match.status,
+      id: match.id, title: match.title, scheduled_at: match.scheduled_at, time_tbd: isTimeTbd(match), status: match.status,
       league_slug: match.league_slug, season_number: match.season_number, week: match.week, stage: match.stage, playoff_round: match.playoff_round,
       locked,
       game_id: match.game_id || null,
@@ -234,7 +242,7 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
     /** Starters per side (10v10). */
     starters: STARTERS,
     side_chosen_at: seeSide ? setupRow?.side_chosen_at || null : null,
-    /** When the home side becomes visible to the away squad and the public (5 min before the match). */
+    /** When the home side becomes visible to the away squad and the public (5 min before the match). Meaningless while match.time_tbd. */
     side_reveal_at: sideRevealAt(match),
     side_released: released,
     /** Substitutions made so far (visible to whoever may see that squad's lineup). */
