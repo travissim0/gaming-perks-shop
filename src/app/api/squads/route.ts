@@ -70,43 +70,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Names and tags are unique across ALL squads (squads_name_key / squads_tag_key), inactive
+    // and legacy ones included, so the checks below must not filter on is_active. Service role:
+    // the public policies may hide inactive squads.
+    type Holder = { name: string; tag: string; is_active: boolean; is_legacy: boolean };
+    const holderOf = async (column: 'name' | 'tag', value: string): Promise<Holder | null> => {
+      const { data } = await supabaseAdmin
+        .from('squads')
+        .select('name, tag, is_active, is_legacy')
+        .eq(column, value)
+        .limit(1);
+      return (data?.[0] as Holder | undefined) ?? null;
+    };
+    const describe = (s: Holder) =>
+      `${s.name} [${s.tag}]${s.is_legacy ? ', a legacy squad' : s.is_active ? '' : ', an inactive squad'}`;
+    const staffHint = (s: Holder) =>
+      s.is_active && !s.is_legacy ? '' : ' If that is your old squad, league staff can bring it back for you.';
+
     if (!tag) {
       const { makeSquadTag } = await import('@/lib/squadTag');
       const base = makeSquadTag(name);
       tag = base;
-      // Avoid colliding with an active squad's tag: BRUH → BRU1, BRU2, …
+      // Avoid colliding with any squad's tag: BRUH → BRU1, BRU2, …
       for (let i = 0; i < 10; i++) {
-        const { data: clash } = await supabase
-          .from('squads')
-          .select('id')
-          .eq('tag', tag)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (!clash) break;
+        if (!(await holderOf('tag', tag))) break;
         tag = base.slice(0, 3) + (i + 1);
       }
+    } else {
+      const tagHolder = await holderOf('tag', tag);
+      if (tagHolder) {
+        return NextResponse.json(
+          { error: `The tag ${tag} is already used by ${describe(tagHolder)}. Pick a different tag.${staffHint(tagHolder)}` },
+          { status: 409 },
+        );
+      }
     }
 
-    // Check if squad name or tag already exists
-    const { data: existingSquad, error: checkError } = await supabase
-      .from('squads')
-      .select('id, name, tag')
-      .or(`name.eq.${name},tag.eq.${tag}`)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking existing squad:', checkError);
-      return NextResponse.json({ error: checkError.message }, { status: 500 });
-    }
-
-    if (existingSquad) {
-      if (existingSquad.name === name) {
-        return NextResponse.json({ error: 'Squad name already taken' }, { status: 409 });
-      }
-      if (existingSquad.tag === tag) {
-        return NextResponse.json({ error: 'Squad tag already taken' }, { status: 409 });
-      }
+    const nameHolder = await holderOf('name', name);
+    if (nameHolder) {
+      return NextResponse.json(
+        { error: `The name is already used by ${describe(nameHolder)}. Pick a different name.${staffHint(nameHolder)}` },
+        { status: 409 },
+      );
     }
 
     // Check if user is already in a current squad. Legacy squads and archived
@@ -153,6 +158,10 @@ export async function POST(req: NextRequest) {
 
     if (squadError) {
       console.error('Error creating squad:', squadError);
+      if (squadError.code === '23505') {
+        const which = /tag/i.test(squadError.message) ? 'tag' : /name/i.test(squadError.message) ? 'name' : 'name or tag';
+        return NextResponse.json({ error: `That squad ${which} is already taken. Pick a different one.` }, { status: 409 });
+      }
       return NextResponse.json({ error: squadError.message }, { status: 500 });
     }
 
