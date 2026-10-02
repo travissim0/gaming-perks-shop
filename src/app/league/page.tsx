@@ -212,7 +212,10 @@ const whenLabel = (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  // Viewer's zone name ("PDT") on the time, like the match page, so nobody reads 7:00 PM as another zone.
+  let tz = '';
+  try { tz = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value || ''; } catch { /* ignore */ }
+  const time = `${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${tz ? ` ${tz}` : ''}`;
   if (sameDay) return `Today ${time}`;
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
