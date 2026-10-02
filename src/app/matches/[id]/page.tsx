@@ -584,7 +584,8 @@ export default function MatchDetailPage() {
         <div className="lg:col-span-1">
           <Card title="Crew" action={<span className="text-xs text-[#8B98B0] tabular-nums">{match.participants.length}</span>}>
             <div className="space-y-2">
-              {ROLES.map((r) => {
+              {/* League fixtures have no player sign-up: the captains' (private) lineups decide who plays. */}
+              {ROLES.filter((r) => !(r.key === 'player' && match.league_slug)).map((r) => {
                 const people = match.participants.filter((p) => p.role === r.key);
                 const me = people.find((p) => p.player_id === user?.id);
                 const allowed = !!user && canJoinRole(r.key);

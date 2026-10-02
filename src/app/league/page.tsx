@@ -27,6 +27,8 @@ import {
   type SeasonPhase,
 } from '@/lib/leagues';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import { weekStart } from '@/lib/scoring';
+import { playByLabel } from '@/lib/schedule';
 import './ctf-theme.css';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -526,12 +528,16 @@ export default function LeagueHome() {
           .gte('scheduled_at', new Date().toISOString())
           .eq('status', 'scheduled')
           .order('scheduled_at', { ascending: true })
-          .limit(6);
+          .limit(12);
         // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
         let { data, error } = await run(`${cols}, time_tbd`);
         if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(cols));
         if (!error && data) {
-          setUpcoming((data as any[]).map((m) => ({
+          // "This week" = one Mon–Sun league week: the week of the next match, not the next
+          // handful of matches (a full season on the schedule used to spill week 2 into the card).
+          const rows = data as any[];
+          const week = rows.length ? weekStart(new Date(rows[0].scheduled_at)) : null;
+          setUpcoming(rows.filter((m) => weekStart(new Date(m.scheduled_at)) === week).map((m) => ({
             id: m.id,
             title: m.title,
             scheduled_at: m.scheduled_at,
@@ -913,7 +919,7 @@ export default function LeagueHome() {
                                   </>
                                 ) : m.title}
                               </div>
-                              <div className="text-[11px] text-[#8B98B0]">{m.time_tbd ? 'Time TBD' : whenLabel(m.scheduled_at)}</div>
+                              <div className="text-[11px] text-[#8B98B0]">{m.time_tbd ? `Time TBD · ${playByLabel(m.scheduled_at)}` : whenLabel(m.scheduled_at)}</div>
                             </Link>
                           </li>
                         ))}

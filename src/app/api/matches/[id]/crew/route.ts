@@ -89,8 +89,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const role = body?.role as Role;
   if (!ROLES.includes(role)) return NextResponse.json({ error: 'A valid role is required' }, { status: 400 });
 
-  const { data: match } = await supabaseAdmin.from('matches').select('id, status').eq('id', matchId).maybeSingle();
+  const { data: match } = await supabaseAdmin.from('matches').select('id, status, league_slug').eq('id', matchId).maybeSingle();
   if (!match) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+  // League fixtures have no player sign-up: the captains' lineups decide who plays.
+  if (role === 'player' && match.league_slug && (action === 'join' || action === 'add')) {
+    return NextResponse.json({ error: 'League matches have no player sign-up. Captains set the lineup.' }, { status: 400 });
+  }
 
   // Who is being changed, and by whom.
   let target: { id: string; alias: string; ctfRole: string | null };

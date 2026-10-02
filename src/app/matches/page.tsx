@@ -462,8 +462,9 @@ export default function MatchesPage() {
                           )}
                           {m.description && <div className="text-xs text-[#8B98B0] mt-0.5 line-clamp-2">{m.description}</div>}
                           {/* Crew */}
-                          <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-1.5">
-                            {ROLES.map((r) => {
+                          {/* League fixtures have no player sign-up: the captains' (private) lineups decide who plays. */}
+                          <div className={`mt-2 grid grid-cols-2 gap-1.5 ${m.league_slug ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
+                            {ROLES.filter((r) => !(r.key === 'player' && m.league_slug)).map((r) => {
                               const people = m.participants.filter((p) => p.role === r.key);
                               const me = people.find((p) => p.player_id === user?.id);
                               const allowed = !!user && canJoinRole(r.key);
