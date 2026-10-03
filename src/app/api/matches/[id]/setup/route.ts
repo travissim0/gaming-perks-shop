@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
  *   { action: 'sub', squad_id, out_player_id, in_player_id }   that squad's captain/co-captain, staff or a referee;
  *         from side release until the result is recorded. Swaps the two slots and logs it.
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
+ *   { action: 'set_match_chat', chat: string }   staff or a referee — the in-game chat for this match's captains
+ *         and referees; readable only by staff, referees and the two squads' captains / co-captains
  *   { action: 'set_manual_zone', manual: boolean }   staff or a referee — take this match out of (or put it back in) the zone queue
  *
  * Home team = squad_a. Captains can edit until the scheduled time; staff always.
@@ -62,6 +64,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (typeof body.manual !== 'boolean') return NextResponse.json({ error: 'manual must be true or false' }, { status: 400 });
     const { error } = await supabaseAdmin.from('matches').update({ manual_zone: body.manual }).eq('id', id);
     if (error) return NextResponse.json({ error: /manual_zone/.test(error.message) ? 'Run add-match-manual-zone.sql in Supabase first' : error.message }, { status: 500 });
+    return NextResponse.json(await loadAll(id, viewer));
+  }
+
+  if (action === 'set_match_chat') {
+    // The in-game chat for this match's captains and referees. Staff or a referee sets it; only
+    // staff, referees and the two squads' captains / co-captains can read it back.
+    if (!viewer.staff && !viewer.referee) return NextResponse.json({ error: 'League staff and referees only' }, { status: 403 });
+    const raw = typeof body.chat === 'string' ? body.chat : '';
+    // Chat names are typed into the game client: keep them short and free of separators.
+    const chat = raw.replace(/[\u0000-\u001f,;]/g, '').trim().slice(0, 30);
+    const { error } = await supabaseAdmin.from('match_setup').upsert({ match_id: id, ref_chat: chat || null });
+    if (error) return NextResponse.json({ error: /ref_chat/.test(error.message) ? 'Run add-match-chat.sql in Supabase first' : error.message }, { status: 500 });
     return NextResponse.json(await loadAll(id, viewer));
   }
 

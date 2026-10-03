@@ -45,10 +45,14 @@ interface Setup {
   subs?: Sub[];
   /** Whether the zone runs this match. Off: referees open the arena and place players by hand. */
   automation?: { enabled: boolean; reason: 'site' | 'match' | null };
+  /** In-game chat for this match's captains and referees. Null for anyone not allowed to see it. */
+  match_chat?: string | null;
+  can_see_match_chat?: boolean;
   viewer: {
     is_staff: boolean; is_referee?: boolean; leads_home: boolean; leads_away: boolean;
     can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean;
     can_sub_home?: boolean; can_sub_away?: boolean; sub_window?: boolean;
+    can_set_match_chat?: boolean;
   } | null;
 }
 
@@ -70,6 +74,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const [draft, setDraft] = useState<Record<string, Record<string, Slot>>>({});
   // Sub picker per squad: who comes out (a starter) and who goes in (bench or roster).
   const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
+  // Match chat name being typed by staff / a referee; null = showing the saved one.
+  const [chatDraft, setChatDraft] = useState<string | null>(null);
 
   const headers = useCallback(async (): Promise<Record<string, string>> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -159,6 +165,52 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     )
   ) : null;
 
+  // Match chat: the in-game chat the referee opens so both squads' captains can raise things during
+  // the match. Shown only to league staff, referees and the two squads' captains / co-captains.
+  const saveChat = async () => {
+    if (chatDraft === null) return;
+    await post({ action: 'set_match_chat', chat: chatDraft }, chatDraft.trim() ? 'Match chat saved' : 'Match chat cleared');
+    setChatDraft(null);
+  };
+  const chatRow = setup.can_see_match_chat ? (
+    <div className="rounded-md bg-[#1B2438] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Match chat</span>
+        {chatDraft !== null ? (
+          <>
+            <input
+              type="text"
+              value={chatDraft}
+              maxLength={30}
+              onChange={(e) => setChatDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveChat(); } }}
+              placeholder="chat name, e.g. ptifang"
+              autoFocus
+              className="w-56 rounded-md bg-[#0B0F1A] border border-white/10 px-2 py-1 text-sm text-[#E6EDF7] focus:border-[#22D3EE] focus:outline-none"
+            />
+            <button type="button" onClick={saveChat} disabled={busy !== null} className={btnPrimary}>Save</button>
+            <button type="button" onClick={() => setChatDraft(null)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Cancel</button>
+          </>
+        ) : (
+          <>
+            {setup.match_chat ? (
+              <>
+                <span className="font-mono text-sm text-[#22D3EE]">{setup.match_chat}</span>
+                <span className="text-[11px] text-[#8B98B0]">in game, add it to your chats: <span className="font-mono text-[#E6EDF7]">?chat={setup.match_chat}</span></span>
+              </>
+            ) : (
+              <span className="text-sm text-[#8B98B0]">{viewer?.can_set_match_chat ? 'Not set yet.' : 'The referee hasn’t set one yet.'}</span>
+            )}
+            {viewer?.can_set_match_chat && (
+              <button type="button" onClick={() => setChatDraft(setup.match_chat || '')} className="text-xs text-[#F59E0B] hover:text-[#FBBF24]">{setup.match_chat ? 'Change' : 'Set chat name'}</button>
+            )}
+          </>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-[#8B98B0]">For raising things with the referees during the match. Only league staff, referees and both squads’ captains and co-captains can see this.</p>
+    </div>
+  ) : null;
+
   // FS Green: only the captain and later-round picks may play; everyone else stays on the bench.
   const isGreen = match.fs_color === 'green' && !!match.green_min_round;
   const minRound = match.green_min_round || 4;
@@ -207,6 +259,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
         {manualNote && <div className="px-4 pb-2">{manualNote}</div>}
         {greenNote && <div className="px-4 pb-2">{greenNote}</div>}
+        {/* A referee sees this view until the sides are released; they set the chat here. */}
+        {chatRow && <div className="px-4 pb-2">{chatRow}</div>}
         <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
           {setup.side_released ? 'Sides are out. ' : `Sides are released ${revealAt}. `}
           Lineups stay private to each squad's captains and league staff.
@@ -391,6 +445,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
       <div className="px-4 pb-4 space-y-3">
         {manualNote}
         {greenNote}
+        {chatRow}
         {/* Side */}
         <div className="rounded-md bg-[#1B2438] px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-[#E6EDF7]">{sideText}</div>

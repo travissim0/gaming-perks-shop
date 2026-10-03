@@ -312,6 +312,13 @@ export function buildPayload(
     },
     /** Whether the zone runs this match (arena, placement, subs). Off: by hand. */
     automation,
+    /**
+     * The in-game chat the referee opens for this match, so both squads' captains can raise things
+     * during it. Private: only league staff, referees and the two squads' captains / co-captains
+     * get the name; everyone else gets null. Stored on match_setup (no browser read access).
+     */
+    match_chat: viewer.staff || viewer.referee || leadsHome || leadsAway ? (setupRow?.ref_chat || null) : null,
+    can_see_match_chat: viewer.staff || viewer.referee || leadsHome || leadsAway,
     home: teamBlock(home, side, homeNames, seeHome),
     away: teamBlock(away, side ? OTHER[side] : null, awayNames, seeAway),
     /** Public progress flags — no values. */
@@ -351,6 +358,8 @@ export function buildPayload(
           // Subs: captains/co-captains of that squad, staff and referees, from side release until the match is recorded.
           can_sub_home: subWindow && (viewer.staff || viewer.referee || leadsHome),
           can_sub_away: subWindow && (viewer.staff || viewer.referee || leadsAway),
+          // The match chat name is set by whoever is running the match: staff or a referee.
+          can_set_match_chat: viewer.staff || viewer.referee,
           sub_window: subWindow,
         }
       : null,
@@ -376,9 +385,15 @@ export async function loadAll(id: string, viewer: Viewer) {
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */
 export async function loadForMatch(match: any, viewer: Viewer) {
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
+  // ref_chat arrives with add-match-chat.sql; before that, read the row without it.
+  const readSetup = async () => {
+    const one = (cols: string) => supabaseAdmin.from('match_setup').select(cols).eq('match_id', match.id).maybeSingle();
+    const res = await one('home_side, side_chosen_at, side_chosen_by, updated_at, ref_chat');
+    return res.error && /ref_chat/.test(res.error.message) ? one('home_side, side_chosen_at, side_chosen_by, updated_at') : res;
+  };
   const [squads, setupRes, lineupRes, subsRes, automation] = await Promise.all([
     loadSquads(ids),
-    supabaseAdmin.from('match_setup').select('home_side, side_chosen_at, side_chosen_by, updated_at').eq('match_id', match.id).maybeSingle(),
+    readSetup(),
     supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, updated_at').eq('match_id', match.id),
     loadSubs(match.id),
     automationFor(match),
