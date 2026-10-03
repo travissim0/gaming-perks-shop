@@ -149,6 +149,16 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const starters = setup.starters ?? 10;
   const locked = match.locked;
   const auto = setup.automation ?? { enabled: true, reason: null };
+  // Per-match automation switch: league staff and referees (the people in the arena on match
+  // night). Hidden while automation is off site-wide, since only that switch brings it back.
+  const manualSwitch = (viewer?.is_staff || viewer?.is_referee) && auto.reason !== 'site' ? (
+    auto.enabled ? (
+      <button type="button" onClick={() => { if (confirm('Take this match out of the zone queue? The zone will not open its arena, place anyone or apply subs; referees run it by hand.')) post({ action: 'set_manual_zone', manual: true }, 'This match is now run by hand'); }} disabled={busy !== null} className="text-xs text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50" title="Take this match out of the zone queue">Run by hand</button>
+    ) : (
+      <button type="button" onClick={() => post({ action: 'set_manual_zone', manual: false }, 'Zone automation is back on for this match')} disabled={busy !== null} className="text-xs text-[#34D399] hover:text-[#6EE7B7] disabled:opacity-50">Automate again</button>
+    )
+  ) : null;
+
   // FS Green: only the captain and later-round picks may play; everyone else stays on the bench.
   const isGreen = match.fs_color === 'green' && !!match.green_min_round;
   const minRound = match.green_min_round || 4;
@@ -186,10 +196,12 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
       <section className="rounded-xl overflow-hidden bg-[#131A2B]">
         <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-lg text-[#E6EDF7]">Match setup</h2>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Flag on={progress.side_picked} label={`${home.tag} side`} />
             <Flag on={progress.home_lineup_set} label={`${home.tag} lineup`} />
             <Flag on={progress.away_lineup_set} label={`${away.tag} lineup`} />
+            {/* A referee sees this view until the sides are released; the switch is here too. */}
+            {manualSwitch && <span className="ml-2">{manualSwitch}</span>}
           </div>
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
@@ -372,13 +384,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
           {viewer?.is_staff && (
             <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
           )}
-          {viewer?.is_staff && auto.reason !== 'site' && (
-            auto.enabled ? (
-              <button type="button" onClick={() => { if (confirm('Take this match out of the zone queue? The zone will not open its arena, place anyone or apply subs; referees run it by hand.')) post({ action: 'set_manual_zone', manual: true }, 'This match is now run by hand'); }} disabled={busy !== null} className="text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50" title="Take this match out of the zone queue">Run by hand</button>
-            ) : (
-              <button type="button" onClick={() => post({ action: 'set_manual_zone', manual: false }, 'Zone automation is back on for this match')} disabled={busy !== null} className="text-[#34D399] hover:text-[#6EE7B7] disabled:opacity-50">Automate again</button>
-            )
-          )}
+          {manualSwitch}
         </div>
       </div>
 
