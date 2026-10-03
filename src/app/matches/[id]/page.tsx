@@ -23,6 +23,14 @@ import { leagueDate } from '@/lib/scoring';
 
 type Role = 'player' | 'commentator' | 'recording' | 'referee';
 
+/** GET /api/matches/[id]/games (staff): the games the match's arena ran, and which one is recorded. */
+interface ArenaSide { players: number; kills: number; won: boolean; name: string; tag: string }
+interface ArenaGame {
+  game_id: string; game_date: string | null; minutes: number | null; game_mode: string | null; players: number;
+  home: ArenaSide; away: ArenaSide; winner: 'home' | 'away' | null; usable: boolean; why_not: string | null; picked: boolean;
+}
+interface ArenaGames { arena: string | null; picked_game_id: string | null; recorded: boolean; games: ArenaGame[] }
+
 interface Participant { id: string; player_id: string; in_game_alias: string; role: Role }
 
 interface Match {
@@ -259,6 +267,36 @@ export default function MatchDetailPage() {
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not leave'); } finally { setBusy(null); }
   };
+  // Staff: every game the arena ran around this match, and which one was recorded.
+  const [arenaGames, setArenaGames] = useState<ArenaGames | null>(null);
+  const loadArenaGames = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/games`, { headers: await authHeaders(), cache: 'no-store' });
+      setArenaGames(r.ok ? await r.json() : null);
+    } catch { setArenaGames(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
+  useEffect(() => {
+    if (isStaff && match?.league_slug && match.squad_a_id && match.squad_b_id) loadArenaGames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStaff, match?.id, match?.game_id, match?.status]);
+  const useArenaGame = async (gameId: string, winnerName: string | null) => {
+    if (!confirm(`Record this match from that game${winnerName ? ` (${winnerName} won)` : ''}? The current result, if there is one, is replaced and the standings are rebuilt.`)) return;
+    setBusy(`game-${gameId}`);
+    try {
+      const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/games`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ game_id: gameId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not record from that game');
+      toast.success(j.unchanged ? 'That game is already the recorded result' : 'Match re-recorded from that game · standings rebuilt');
+      await load();
+      await loadArenaGames();
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
+  };
+
   const openTime = () => {
     if (!match) return;
     const d = new Date(match.scheduled_at);
@@ -773,6 +811,62 @@ export default function MatchDetailPage() {
 
           {match.match_notes && (
             <Card title="Notes"><p className="text-sm text-[#E6EDF7] whitespace-pre-line">{match.match_notes}</p></Card>
+          )}
+
+          {/* Staff: every game the arena ran, to check the site recorded the right one */}
+          {isStaff && match.league_slug && match.squad_a_id && match.squad_b_id && arenaGames && (
+            <Card
+              title="Games in this arena"
+              action={<button type="button" onClick={loadArenaGames} className="text-xs text-[#8B98B0] hover:text-[#22D3EE]">Refresh</button>}
+            >
+              <p className="text-[11px] text-[#8B98B0] mb-2">
+                Staff only. The arena{arenaGames.arena ? <> <span className="font-mono text-[#E6EDF7]">{arenaGames.arena}</span></> : ''} saves stats for every game it runs: warm-ups, restarts and the match itself.
+                The site records the first one with a winner that started at kick-off. Check it picked the right one; if not, choose the right game and the result, points and standings are redone from it.
+              </p>
+              {arenaGames.games.length === 0 ? (
+                <p className="text-sm text-[#8B98B0]">No games found in this arena around the match time yet.</p>
+              ) : (
+                <ul className="divide-y divide-white/[0.06]">
+                  {arenaGames.games.map((g) => {
+                    const started = g.game_date ? new Date(g.game_date) : null;
+                    const winnerName = g.winner === 'home' ? g.home.name : g.winner === 'away' ? g.away.name : null;
+                    return (
+                      <li key={g.game_id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm ${g.picked ? 'bg-[#34D399]/[0.05] -mx-2 px-2 rounded' : ''}`}>
+                        <span className="w-28 shrink-0 text-xs tabular-nums text-[#8B98B0]">
+                          {started ? started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '—'}
+                          {g.minutes ? ` · ${Math.round(g.minutes)} min` : ''}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          {winnerName ? (
+                            <span className="text-[#E6EDF7]"><span className="text-[#34D399]">{winnerName}</span> won</span>
+                          ) : (
+                            <span className="text-[#8B98B0]">No winner</span>
+                          )}
+                          <span className="ml-2 text-[11px] text-[#8B98B0]">
+                            {g.away.tag} {g.away.players} v {g.home.tag} {g.home.players} players{g.game_mode ? ` · ${g.game_mode}` : ''}
+                            {!g.usable && g.why_not ? ` · ${g.why_not}` : ''}
+                          </span>
+                        </span>
+                        <Link href={`/stats/game/${encodeURIComponent(g.game_id)}`} className="text-[11px] text-[#8B98B0] hover:text-[#22D3EE]">Stats</Link>
+                        {g.picked ? (
+                          <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#34D399]">{arenaGames.recorded ? 'Recorded as the match' : 'Linked'}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => useArenaGame(g.game_id, winnerName)}
+                            disabled={!g.usable || busy === `game-${g.game_id}`}
+                            title={g.usable ? 'Record the match from this game instead' : g.why_not || ''}
+                            className="rounded-md bg-white/5 px-2 py-1 text-[11px] text-[#F59E0B] hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {busy === `game-${g.game_id}` ? 'Recording…' : 'Use this game'}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
           )}
         </div>
       </div>

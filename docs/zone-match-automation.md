@@ -53,6 +53,22 @@ Response:
 A league fixture whose time the captains haven't agreed yet ("Time TBD" on the schedule) is
 **never in the queue**: it has no kick-off time. It appears once staff set its time.
 
+## Which game is the match
+
+The arena saves stats for every game it runs: a warm-up before kick-off, a restart, the match,
+anything after. The site links and scores exactly one of them: **the first game reported
+`played` that has a winner and started at kick-off.**
+
+- A game with **no winner** (restarted or abandoned before a team held the flags) is refused,
+  and the match goes back to waiting. Keep not reporting these.
+- A game that **started more than 10 minutes before the scheduled time** is a warm-up and is
+  refused the same way, even if it ended with a winner. This matters with the countdown: when
+  `*timer` reaches zero it ends whatever warm-up game is running.
+- Once a result is recorded the match is closed; later games in the arena are ignored.
+
+If you can, don't save stats at all for a game the timer ends at kick-off: otherwise the
+warm-up lands in `player_stats` as a league-mode game and counts toward league stats.
+
 ## Free-scheduled (FS) matches
 
 Accepted FS matches are in the queue like any other league match (`stage: "fs"`); a proposal

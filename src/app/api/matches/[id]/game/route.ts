@@ -14,7 +14,9 @@ export const dynamic = 'force-dynamic';
  *                season's rules), standings rebuilt. Staff can remove/re-enter it in the
  *                match manager if the game got it wrong. The reply says what happened.
  *                Only report 'played' for a game that has a winner: a no-winner game is an
- *                aborted game that will be replayed.
+ *                aborted game that will be replayed. The site enforces both halves itself: a
+ *                game with no winner, or one that started more than ten minutes before the
+ *                scheduled kick-off (a warm-up), is refused and the match is put back to waiting.
  *   After a 'played' report, further 'in_progress' reports are ignored (the arena auto-starting
  *   its next game is not part of the match). Re-sending 'played' for the same game is fine.
  */
@@ -39,17 +41,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ ok: true, ignored: 'match already reported over; later games in the arena are not this match', game_id: match.game_id });
   }
 
-  const patch: Record<string, any> = { game_id: gameId };
-  if (status === 'in_progress' && match.status === 'scheduled') { patch.status = 'in_progress'; patch.actual_start_time = new Date().toISOString(); }
-  if (status === 'played') patch.actual_end_time = new Date().toISOString();
-
-  const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
   if (status === 'played') {
     // The zone's stat rows may land a moment after the game ends; the zone can call again.
     const result = await autoRecordFromGame({ ...match, game_id: gameId }, gameId);
+    if (result.warmup || result.aborted) {
+      // Not the match: a game that started well before kick-off (the warm-up the arena's timer
+      // ends), or one that ended with no winner (restarted or abandoned before a team held the
+      // flags). Put the match back to waiting so the real game's reports are accepted and its
+      // stats are the ones linked.
+      const { error: resetErr } = await supabaseAdmin.from('matches')
+        .update({ status: 'scheduled', game_id: null, actual_start_time: null, actual_end_time: null })
+        .eq('id', id);
+      if (resetErr) return NextResponse.json({ error: resetErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true, ignored: result.warmup ? 'warm-up game, not the match' : 'game had no winner, not the match', match_id: id, game_id: gameId, status: 'scheduled', result });
+    }
+    if (!result.recorded) {
+      // Not recorded yet (stat rows still landing, no winner, …): note the game and that it ended.
+      const { error } = await supabaseAdmin.from('matches').update({ game_id: gameId, actual_end_time: new Date().toISOString() }).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ ok: true, match_id: id, game_id: gameId, status: result.recorded ? 'completed' : match.status, result });
   }
+
+  const patch: Record<string, any> = { game_id: gameId };
+  if (match.status === 'scheduled') { patch.status = 'in_progress'; patch.actual_start_time = new Date().toISOString(); }
+  const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, match_id: id, game_id: gameId, status: patch.status || match.status });
 }

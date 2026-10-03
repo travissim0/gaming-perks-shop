@@ -20,8 +20,23 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
+/**
+ * Which of the arena's games is the match. Every game the arena runs (a warm-up before kick-off,
+ * a restart, a game after the match) saves its own stats under its own game id. The match is the
+ * first game the zone reports as played with a winner THAT STARTED AT KICK-OFF: a game that began
+ * more than this long before the scheduled time is a warm-up and is never recorded, even if it
+ * ended with a winner (the arena's countdown timer ends the warm-up game at kick-off).
+ */
+export const EARLY_START_GRACE_MS = 10 * 60 * 1000;
+
 export interface AutoRecordOutcome {
   recorded: boolean;
+  /** True when the game was refused as a pre-match warm-up: the match stays open for the real game. */
+  warmup?: boolean;
+  /** True when the game had no winner (restarted / abandoned): the match stays open for the real game. */
+  aborted?: boolean;
+  /** Dry run only: this game is recordable (has a winner and matches the fixture's squads). */
+  would_record?: boolean;
   reason?: string;
   winner_squad_id?: string | null;
   win_type?: WinType | null;
@@ -37,20 +52,28 @@ async function leagueSeasonId(slug: string, seasonNumber: number): Promise<strin
 }
 
 /** "KEVI T" → "KEVI"; anything else unchanged, upper-cased. */
-const squadTagOfTeam = (team: string) => String(team || '').replace(/\s+[TC]$/i, '').trim().toUpperCase();
+export const squadTagOfTeam = (team: string) => String(team || '').replace(/\s+[TC]$/i, '').trim().toUpperCase();
 
-export async function autoRecordFromGame(match: any, gameId: string): Promise<AutoRecordOutcome> {
+/**
+ * opts.staffPick  a staff member chose this game on the match page: the warm-up guard is skipped
+ *                 (staff know which game was the match).
+ * opts.dryRun     work out what would be recorded and stop before writing anything
+ *                 (`would_record` on the outcome); also skips the "already recorded" check.
+ */
+export async function autoRecordFromGame(match: any, gameId: string, opts: { staffPick?: boolean; dryRun?: boolean } = {}): Promise<AutoRecordOutcome> {
   if (!match.league_slug || !match.season_number) return { recorded: false, reason: 'not a league fixture' };
   if (!match.squad_a_id || !match.squad_b_id) return { recorded: false, reason: 'fixture has no squads' };
   if (match.league_slug === 'ctfpl') return { recorded: false, reason: 'CTFPL results are entered by staff' };
 
   // Already recorded (by the zone earlier, or by staff)? Leave it alone.
-  const { data: existing } = await supabaseAdmin
-    .from('league_matches')
-    .select('id')
-    .or(`fixture_id.eq.${match.id},game_id.eq.${gameId}`)
-    .limit(1);
-  if (existing && existing.length > 0) return { recorded: false, reason: 'already recorded', league_match_id: existing[0].id };
+  if (!opts.dryRun) {
+    const { data: existing } = await supabaseAdmin
+      .from('league_matches')
+      .select('id')
+      .or(`fixture_id.eq.${match.id},game_id.eq.${gameId}`)
+      .limit(1);
+    if (existing && existing.length > 0) return { recorded: false, reason: 'already recorded', league_match_id: existing[0].id };
+  }
 
   const seasonId = await leagueSeasonId(match.league_slug, match.season_number);
   if (!seasonId) return { recorded: false, reason: `no season ${match.season_number} for ${match.league_slug}` };
@@ -80,14 +103,29 @@ export async function autoRecordFromGame(match: any, gameId: string): Promise<Au
   const h = byTag.get(home.id), a = byTag.get(away.id);
   if (!h || !a) return { recorded: false, reason: `game teams don't match the fixture's squads (${tagOf(home)} / ${tagOf(away)})` };
   const winnerId = h.win && !a.win ? home.id : a.win && !h.win ? away.id : null;
-  if (!winnerId) return { recorded: false, reason: h.win && a.win ? 'both teams marked as winners' : 'no winner in the stat rows (undecided game?)' };
+  // No winner = a game that was restarted or abandoned before a team held the flags to win.
+  // It is never the match result; the match stays open for the game that is decided.
+  if (!winnerId) return { recorded: false, aborted: !(h.win && a.win), reason: h.win && a.win ? 'both teams marked as winners' : 'no winner in the stat rows: a restarted or abandoned game, not the match result' };
 
   const minutes = Math.max(0, ...(rows as any[]).map((r) => Number(r.game_length_minutes) || 0)) || null;
+
+  // Warm-up guard. The report arrives as the game ends, so it started about `minutes` ago. A game
+  // that began well before the scheduled kick-off is not the match.
+  const kickoff = match.scheduled_at && match.time_tbd !== true ? new Date(match.scheduled_at).getTime() : NaN;
+  if (!Number.isNaN(kickoff) && !opts.staffPick) {
+    const startedAt = Date.now() - (minutes || 0) * 60_000;
+    if (startedAt < kickoff - EARLY_START_GRACE_MS) {
+      const early = Math.round((kickoff - startedAt) / 60_000);
+      return { recorded: false, warmup: true, minutes, reason: `warm-up: this game started about ${early} min before the scheduled kick-off, so it is not the match. If the match really was played early, change its time on the site or record the result in the match manager.` };
+    }
+  }
+
   const rules = await loadSeasonRules(seasonId);
   const matchKind: MatchKind = match.stage === 'fs' ? 'fs' : 'rs';
   const matchType = match.stage === 'playoff' ? 'Playoffs' : 'Season';
   const winType: WinType | null = winTypeFromMinutes(rules, minutes);
   const playedAt = (rows as any[])[0]?.game_date ? new Date((rows as any[])[0].game_date).toISOString() : new Date().toISOString();
+  if (opts.dryRun) return { recorded: false, would_record: true, winner_squad_id: winnerId, win_type: winType, minutes };
 
   // FS Red / Green. A Green match in which a round 1-3 pick actually played scores as Red for
   // both squads. "Played" = has a stat row on a squad's STARTING team; the bench sits in spec on
@@ -173,7 +211,7 @@ export async function autoRecordFromGame(match: any, gameId: string): Promise<Au
     squad_b_score: a.kills,
     game_id: gameId,
     actual_end_time: playedAt,
-    match_notes: `Result recorded automatically from game ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}).${greenBroken.length ? ` Booked as FS Green but scored as FS Red: ${greenBroken.join(', ')} (round 1–${rules.fs.green_min_round - 1}) played.` : ''} Staff can remove it in the match manager if it's wrong.`,
+    match_notes: `Result recorded ${opts.staffPick ? 'from the game staff picked,' : 'automatically from game'} ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}).${greenBroken.length ? ` Booked as FS Green but scored as FS Red: ${greenBroken.join(', ')} (round 1–${rules.fs.green_min_round - 1}) played.` : ''} Staff can remove it in the match manager if it's wrong.`,
   }).eq('id', match.id);
 
   if (matchType === 'Season') await rebuildStandings(seasonId);
