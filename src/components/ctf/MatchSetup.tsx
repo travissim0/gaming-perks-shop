@@ -38,6 +38,8 @@ interface Setup {
   side_reveal_at: string;
   side_released: boolean;
   subs?: Sub[];
+  /** Whether the zone runs this match. Off: referees open the arena and place players by hand. */
+  automation?: { enabled: boolean; reason: 'site' | 'match' | null };
   viewer: {
     is_staff: boolean; is_referee?: boolean; leads_home: boolean; leads_away: boolean;
     can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean;
@@ -141,6 +143,13 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const { home, away, viewer, match, progress } = setup;
   const starters = setup.starters ?? 10;
   const locked = match.locked;
+  const auto = setup.automation ?? { enabled: true, reason: null };
+  const manualNote = auto.enabled ? null : (
+    <div className="rounded-md bg-[#F87171]/10 ring-1 ring-[#F87171]/30 px-3 py-2 text-xs text-[#E6EDF7]">
+      <span className="font-medium text-[#F87171]">Zone automation is off{auto.reason === 'match' ? ' for this match' : ' site-wide'}.</span>{' '}
+      The arena is not opened and nobody is placed automatically. Referees: open <span className="font-mono">{match.arena || 'the match arena'}</span>, lock it, and move players onto their teams by hand from the lineups below.
+    </div>
+  );
   const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || (!!viewer.is_referee && setup.side_released));
   const subs = setup.subs || [];
   const makeSub = (team: Team) => {
@@ -170,6 +179,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
           </div>
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
+        {manualNote && <div className="px-4 pb-2">{manualNote}</div>}
         <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
           {setup.side_released ? 'Sides are out. ' : `Sides are released ${revealAt}. `}
           Lineups stay private to each squad's captains and league staff.
@@ -302,7 +312,11 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
               </select>
               <button type="button" onClick={() => makeSub(team)} disabled={busy !== null || !subPick[team.squad_id]?.out || !subPick[team.squad_id]?.in} className={btnPrimary}>Make sub</button>
             </div>
-            <p className="text-[11px] text-[#8B98B0]">The zone moves them within a minute: the sub is unspecced onto {team.team_starting || 'the team'}, the player coming out goes to spec on {team.team_bench || 'the bench team'}.</p>
+            <p className="text-[11px] text-[#8B98B0]">
+              {auto.enabled
+                ? <>The zone moves them within a minute: the sub is unspecced onto {team.team_starting || 'the team'}, the player coming out goes to spec on {team.team_bench || 'the bench team'}.</>
+                : <>Zone automation is off: a referee moves them by hand. The sub goes onto {team.team_starting || 'the team'}, the player coming out to spec on {team.team_bench || 'the bench team'}.</>}
+            </p>
           </div>
         )}
         {canSee && subs.some((s) => s.squad_id === team.squad_id) && (
@@ -341,10 +355,18 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
           {viewer?.is_staff && (
             <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
           )}
+          {viewer?.is_staff && auto.reason !== 'site' && (
+            auto.enabled ? (
+              <button type="button" onClick={() => { if (confirm('Take this match out of the zone queue? The zone will not open its arena, place anyone or apply subs; referees run it by hand.')) post({ action: 'set_manual_zone', manual: true }, 'This match is now run by hand'); }} disabled={busy !== null} className="text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50" title="Take this match out of the zone queue">Run by hand</button>
+            ) : (
+              <button type="button" onClick={() => post({ action: 'set_manual_zone', manual: false }, 'Zone automation is back on for this match')} disabled={busy !== null} className="text-[#34D399] hover:text-[#6EE7B7] disabled:opacity-50">Automate again</button>
+            )
+          )}
         </div>
       </div>
 
       <div className="px-4 pb-4 space-y-3">
+        {manualNote}
         {/* Side */}
         <div className="rounded-md bg-[#1B2438] px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-[#E6EDF7]">{sideText}</div>

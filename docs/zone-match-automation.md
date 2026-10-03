@@ -53,6 +53,28 @@ Response:
 A league fixture whose time the captains haven't agreed yet ("Time TBD" on the schedule) is
 **never in the queue**: it has no kick-off time. It appears once staff set its time.
 
+## Switches (site side, nothing to do on the zone)
+
+- **Site-wide:** CTF management → Season → *Zone automation*. Off returns an **empty queue**
+  (`"automation": "off"`, `"matches": []`), so the zone opens nothing, places nobody and applies
+  no subs until it is turned back on. Treat an empty queue as "nothing to do", never as an error.
+- **Per match:** staff can mark one match *Run by hand* on its match page. That match is simply
+  left out of the queue; the others carry on. If a match you were running disappears from the
+  queue, stop reconciling it (and close its arena if empty), exactly as for a cancelled match.
+
+## Match timer (`*timer`)
+
+When you open the arena, start the arena's countdown so the game starts itself at kick-off:
+the equivalent of `*timer <starts_in_min>` (`arena.setTicker(1, arena.playtimeTickerIdx,
+minutes * 6000, "Time Remaining: ", () => arena.gameEnd())`, which is what `*timer` does).
+At zero the game ends/resets and the script starts the match with the placed players.
+
+- `starts_in_min` is in every poll; set the timer from it when the arena is opened.
+- **Staff can extend:** if `scheduled_at` moves (staff changed the time on the site), set the
+  timer again from the new `starts_in_min`. A mod can also type `*timer N` in the arena; don't
+  fight that — only reset the timer when `scheduled_at` actually changed since you last set it.
+- Once the game has started (`status: in_progress`), leave the timer alone.
+
 `client.players` is the **desired state**: every listed player, the team they
 belong on, and whether they sit in spec. It already reflects subs. Players
 not listed are not part of the match.
@@ -95,7 +117,7 @@ spec quiet, placement, subs and both game reports all worked once these were sor
 
 | When | Do |
 |---|---|
-| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Make sure the four `client.teams` exist. |
+| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Start the countdown: `*timer <starts_in_min>` (see Match timer). Make sure the four `client.teams` exist. |
 | `side_released == true` and `client.ready` | Place everyone: for each `client.players` entry, if `spec` is false → `player.unspec(getTeamByName(team))`; if `spec` is true → `player.spec(team)` (spec'd, sitting on the bench team name). Anyone in the arena who is not in the list → spec. |
 | every poll while `status` is scheduled/in_progress | **Reconcile**: compare each player's actual team/spec against the desired state and move only those that differ. That is what makes subs work: the site swaps the two rows and `updated_at` bumps. `updated_at` also bumps at the side release, so a zone that skips unchanged matches still gets the placement moment. If you cache, key the skip on `updated_at` **and** `side_released`, and never skip a match whose arena you haven't finished setting up (lock / spec quiet / teams). |
 | a player enters the arena | Place them per the desired state at once (or on the next poll). Not in the list → spec. |

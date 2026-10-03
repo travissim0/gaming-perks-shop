@@ -26,6 +26,7 @@ import SeasonSettingsPanel from '@/components/admin/SeasonSettingsPanel';
 import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 import GameClientPanel from '@/components/admin/GameClientPanel';
+import ZoneAutomationPanel from '@/components/admin/ZoneAutomationPanel';
 import ScoringRulesPanel from '@/components/admin/ScoringRulesPanel';
 
 interface Squad {
@@ -957,6 +958,7 @@ export default function CTFManagementPage() {
           <SeasonSettingsPanel />
           <ScoringRulesPanel />
           <GameClientPanel />
+          <ZoneAutomationPanel />
           {rollover && (
             <Panel
               title={`Season rollover · ${rollover.league.name} Season ${rollover.season.season_number}`}

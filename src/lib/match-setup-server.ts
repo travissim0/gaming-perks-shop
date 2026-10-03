@@ -71,13 +71,35 @@ export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow |
 
 export const MATCH_COLS = 'id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time';
 
+/** Optional columns that arrive with later SQL files; a select falls back without any that is missing. */
+export const MATCH_OPTIONAL_COLS = ['time_tbd', 'manual_zone'];
+
 export async function loadMatch(id: string) {
   const one = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
-  // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
-  let { data, error } = await one(`${MATCH_COLS}, time_tbd`);
-  if (error && /time_tbd/.test(error.message)) ({ data, error } = await one(MATCH_COLS));
-  if (error) throw new Error(error.message);
-  return data as any | null;
+  let optional = [...MATCH_OPTIONAL_COLS];
+  for (;;) {
+    const { data, error } = await one([MATCH_COLS, ...optional].join(', '));
+    if (!error) return data as any | null;
+    const missing = optional.find((c) => error.message.includes(c));
+    if (!missing) throw new Error(error.message);
+    optional = optional.filter((c) => c !== missing); // before that column's SQL has run
+  }
+}
+
+/**
+ * Zone automation switches. Off means the match is left out of the zone queue: no arena opened,
+ * nobody placed, no subs applied; staff and referees run it by hand.
+ *   site-wide: site_settings ZONE_AUTOMATION = 'off' (CTF management → Season)
+ *   per match: matches.manual_zone (add-match-manual-zone.sql), toggled on the match page
+ */
+export async function zoneAutomationEnabled(): Promise<boolean> {
+  return (await getSetting('ZONE_AUTOMATION')).trim().toLowerCase() !== 'off';
+}
+export type AutomationState = { enabled: boolean; reason: 'site' | 'match' | null };
+export async function automationFor(match: any): Promise<AutomationState> {
+  if (!(await zoneAutomationEnabled())) return { enabled: false, reason: 'site' };
+  if (match?.manual_zone === true) return { enabled: false, reason: 'match' };
+  return { enabled: true, reason: null };
 }
 
 /**
@@ -150,7 +172,7 @@ export const sideReleased = (match: any) => !isTimeTbd(match) && Date.now() >= n
 
 export interface SubRow { id: string; squad_id: string; out_player_id: string; in_player_id: string; by_id: string | null; by_alias: string | null; created_at: string; out_alias?: string; in_alias?: string }
 
-export function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, lineupRows: any[], subs: SubRow[], viewer: Viewer) {
+export function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, lineupRows: any[], subs: SubRow[], viewer: Viewer, automation: AutomationState = { enabled: true, reason: null }) {
   const home = match.squad_a_id ? squads[match.squad_a_id] : null;
   const away = match.squad_b_id ? squads[match.squad_b_id] : null;
   const side: Side | null = setupRow?.home_side || null;
@@ -235,6 +257,8 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
       game_id: match.game_id || null,
       arena: arenaNameFor(match, home, away),
     },
+    /** Whether the zone runs this match (arena, placement, subs). Off: by hand. */
+    automation,
     home: teamBlock(home, side, homeNames, seeHome),
     away: teamBlock(away, side ? OTHER[side] : null, awayNames, seeAway),
     /** Public progress flags — no values. */
@@ -299,12 +323,13 @@ export async function loadAll(id: string, viewer: Viewer) {
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */
 export async function loadForMatch(match: any, viewer: Viewer) {
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
-  const [squads, setupRes, lineupRes, subsRes] = await Promise.all([
+  const [squads, setupRes, lineupRes, subsRes, automation] = await Promise.all([
     loadSquads(ids),
     supabaseAdmin.from('match_setup').select('home_side, side_chosen_at, side_chosen_by, updated_at').eq('match_id', match.id).maybeSingle(),
     supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, updated_at').eq('match_id', match.id),
     loadSubs(match.id),
+    automationFor(match),
   ]);
   if ((setupRes.error && missingTable(setupRes.error.message)) || (lineupRes.error && missingTable(lineupRes.error.message))) return { pending_sql: true };
-  return buildPayload(match, setupRes.data, squads, lineupRes.data || [], subsRes.subs, viewer);
+  return buildPayload(match, setupRes.data, squads, lineupRes.data || [], subsRes.subs, viewer, automation);
 }

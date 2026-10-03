@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadForMatch, supabaseAdmin, viewerFor } from '@/lib/match-setup-server';
+import { loadForMatch, supabaseAdmin, viewerFor, zoneAutomationEnabled } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +28,17 @@ export async function GET(request: NextRequest) {
   const league = (q.get('league') || '').trim().toLowerCase();
 
   const now = Date.now();
-  const run = (tbdColumn: boolean) => {
+
+  // Site-wide switch (CTF management → Season → Zone automation). Off = an empty queue, so the
+  // zone opens nothing, places nobody and applies no subs, without any change on the zone side.
+  if (!(await zoneAutomationEnabled())) {
+    return NextResponse.json(
+      { generated_at: new Date(now).toISOString(), window_hours: hours, automation: 'off', matches: [] },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  const run = (skip: string[]) => {
     let query = supabaseAdmin
       .from('matches')
       .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id')
@@ -41,14 +51,20 @@ export async function GET(request: NextRequest) {
       .limit(50);
     // "Time TBD" fixtures have no kick-off time (scheduled_at is only their play-by day), so the
     // zone must not open an arena for them. They join the queue once staff set a real time.
-    if (tbdColumn) query = query.eq('time_tbd', false);
+    if (!skip.includes('time_tbd')) query = query.eq('time_tbd', false);
+    // Per-match switch: staff marked this one to be run by hand.
+    if (!skip.includes('manual_zone')) query = query.eq('manual_zone', false);
     if (league) query = query.eq('league_slug', league);
     else query = query.not('league_slug', 'is', null);
     return query;
   };
 
-  let { data, error } = await run(true);
-  if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(false)); // before add-match-time-tbd.sql
+  // Each optional column arrives with its own SQL file; drop a filter whose column is missing.
+  const skip: string[] = [];
+  let { data, error } = await run(skip);
+  for (const col of ['time_tbd', 'manual_zone']) {
+    if (error && error.message.includes(col)) { skip.push(col); ({ data, error } = await run(skip)); }
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const matches = [];
@@ -68,7 +84,7 @@ export async function GET(request: NextRequest) {
       scheduled_at: p.match.scheduled_at,
       side_reveal_at: p.side_reveal_at,
       side_released: p.side_released,
-      /** Minutes until the scheduled time (negative once it has started). */
+      /** Minutes until the scheduled time (negative once it has started). Also the arena's `*timer` value when it is opened; re-set it if scheduled_at moves. */
       starts_in_min: Math.round((new Date(p.match.scheduled_at).getTime() - now) / 60_000),
       home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench },
       away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench },
@@ -81,7 +97,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { generated_at: new Date(now).toISOString(), window_hours: hours, matches },
+    { generated_at: new Date(now).toISOString(), window_hours: hours, automation: 'on', matches },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }

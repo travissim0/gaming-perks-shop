@@ -15,6 +15,8 @@ const ALLOWED: Record<string, { secret: boolean }> = {
   DISCORD_GUILD_ID: { secret: false },
   // Shared key the game client sends (X-Client-Key) to read private match setups.
   MATCH_CLIENT_KEY: { secret: true },
+  // 'off' empties the zone queue: no arenas opened, nobody placed, no subs applied, site-wide.
+  ZONE_AUTOMATION: { secret: false },
 };
 
 const supabaseAdmin = createClient(

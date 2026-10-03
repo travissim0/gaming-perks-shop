@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
  *   { action: 'sub', squad_id, out_player_id, in_player_id }   that squad's captain/co-captain, staff or a referee;
  *         from side release until the result is recorded. Swaps the two slots and logs it.
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
+ *   { action: 'set_manual_zone', manual: boolean }   staff — take this match out of (or put it back in) the zone queue
  *
  * Home team = squad_a. Captains can edit until the scheduled time; staff always.
  */
@@ -53,6 +54,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const now = new Date().toISOString();
   const fail = (error: { message: string }) =>
     NextResponse.json({ error: missingTable(error.message) ? 'Run add-match-setup.sql (and add-match-subs.sql) in Supabase first' : error.message }, { status: missingTable(error.message) ? 503 : 500 });
+
+  if (action === 'set_manual_zone') {
+    // Per-match zone switch: off = left out of the zone queue, run by hand.
+    if (!viewer.staff) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
+    if (typeof body.manual !== 'boolean') return NextResponse.json({ error: 'manual must be true or false' }, { status: 400 });
+    const { error } = await supabaseAdmin.from('matches').update({ manual_zone: body.manual }).eq('id', id);
+    if (error) return NextResponse.json({ error: /manual_zone/.test(error.message) ? 'Run add-match-manual-zone.sql in Supabase first' : error.message }, { status: 500 });
+    return NextResponse.json(await loadAll(id, viewer));
+  }
 
   if (action === 'swap_home') {
     if (!viewer.staff) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
