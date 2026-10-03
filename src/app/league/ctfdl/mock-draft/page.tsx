@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import DraftCountdown from '@/components/ctf/DraftCountdown';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { displayFont, bodyFont } from '@/lib/fonts';
@@ -165,7 +166,10 @@ export default function MockDraftPage() {
   const shell = (children: React.ReactNode) => (
     <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
-      <main className="mx-auto max-w-[1200px] px-4 py-5">{children}</main>
+      <main className="mx-auto max-w-[1200px] px-4 py-5">
+        <DraftCountdown here="mock" />
+        {children}
+      </main>
     </div>
   );
 

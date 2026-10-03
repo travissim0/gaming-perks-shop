@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import DraftCountdown from '@/components/ctf/DraftCountdown';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 import FreeAgentJoinForm, { type FreeAgentFormData } from '@/components/FreeAgentJoinForm';
@@ -150,7 +151,10 @@ export default function LeagueRegisterPage() {
   const shell = (children: React.ReactNode) => (
     <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
-      <main className="mx-auto max-w-4xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-4xl px-4 py-8">
+        <DraftCountdown here="register" />
+        {children}
+      </main>
     </div>
   );
 

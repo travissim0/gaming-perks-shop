@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
+import DraftCountdown from '@/components/ctf/DraftCountdown';
 import { useAuth } from '@/lib/AuthContext';
 import { CLASS_OPTIONS } from '@/lib/constants';
 import { displayFont, bodyFont } from '@/lib/fonts';
@@ -239,7 +240,10 @@ export default function CtfdlDraftLobbyPage() {
   const shell = (children: React.ReactNode) => (
     <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
       <Navbar user={user} />
-      <main className="mx-auto max-w-[1400px] px-4 py-5">{children}</main>
+      <main className="mx-auto max-w-[1400px] px-4 py-5">
+        <DraftCountdown here="draft" />
+        {children}
+      </main>
     </div>
   );
 

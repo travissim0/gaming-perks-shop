@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import type { LeagueInfo, LeagueSeason, SeasonStatus, SeasonPhase } from '@/lib/leagues';
-import { formatDateOnly, leagueRulesHref, leagueStandingsHref } from '@/lib/leagues';
+import { formatDateOnly, isRegistrationClosed, leagueRulesHref, leagueStandingsHref } from '@/lib/leagues';
+import DraftCountdown from '@/components/ctf/DraftCountdown';
 
 const STATUS: Record<SeasonStatus, { label: string; cls: string; dot: boolean }> = {
   active: { label: 'Active', cls: 'bg-[#34D399]/15 text-[#34D399]', dot: true },
@@ -48,7 +49,10 @@ export default function SeasonHero({
     : null;
   const next = phase.milestones.find((m) => !m.past);
   const isDraft = league.format === 'draft';
-  const registrationOpen = status !== 'off-season' && !phase.milestones.some((m) => m.label === 'Registration closes' && m.past);
+  // With a draft time set the deadline is an hour before the draft, to the minute; otherwise the milestone day.
+  const registrationOpen = status !== 'off-season' && (season?.draft_at
+    ? !isRegistrationClosed(season)
+    : !phase.milestones.some((m) => m.label === 'Registration closes' && m.past));
 
   const draftHref = isDraft
     ? draft?.status === 'complete'
@@ -171,6 +175,9 @@ export default function SeasonHero({
           </Link>
         </div>
       </div>
+
+      {/* Draft-day countdown (only while the season has a draft time and the draft hasn't finished) */}
+      <DraftCountdown variant="strip" here="league" league={league} season={season} draftStatus={draft?.status ?? null} viewerRegistered={viewerRegistered} />
 
       {/* Milestone rail */}
       {phase.milestones.length > 0 && (
