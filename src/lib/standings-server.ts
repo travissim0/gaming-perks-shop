@@ -20,18 +20,19 @@ export async function loadSeasonRules(leagueSeasonId: string): Promise<ScoringRu
 
 export async function rebuildStandings(leagueSeasonId: string): Promise<{ rows: number; error: string | null }> {
   const rules = await loadSeasonRules(leagueSeasonId);
-  const [{ data: matches, error: mErr }, { data: existing }] = await Promise.all([
-    supabaseAdmin
-      .from('league_matches')
-      .select('id, match_type, match_kind, win_type, no_contest, verified, game_length_minutes, team_a_squad_id, team_b_squad_id, team_a_result, team_b_result, team_a_kills, team_b_kills, match_date')
-      .eq('league_season_id', leagueSeasonId),
+  const cols = 'id, match_type, match_kind, win_type, no_contest, verified, game_length_minutes, team_a_squad_id, team_b_squad_id, team_a_result, team_b_result, team_a_kills, team_b_kills, match_date';
+  const load = (c: string) => supabaseAdmin.from('league_matches').select(c).eq('league_season_id', leagueSeasonId);
+  const [first, { data: existing }] = await Promise.all([
+    load(`${cols}, fs_color`),
     supabaseAdmin.from('league_standings').select('squad_id').eq('league_season_id', leagueSeasonId),
   ]);
+  // fs_color arrives with add-fs-colors.sql; without it every FS scores as red.
+  const { data: matches, error: mErr } = first.error && /fs_color/.test(first.error.message) ? await load(cols) : first;
   if (mErr) return { rows: 0, error: mErr.message };
 
   // Keep zero rows for squads already in the table (e.g. seeded at draft time).
   const seeded = (existing || []).map((r: any) => r.squad_id as string);
-  const computed = computeStandings((matches || []) as ScoredMatch[], rules, seeded);
+  const computed = computeStandings((matches || []) as unknown as ScoredMatch[], rules, seeded);
   const now = new Date().toISOString();
   const rows = computed.map((r) => ({
     league_season_id: leagueSeasonId,

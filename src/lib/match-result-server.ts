@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { winTypeFromMinutes, type MatchKind, type WinType } from '@/lib/scoring';
 import { loadSeasonRules, rebuildStandings } from '@/lib/standings-server';
-import { tagOf } from '@/lib/match-setup-server';
+import { greenBlockedFor, loadSquads, tagOf } from '@/lib/match-setup-server';
 
 /**
  * Record a league fixture's result from the game the zone ran for it.
@@ -89,6 +89,46 @@ export async function autoRecordFromGame(match: any, gameId: string): Promise<Au
   const winType: WinType | null = winTypeFromMinutes(rules, minutes);
   const playedAt = (rows as any[])[0]?.game_date ? new Date((rows as any[])[0].game_date).toISOString() : new Date().toISOString();
 
+  // FS Red / Green. A Green match in which a round 1-3 pick actually played scores as Red for
+  // both squads. "Played" = has a stat row on a squad's STARTING team; the bench sits in spec on
+  // the squad's other team name and doesn't count.
+  let fsColor: 'red' | 'green' | null = null;
+  let greenBroken: string[] = [];
+  if (matchKind === 'fs' && rules.fs.colors) {
+    fsColor = match.fs_color === 'green' ? 'green' : 'red';
+    if (fsColor === 'green') {
+      const squadsFull = await loadSquads([home.id, away.id]);
+      const green = await greenBlockedFor(match, squadsFull);
+      if (green && green.blocked.size > 0) {
+        const ids = Array.from(green.blocked);
+        const [{ data: profs }, { data: aliases }, { data: setupRow }] = await Promise.all([
+          supabaseAdmin.from('profiles').select('id, in_game_alias').in('id', ids),
+          supabaseAdmin.from('profile_aliases').select('profile_id, alias').in('profile_id', ids),
+          supabaseAdmin.from('match_setup').select('home_side').eq('match_id', match.id).maybeSingle(),
+        ]);
+        const nameOf = new Map<string, string>(); // any known name (lower-cased) → display alias
+        (profs || []).forEach((p: any) => { if (p.in_game_alias) nameOf.set(String(p.in_game_alias).trim().toLowerCase(), p.in_game_alias); });
+        (aliases || []).forEach((a: any) => {
+          const main = (profs || []).find((p: any) => p.id === a.profile_id)?.in_game_alias || a.alias;
+          if (a.alias) nameOf.set(String(a.alias).trim().toLowerCase(), main);
+        });
+        const side = (setupRow as any)?.home_side as 'titan' | 'collective' | undefined;
+        const startingTeams = side
+          ? new Set([`${tagOf(home)} ${side === 'titan' ? 'T' : 'C'}`, `${tagOf(away)} ${side === 'titan' ? 'C' : 'T'}`].map((t) => t.toUpperCase()))
+          : null; // side unknown: any row on either squad's teams counts
+        const hit = new Set<string>();
+        for (const r of rows as any[]) {
+          const team = String(r.team || '').trim().toUpperCase();
+          const onField = startingTeams ? startingTeams.has(team) : [tagOf(home), tagOf(away)].includes(squadTagOfTeam(team));
+          const who = nameOf.get(String(r.player_name || '').trim().toLowerCase());
+          if (onField && who) hit.add(who);
+        }
+        greenBroken = Array.from(hit);
+        if (greenBroken.length) fsColor = 'red';
+      }
+    }
+  }
+
   const insert: Record<string, unknown> = {
     league_season_id: seasonId,
     team_a_name: home.name,
@@ -110,10 +150,16 @@ export async function autoRecordFromGame(match: any, gameId: string): Promise<Au
     no_contest: false,
     verified: true, // the zone ran it: as good as a recording
     fixture_id: match.id,
+    ...(fsColor ? { fs_color: fsColor } : {}),
   };
   let res = await supabaseAdmin.from('league_matches').insert(insert).select('id').single();
+  if (res.error && /fs_color/.test(res.error.message)) {
+    // Before add-fs-colors.sql: record it without the colour (scores as red).
+    const { fs_color: _fc, ...noColor } = insert;
+    res = await supabaseAdmin.from('league_matches').insert(noColor).select('id').single();
+  }
   if (res.error && /column .*does not exist/i.test(res.error.message)) {
-    const { match_kind: _mk, win_type: _wt, no_contest: _nc, verified: _v, fixture_id: _f, ...basic } = insert;
+    const { match_kind: _mk, win_type: _wt, no_contest: _nc, verified: _v, fixture_id: _f, fs_color: _fc2, ...basic } = insert;
     res = await supabaseAdmin.from('league_matches').insert(basic).select('id').single();
   }
   if (res.error) return { recorded: false, reason: res.error.message };
@@ -127,7 +173,7 @@ export async function autoRecordFromGame(match: any, gameId: string): Promise<Au
     squad_b_score: a.kills,
     game_id: gameId,
     actual_end_time: playedAt,
-    match_notes: `Result recorded automatically from game ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}). Staff can remove it in the match manager if it's wrong.`,
+    match_notes: `Result recorded automatically from game ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}).${greenBroken.length ? ` Booked as FS Green but scored as FS Red: ${greenBroken.join(', ')} (round 1–${rules.fs.green_min_round - 1}) played.` : ''} Staff can remove it in the match manager if it's wrong.`,
   }).eq('id', match.id);
 
   if (matchType === 'Season') await rebuildStandings(seasonId);

@@ -33,6 +33,8 @@ export default function FsProposals({
   const [opponent, setOpponent] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('20:00');
+  // Red or Green, declared when booking and fixed after (seasons that split FS by colour).
+  const [color, setColor] = useState<'red' | 'green' | ''>('');
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -68,7 +70,15 @@ export default function FsProposals({
     const b = new Date(y2, m2 - 1, d2);
     return `${a.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${b.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
   };
-  const usedThisWeek = mySquad ? fs.filter((f) => f.fs_status !== 'declined' && f.fs_status !== 'cancelled' && f.fs_week_start === thisWeek && (f.squad_a_id === mySquad.id || f.squad_b_id === mySquad.id)).length : 0;
+  const split = rules.fs.colors;
+  const colorOf = (f: Fixture): 'red' | 'green' => (f.fs_color === 'green' ? 'green' : 'red');
+  const usedWeek = (c: 'red' | 'green' | null) => mySquad
+    ? fs.filter((f) => f.fs_status !== 'declined' && f.fs_status !== 'cancelled' && f.fs_week_start === thisWeek && (f.squad_a_id === mySquad.id || f.squad_b_id === mySquad.id) && (!c || colorOf(f) === c)).length
+    : 0;
+  const usedThisWeek = usedWeek(null);
+  const ColorTag = ({ c }: { c: 'red' | 'green' }) => (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${c === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}>{c === 'green' ? 'FS Green' : 'FS Red'}</span>
+  );
 
   const call = async (body: Record<string, unknown>, label: string, key: string) => {
     setBusy(key);
@@ -90,9 +100,13 @@ export default function FsProposals({
   };
 
   const propose = async () => {
-    if (!mySquad || !opponent || !date || !time) return;
-    const ok = await call({ action: 'propose', league: league.slug, season: season.season_number, my_squad_id: mySquad.id, opponent_squad_id: opponent, scheduled_at: localDateTimeToIso(date, time) }, `FS match proposed to ${teams.find((t) => t.id === opponent)?.name || 'them'}`, 'propose');
-    if (ok) { setOpponent(''); setDate(''); setOpen(false); }
+    if (!mySquad || !opponent || !date || !time || (split && !color)) return;
+    const ok = await call(
+      { action: 'propose', league: league.slug, season: season.season_number, my_squad_id: mySquad.id, opponent_squad_id: opponent, scheduled_at: localDateTimeToIso(date, time), ...(split ? { color } : {}) },
+      `${split ? `FS ${color === 'green' ? 'Green' : 'Red'}` : 'FS'} match proposed to ${teams.find((t) => t.id === opponent)?.name || 'them'}`,
+      'propose',
+    );
+    if (ok) { setOpponent(''); setDate(''); setColor(''); setOpen(false); }
   };
 
   const nothingToShow = !mySquad && pendingForMe.length === 0 && myPending.length === 0 && !isStaff;
@@ -105,13 +119,19 @@ export default function FsProposals({
           <h2 className="font-display text-lg text-[#E6EDF7]">Free scheduled</h2>
           <div className="text-xs text-[#8B98B0]">
             Optional matches two captains agree to. Worth fewer points, but every one counts.
-            {' '}Caps: {rules.fs.per_week} per week (Mon–Sun), {rules.fs.per_opponent_week} vs the same squad per week, {rules.fs.per_opponent_season} vs the same squad per season.
+            {split && <> <span className="text-[#F87171]">Red</span>: a normal match, full lineup. <span className="text-[#34D399]">Green</span>: only the captain and round {rules.fs.green_min_round}+ picks play, worth double.</>}
+            {' '}Caps{split ? ' for each colour' : ''}: {rules.fs.per_week} per week (Mon–Sun), {rules.fs.per_opponent_week} vs the same squad per week, {rules.fs.per_opponent_season} vs the same squad per season.
             {rules.fs.needs_verification && ' Needs a ref or a recording to count.'}
+            {rules.fs.closes_on && ` FS closes after ${new Date(`${rules.fs.closes_on}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.`}
           </div>
         </div>
         {mySquad && (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-[#8B98B0]">{mySquad.tag || mySquad.name} · <span className={usedThisWeek >= rules.fs.per_week ? 'text-[#F87171]' : 'text-[#E6EDF7]'}>{usedThisWeek}</span> of {rules.fs.per_week} this week</span>
+            {split ? (
+              <span className="text-xs text-[#8B98B0]">{mySquad.tag || mySquad.name} this week · <span className="text-[#F87171]">Red {usedWeek('red')}/{rules.fs.per_week}</span> · <span className="text-[#34D399]">Green {usedWeek('green')}/{rules.fs.per_week}</span></span>
+            ) : (
+              <span className="text-xs text-[#8B98B0]">{mySquad.tag || mySquad.name} · <span className={usedThisWeek >= rules.fs.per_week ? 'text-[#F87171]' : 'text-[#E6EDF7]'}>{usedThisWeek}</span> of {rules.fs.per_week} this week</span>
+            )}
             <button type="button" onClick={() => setOpen((o) => !o)} className={btnPrimary}>{open ? 'Close' : 'Propose an FS match'}</button>
           </div>
         )}
@@ -128,8 +148,21 @@ export default function FsProposals({
           </label>
           <label className="block"><span className={labelCls}>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} /></label>
           <label className="block"><span className={labelCls}>Time (your zone)</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} /></label>
-          <button type="button" onClick={propose} disabled={!opponent || !date || !time || busy !== null} className={btnPrimary}>{busy === 'propose' ? 'Sending…' : 'Send proposal'}</button>
-          <span className="text-[11px] text-[#8B98B0]">You are home and pick the side. Their captain gets an Accept button here.</span>
+          {split && (
+            <div>
+              <span className={labelCls}>Type</span>
+              <div className="flex gap-1.5">
+                <button type="button" onClick={() => setColor('red')} className={`rounded-md px-3 py-2 text-sm transition-colors ${color === 'red' ? 'bg-[#F87171]/20 text-[#F87171]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`} title="A normal match: full lineup">Red</button>
+                <button type="button" onClick={() => setColor('green')} className={`rounded-md px-3 py-2 text-sm transition-colors ${color === 'green' ? 'bg-[#34D399]/20 text-[#34D399]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`} title={`Only the captain and round ${rules.fs.green_min_round}+ picks play. Worth double.`}>Green</button>
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={propose} disabled={!opponent || !date || !time || (split && !color) || busy !== null} className={btnPrimary}>{busy === 'propose' ? 'Sending…' : 'Send proposal'}</button>
+          <span className="text-[11px] text-[#8B98B0]">
+            You are home and pick the side. Their captain gets an Accept button here.
+            {split && ' Red or Green is fixed once you send it.'}
+            {split && color === 'green' && ` Green: rounds 1–${rules.fs.green_min_round - 1} stay in spec; if one of them plays, the match scores as Red for both squads.`}
+          </span>
         </div>
       )}
 
@@ -143,6 +176,7 @@ export default function FsProposals({
             return (
               <li key={f.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
                 <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">Pending</span>
+                {split && <ColorTag c={colorOf(f)} />}
                 <span className="min-w-0 flex-1 text-[#E6EDF7]">
                   {f.squad_b_name} <span className="text-[#8B98B0]">vs</span> {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
                   <span className="ml-2 text-xs text-[#8B98B0]">{when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{f.fs_week_start ? ` · week of ${weekLabel(f.fs_week_start)}` : ''}</span>

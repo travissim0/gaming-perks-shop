@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, supabaseAdmin, viewerFor,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, supabaseAdmin, viewerFor,
 } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
@@ -100,6 +100,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const roster = new Set(sq.members.map((m) => m.player_id));
     if ([...starting, ...bench].some((p) => !roster.has(p))) return NextResponse.json({ error: 'Everyone in the lineup must be on the squad roster' }, { status: 400 });
     if (starting.length > STARTERS) return NextResponse.json({ error: `Matches are ${STARTERS}v${STARTERS}: pick at most ${STARTERS} starters, the rest go on the bench` }, { status: 400 });
+    // FS Green: only the captain and later-round picks may start. Staff are held to it too.
+    const green = await greenBlockedFor(match, squads);
+    if (green) {
+      const bad = starting.filter((p) => green.blocked.has(p)).map((p) => sq.members.find((m) => m.player_id === p)?.alias || 'a player');
+      if (bad.length) return NextResponse.json({ error: `This is an FS Green match: only the captain and round ${green.minRound}+ picks can start. ${bad.join(', ')} ${bad.length === 1 ? 'was' : 'were'} drafted in rounds 1–${green.minRound - 1} and stay${bad.length === 1 ? 's' : ''} on the bench.` }, { status: 400 });
+    }
 
     const rows = [
       ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, set_by: viewer.id, updated_at: now })),
@@ -129,6 +135,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const roster = new Set(sq.members.map((m) => m.player_id));
     if (!roster.has(inId)) return NextResponse.json({ error: 'The player coming in must be on the squad roster' }, { status: 400 });
+    // FS Green: a round 1-3 pick can't be subbed in either (the match would score as Red).
+    const green = await greenBlockedFor(match, squads);
+    if (green?.blocked.has(inId)) {
+      return NextResponse.json({ error: `This is an FS Green match: ${sq.members.find((m) => m.player_id === inId)?.alias || 'that player'} was drafted in rounds 1–${green.minRound - 1} and can't be subbed in. Only the captain and round ${green.minRound}+ picks play.` }, { status: 400 });
+    }
 
     const { data: rows, error: rowsErr } = await supabaseAdmin.from('match_lineups').select('id, player_id, slot, position').eq('match_id', id).eq('squad_id', sq.id);
     if (rowsErr) return fail(rowsErr);

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SYSTEM_USER_ID } from '@/lib/constants';
+import { normalizeRules } from '@/lib/scoring';
 
 /**
  * Notices to people, delivered by the Discord bot (DM, and a channel post
@@ -19,8 +20,10 @@ export interface MatchSummary {
   match_id: string;
   url: string;
   league: string | null;
+  league_slug: string | null;
   season_number: number | null;
-  stage_label: string;          // "Week 3" | "Playoffs" | "Free scheduled"
+  stage: string | null;         // regular | playoff | fs
+  stage_label: string;          // "Week 3" | "Playoffs" | "FS Green" | "Free scheduled"
   squad_a: string | null;
   squad_b: string | null;
   /** null while the match's time is TBD: the bot then shows scheduled_et instead of a Discord timestamp. */
@@ -35,8 +38,15 @@ export async function matchSummary(matchId: string): Promise<MatchSummary | null
   const cols = 'id, title, scheduled_at, league_slug, season_number, week, stage, squad_a:squads!matches_squad_a_id_fkey(name, tag), squad_b:squads!matches_squad_b_id_fkey(name, tag)';
   const one = (c: string) => supabaseAdmin.from('matches').select(c).eq('id', matchId).maybeSingle();
   // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
-  let { data, error } = await one(`${cols}, time_tbd`);
-  if (error && /time_tbd/.test(error.message)) ({ data } = await one(cols));
+  // time_tbd / fs_color arrive with later SQL files; drop whichever is missing.
+  let optional = ['time_tbd', 'fs_color'];
+  let { data, error } = await one([cols, ...optional].join(', '));
+  while (error && optional.length) {
+    const missing = optional.find((c) => error!.message.includes(c));
+    if (!missing) break;
+    optional = optional.filter((c) => c !== missing);
+    ({ data, error } = await one([cols, ...optional].join(', ')));
+  }
   const m = data as any;
   if (!m) return null;
   const tbd = m.time_tbd === true;
@@ -46,13 +56,28 @@ export async function matchSummary(matchId: string): Promise<MatchSummary | null
     match_id: m.id,
     url: `${SITE_URL}/matches/${m.id}`,
     league: m.league_slug ? m.league_slug.toUpperCase() : null,
+    league_slug: m.league_slug ?? null,
     season_number: m.season_number ?? null,
-    stage_label: m.stage === 'playoff' ? 'Playoffs' : m.stage === 'fs' ? 'Free scheduled' : m.week ? `Week ${m.week}` : (m.title || 'Match'),
+    stage: m.stage ?? null,
+    stage_label: m.stage === 'playoff' ? 'Playoffs' : m.stage === 'fs' ? (m.fs_color === 'green' ? 'FS Green' : m.fs_color === 'red' ? 'FS Red' : 'Free scheduled') : m.week ? `Week ${m.week}` : (m.title || 'Match'),
     squad_a: name(a),
     squad_b: name(b),
     scheduled_at: tbd ? null : m.scheduled_at,
     scheduled_et: tbd ? 'Time TBD' : fmtEt(m.scheduled_at),
   };
+}
+
+/**
+ * How many referees the league wants on this match (season scoring rules → refs): two on RS and
+ * playoff matches, one on FS in CTFDL S5. A target, not a requirement: a match still runs with one.
+ */
+export async function refsWantedFor(leagueSlug: string | null, seasonNumber: number | null, stage: string | null): Promise<number> {
+  if (!leagueSlug || !seasonNumber || leagueSlug === 'ctfpl') return 1;
+  const { data: league } = await supabaseAdmin.from('leagues').select('id').eq('slug', leagueSlug).maybeSingle();
+  if (!league) return 1;
+  const { data: season } = await supabaseAdmin.from('league_seasons').select('scoring_rules').eq('league_id', league.id).eq('season_number', seasonNumber).maybeSingle();
+  const rules = normalizeRules((season as any)?.scoring_rules);
+  return Math.max(1, stage === 'fs' ? rules.refs.fs : rules.refs.rs);
 }
 
 /**
@@ -75,7 +100,7 @@ export async function announceMatchTime(matchId: string, moved = false): Promise
       user_id: null,
       channel: 'referee',
       kind: moved ? 'match_time_moved' : 'match_time_set',
-      payload: { ...m, ref_aliases: refAliases },
+      payload: { ...m, ref_aliases: refAliases, refs_wanted: await refsWantedFor(m.league_slug, m.season_number, m.stage) },
       text: '',
     });
   } catch (e) {

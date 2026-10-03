@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
  * fewer points. They live on the schedule (matches, stage 'fs').
  *
  * GET  ?league=&season=&squad=   → this squad's FS usage this week + season, and the caps
- * POST { action: 'propose', league, season, my_squad_id, opponent_squad_id, scheduled_at }
+ * POST { action: 'propose', league, season, my_squad_id, opponent_squad_id, scheduled_at, color? }
  *        captain/co-captain of my_squad_id (or staff). Proposer is home. Caps checked here.
+ *        color 'red' | 'green' is required when the season splits FS (rules.fs.colors) and is fixed once booked.
  * POST { action: 'accept' | 'decline', id }   captain/co-captain of the opponent squad (or staff)
  * POST { action: 'cancel', id }               proposer's squad leads (or staff); pending only
  */
@@ -85,15 +86,21 @@ export async function POST(request: NextRequest) {
     const b = (squads || []).find((s: any) => s.id === opp);
     if (!a || !b) return NextResponse.json({ error: 'Unknown squad' }, { status: 400 });
 
-    const cap = await fsCapCheck(ctx.season.id, slug, Number(seasonNumber), rules, mine, opp, at, null, { a: a.name, b: b.name });
+    // Red or Green is declared when the match is booked and cannot change afterwards.
+    const color = body.color === 'green' ? 'green' : body.color === 'red' ? 'red' : null;
+    if (rules.fs.colors && !color) return NextResponse.json({ error: 'Pick FS Red or FS Green' }, { status: 400 });
+
+    const cap = await fsCapCheck(ctx.season.id, slug, Number(seasonNumber), rules, mine, opp, at, null, { a: a.name, b: b.name }, color);
     if (cap) return NextResponse.json({ error: cap }, { status: 409 });
 
     const ws = weekStart(new Date(at));
+    const kindLabel = rules.fs.colors ? `FS ${color === 'green' ? 'Green' : 'Red'}` : 'FS';
     const { data, error } = await supabaseAdmin
       .from('matches')
       .insert({
-        title: `${slug.toUpperCase()} S${seasonNumber} · FS · ${b.name} vs ${a.name}`, // away vs home
-        description: `${ctx.league.name} Season ${seasonNumber}, free-scheduled match proposed by ${a.name}.`,
+        title: `${slug.toUpperCase()} S${seasonNumber} · ${kindLabel} · ${b.name} vs ${a.name}`, // away vs home
+        description: `${ctx.league.name} Season ${seasonNumber}, free-scheduled match proposed by ${a.name}.${rules.fs.colors && color === 'green' ? ` Green: only the captain and round ${rules.fs.green_min_round}+ picks play.` : ''}`,
+        ...(rules.fs.colors ? { fs_color: color } : {}),
         match_type: 'tournament',
         status: 'scheduled',
         scheduled_at: at,
@@ -110,14 +117,18 @@ export async function POST(request: NextRequest) {
       })
       .select('id')
       .single();
-    if (error) return NextResponse.json({ error: /fs_status|stage/.test(error.message) ? 'Run add-season-scoring.sql in Supabase first' : error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: /fs_color/.test(error.message) ? 'Run add-fs-colors.sql in Supabase first' : /fs_status|stage/.test(error.message) ? 'Run add-season-scoring.sql in Supabase first' : error.message }, { status: 500 });
     return NextResponse.json({ ok: true, id: data.id });
   }
 
   if (action === 'accept' || action === 'decline' || action === 'cancel') {
     const id = body?.id;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-    const { data: m } = await supabaseAdmin.from('matches').select('id, stage, fs_status, squad_a_id, squad_b_id, league_slug, season_number, scheduled_at').eq('id', id).maybeSingle();
+    const fsCols = 'id, stage, fs_status, squad_a_id, squad_b_id, league_slug, season_number, scheduled_at';
+    const one = (c: string) => supabaseAdmin.from('matches').select(c).eq('id', id).maybeSingle();
+    let got = await one(`${fsCols}, fs_color`);
+    if (got.error && /fs_color/.test(got.error.message)) got = await one(fsCols); // before add-fs-colors.sql
+    const m = got.data as any;
     if (!m || m.stage !== 'fs') return NextResponse.json({ error: 'Not an FS match' }, { status: 404 });
     if (m.fs_status !== 'pending') return NextResponse.json({ error: `This proposal is already ${m.fs_status}` }, { status: 409 });
 
@@ -134,7 +145,7 @@ export async function POST(request: NextRequest) {
       const ctx = await seasonFor(m.league_slug, m.season_number);
       if (ctx) {
         const rules = await loadSeasonRules(ctx.season.id);
-        const cap = await fsCapCheck(ctx.season.id, m.league_slug, m.season_number, rules, m.squad_a_id, m.squad_b_id, m.scheduled_at, m.id);
+        const cap = await fsCapCheck(ctx.season.id, m.league_slug, m.season_number, rules, m.squad_a_id, m.squad_b_id, m.scheduled_at, m.id, undefined, m.fs_color);
         if (cap) return NextResponse.json({ error: cap }, { status: 409 });
       }
       const { error } = await supabaseAdmin.from('matches').update({ fs_status: 'accepted' }).eq('id', id);

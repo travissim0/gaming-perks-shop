@@ -9,6 +9,15 @@
  */
 
 export type MatchKind = 'rs' | 'fs';
+/**
+ * FS matches come in two colours when rules.fs.colors is on (CTFDL S5, Oct 2026):
+ *   red   — a normal match, full lineup
+ *   green — only the captain and players drafted in round `green_min_round` or later may play;
+ *           pays the fs_green table (double red). A green match in which an earlier-round pick
+ *           plays scores as red for both squads.
+ * Declared when the match is booked and fixed after. No colour stored = red.
+ */
+export type FsColor = 'red' | 'green';
 export type WinType = 'regulation' | 'ot' | '2ot';
 export type Outcome = 'win' | 'loss' | 'forfeit';
 
@@ -16,8 +25,8 @@ export interface PointsTable { regulation: number; ot: number; ot2: number; loss
 
 export interface ScoringRules {
   preset: 'classic' | 'points';
-  /** Points by match kind. Classic uses rs for everything. */
-  points: { rs: PointsTable; fs: PointsTable };
+  /** Points by match kind. Classic uses rs for everything. `fs` is FS Red (or plain FS); `fs_green` is FS Green. */
+  points: { rs: PointsTable; fs: PointsTable; fs_green: PointsTable };
   /** A win at or past ot_minutes is OT; at or past ot2_minutes is 2OT. */
   ot_minutes: number;
   ot2_minutes: number;
@@ -30,7 +39,15 @@ export interface ScoringRules {
     needs_verification: boolean;
     /** A forfeited FS is a no-contest: nobody scores. */
     forfeit_no_contest: boolean;
+    /** Red / Green FS: captains declare one when booking; the caps above apply to each colour separately. */
+    colors: boolean;
+    /** Green: lowest draft round allowed to play (the captain always may). */
+    green_min_round: number;
+    /** Last day (YYYY-MM-DD, league time) an FS match may be played. null = until the playoffs start. */
+    closes_on: string | null;
   };
+  /** Referees wanted per match: the target, not a requirement (a match still runs with one). */
+  refs: { rs: number; fs: number };
   playoff_spots: number;
   tiebreakers: Tiebreaker[];
 }
@@ -42,10 +59,12 @@ export const CLASSIC_RULES: ScoringRules = {
   points: {
     rs: { regulation: 3, ot: 3, ot2: 3, loss: 1, forfeit: 0 },
     fs: { regulation: 3, ot: 3, ot2: 3, loss: 1, forfeit: 0 },
+    fs_green: { regulation: 3, ot: 3, ot2: 3, loss: 1, forfeit: 0 },
   },
   ot_minutes: 30,
   ot2_minutes: 45,
-  fs: { enabled: false, per_week: 0, per_opponent_week: 0, per_opponent_season: 0, needs_verification: false, forfeit_no_contest: false },
+  fs: { enabled: false, per_week: 0, per_opponent_week: 0, per_opponent_season: 0, needs_verification: false, forfeit_no_contest: false, colors: false, green_min_round: 4, closes_on: null },
+  refs: { rs: 1, fs: 1 },
   playoff_spots: 4,
   tiebreakers: ['win_pct', 'reg_wins', 'ot_wins', 'kd', 'wins'],
 };
@@ -54,11 +73,15 @@ export const POINTS_RULES: ScoringRules = {
   preset: 'points',
   points: {
     rs: { regulation: 30, ot: 27, ot2: 24, loss: 6, forfeit: 0 },
-    fs: { regulation: 5, ot: 4, ot2: 3, loss: 1, forfeit: 0 },
+    // CTFDL S5 rules update, 2026-10-02: FS Red 4/3/2/1, FS Green double that.
+    fs: { regulation: 4, ot: 3, ot2: 2, loss: 1, forfeit: 0 },
+    fs_green: { regulation: 8, ot: 6, ot2: 4, loss: 2, forfeit: 0 },
   },
   ot_minutes: 30,
   ot2_minutes: 45,
-  fs: { enabled: true, per_week: 2, per_opponent_week: 1, per_opponent_season: 3, needs_verification: true, forfeit_no_contest: true },
+  fs: { enabled: true, per_week: 2, per_opponent_week: 1, per_opponent_season: 2, needs_verification: true, forfeit_no_contest: true, colors: true, green_min_round: 4, closes_on: null },
+  // Two referees wanted on RS and playoff matches, one on FS. A match still runs with one.
+  refs: { rs: 2, fs: 1 },
   playoff_spots: 4,
   tiebreakers: ['rs_h2h', 'rs_wins', 'reg_wins', 'fewest_forfeits', 'avg_rs_win_time'],
 };
@@ -85,10 +108,12 @@ export function normalizeRules(raw: unknown): ScoringRules {
     points: {
       rs: { ...base.points.rs, ...(r.points?.rs || {}) },
       fs: { ...base.points.fs, ...(r.points?.fs || {}) },
+      fs_green: { ...base.points.fs_green, ...(r.points?.fs_green || {}) },
     },
     ot_minutes: typeof r.ot_minutes === 'number' ? r.ot_minutes : base.ot_minutes,
     ot2_minutes: typeof r.ot2_minutes === 'number' ? r.ot2_minutes : base.ot2_minutes,
     fs: { ...base.fs, ...(r.fs || {}) },
+    refs: { ...base.refs, ...(r.refs || {}) },
     playoff_spots: typeof r.playoff_spots === 'number' ? r.playoff_spots : base.playoff_spots,
     tiebreakers: Array.isArray(r.tiebreakers) && r.tiebreakers.length ? (r.tiebreakers as Tiebreaker[]) : base.tiebreakers,
   };
@@ -102,8 +127,11 @@ export function winTypeFromMinutes(rules: ScoringRules, minutes: number | null |
   return 'regulation';
 }
 
-export function pointsFor(rules: ScoringRules, kind: MatchKind, outcome: Outcome, winType: WinType | null): number {
-  const t = rules.points[kind];
+/** 'green' only when the season splits FS by colour; anything else scores as red. */
+export const fsColorOf = (rules: ScoringRules, raw: unknown): FsColor => (rules.fs.colors && raw === 'green' ? 'green' : 'red');
+
+export function pointsFor(rules: ScoringRules, kind: MatchKind, outcome: Outcome, winType: WinType | null, color: FsColor | null = null): number {
+  const t = kind === 'fs' && color === 'green' && rules.fs.colors ? rules.points.fs_green : rules.points[kind];
   if (outcome === 'forfeit') return t.forfeit;
   if (outcome === 'loss') return t.loss;
   return winType === '2ot' ? t.ot2 : winType === 'ot' ? t.ot : t.regulation;
@@ -145,6 +173,8 @@ export interface ScoredMatch {
   id: string;
   match_type: string;               // Season | Playoffs | Finals — only Season counts
   match_kind: MatchKind;
+  /** FS only: the colour it SCORES as (a broken green is stored as red). */
+  fs_color?: string | null;
   win_type: WinType | null;
   no_contest: boolean;
   verified: boolean;
@@ -238,7 +268,7 @@ export function computeStandings(matches: ScoredMatch[], rules: ScoringRules, sq
       r.matches_played += 1;
       r.kills_for += killsFor || 0;
       r.deaths_against += killsAgainst || 0;
-      r.points += pointsFor(rules, kind, outcome, winType);
+      r.points += pointsFor(rules, kind, outcome, winType, kind === 'fs' ? fsColorOf(rules, m.fs_color) : null);
       if (outcome === 'win') {
         r.wins += 1;
         if (isOt) r.overtime_wins += 1;
@@ -331,8 +361,17 @@ export function describeRules(rules: ScoringRules): string[] {
     `RS (official schedule): win under ${rules.ot_minutes} min ${rs.regulation} · OT win ${rs.ot} · 2OT win ${rs.ot2} · loss ${rs.loss} · forfeit ${rs.forfeit}`,
   ];
   if (rules.fs.enabled) {
-    lines.push(`FS (free scheduled): win under ${rules.ot_minutes} min ${fs.regulation} · OT win ${fs.ot} · 2OT win ${fs.ot2} · loss ${fs.loss}${rules.fs.forfeit_no_contest ? ' · forfeit = no contest' : ` · forfeit ${fs.forfeit}`}`);
-    lines.push(`FS caps: ${rules.fs.per_week} per squad per week, ${rules.fs.per_opponent_week} vs the same squad per week, ${rules.fs.per_opponent_season} vs the same squad per season${rules.fs.needs_verification ? '; needs a ref or a recording' : ''}. No FS in the playoffs.`);
+    const fsLine = (name: string, t: PointsTable) =>
+      `${name}: win under ${rules.ot_minutes} min ${t.regulation} · OT win ${t.ot} · 2OT win ${t.ot2} · loss ${t.loss}${rules.fs.forfeit_no_contest ? ' · forfeit = no contest' : ` · forfeit ${t.forfeit}`}`;
+    if (rules.fs.colors) {
+      lines.push(fsLine('FS Red (free scheduled, full lineup)', fs));
+      lines.push(fsLine(`FS Green (captain + round ${rules.fs.green_min_round}+ picks only)`, rules.points.fs_green));
+      lines.push(`A Green match in which a round 1–${rules.fs.green_min_round - 1} pick plays scores as Red for both squads.`);
+    } else {
+      lines.push(fsLine('FS (free scheduled)', fs));
+    }
+    const closes = rules.fs.closes_on ? ` FS closes after ${new Date(`${rules.fs.closes_on}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.` : '';
+    lines.push(`FS caps${rules.fs.colors ? ' (Red and Green counted separately)' : ''}: ${rules.fs.per_week} per squad per week, ${rules.fs.per_opponent_week} vs the same squad per week, ${rules.fs.per_opponent_season} vs the same squad per season${rules.fs.needs_verification ? '; needs a ref or a recording' : ''}.${closes} No FS in the playoffs.`);
   }
   lines.push(`Tiebreakers: ${rules.tiebreakers.map((t) => TIEBREAKER_LABEL[t]).join(' → ')}. RS results always outrank FS.`);
   lines.push(`Top ${rules.playoff_spots} in points make the playoffs, seeded by the standings.`);

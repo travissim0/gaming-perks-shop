@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'crypto';
 import { supabase } from '@/lib/supabase';
 import { getSetting } from '@/lib/site-settings';
+import { normalizeRules } from '@/lib/scoring';
 
 /**
  * Match setup: the home team's side and both teams' lineups. PRIVATE.
@@ -34,7 +35,13 @@ export const STARTERS = 10;
 export const LETTER: Record<Side, 'T' | 'C'> = { titan: 'T', collective: 'C' };
 export const OTHER: Record<Side, Side> = { titan: 'collective', collective: 'titan' };
 
-export interface Member { player_id: string; alias: string; role: 'captain' | 'co_captain' | 'player' }
+export interface Member {
+  player_id: string; alias: string; role: 'captain' | 'co_captain' | 'player';
+  /** FS Green matches only: false = drafted too early to play this match (stays in spec). */
+  green_ok?: boolean;
+  /** FS Green matches only: the round this player was drafted in, when known. */
+  draft_round?: number | null;
+}
 export interface SquadRow { id: string; name: string; tag: string | null; captain_id: string | null }
 export type Squad = SquadRow & { members: Member[] };
 export interface Viewer { id: string | null; alias: string; staff: boolean; referee: boolean; client: boolean }
@@ -72,7 +79,35 @@ export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow |
 export const MATCH_COLS = 'id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time';
 
 /** Optional columns that arrive with later SQL files; a select falls back without any that is missing. */
-export const MATCH_OPTIONAL_COLS = ['time_tbd', 'manual_zone'];
+export const MATCH_OPTIONAL_COLS = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status'];
+
+/**
+ * FS Green: only the squad's captain and players drafted in round `minRound` or later may play
+ * (rounds 1 to minRound-1 stay in spec and coach). Returns the player ids that may NOT play in
+ * this match, or null when the match isn't a Green FS. A player with no draft pick (added to the
+ * roster after the draft) may play. The captain exemption is the squad's captain_id, not co-captains.
+ */
+export async function greenBlockedFor(match: any, squads: Record<string, Squad>): Promise<{ minRound: number; blocked: Set<string>; roundOf: Map<string, number> } | null> {
+  if (match?.stage !== 'fs' || match?.fs_color !== 'green' || !match.league_slug || !match.season_number) return null;
+  const { data: league } = await supabaseAdmin.from('leagues').select('id').eq('slug', match.league_slug).maybeSingle();
+  if (!league) return null;
+  const { data: season } = await supabaseAdmin.from('league_seasons').select('id, scoring_rules').eq('league_id', league.id).eq('season_number', match.season_number).maybeSingle();
+  if (!season) return null;
+  const rules = normalizeRules((season as any).scoring_rules);
+  if (!rules.fs.colors) return null;
+  const minRound = rules.fs.green_min_round;
+
+  const roundOf = new Map<string, number>();
+  const { data: draft } = await supabaseAdmin.from('ctfdl_drafts').select('id').eq('league_season_id', season.id).maybeSingle();
+  if (draft) {
+    const { data: picks } = await supabaseAdmin.from('ctfdl_draft_picks').select('round, player_id').eq('draft_id', draft.id).not('player_id', 'is', null);
+    (picks || []).forEach((p: any) => roundOf.set(p.player_id, p.round));
+  }
+  const captains = new Set(Object.values(squads).map((s) => s.captain_id).filter(Boolean) as string[]);
+  const blocked = new Set<string>();
+  roundOf.forEach((round, playerId) => { if (round < minRound && !captains.has(playerId)) blocked.add(playerId); });
+  return { minRound, blocked, roundOf };
+}
 
 export async function loadMatch(id: string) {
   const one = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
@@ -172,7 +207,18 @@ export const sideReleased = (match: any) => !isTimeTbd(match) && Date.now() >= n
 
 export interface SubRow { id: string; squad_id: string; out_player_id: string; in_player_id: string; by_id: string | null; by_alias: string | null; created_at: string; out_alias?: string; in_alias?: string }
 
-export function buildPayload(match: any, setupRow: any, squads: Record<string, Squad>, lineupRows: any[], subs: SubRow[], viewer: Viewer, automation: AutomationState = { enabled: true, reason: null }) {
+export function buildPayload(
+  match: any, setupRow: any, squads: Record<string, Squad>, lineupRows: any[], subs: SubRow[], viewer: Viewer,
+  automation: AutomationState = { enabled: true, reason: null },
+  green: { minRound: number; blocked: Set<string>; roundOf: Map<string, number> } | null = null,
+) {
+  // FS Green: mark who may play. A blocked player is never sent to the zone as a starter.
+  if (green) {
+    Object.values(squads).forEach((s) => s.members.forEach((m) => {
+      m.green_ok = !green.blocked.has(m.player_id);
+      m.draft_round = green.roundOf.get(m.player_id) ?? null;
+    }));
+  }
   const home = match.squad_a_id ? squads[match.squad_a_id] : null;
   const away = match.squad_b_id ? squads[match.squad_b_id] : null;
   const side: Side | null = setupRow?.home_side || null;
@@ -228,7 +274,11 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
   if (full) {
     const push = (sq: Squad | null, names: { starting: string | null; bench: string | null }) => {
       if (!sq || !names.starting || !names.bench) return;
-      bySquad[sq.id].starting.forEach((p) => players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.starting!, spec: false, slot: 'starting' }));
+      bySquad[sq.id].starting.forEach((p) => {
+        // FS Green safety net: a player who may not play is never placed, whatever the lineup rows say.
+        if (green?.blocked.has(p.player_id)) players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench' });
+        else players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.starting!, spec: false, slot: 'starting' });
+      });
       bySquad[sq.id].bench.forEach((p) => players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench' }));
     };
     push(home, homeNames);
@@ -252,6 +302,9 @@ export function buildPayload(match: any, setupRow: any, squads: Record<string, S
   return {
     match: {
       id: match.id, title: match.title, scheduled_at: match.scheduled_at, time_tbd: isTimeTbd(match), status: match.status,
+      /** FS only: 'red' | 'green' as booked. Green limits who may play (roster members carry green_ok). */
+      fs_color: match.stage === 'fs' ? (match.fs_color === 'green' ? 'green' : match.fs_color === 'red' ? 'red' : null) : null,
+      green_min_round: green?.minRound ?? null,
       league_slug: match.league_slug, season_number: match.season_number, week: match.week, stage: match.stage, playoff_round: match.playoff_round,
       locked,
       game_id: match.game_id || null,
@@ -331,5 +384,6 @@ export async function loadForMatch(match: any, viewer: Viewer) {
     automationFor(match),
   ]);
   if ((setupRes.error && missingTable(setupRes.error.message)) || (lineupRes.error && missingTable(lineupRes.error.message))) return { pending_sql: true };
-  return buildPayload(match, setupRes.data, squads, lineupRes.data || [], subsRes.subs, viewer, automation);
+  const green = await greenBlockedFor(match, squads);
+  return buildPayload(match, setupRes.data, squads, lineupRes.data || [], subsRes.subs, viewer, automation, green);
 }

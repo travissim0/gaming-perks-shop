@@ -58,6 +58,7 @@ interface Fixture {
   week: number | null;
   stage: 'regular' | 'playoff' | 'fs';
   fs_status?: string | null;
+  fs_color?: 'red' | 'green' | null;
   playoff_round: number | null;
   scheduled_at: string;
   title: string;
@@ -120,6 +121,8 @@ export default function MatchManagerPage() {
   const [fromFixture, setFromFixture] = useState<Fixture | null>(null);
   // Season scoring (add-season-scoring.sql)
   const [matchKind, setMatchKind] = useState<'rs' | 'fs'>('rs');
+  // FS Red / Green: what the result scores as. Booked colour by default; staff drop a broken Green to Red.
+  const [fsColor, setFsColor] = useState<'red' | 'green'>('red');
   const [winType, setWinType] = useState<'regulation' | 'ot' | '2ot' | ''>('');
   const [verified, setVerified] = useState(false);
   const [rules, setRules] = useState<ScoringRules>(CLASSIC_RULES);
@@ -291,6 +294,7 @@ export default function MatchManagerPage() {
     setMatchTitle(f.title && !f.title.includes(' vs ') ? f.title : '');
     setMatchType(f.stage === 'playoff' ? 'Playoffs' : 'Season');
     setMatchKind(f.stage === 'fs' ? 'fs' : 'rs');
+    setFsColor(f.fs_color === 'green' ? 'green' : 'red');
     // A referee or recorder on the crew satisfies the FS "ref or recording" requirement.
     setVerified((f.participants || []).some((p) => p.role === 'referee' || p.role === 'recording') || !!f.game_id);
     if (f.game_id) setExistingGameId(f.game_id);
@@ -336,7 +340,7 @@ export default function MatchManagerPage() {
     setCsvPreview([]); setExistingGameId(''); setArenaName(''); setMatchType('Season'); setMatchLength(''); setMvp('');
     setPlayedAt(new Date().toISOString().split('T')[0]);
     setFromFixture(null);
-    setMatchKind('rs'); setWinType(''); setVerified(false);
+    setMatchKind('rs'); setFsColor('red'); setWinType(''); setVerified(false);
   };
 
   const handleSubmit = async () => {
@@ -375,6 +379,7 @@ export default function MatchManagerPage() {
         game_id: existingGameId || undefined,
         // Season scoring
         match_kind: matchKind,
+        fs_color: matchKind === 'fs' && rules.fs.colors ? fsColor : undefined,
         win_type: winType || undefined,
         verified,
         fixture_id: fromFixture?.id || undefined,
@@ -511,7 +516,7 @@ export default function MatchManagerPage() {
                     {(f as any).time_tbd ? 'Time TBD' : when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                     {past || (f as any).time_tbd ? '' : <span className="ml-1 text-[#F59E0B]">upcoming</span>}
                   </span>
-                  <span className={`w-16 shrink-0 text-[11px] uppercase tracking-wide ${f.stage === 'fs' ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>{f.stage === 'playoff' ? 'Playoffs' : f.stage === 'fs' ? 'FS' : f.week ? `Week ${f.week}` : ''}</span>
+                  <span className={`w-16 shrink-0 text-[11px] uppercase tracking-wide ${f.stage === 'fs' ? 'text-[#22D3EE]' : 'text-[#8B98B0]'}`}>{f.stage === 'playoff' ? 'Playoffs' : f.stage === 'fs' ? (f.fs_color === 'green' ? 'FS Green' : f.fs_color === 'red' ? 'FS Red' : 'FS') : f.week ? `Week ${f.week}` : ''}</span>
                   <span className="min-w-0 flex-1 text-sm text-[#E6EDF7]">
                     {f.squad_b_name} <span className="text-[#8B98B0]">vs</span> {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
                   </span>
@@ -568,8 +573,18 @@ export default function MatchManagerPage() {
                   <label className={labelCls}>Kind</label>
                   <div className="flex gap-1.5">
                     <Chip active={matchKind === 'rs'} onClick={() => setMatchKind('rs')} title="Regular season: the official schedule">RS</Chip>
-                    <Chip active={matchKind === 'fs'} onClick={() => setMatchKind('fs')} title="Free scheduled: captain-agreed extra match" disabled={!rules.fs.enabled}>FS</Chip>
+                    {rules.fs.colors ? (
+                      <>
+                        <Chip active={matchKind === 'fs' && fsColor === 'red'} onClick={() => { setMatchKind('fs'); setFsColor('red'); }} title="Free scheduled Red: a normal match, full lineup" disabled={!rules.fs.enabled}>FS Red</Chip>
+                        <Chip active={matchKind === 'fs' && fsColor === 'green'} onClick={() => { setMatchKind('fs'); setFsColor('green'); }} title={`Free scheduled Green: captain and round ${rules.fs.green_min_round}+ picks only, worth double`} disabled={!rules.fs.enabled}>FS Green</Chip>
+                      </>
+                    ) : (
+                      <Chip active={matchKind === 'fs'} onClick={() => setMatchKind('fs')} title="Free scheduled: captain-agreed extra match" disabled={!rules.fs.enabled}>FS</Chip>
+                    )}
                   </div>
+                  {matchKind === 'fs' && rules.fs.colors && fromFixture?.fs_color === 'green' && (
+                    <p className="mt-1 text-[11px] text-[#8B98B0]">Booked as Green. If a round 1–{rules.fs.green_min_round - 1} pick played, record it as FS Red.</p>
+                  )}
                 </div>
                 <div>
                   <label className={labelCls}>Win type{suggestedWin && !winType ? <span className="ml-1 normal-case tracking-normal text-[#8B98B0]/70">suggested: {WIN_LABEL[suggestedWin]}</span> : null}</label>
@@ -692,7 +707,7 @@ export default function MatchManagerPage() {
                           </td>
                           <td className={`${td} ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
                           <td className={`${td} text-xs text-[#8B98B0] whitespace-nowrap`}>
-                            {m.match_kind && <span className="mr-1.5 rounded bg-white/5 px-1 text-[10px] uppercase tracking-wide">{m.match_kind}</span>}
+                            {m.match_kind && <span className="mr-1.5 rounded bg-white/5 px-1 text-[10px] uppercase tracking-wide">{m.match_kind}{m.match_kind === 'fs' && (m as any).fs_color ? ` ${(m as any).fs_color}` : ''}</span>}
                             {m.win_type ? (m.win_type === '2ot' ? '2OT' : m.win_type === 'ot' ? 'OT' : 'Reg') : ''}
                             {m.game_length_minutes ? ` · ${Math.round(m.game_length_minutes)} min` : ''}
                             {auto && <span className="ml-1.5 rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Recorded automatically from the game the zone ran">Auto</span>}

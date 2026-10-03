@@ -39,9 +39,10 @@ export async function GET(request: NextRequest) {
   }
 
   const run = (skip: string[]) => {
+    const extra = ['fs_color', 'fs_status'].filter((c) => !skip.includes(c));
     let query = supabaseAdmin
       .from('matches')
-      .select('id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id')
+      .select(['id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id', ...extra].join(', '))
       .in('status', ['scheduled', 'in_progress'])
       .not('squad_a_id', 'is', null)
       .not('squad_b_id', 'is', null)
@@ -62,13 +63,18 @@ export async function GET(request: NextRequest) {
   // Each optional column arrives with its own SQL file; drop a filter whose column is missing.
   const skip: string[] = [];
   let { data, error } = await run(skip);
-  for (const col of ['time_tbd', 'manual_zone']) {
-    if (error && error.message.includes(col)) { skip.push(col); ({ data, error } = await run(skip)); }
+  for (let i = 0; i < 4 && error; i++) {
+    const col = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status'].find((c) => !skip.includes(c) && error!.message.includes(c));
+    if (!col) break;
+    skip.push(col);
+    ({ data, error } = await run(skip));
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const matches = [];
-  for (const m of data || []) {
+  for (const m of (data || []) as any[]) {
+    // An FS proposal the other captain hasn't accepted yet is not a match: no arena for it.
+    if (m.stage === 'fs' && m.fs_status && m.fs_status !== 'accepted') continue;
     const payload = await loadForMatch(m, viewer);
     if (!payload || 'pending_sql' in payload) continue;
     const p = payload as any;
@@ -80,6 +86,8 @@ export async function GET(request: NextRequest) {
       season_number: p.match.season_number,
       week: p.match.week,
       stage: p.match.stage,
+      /** FS only: 'red' | 'green'. Green: `client.players` already leaves out everyone who may not play. */
+      fs_color: p.match.fs_color,
       status: p.match.status,
       scheduled_at: p.match.scheduled_at,
       side_reveal_at: p.side_reveal_at,

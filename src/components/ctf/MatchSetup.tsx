@@ -17,7 +17,12 @@ import { supabase } from '@/lib/supabase';
 type Side = 'titan' | 'collective';
 type Slot = 'starting' | 'bench' | 'out';
 
-interface Member { player_id: string; alias: string; role: 'captain' | 'co_captain' | 'player' }
+interface Member {
+  player_id: string; alias: string; role: 'captain' | 'co_captain' | 'player';
+  /** FS Green only: false = drafted too early to play this match. */
+  green_ok?: boolean;
+  draft_round?: number | null;
+}
 interface Entry { player_id: string; alias: string }
 interface Team {
   squad_id: string; name: string; tag: string;
@@ -29,7 +34,7 @@ interface Team {
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
 interface Setup {
   pending_sql?: boolean;
-  match: { id: string; scheduled_at: string; time_tbd?: boolean; status: string; locked: boolean; arena?: string | null; game_id?: string | null };
+  match: { id: string; scheduled_at: string; time_tbd?: boolean; status: string; locked: boolean; arena?: string | null; game_id?: string | null; fs_color?: 'red' | 'green' | null; green_min_round?: number | null };
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
@@ -144,6 +149,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const starters = setup.starters ?? 10;
   const locked = match.locked;
   const auto = setup.automation ?? { enabled: true, reason: null };
+  // FS Green: only the captain and later-round picks may play; everyone else stays on the bench.
+  const isGreen = match.fs_color === 'green' && !!match.green_min_round;
+  const minRound = match.green_min_round || 4;
+  const greenNote = isGreen ? (
+    <div className="rounded-md bg-[#34D399]/10 ring-1 ring-[#34D399]/30 px-3 py-2 text-xs text-[#E6EDF7]">
+      <span className="font-medium text-[#34D399]">FS Green.</span>{' '}
+      Only the captain and round {minRound}+ picks can start or be subbed in. Rounds 1–{minRound - 1} stay in spec and coach. If one of them plays, the match scores as Red for both squads.
+    </div>
+  ) : null;
   const manualNote = auto.enabled ? null : (
     <div className="rounded-md bg-[#F87171]/10 ring-1 ring-[#F87171]/30 px-3 py-2 text-xs text-[#E6EDF7]">
       <span className="font-medium text-[#F87171]">Zone automation is off{auto.reason === 'match' ? ' for this match' : ' site-wide'}.</span>{' '}
@@ -180,6 +194,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
         {manualNote && <div className="px-4 pb-2">{manualNote}</div>}
+        {greenNote && <div className="px-4 pb-2">{greenNote}</div>}
         <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
           {setup.side_released ? 'Sides are out. ' : `Sides are released ${revealAt}. `}
           Lineups stay private to each squad's captains and league staff.
@@ -247,6 +262,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
                   <span className="min-w-0 flex-1 truncate text-[#E6EDF7]">
                     {m.alias}
                     {m.role !== 'player' && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
+                    {isGreen && m.green_ok === false && <span className="ml-1.5 rounded bg-[#F87171]/15 px-1 text-[10px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
                   </span>
                   <span className="flex gap-1">
                     {(['starting', 'bench', 'out'] as Slot[]).map((k) => (
@@ -254,8 +270,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
                         key={k}
                         type="button"
                         onClick={() => setSlot(team, m.player_id, k)}
-                        disabled={k === 'starting' && s !== 'starting' && full}
-                        title={k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
+                        disabled={k === 'starting' && ((s !== 'starting' && full) || (isGreen && m.green_ok === false))}
+                        title={k === 'starting' && isGreen && m.green_ok === false ? `FS Green: only the captain and round ${minRound}+ picks can start` : k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
                         className={`rounded px-2 py-0.5 text-[11px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${s === k
                           ? k === 'starting' ? 'bg-[#34D399]/20 text-[#34D399]' : k === 'bench' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/10 text-[#E6EDF7]'
                           : 'text-[#8B98B0] hover:bg-white/5'}`}
@@ -307,8 +323,9 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
                 aria-label="Player going in"
               >
                 <option value="">In…</option>
-                {bench.map((m) => <option key={m.player_id} value={m.player_id}>{m.alias} (bench)</option>)}
-                {team.roster.filter((m) => slots[m.player_id] === 'out').map((m) => <option key={m.player_id} value={m.player_id}>{m.alias}</option>)}
+                {/* FS Green: early-round picks can't be subbed in, so they aren't offered. */}
+                {bench.filter((m) => !(isGreen && m.green_ok === false)).map((m) => <option key={m.player_id} value={m.player_id}>{m.alias} (bench)</option>)}
+                {team.roster.filter((m) => slots[m.player_id] === 'out' && !(isGreen && m.green_ok === false)).map((m) => <option key={m.player_id} value={m.player_id}>{m.alias}</option>)}
               </select>
               <button type="button" onClick={() => makeSub(team)} disabled={busy !== null || !subPick[team.squad_id]?.out || !subPick[team.squad_id]?.in} className={btnPrimary}>Make sub</button>
             </div>
@@ -367,6 +384,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
 
       <div className="px-4 pb-4 space-y-3">
         {manualNote}
+        {greenNote}
         {/* Side */}
         <div className="rounded-md bg-[#1B2438] px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-[#E6EDF7]">{sideText}</div>

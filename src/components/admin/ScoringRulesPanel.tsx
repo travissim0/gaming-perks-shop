@@ -37,7 +37,7 @@ export default function ScoringRulesPanel() {
   }, []);
 
   const set = (patch: Partial<ScoringRules>) => { setRules((r) => ({ ...r, ...patch })); setDirty(true); };
-  const setPts = (kind: 'rs' | 'fs', key: keyof ScoringRules['points']['rs'], v: string) => {
+  const setPts = (kind: 'rs' | 'fs' | 'fs_green', key: keyof ScoringRules['points']['rs'], v: string) => {
     const n = Number(v);
     if (Number.isNaN(n)) return;
     setRules((r) => ({ ...r, points: { ...r.points, [kind]: { ...r.points[kind], [key]: n } } }));
@@ -105,7 +105,8 @@ export default function ScoringRulesPanel() {
                 <tr className="text-[11px] uppercase tracking-wide text-[#8B98B0]">
                   <th className="pr-4 py-1 text-left font-medium">Result</th>
                   <th className="px-2 py-1 font-medium">RS</th>
-                  {isPoints && <th className="px-2 py-1 font-medium">FS</th>}
+                  {isPoints && <th className="px-2 py-1 font-medium">{rules.fs.colors ? <span className="text-[#F87171]">FS Red</span> : 'FS'}</th>}
+                  {isPoints && rules.fs.colors && <th className="px-2 py-1 font-medium text-[#34D399]">FS Green</th>}
                 </tr>
               </thead>
               <tbody className="text-[#E6EDF7]">
@@ -120,6 +121,7 @@ export default function ScoringRulesPanel() {
                     <td className="pr-4 py-1">{label}</td>
                     <td className="px-2 py-1">{num(rules.points.rs[k], (v) => setPts('rs', k, v))}</td>
                     {isPoints && <td className="px-2 py-1">{k === 'forfeit' && rules.fs.forfeit_no_contest ? <span className="text-xs text-[#8B98B0]">no contest</span> : num(rules.points.fs[k], (v) => setPts('fs', k, v))}</td>}
+                    {isPoints && rules.fs.colors && <td className="px-2 py-1">{k === 'forfeit' && rules.fs.forfeit_no_contest ? <span className="text-xs text-[#8B98B0]">no contest</span> : num(rules.points.fs_green[k], (v) => setPts('fs_green', k, v))}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -141,8 +143,29 @@ export default function ScoringRulesPanel() {
                   <label className="block"><span className="block text-xs text-[#8B98B0] mb-1">Vs same squad per season</span>{num(rules.fs.per_opponent_season, (v) => setFs({ per_opponent_season: Number(v) || 0 }))}</label>
                   <Chip active={rules.fs.needs_verification} onClick={() => setFs({ needs_verification: !rules.fs.needs_verification })}>Needs ref or recording</Chip>
                   <Chip active={rules.fs.forfeit_no_contest} onClick={() => setFs({ forfeit_no_contest: !rules.fs.forfeit_no_contest })}>Forfeit = no contest</Chip>
+                  <Chip active={rules.fs.colors} onClick={() => setFs({ colors: !rules.fs.colors })} title="Captains declare Red or Green when booking; the limits apply to each colour separately">Red / Green</Chip>
                 </div>
-                <p className="mt-1 text-[11px] text-[#8B98B0]">Weeks run Monday to Sunday, league time. FS closes when the regular season ends.</p>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  {rules.fs.colors && (
+                    <label className="block"><span className="block text-xs text-[#8B98B0] mb-1">Green: earliest draft round that may play</span>{num(rules.fs.green_min_round, (v) => setFs({ green_min_round: Math.max(1, Number(v) || 1) }))}</label>
+                  )}
+                  <label className="block">
+                    <span className="block text-xs text-[#8B98B0] mb-1">Last day FS can be played</span>
+                    <input type="date" value={rules.fs.closes_on || ''} onChange={(e) => setFs({ closes_on: e.target.value || null })} className={`${inputCls} w-44`} style={{ colorScheme: 'dark' }} />
+                  </label>
+                </div>
+                <p className="mt-1 text-[11px] text-[#8B98B0]">
+                  Weeks run Monday to Sunday, league time. {rules.fs.closes_on ? 'FS closes after that day.' : 'With no last day set, FS closes when the playoffs start.'}
+                  {rules.fs.colors && ` Green: the captain always plays; a Green match in which a round 1–${rules.fs.green_min_round - 1} pick plays scores as Red.`}
+                </p>
+              </div>
+              <div>
+                <div className={labelCls}>Referees wanted per match</div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="block"><span className="block text-xs text-[#8B98B0] mb-1">RS and playoffs</span>{num(rules.refs.rs, (v) => set({ refs: { ...rules.refs, rs: Math.max(1, Number(v) || 1) } }))}</label>
+                  <label className="block"><span className="block text-xs text-[#8B98B0] mb-1">FS</span>{num(rules.refs.fs, (v) => set({ refs: { ...rules.refs, fs: Math.max(1, Number(v) || 1) } }))}</label>
+                </div>
+                <p className="mt-1 text-[11px] text-[#8B98B0]">A target, not a requirement: the referee channel keeps asking until a match has this many, but a match still runs with one.</p>
               </div>
             </>
           )}

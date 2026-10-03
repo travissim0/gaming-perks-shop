@@ -33,6 +33,8 @@ export interface Fixture {
   playoff_round: number | null;
   /** Free-scheduled only: pending (awaiting the other captain), accepted, declined, cancelled. */
   fs_status: 'pending' | 'accepted' | 'declined' | 'cancelled' | null;
+  /** Free-scheduled only: the colour the captains declared when booking (null on older rows = red). */
+  fs_color: 'red' | 'green' | null;
   proposed_by: string | null;
   fs_week_start: string | null;
   scheduled_at: string;
@@ -90,10 +92,16 @@ export async function GET(request: NextRequest) {
       match_participants(role, profiles!match_participants_player_id_fkey(in_game_alias))`;
   const query = (cols: string) =>
     supabaseAdmin.from('matches').select(cols).eq('league_slug', league).eq('season_number', season).order('scheduled_at', { ascending: true });
-  // FS columns arrive with add-season-scoring.sql, time_tbd with add-match-time-tbd.sql; fall back without them.
-  let { data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start, time_tbd`);
-  if (error && /time_tbd/.test(error.message)) ({ data: rows, error } = await query(`${base}, fs_status, proposed_by, fs_week_start`));
-  if (error && /fs_status|proposed_by|fs_week_start/.test(error.message)) ({ data: rows, error } = await query(base));
+  // Optional columns arrive with later SQL files (add-season-scoring, add-match-time-tbd,
+  // add-fs-colors); drop whichever is missing and try again.
+  let optional = ['fs_status', 'proposed_by', 'fs_week_start', 'time_tbd', 'fs_color'];
+  let { data: rows, error } = await query([base, ...optional].join(', '));
+  while (error && optional.length) {
+    const missing = optional.find((c) => error!.message.includes(c));
+    if (!missing) break;
+    optional = optional.filter((c) => c !== missing);
+    ({ data: rows, error } = await query([base, ...optional].join(', ')));
+  }
   if (error) {
     // Columns missing until add-league-schedule.sql runs → empty schedule, not a crash.
     if (/column .*does not exist/i.test(error.message)) return NextResponse.json({ fixtures: [], pending_sql: true });
@@ -157,6 +165,7 @@ export async function GET(request: NextRequest) {
     stage: m.stage === 'playoff' ? 'playoff' : m.stage === 'fs' ? 'fs' : 'regular',
     playoff_round: m.playoff_round ?? null,
     fs_status: m.stage === 'fs' ? (m.fs_status ?? 'accepted') : null,
+    fs_color: m.stage === 'fs' ? (m.fs_color === 'green' ? 'green' : m.fs_color === 'red' ? 'red' : null) : null,
     proposed_by: m.proposed_by ?? null,
     fs_week_start: m.fs_week_start ?? null,
     scheduled_at: m.scheduled_at,

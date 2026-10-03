@@ -354,7 +354,11 @@ function SchedulePage() {
                               <div className="text-[#E6EDF7]">{f.time_tbd ? '' : timeLabel(f.scheduled_at)}</div>
                             </>
                           )}
-                          {f.stage === 'fs' && <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>}
+                          {f.stage === 'fs' && (
+                            f.fs_color === 'green' ? <div className="mt-0.5 inline-block rounded bg-[#34D399]/15 px-1 text-[10px] uppercase tracking-wide text-[#34D399]" title="Free scheduled Green: only the captain and later-round picks play, worth double Red">FS Green</div>
+                              : f.fs_color === 'red' ? <div className="mt-0.5 inline-block rounded bg-[#F87171]/15 px-1 text-[10px] uppercase tracking-wide text-[#F87171]" title="Free scheduled Red: a normal match, worth fewer points than RS">FS Red</div>
+                                : <div className="mt-0.5 inline-block rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Free scheduled: captain-agreed, worth fewer points">FS</div>
+                          )}
                           {pointsMode && f.stage === 'regular' && <div className="mt-0.5 inline-block rounded bg-[#F59E0B]/15 px-1 text-[10px] uppercase tracking-wide text-[#F59E0B]" title="Regular season: official schedule, full points">RS</div>}
                         </div>
                         <Link href={f.squad_b_id ? `/squads/${f.squad_b_id}` : '#'} className={`flex items-center gap-2 min-w-0 flex-1 justify-end text-right ${bWon ? 'text-[#E6EDF7]' : done ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'} hover:text-[#22D3EE]`}>

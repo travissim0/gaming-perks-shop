@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { winTypeFromMinutes, type MatchKind, type WinType } from '@/lib/scoring';
+import { winTypeFromMinutes, fsColorOf, type MatchKind, type WinType } from '@/lib/scoring';
 import { loadSeasonRules, rebuildStandings } from '@/lib/standings-server';
 import { fsCapCheck } from '@/lib/fs-server';
 import { removeLeagueResult } from '@/lib/match-result-server';
@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
       mvp: m.mvp,
       // Scoring columns (generic leagues; absent on CTFPL rows)
       match_kind: m.match_kind ?? null,
+      fs_color: m.fs_color ?? null,
       win_type: m.win_type ?? null,
       verified: m.verified ?? null,
       fixture_id: m.fixture_id ?? null,
@@ -173,6 +174,9 @@ export async function POST(request: NextRequest) {
       mvp,
       // Season scoring (add-season-scoring.sql): RS/FS, how the win happened, ref/recording present, linked fixture.
       match_kind: matchKindRaw,
+      // FS Red / Green: what this result scores as (add-fs-colors.sql). Staff pick it; a Green
+      // in which a round 1-3 pick played is entered as red.
+      fs_color: fsColorRaw,
       win_type: winTypeRaw,
       verified: verifiedRaw,
       fixture_id: fixtureId,
@@ -296,19 +300,30 @@ export async function POST(request: NextRequest) {
       if (matchKind === 'fs' && isSeasonMatch) {
         if (!rules.fs.enabled) return NextResponse.json({ error: 'This season does not use free-scheduled matches' }, { status: 400 });
         if (rules.fs.needs_verification && !verified) return NextResponse.json({ error: 'An FS match only counts with a referee or a recording. Tick "Ref or recording" to confirm.' }, { status: 400 });
-        const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null);
+        if (rules.fs.colors && fsColorRaw !== 'red' && fsColorRaw !== 'green') return NextResponse.json({ error: 'Say whether this FS match was Red or Green' }, { status: 400 });
+        // Caps count the colour the captains booked (the fixture's), not what it ends up scoring as.
+        let bookedColor: unknown = fsColorRaw;
+        if (fixtureId && rules.fs.colors) {
+          const { data: fx } = await supabaseAdmin.from('matches').select('fs_color').eq('id', fixtureId).maybeSingle();
+          if ((fx as any)?.fs_color) bookedColor = (fx as any).fs_color;
+        }
+        const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null, undefined, bookedColor);
         if (cap) return NextResponse.json({ error: cap }, { status: 409 });
         if (forfeit && rules.fs.forfeit_no_contest) scoringNote = 'Forfeited FS recorded as a no-contest: neither squad scores.';
       }
 
       const scoringCols: Record<string, unknown> = {
         match_kind: matchKind,
+        ...(matchKind === 'fs' && rules.fs.colors ? { fs_color: fsColorOf(rules, fsColorRaw) } : {}),
         win_type: forfeit ? null : winType,
         no_contest: matchKind === 'fs' && forfeit && rules.fs.forfeit_no_contest,
         verified,
         fixture_id: fixtureId || null,
       };
       let res = await supabaseAdmin.from('league_matches').insert({ ...matchInsert, league_season_id: leagueSeasonId, ...scoringCols }).select().single();
+      if (res.error && /fs_color/.test(res.error.message)) {
+        return NextResponse.json({ error: 'Run add-fs-colors.sql in Supabase first, then record this FS match again.' }, { status: 503 });
+      }
       if (res.error && /column .*does not exist/i.test(res.error.message)) {
         // Schema not migrated yet — record without the scoring columns.
         res = await supabaseAdmin.from('league_matches').insert({ ...matchInsert, league_season_id: leagueSeasonId }).select().single();

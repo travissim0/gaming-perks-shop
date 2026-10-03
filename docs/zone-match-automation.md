@@ -53,6 +53,17 @@ Response:
 A league fixture whose time the captains haven't agreed yet ("Time TBD" on the schedule) is
 **never in the queue**: it has no kick-off time. It appears once staff set its time.
 
+## Free-scheduled (FS) matches
+
+Accepted FS matches are in the queue like any other league match (`stage: "fs"`); a proposal
+the other captain hasn't accepted is not. Each carries `fs_color`: `"red"` (a normal match) or
+`"green"`. In a **Green** match only the captain and round 4+ draft picks may play. The site
+enforces it in the lineup and the sub form, and `client.players` never lists an ineligible
+player as a starter, so placing the desired state is enough. Do **not** let anyone outside
+`client.players`' starters unspec (the arena is locked anyway). If a round 1–3 pick does play,
+the site scores the match as Red when the result comes in. Tag the game's mode with the league
+as usual (`CTFDL`); the colour is the site's business.
+
 ## Switches (site side, nothing to do on the zone)
 
 - **Site-wide:** CTF management → Season → *Zone automation*. Off returns an **empty queue**
