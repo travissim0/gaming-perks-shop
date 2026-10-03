@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadForMatch, supabaseAdmin, viewerFor, zoneAutomationEnabled } from '@/lib/match-setup-server';
+import { loadForMatch, viewerFor, zoneAutomationEnabled } from '@/lib/match-setup-server';
+import { selectZoneQueueMatches } from '@/lib/zone-queue-select';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,37 +39,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const run = (skip: string[]) => {
-    const extra = ['fs_color', 'fs_status'].filter((c) => !skip.includes(c));
-    let query = supabaseAdmin
-      .from('matches')
-      .select(['id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id', ...extra].join(', '))
-      .in('status', ['scheduled', 'in_progress'])
-      .not('squad_a_id', 'is', null)
-      .not('squad_b_id', 'is', null)
-      .gte('scheduled_at', new Date(now - past * 3_600_000).toISOString())
-      .lte('scheduled_at', new Date(now + hours * 3_600_000).toISOString())
-      .order('scheduled_at', { ascending: true })
-      .limit(50);
-    // "Time TBD" fixtures have no kick-off time (scheduled_at is only their play-by day), so the
-    // zone must not open an arena for them. They join the queue once staff set a real time.
-    if (!skip.includes('time_tbd')) query = query.eq('time_tbd', false);
-    // Per-match switch: staff marked this one to be run by hand.
-    if (!skip.includes('manual_zone')) query = query.eq('manual_zone', false);
-    if (league) query = query.eq('league_slug', league);
-    else query = query.not('league_slug', 'is', null);
-    return query;
-  };
-
-  // Each optional column arrives with its own SQL file; drop a filter whose column is missing.
-  const skip: string[] = [];
-  let { data, error } = await run(skip);
-  for (let i = 0; i < 4 && error; i++) {
-    const col = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status'].find((c) => !skip.includes(c) && error!.message.includes(c));
-    if (!col) break;
-    skip.push(col);
-    ({ data, error } = await run(skip));
-  }
+  const { data, error } = await selectZoneQueueMatches({ hours, past, league, now });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const matches = [];
