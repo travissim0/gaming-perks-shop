@@ -10,9 +10,11 @@ import {
   getLatestSeason,
   getSeasonDraft,
   seasonPhase,
+  registrationClosesLabel,
   type LeagueInfo,
   type LeagueSeason,
 } from '@/lib/leagues';
+import { localDateTimeToIso } from '@/lib/schedule';
 import { inputCls, labelCls, btnPrimary, btnQuiet } from '@/components/ctf/FormBits';
 
 type DateKey = 'registration_closes_on' | 'draft_on' | 'start_date' | 'playoffs_start_on' | 'end_date';
@@ -36,6 +38,9 @@ export default function SeasonSettingsPanel() {
   const [dates, setDates] = useState<Record<DateKey, string>>({
     registration_closes_on: '', draft_on: '', start_date: '', playoffs_start_on: '', end_date: '',
   });
+  // Draft start time, in the viewer's zone ("HH:MM"). With it set, registration stays open
+  // until one hour before the draft instead of closing at the end of "Registration closes".
+  const [draftTime, setDraftTime] = useState('');
   const [discord, setDiscord] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<'dates' | 'discord' | null>(null);
@@ -63,6 +68,10 @@ export default function SeasonSettingsPanel() {
             playoffs_start_on: S.playoffs_start_on || '',
             end_date: S.end_date || '',
           });
+          if (S.draft_at) {
+            const d = new Date(S.draft_at);
+            setDraftTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+          }
         }
       } catch (e) {
         console.error('SeasonSettingsPanel: load failed', e);
@@ -89,9 +98,14 @@ export default function SeasonSettingsPanel() {
     if (!league || !season) return;
     setSaving('dates');
     try {
-      await call({ action: 'season_dates', league_slug: league.slug, season_id: season.id, ...dates });
-      setSeason({ ...season, ...Object.fromEntries(Object.entries(dates).map(([k, v]) => [k, v || null])) });
-      toast.success('Season dates saved');
+      // Draft time needs a draft day. Only sent when it is set or being cleared, so plain date
+      // saves still work before add-season-draft-time.sql has run.
+      if (draftTime && !dates.draft_on) throw new Error('Set the draft day before the draft time');
+      const draftAt = league.format === 'draft' && draftTime && dates.draft_on ? localDateTimeToIso(dates.draft_on, draftTime) : null;
+      const sendDraftAt = league.format === 'draft' && (draftAt !== null || !!season.draft_at);
+      await call({ action: 'season_dates', league_slug: league.slug, season_id: season.id, ...dates, ...(sendDraftAt ? { draft_at: draftAt } : {}) });
+      setSeason({ ...season, ...Object.fromEntries(Object.entries(dates).map(([k, v]) => [k, v || null])), ...(sendDraftAt ? { draft_at: draftAt } : {}) });
+      toast.success(draftAt ? `Season dates saved · registration closes ${registrationClosesLabel({ registration_closes_on: dates.registration_closes_on || null, draft_at: draftAt })}` : 'Season dates saved');
     } catch (e: any) {
       toast.error(e.message || 'Could not save dates');
     } finally {
@@ -153,7 +167,7 @@ export default function SeasonSettingsPanel() {
 
       <div className="p-5 space-y-5">
         {season ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${isDraft ? 'lg:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-5'}`}>
             {FIELDS.filter((f) => !f.draftOnly || isDraft).map((f) => (
               <label key={f.key} className="block">
                 <span className={labelCls}>{f.label}</span>
@@ -167,6 +181,17 @@ export default function SeasonSettingsPanel() {
                 <span className="block text-[11px] text-[#8B98B0]/70 mt-1">{f.hint}</span>
               </label>
             ))}
+            {isDraft && (
+              <label className="block">
+                <span className={labelCls}>Draft time (your zone)</span>
+                <input type="time" value={draftTime} onChange={(e) => setDraftTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                <span className="block text-[11px] text-[#8B98B0]/70 mt-1">
+                  {draftTime && dates.draft_on
+                    ? `Sign-ups stay open until ${registrationClosesLabel({ registration_closes_on: dates.registration_closes_on || null, draft_at: localDateTimeToIso(dates.draft_on, draftTime) })}, one hour before the draft.`
+                    : 'Set it to keep sign-ups open until one hour before the draft. Blank: they close at the end of the "Registration closes" day.'}
+                </span>
+              </label>
+            )}
           </div>
         ) : (
           <div className="text-sm text-[#8B98B0]">No season found for {league.name}. Create the season first, then set its dates here.</div>

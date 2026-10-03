@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { getLeagues, pickFeatured, getOpenSeason, isRegistrationClosed, registrationClosesAt } from '@/lib/leagues';
+import { getLeagues, pickFeatured, getOpenSeason, isRegistrationClosed, registrationClosesLabel } from '@/lib/leagues';
 import { ensureProfile } from '@/lib/ensure-profile-server';
 
 /**
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
   // still edit their registration, and staff can still add players from CTF management
   // (that path writes free_agents directly and never comes through here).
   if (!existing && isRegistrationClosed(season)) {
-    const when = registrationClosesAt(season)!.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+    const when = registrationClosesLabel(season);
     return NextResponse.json({ error: `Registration for ${league.name} closed on ${when}. Message league staff if you still need to be added.`, closed: true }, { status: 409 });
   }
 

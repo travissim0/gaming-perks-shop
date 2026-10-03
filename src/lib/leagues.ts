@@ -40,6 +40,11 @@ export interface LeagueSeason {
   end_date?: string | null;
   registration_closes_on?: string | null;
   draft_on?: string | null;
+  /**
+   * When the draft starts (ISO instant; add-season-draft-time.sql, draft leagues). When set,
+   * registration stays open until one hour before it, whatever registration_closes_on says.
+   */
+  draft_at?: string | null;
   playoffs_start_on?: string | null;
   /** Per-season scoring (add-season-scoring.sql). Null = classic 3/1/0. Generic leagues only. */
   scoring_rules?: unknown;
@@ -113,8 +118,18 @@ const SEASON_DATE_COLS = `${SEASON_COLS}, start_date, end_date, registration_clo
 /** Registration deadlines are announced in Pacific time ("11:59 PM PT"), so the day ends there. */
 const REGISTRATION_TZ = 'America/Los_Angeles';
 
-/** The instant registration closes: the end of `registration_closes_on` in Pacific time, or null when no date is set. */
-export function registrationClosesAt(season: Pick<LeagueSeason, 'registration_closes_on'> | null | undefined): Date | null {
+/** Sign-ups stay open until this long before the draft starts (John, 2026-10-03: "up until 1hr before the draft"). */
+export const REGISTRATION_CLOSES_BEFORE_DRAFT_MS = 60 * 60 * 1000;
+
+/**
+ * The instant registration closes. With a draft start time set (`draft_at`): one hour before the
+ * draft. Otherwise the end of `registration_closes_on` in Pacific time, or null when no date is set.
+ */
+export function registrationClosesAt(season: Pick<LeagueSeason, 'registration_closes_on' | 'draft_at'> | null | undefined): Date | null {
+  if (season?.draft_at) {
+    const t = new Date(season.draft_at).getTime();
+    if (!Number.isNaN(t)) return new Date(t - REGISTRATION_CLOSES_BEFORE_DRAFT_MS);
+  }
   const day = season?.registration_closes_on;
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
   // Find the zone's UTC offset on that day (DST-safe), then build the end-of-day instant with it.
@@ -129,9 +144,21 @@ export function registrationClosesAt(season: Pick<LeagueSeason, 'registration_cl
 }
 
 /** True once the announced registration deadline has passed. Staff can still add players by hand. */
-export function isRegistrationClosed(season: Pick<LeagueSeason, 'registration_closes_on'> | null | undefined, now = new Date()): boolean {
+export function isRegistrationClosed(season: Pick<LeagueSeason, 'registration_closes_on' | 'draft_at'> | null | undefined, now = new Date()): boolean {
   const at = registrationClosesAt(season);
   return !!at && now.getTime() > at.getTime();
+}
+
+/**
+ * "October 3 at 5:00 PM PT" when the deadline is tied to the draft time, "October 2" when it is a
+ * plain end-of-day date. Pacific, like the announced deadlines.
+ */
+export function registrationClosesLabel(season: Pick<LeagueSeason, 'registration_closes_on' | 'draft_at'> | null | undefined): string | null {
+  const at = registrationClosesAt(season);
+  if (!at) return null;
+  const day = at.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: REGISTRATION_TZ });
+  if (!season?.draft_at) return day;
+  return `${day} at ${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: REGISTRATION_TZ })} PT`;
 }
 
 /** Which table holds a league's seasons. */
@@ -144,7 +171,8 @@ export const seasonTable = (league: LeagueInfo) =>
  */
 async function fetchSeason(league: LeagueInfo, status?: string): Promise<LeagueSeason | null> {
   // scoring_rules exists on league_seasons only (add-season-scoring.sql); try richest first.
-  const attempts = league.data_source === 'ctfpl' ? [SEASON_DATE_COLS, SEASON_COLS] : [`${SEASON_DATE_COLS}, scoring_rules`, SEASON_DATE_COLS, SEASON_COLS];
+  // draft_at (add-season-draft-time.sql) is newer still; each attempt drops the newest columns.
+  const attempts = league.data_source === 'ctfpl' ? [SEASON_DATE_COLS, SEASON_COLS] : [`${SEASON_DATE_COLS}, scoring_rules, draft_at`, `${SEASON_DATE_COLS}, scoring_rules`, SEASON_DATE_COLS, SEASON_COLS];
   for (const cols of attempts) {
     let q = supabase.from(seasonTable(league)).select(cols);
     if (league.data_source !== 'ctfpl') q = q.eq('league_id', league.id);
@@ -250,8 +278,12 @@ export function seasonPhase(
   const add = (label: string, date: string | null | undefined) => {
     if (date) milestones.push({ label, date, past: days(date) > 0 });
   };
+  // With a draft time set, registration closes an hour before the draft, not on the old date.
+  const regCloses = season?.draft_at ? registrationClosesAt(season) : null;
+  const regClosesYmd = regCloses ? `${regCloses.getFullYear()}-${String(regCloses.getMonth() + 1).padStart(2, '0')}-${String(regCloses.getDate()).padStart(2, '0')}` : season?.registration_closes_on;
+  const regIsOpen = (s: LeagueSeason) => (s.draft_at ? !isRegistrationClosed(s, now) : !s.registration_closes_on || days(s.registration_closes_on) <= 0);
   if (season) {
-    add('Registration closes', season.registration_closes_on);
+    add('Registration closes', regClosesYmd);
     if (isDraft) add(opts.draftDone ? 'Drafted' : 'Draft', season.draft_on);
     add('Season starts', season.start_date);
     add('Playoffs', season.playoffs_start_on);
@@ -264,7 +296,7 @@ export function seasonPhase(
   }
 
   if (status === 'upcoming') {
-    const regOpen = !season.registration_closes_on || days(season.registration_closes_on) <= 0;
+    const regOpen = regIsOpen(season);
     if (isDraft && opts.draftDone) return { label: 'Teams set', milestones };
     if (isDraft && season.draft_on && days(season.draft_on) >= 0) return { label: 'Draft day', milestones };
     return { label: regOpen ? 'Recruiting' : 'Pre-season', milestones };
@@ -273,7 +305,7 @@ export function seasonPhase(
   // active — but a draft league can't be underway until its draft has run
   // (seasons are often flagged active early so registration and the draft room work).
   if (isDraft && opts.draftDone === false) {
-    const regOpen = !season.registration_closes_on || days(season.registration_closes_on) <= 0;
+    const regOpen = regIsOpen(season);
     if (season.draft_on && days(season.draft_on) >= 0) return { label: 'Draft day', milestones };
     return { label: regOpen ? 'Recruiting' : 'Pre-season', milestones };
   }

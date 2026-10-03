@@ -102,15 +102,22 @@ export async function PATCH(request: NextRequest) {
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    const table = league.data_source === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
+    // Draft start time (add-season-draft-time.sql): an ISO instant, or null to clear. Registration
+    // then closes one hour before it. league_seasons only.
+    if ('draft_at' in body && table === 'league_seasons') {
+      if (body.draft_at === null || body.draft_at === '') patch.draft_at = null;
+      else if (typeof body.draft_at === 'string' && !Number.isNaN(new Date(body.draft_at).getTime())) patch.draft_at = new Date(body.draft_at).toISOString();
+      else return NextResponse.json({ error: 'Draft time is not a valid date and time' }, { status: 400 });
+    }
     if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
-    const table = league.data_source === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
     let q = supabaseAdmin.from(table).update(patch).eq('id', seasonId);
     if (table === 'league_seasons') q = q.eq('league_id', league.id);
     const { data, error } = await q.select('id').maybeSingle();
     if (error) {
       console.error('season_dates: update failed', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: /draft_at/.test(error.message) ? 'Run add-season-draft-time.sql in Supabase first, then save the draft time again.' : error.message }, { status: 500 });
     }
     if (!data) return NextResponse.json({ error: 'Season not found for this league' }, { status: 404 });
     return NextResponse.json({ ok: true, ...patch });

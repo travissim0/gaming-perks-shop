@@ -42,7 +42,7 @@ const NUDGE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const POLL_MS = 60_000;
 
 interface Registrant { rowId: string; playerId: string; alias: string; discordId: string | null; classes: string[]; createdAt: string }
-interface SeasonInfo { key: string; label: string; closesOn: string | null; ctx: SeasonContext }
+interface SeasonInfo { key: string; label: string; closesOn: string | null; draftAt: string | null; ctx: SeasonContext }
 interface State { seasonKey: string | null; announced: string[]; nudged: Record<string, string>; lastSignupTemplate: number; lastNudgeTemplate: number }
 
 // ---------------------------------------------------------------------------
@@ -116,11 +116,15 @@ async function openSeason(): Promise<SeasonInfo | null> {
   const ctx = await getSeasonContext();
   if (!ctx) return null;
   const table = ctx.league.slug === 'ctfpl' ? 'ctfpl_seasons' : 'league_seasons';
-  const { data } = await db.from(table).select('season_name, registration_closes_on').eq('id', ctx.season.id).maybeSingle();
+  // draft_at (league_seasons, add-season-draft-time.sql) moves the deadline to an hour before the draft.
+  const read = (cols: string) => db.from(table).select(cols).eq('id', ctx.season.id).maybeSingle();
+  let res = table === 'league_seasons' ? await read('season_name, registration_closes_on, draft_at') : await read('season_name, registration_closes_on');
+  if (res.error && /draft_at/.test(res.error.message)) res = await read('season_name, registration_closes_on');
+  const data = res.data;
   const name = (data as any)?.season_name?.trim();
   const generic = `Season ${ctx.season.season_number}`;
   const label = name && name.toLowerCase() !== generic.toLowerCase() ? `${ctx.league.name} ${generic} · ${name}` : `${ctx.league.name} ${generic}`;
-  return { key: `${ctx.league.slug}/${ctx.season.season_number}`, label, closesOn: (data as any)?.registration_closes_on ?? null, ctx };
+  return { key: `${ctx.league.slug}/${ctx.season.season_number}`, label, closesOn: (data as any)?.registration_closes_on ?? null, draftAt: (data as any)?.draft_at ?? null, ctx };
 }
 
 async function registrants(season: SeasonInfo): Promise<Registrant[]> {
@@ -145,8 +149,15 @@ async function registrants(season: SeasonInfo): Promise<Registrant[]> {
   }));
 }
 
-/** Registration deadline as Discord timestamps (end of that day, Pacific). */
+/**
+ * Registration deadline as a Unix time. With a draft start time on the season: one hour before
+ * the draft (the site's rule). Otherwise the end of the closing day, Pacific.
+ */
 function closesAt(season: SeasonInfo): number | null {
+  if (season.draftAt) {
+    const t = new Date(season.draftAt).getTime();
+    if (!Number.isNaN(t)) return Math.floor((t - 60 * 60 * 1000) / 1000);
+  }
   if (!season.closesOn || !/^\d{4}-\d{2}-\d{2}$/.test(season.closesOn)) return null;
   // Deadlines are announced as end of day Pacific; -07:00 is close enough for "closes in 5 days".
   return Math.floor(new Date(`${season.closesOn}T23:59:59-07:00`).getTime() / 1000);
@@ -154,7 +165,8 @@ function closesAt(season: SeasonInfo): number | null {
 
 function deadline(season: SeasonInfo): { relative: string; absolute: string } | null {
   const t = closesAt(season);
-  return t ? { relative: `<t:${t}:R>`, absolute: `<t:${t}:D>` } : null;
+  // With a draft-time deadline the hour matters, so show date and time.
+  return t ? { relative: `<t:${t}:R>`, absolute: `<t:${t}:${season.draftAt ? 'f' : 'D'}>` } : null;
 }
 
 function closed(season: SeasonInfo): boolean {

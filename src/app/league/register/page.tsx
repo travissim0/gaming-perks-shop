@@ -18,7 +18,7 @@ import {
   leagueRulesHref,
   type LeagueInfo,
   type LeagueSeason,
-  isRegistrationClosed, registrationClosesAt,
+  isRegistrationClosed, registrationClosesLabel,
 } from '@/lib/leagues';
 
 /**
@@ -145,7 +145,7 @@ export default function LeagueRegisterPage() {
   const title = league ? seasonLabel(league, season) : 'League registration';
   const isEdit = !!existing;
   const closed = isRegistrationClosed(season);
-  const closedOn = registrationClosesAt(season)?.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/Los_Angeles' });
+  const closedOn = registrationClosesLabel(season);
 
   const shell = (children: React.ReactNode) => (
     <div className="ctf-theme min-h-screen">
