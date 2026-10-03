@@ -301,14 +301,21 @@ export async function POST(request: NextRequest) {
         if (!rules.fs.enabled) return NextResponse.json({ error: 'This season does not use free-scheduled matches' }, { status: 400 });
         if (rules.fs.needs_verification && !verified) return NextResponse.json({ error: 'An FS match only counts with a referee or a recording. Tick "Ref or recording" to confirm.' }, { status: 400 });
         if (rules.fs.colors && fsColorRaw !== 'red' && fsColorRaw !== 'green') return NextResponse.json({ error: 'Say whether this FS match was Red or Green' }, { status: 400 });
-        // Caps count the colour the captains booked (the fixture's), not what it ends up scoring as.
-        let bookedColor: unknown = fsColorRaw;
+        // Caps count the colour the match SCORES as: a Green that dropped to Red uses a Red slot.
+        let bookedColor: unknown = null;
         if (fixtureId && rules.fs.colors) {
           const { data: fx } = await supabaseAdmin.from('matches').select('fs_color').eq('id', fixtureId).maybeSingle();
-          if ((fx as any)?.fs_color) bookedColor = (fx as any).fs_color;
+          bookedColor = (fx as any)?.fs_color ?? null;
         }
-        const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null, undefined, bookedColor);
-        if (cap) return NextResponse.json({ error: cap }, { status: 409 });
+        const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null, undefined, fsColorRaw);
+        const droppedToRed = rules.fs.colors && bookedColor === 'green' && fsColorRaw === 'red';
+        if (cap && droppedToRed) {
+          // The match was booked Green (within the Green limits) and has already been played; it
+          // only breaks the Red limit because it dropped to Red. Record it and tell staff.
+          scoringNote = `Booked as FS Green, recorded as FS Red. That puts a squad over the Red limit: ${cap}`;
+        } else if (cap) {
+          return NextResponse.json({ error: cap }, { status: 409 });
+        }
         if (forfeit && rules.fs.forfeit_no_contest) scoringNote = 'Forfeited FS recorded as a no-contest: neither squad scores.';
       }
 

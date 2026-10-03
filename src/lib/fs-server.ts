@@ -9,7 +9,8 @@ import { weekStart, weekEnd, leagueDate, fsColorOf, type FsColor, type ScoringRu
  *
  * When the season splits FS into Red and Green (rules.fs.colors), the caps apply
  * to each colour separately: a squad can play the same opponent Red and Green in
- * the same week. Rows with no colour count as red.
+ * the same week. Rows with no colour count as red. A played match counts as the
+ * colour it scored as, so a Green that dropped to Red uses up a Red slot.
  */
 
 const supabaseAdmin = createClient(
@@ -60,8 +61,18 @@ export async function fsCountsFor(
   let lo = await looseQ('id, team_a_squad_id, team_b_squad_id, match_date, fs_color');
   if (lo.error && /fs_color/.test(lo.error.message)) lo = await looseQ('id, team_a_squad_id, team_b_squad_id, match_date');
 
+  // A fixture counts as the colour it SCORED as once it has a result: a Green match that dropped
+  // to Red (a round 1-3 pick played) is a Red match for the limits too (John, 2026-10-03).
+  // Until it is played it counts as the colour the captains booked.
+  const fixtureIds = ((fx.data || []) as any[]).map((f) => f.id);
+  const scored = new Map<string, string>();
+  if (fixtureIds.length) {
+    const { data: res } = await supabaseAdmin.from('league_matches').select('fixture_id, fs_color').in('fixture_id', fixtureIds).eq('match_kind', 'fs');
+    ((res || []) as any[]).forEach((r) => { if (r.fixture_id && r.fs_color) scored.set(r.fixture_id, r.fs_color); });
+  }
+
   const items = [
-    ...((fx.data || []) as any[]).map((f) => ({ a: f.squad_a_id, b: f.squad_b_id, ws: f.fs_week_start as string | null, color: f.fs_color === 'green' ? 'green' : 'red' })),
+    ...((fx.data || []) as any[]).map((f) => ({ a: f.squad_a_id, b: f.squad_b_id, ws: f.fs_week_start as string | null, color: (scored.get(f.id) || f.fs_color) === 'green' ? 'green' : 'red' })),
     ...((lo.data || []) as any[]).map((m) => ({ a: m.team_a_squad_id, b: m.team_b_squad_id, ws: weekStart(new Date(m.match_date)), color: m.fs_color === 'green' ? 'green' : 'red' })),
   ].filter((i) => !color || i.color === color);
   const inWeek = items.filter((i) => i.ws && i.ws >= ws && i.ws <= we);

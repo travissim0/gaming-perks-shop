@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { winTypeFromMinutes, type MatchKind, type WinType } from '@/lib/scoring';
 import { loadSeasonRules, rebuildStandings } from '@/lib/standings-server';
 import { greenBlockedFor, loadSquads, tagOf } from '@/lib/match-setup-server';
+import { fsCapCheck } from '@/lib/fs-server';
 
 /**
  * Record a league fixture's result from the game the zone ran for it.
@@ -166,6 +167,14 @@ export async function autoRecordFromGame(match: any, gameId: string, opts: { sta
       }
     }
   }
+  // A Green that dropped to Red counts against the Red limits from here on. It was booked inside
+  // the Green limits and has been played, so it is still recorded; if it takes a squad over the
+  // Red limit, say so on the match for staff.
+  let overRedLimit: string | null = null;
+  if (greenBroken.length) {
+    overRedLimit = await fsCapCheck(seasonId, match.league_slug, match.season_number, rules, home.id, away.id, playedAt, match.id, { a: home.name, b: away.name }, 'red').catch(() => null);
+    if (overRedLimit && /^FS clos/i.test(overRedLimit)) overRedLimit = null; // the cut-off date is not a colour limit
+  }
 
   const insert: Record<string, unknown> = {
     league_season_id: seasonId,
@@ -211,7 +220,7 @@ export async function autoRecordFromGame(match: any, gameId: string, opts: { sta
     squad_b_score: a.kills,
     game_id: gameId,
     actual_end_time: playedAt,
-    match_notes: `Result recorded ${opts.staffPick ? 'from the game staff picked,' : 'automatically from game'} ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}).${greenBroken.length ? ` Booked as FS Green but scored as FS Red: ${greenBroken.join(', ')} (round 1–${rules.fs.green_min_round - 1}) played.` : ''} Staff can remove it in the match manager if it's wrong.`,
+    match_notes: `Result recorded ${opts.staffPick ? 'from the game staff picked,' : 'automatically from game'} ${gameId} (${winType || 'no win type'}${minutes ? `, ${minutes.toFixed(0)} min` : ''}).${greenBroken.length ? ` Booked as FS Green but scored as FS Red: ${greenBroken.join(', ')} (round 1–${rules.fs.green_min_round - 1}) played.${overRedLimit ? ` It now counts as a Red match and goes over the Red limit: ${overRedLimit}` : ' It now counts against the Red limits.'}` : ''} Staff can remove it in the match manager if it's wrong.`,
   }).eq('id', match.id);
 
   if (matchType === 'Season') await rebuildStandings(seasonId);
