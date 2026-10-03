@@ -196,7 +196,8 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
             {setup.match_chat ? (
               <>
                 <span className="font-mono text-sm text-[#22D3EE]">{setup.match_chat}</span>
-                <span className="text-[11px] text-[#8B98B0]">in game, add it to your chats: <span className="font-mono text-[#E6EDF7]">?chat={setup.match_chat}</span></span>
+                {/* ?chatadd adds one chat and keeps the ones you are already in; ?chat= would replace them. */}
+                <span className="text-[11px] text-[#8B98B0]">in game, add it to your chats: <span className="font-mono text-[#E6EDF7]">?chatadd {setup.match_chat}</span></span>
               </>
             ) : (
               <span className="text-sm text-[#8B98B0]">{viewer?.can_set_match_chat ? 'Not set yet.' : 'The referee hasn’t set one yet.'}</span>
