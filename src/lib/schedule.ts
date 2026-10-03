@@ -139,6 +139,21 @@ export function playByIso(date: string): string {
   }
   return new Date(Date.UTC(y, m - 1, d + 1, 4, 59)).toISOString();
 }
+/**
+ * Why a played FS match scored nothing, in words everyone can read, or null when it counted.
+ * A Green that dropped to Red and so went over the Red limit does not count; neither does a
+ * forfeited FS.
+ */
+export function noContestReason(f: { stage: string; fs_color?: string | null; result: { no_contest: boolean; scored_color: string | null; a_result: string | null; b_result: string | null } | null }): string | null {
+  if (!f.result?.no_contest) return null;
+  const forfeit = /no.?show|forfeit/i.test(`${f.result.a_result || ''} ${f.result.b_result || ''}`);
+  if (forfeit) return 'Forfeit: no contest, no points for either squad.';
+  if (f.stage === 'fs' && f.fs_color === 'green' && f.result.scored_color === 'red') {
+    return 'Did not count. Booked as FS Green, but a round 1–3 pick played, so it became an FS Red match, and as a Red it was over the limit. No points for either squad.';
+  }
+  return 'Did not count: no contest, no points for either squad.';
+}
+
 /** "by Sun, Oct 11" for a TBD fixture's play-by day: a league-calendar date, the same for every viewer. */
 export const playByLabel = (iso: string) =>
   `by ${new Date(iso).toLocaleDateString(undefined, { timeZone: LEAGUE_TZ, weekday: 'short', month: 'short', day: 'numeric' })}`;

@@ -708,6 +708,7 @@ export default function MatchManagerPage() {
                           <td className={`${td} ${aWon ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{m.squad_a_name}</td>
                           <td className={`${td} text-xs text-[#8B98B0] whitespace-nowrap`}>
                             {m.match_kind && <span className="mr-1.5 rounded bg-white/5 px-1 text-[10px] uppercase tracking-wide">{m.match_kind}{m.match_kind === 'fs' && (m as any).fs_color ? ` ${(m as any).fs_color}` : ''}</span>}
+                            {(m as any).no_contest && <span className="mr-1.5 rounded bg-[#F59E0B]/15 px-1 text-[10px] uppercase tracking-wide text-[#F59E0B]" title="Scored nothing: no points for either squad">did not count</span>}
                             {m.win_type ? (m.win_type === '2ot' ? '2OT' : m.win_type === 'ot' ? 'OT' : 'Reg') : ''}
                             {m.game_length_minutes ? ` · ${Math.round(m.game_length_minutes)} min` : ''}
                             {auto && <span className="ml-1.5 rounded bg-[#22D3EE]/15 px-1 text-[10px] uppercase tracking-wide text-[#22D3EE]" title="Recorded automatically from the game the zone ran">Auto</span>}

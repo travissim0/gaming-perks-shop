@@ -22,7 +22,7 @@ import {
   type SeasonStatus,
   type StandingRow,
 } from '@/lib/leagues';
-import { playoffRoundLabel, playByLabel, TBD_LABEL, type TeamRef } from '@/lib/schedule';
+import { playoffRoundLabel, playByLabel, noContestReason, TBD_LABEL, type TeamRef } from '@/lib/schedule';
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
@@ -369,7 +369,9 @@ function SchedulePage() {
                           <TeamMark tag={f.squad_b_tag} name={f.squad_b_name} />
                         </Link>
                         <div className="w-24 shrink-0 text-center">
-                          {f.result ? (
+                          {f.result?.no_contest ? (
+                            <span className="inline-block rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#F59E0B]" title={noContestReason(f) || undefined}>Did not count</span>
+                          ) : f.result ? (
                             <span className="font-display text-2xl tabular-nums">
                               <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
                               <span className="text-white/20 mx-1.5">·</span>
@@ -405,6 +407,8 @@ function SchedulePage() {
                           )}
                         </div>
                       </div>
+                      {/* A played match that scored nothing says so, and why, for everyone. */}
+                      {noContestReason(f) && <div className="mt-1 md:pl-[6.75rem] text-[11px] text-[#F59E0B]">{noContestReason(f)}</div>}
                       <div className="md:hidden mt-1 pl-[6.75rem] flex gap-3 text-[11px] text-[#8B98B0]">
                         <Link href={`/matches/${f.id}`} className="hover:text-[#22D3EE]">Details</Link>
                         {isStaff && <button type="button" onClick={() => setEditing(editing === f.id ? null : f.id)} className="text-[#F59E0B]">Edit</button>}

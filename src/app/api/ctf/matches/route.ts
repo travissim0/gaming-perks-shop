@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
       // Scoring columns (generic leagues; absent on CTFPL rows)
       match_kind: m.match_kind ?? null,
       fs_color: m.fs_color ?? null,
+      no_contest: m.no_contest ?? null,
       win_type: m.win_type ?? null,
       verified: m.verified ?? null,
       fixture_id: m.fixture_id ?? null,
@@ -296,6 +297,7 @@ export async function POST(request: NextRequest) {
           ? winTypeRaw
           : is_overtime ? 'ot' : winTypeFromMinutes(rules, gameLengthMinutes);
       const verified = !!verifiedRaw;
+      let overLimitNoContest = false;
 
       if (matchKind === 'fs' && isSeasonMatch) {
         if (!rules.fs.enabled) return NextResponse.json({ error: 'This season does not use free-scheduled matches' }, { status: 400 });
@@ -310,20 +312,22 @@ export async function POST(request: NextRequest) {
         const cap = await fsCapCheck(leagueSeasonId, leagueSlug, parseInt(season_number), rules, resolvedSquadAId, resolvedSquadBId, played_at || new Date().toISOString(), fixtureId || null, undefined, fsColorRaw);
         const droppedToRed = rules.fs.colors && bookedColor === 'green' && fsColorRaw === 'red';
         if (cap && droppedToRed) {
-          // The match was booked Green (within the Green limits) and has already been played; it
-          // only breaks the Red limit because it dropped to Red. Record it and tell staff.
-          scoringNote = `Booked as FS Green, recorded as FS Red. That puts a squad over the Red limit: ${cap}`;
+          // Booked Green, played, and dropped to Red: as a Red it is over the limit, so it does
+          // not count. Recorded as a no-contest (nobody scores) so the match still has a record.
+          overLimitNoContest = true;
+          scoringNote = `Booked as FS Green, recorded as FS Red. As a Red match it is over the limit, so it does not count: no points for either squad. ${cap}`;
         } else if (cap) {
           return NextResponse.json({ error: cap }, { status: 409 });
         }
         if (forfeit && rules.fs.forfeit_no_contest) scoringNote = 'Forfeited FS recorded as a no-contest: neither squad scores.';
       }
+      const noContestOverLimit = overLimitNoContest;
 
       const scoringCols: Record<string, unknown> = {
         match_kind: matchKind,
         ...(matchKind === 'fs' && rules.fs.colors ? { fs_color: fsColorOf(rules, fsColorRaw) } : {}),
         win_type: forfeit ? null : winType,
-        no_contest: matchKind === 'fs' && forfeit && rules.fs.forfeit_no_contest,
+        no_contest: (matchKind === 'fs' && forfeit && rules.fs.forfeit_no_contest) || noContestOverLimit,
         verified,
         fixture_id: fixtureId || null,
       };

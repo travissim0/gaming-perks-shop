@@ -13,7 +13,7 @@ import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
 import { canFillCrewRole } from '@/lib/crewRoles';
-import { localDateTimeToIso, playByIso } from '@/lib/schedule';
+import { localDateTimeToIso, noContestReason, playByIso } from '@/lib/schedule';
 import { leagueDate } from '@/lib/scoring';
 
 /*
@@ -267,6 +267,23 @@ export default function MatchDetailPage() {
       await load();
     } catch (e: any) { toast.error(e.message || 'Could not leave'); } finally { setBusy(null); }
   };
+  // A played league match that scored nothing (a forfeited FS, or a Green that dropped to Red and
+  // went over the Red limit): say so, and why, to everyone.
+  const [didNotCount, setDidNotCount] = useState<string | null>(null);
+  useEffect(() => {
+    if (!match?.league_slug || !match.season_number) { setDidNotCount(null); return; }
+    let cancelled = false;
+    fetch(`/api/league/schedule?league=${encodeURIComponent(match.league_slug)}&season=${match.season_number}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled) return;
+        const fx = (j?.fixtures || []).find((f: any) => f.id === match.id);
+        setDidNotCount(fx ? noContestReason(fx) : null);
+      })
+      .catch(() => { if (!cancelled) setDidNotCount(null); });
+    return () => { cancelled = true; };
+  }, [match?.id, match?.league_slug, match?.season_number, match?.status, match?.game_id]);
+
   // Staff: every game the arena ran around this match, and which one was recorded.
   const [arenaGames, setArenaGames] = useState<ArenaGames | null>(null);
   const loadArenaGames = useCallback(async () => {
@@ -443,9 +460,11 @@ export default function MatchDetailPage() {
     ? { label: match!.status === 'cancelled' ? 'Cancelled' : 'Not played', cls: 'bg-white/5 text-[#8B98B0]' }
     : live
       ? { label: 'Live', cls: 'bg-[#34D399]/15 text-[#34D399]' }
-      : played
-        ? { label: 'Played', cls: 'bg-white/5 text-[#E6EDF7]' }
-        : { label: 'Scheduled', cls: 'bg-[#22D3EE]/15 text-[#22D3EE]' };
+      : didNotCount
+        ? { label: 'Did not count', cls: 'bg-[#F59E0B]/15 text-[#F59E0B]' }
+        : played
+          ? { label: 'Played', cls: 'bg-white/5 text-[#E6EDF7]' }
+          : { label: 'Scheduled', cls: 'bg-[#22D3EE]/15 text-[#22D3EE]' };
 
   const shell = (children: React.ReactNode) => (
     <div className={`ctf-theme ${displayFont.variable} ${bodyFont.variable} min-h-screen`}>
@@ -530,6 +549,14 @@ export default function MatchDetailPage() {
           )}
         </div>
       </section>
+
+      {/* Played, but scored nothing: everyone sees why */}
+      {didNotCount && (
+        <section className="rounded-xl bg-[#F59E0B]/10 ring-1 ring-[#F59E0B]/40 px-4 py-3 text-sm text-[#E6EDF7]">
+          <span className="font-medium text-[#F59E0B]">This match did not count in the standings.</span>{' '}
+          {didNotCount.replace(/^Did not count[.:]\s*/i, '')}
+        </section>
+      )}
 
       {/* Manage panels */}
       {isStaff && panel === 'time' && (

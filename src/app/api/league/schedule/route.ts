@@ -59,6 +59,10 @@ export interface Fixture {
     b_result: string | null;
     played_at: string;
     swapped: boolean;
+    /** The match was played (or forfeited) but does not count: nobody scores. */
+    no_contest: boolean;
+    /** FS only: the colour the result scored as (a Green in which a round 1-3 pick played is red). */
+    scored_color: 'red' | 'green' | null;
   } | null;
 }
 
@@ -123,18 +127,21 @@ export async function GET(request: NextRequest) {
       ? await supabaseAdmin.from('league_seasons').select('id').eq('league_id', lg.id).eq('season_number', season).maybeSingle()
       : { data: null };
     if (ls) {
-      const { data } = await supabaseAdmin
-        .from('league_matches')
-        .select('id, game_id, match_date, team_a_squad_id, team_b_squad_id, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result')
-        .eq('league_season_id', ls.id);
-      results = data || [];
+      const resCols = 'id, game_id, match_date, team_a_squad_id, team_b_squad_id, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result';
+      const read = (c: string) => supabaseAdmin.from('league_matches').select(c).eq('league_season_id', ls.id);
+      // no_contest / fs_color / fixture_id arrive with the scoring SQL files; fall back without them.
+      let res = await read(`${resCols}, no_contest, fs_color, fixture_id`);
+      if (res.error) res = await read(resCols);
+      results = (res.data as any[]) || [];
     }
   }
 
   const used = new Set<string>();
   const findResult = (m: any) => {
+    const byFixture = results.find((r) => r.fixture_id && r.fixture_id === m.id && !used.has(r.id));
     const byGame = m.game_id ? results.find((r) => r.game_id && r.game_id === m.game_id && !used.has(r.id)) : null;
     const hit =
+      byFixture ||
       byGame ||
       results.find((r) => {
         if (used.has(r.id) || !m.squad_a_id || !m.squad_b_id) return false;
@@ -153,6 +160,8 @@ export async function GET(request: NextRequest) {
       b_result: swapped ? hit.team_a_result : hit.team_b_result,
       played_at: hit.match_date,
       swapped,
+      no_contest: hit.no_contest === true,
+      scored_color: hit.fs_color === 'green' ? 'green' : hit.fs_color === 'red' ? 'red' : null,
     };
   };
 
