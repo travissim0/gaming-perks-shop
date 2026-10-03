@@ -178,11 +178,15 @@ function SchedulePage() {
     for (const f of visible) {
       const key = f.stage === 'playoff' ? `p${f.playoff_round || 1}` : f.stage === 'fs' ? `fs${f.fs_week_start || f.scheduled_at.slice(0, 10)}` : `w${f.week || 0}`;
       if (!map.has(key)) {
-        const inRound = fixtures.filter((x) => x.stage === 'playoff' && x.playoff_round === f.playoff_round).length * 2;
+        const roundItems = fixtures.filter((x) => x.stage === 'playoff' && x.playoff_round === f.playoff_round);
+        const inRound = roundItems.length * 2;
+        // Named games (Page playoff: "Game A", "Game B", "Game C", "Championship") carry their label in the title.
+        const named = Array.from(new Set(roundItems.map((x) => x.title.split(' · ')[1]).filter((l) => l && /^(Game [A-Z]|Championship|Final)/.test(l))));
+        const playoffLabel = named.length ? `Playoffs · ${named.join(' & ')}` : `Playoffs · ${playoffRoundLabel(inRound)}`;
         // FS groups sort by their Mon–Sun week, between the RS weeks around them.
         const fsOrder = f.fs_week_start ? 500 + new Date(f.fs_week_start).getTime() / 8.64e7 / 1e6 : 500;
         map.set(key, {
-          label: f.stage === 'playoff' ? `Playoffs · ${playoffRoundLabel(inRound)}` : f.stage === 'fs' ? `Free scheduled · ${weekRange(f.fs_week_start || weekStart(new Date(f.scheduled_at)))}` : `Week ${f.week ?? '–'}${pointsMode ? ' · RS' : ''}`,
+          label: f.stage === 'playoff' ? playoffLabel : f.stage === 'fs' ? `Free scheduled · ${weekRange(f.fs_week_start || weekStart(new Date(f.scheduled_at)))}` : `Week ${f.week ?? '–'}${pointsMode ? ' · RS' : ''}`,
           sub: f.stage === 'fs' ? 'Captain-agreed extra matches' : daySub(f),
           items: [],
           order: f.stage === 'playoff' ? 1000 + (f.playoff_round || 1) : f.stage === 'fs' ? fsOrder : f.week || 0,

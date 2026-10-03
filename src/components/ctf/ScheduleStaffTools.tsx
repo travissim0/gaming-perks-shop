@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
@@ -234,24 +234,24 @@ export default function ScheduleStaffTools({
     </ul>
   );
 
-  const submitPlayoffs = async (pairs: [TeamRef, TeamRef][], round: number, label: string) => {
+  const submitPlayoffs = async (pairs: [TeamRef, TeamRef][], round: number, label: string | string[]) => {
     setBusy(true);
     try {
       const when = localDateTimeToIso(poDate, poTime);
       const res = await api('POST', {
         league: league.slug,
         season: season.season_number,
-        fixtures: pairs.map(([a, b]) => ({
+        fixtures: pairs.map(([a, b], i) => ({
           week: lastWeek + 1,
           stage: 'playoff',
           playoff_round: round,
-          label,
+          label: Array.isArray(label) ? label[i] : label,
           squad_a_id: a.id,
           squad_b_id: b.id,
           scheduled_at: when,
         })),
       });
-      toast.success(`Created ${res.count} playoff ${res.count === 1 ? 'match' : 'matches'} · ${label}`);
+      toast.success(`Created ${res.count} playoff ${res.count === 1 ? 'match' : 'matches'} · ${Array.isArray(label) ? label.join(' & ') : label}`);
       if (round === 1) await setSeasonDateIfBlank('playoffs_start_on', poDate);
       onChanged();
     } catch (e: any) {
@@ -260,6 +260,50 @@ export default function ScheduleStaffTools({
       setBusy(false);
     }
   };
+
+  // ── Page playoff (4 teams) ──────────────────────────────────────────
+  // Game A: 1 v 2 and Game B: 3 v 4 on the same night. Game C: loser of A v winner of B, same
+  // night, for the last spot. Championship: winner of A v winner of C, a week later. The top two
+  // seeds get two shots at the final; the bottom two must win twice in one night. The higher seed
+  // is home in every game. Each game is a fixture whose title carries its label.
+  const [poFormat, setPoFormat] = useState<'page' | 'bracket'>(teams.length === 4 ? 'page' : 'bracket');
+  const gameLabel = (f: Fixture) => f.title.split(' · ')[1] || '';
+  const teamRef = (f: Fixture, side: 'a' | 'b'): TeamRef =>
+    side === 'a' ? { id: f.squad_a_id!, name: f.squad_a_name || '?', tag: f.squad_a_tag } : { id: f.squad_b_id!, name: f.squad_b_name || '?', tag: f.squad_b_tag };
+  const aWonIt = (f: Fixture) => !!f.result && (/win/i.test(f.result.a_result || '') || f.result.a_score > f.result.b_score);
+  const winnerOf = (f: Fixture) => teamRef(f, aWonIt(f) ? 'a' : 'b');
+  const loserOf = (f: Fixture) => teamRef(f, aWonIt(f) ? 'b' : 'a');
+  const bySeed = (x: TeamRef, y: TeamRef): [TeamRef, TeamRef] => (seedOf(x.id) <= seedOf(y.id) ? [x, y] : [y, x]);
+  const page = {
+    A: playoffs.find((f) => gameLabel(f) === 'Game A'),
+    B: playoffs.find((f) => gameLabel(f) === 'Game B'),
+    C: playoffs.find((f) => gameLabel(f) === 'Game C'),
+    F: playoffs.find((f) => gameLabel(f) === 'Championship'),
+  };
+  const pageStep: 'seed' | 'gameC' | 'final' | 'waitAB' | 'waitC' | 'waitF' | 'done' =
+    !page.A || !page.B ? 'seed'
+      : !page.A.result || !page.B.result ? 'waitAB'
+        : !page.C ? 'gameC'
+          : !page.C.result ? 'waitC'
+            : !page.F ? 'final'
+              : !page.F.result ? 'waitF' : 'done';
+  const pageSeedPairs: [TeamRef, TeamRef][] = seeded.length >= 4 ? [[seeded[0], seeded[1]], [seeded[2], seeded[3]]] : [];
+  const pageCPair: [TeamRef, TeamRef] | null = pageStep === 'gameC' ? bySeed(loserOf(page.A!), winnerOf(page.B!)) : null;
+  const pageFPair: [TeamRef, TeamRef] | null = pageStep === 'final' ? bySeed(winnerOf(page.A!), winnerOf(page.C!)) : null;
+  // Once playoff fixtures exist, their labels say which format is in use.
+  const playoffFormat: 'page' | 'bracket' = currentRound > 0 ? (page.A ? 'page' : 'bracket') : poFormat;
+  // Game C defaults to the same night as A and B; the Championship to a week later.
+  useEffect(() => {
+    if (pageStep === 'gameC' && page.A) {
+      const d = new Date(page.A.scheduled_at);
+      setPoDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    if (pageStep === 'final' && page.C) {
+      const d = new Date(page.C.scheduled_at); d.setDate(d.getDate() + 7);
+      setPoDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageStep]);
 
   const TeamSelect = ({ value, onChange, exclude }: { value: string; onChange: (v: string) => void; exclude?: string }) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }}>
@@ -429,7 +473,90 @@ export default function ScheduleStaffTools({
 
           {tab === 'playoffs' && (
             <div className="space-y-3">
-              {currentRound === 0 ? (
+              {currentRound === 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className={`${labelCls} mb-0`}>Format</label>
+                  <select value={poFormat} onChange={(e) => setPoFormat(e.target.value as 'page' | 'bracket')} className={`${inputCls} w-auto`} style={{ colorScheme: 'dark' }}>
+                    <option value="page">Page playoff · 4 teams, top two seeds get two shots at the final</option>
+                    <option value="bracket">Single elimination bracket</option>
+                  </select>
+                </div>
+              )}
+              {playoffFormat === 'page' ? (
+                <>
+                  {pageStep === 'seed' && (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                        <div>
+                          <label className={labelCls}>Games A and B date</label>
+                          <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Time (your zone)</label>
+                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          <button type="button" disabled={busy || pageSeedPairs.length === 0} onClick={() => submitPlayoffs(pageSeedPairs, 1, ['Game A', 'Game B'])} className={btnPrimary}>
+                            {busy ? 'Creating…' : 'Seed Games A and B'}
+                          </button>
+                        </div>
+                      </div>
+                      {pageSeedPairs.length === 0 ? (
+                        <p className="text-sm text-[#8B98B0]">Seeding uses the standings (RS points). All four teams need a regular-season result first{seeded.length ? ` · ${seeded.length} of 4 in the standings so far` : ''}.</p>
+                      ) : (
+                        <>
+                          <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">Game A · top two seeds &nbsp;·&nbsp; Game B · bottom two</div>
+                          <PairList pairs={pageSeedPairs} />
+                          <p className="text-[11px] text-[#8B98B0]">Winner of A goes to the Championship; loser of A gets a second life in Game C against the winner of B, the same night. The higher seed is home and picks the side in every game.</p>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {pageStep === 'waitAB' && <p className="text-sm text-[#8B98B0]">Games A and B are on the schedule · {[page.A, page.B].filter((f) => f?.result).length}/2 results in. Game C unlocks once both are reported.</p>}
+                  {pageStep === 'gameC' && pageCPair && (
+                    <>
+                      <div className="text-sm text-[#E6EDF7]">Game C · last spot in the final · loser of A vs winner of B</div>
+                      <PairList pairs={[pageCPair]} />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                        <div>
+                          <label className={labelCls}>Game C date</label>
+                          <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Time (your zone)</label>
+                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageCPair], 2, 'Game C')} className={btnPrimary}>{busy ? 'Creating…' : 'Create Game C'}</button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-[#8B98B0]">Same night as A and B by the format; start it at least 30 minutes after both are final.</p>
+                    </>
+                  )}
+                  {pageStep === 'waitC' && <p className="text-sm text-[#8B98B0]">Game C is on the schedule. The Championship unlocks once its result is reported.</p>}
+                  {pageStep === 'final' && pageFPair && (
+                    <>
+                      <div className="text-sm text-[#E6EDF7]">Championship · winner of A vs winner of C</div>
+                      <PairList pairs={[pageFPair]} />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                        <div>
+                          <label className={labelCls}>Championship date</label>
+                          <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Time (your zone)</label>
+                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageFPair], 3, 'Championship')} className={btnPrimary}>{busy ? 'Creating…' : 'Create Championship'}</button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {pageStep === 'waitF' && <p className="text-sm text-[#8B98B0]">Championship is on the schedule. One game, one champion.</p>}
+                  {pageStep === 'done' && <p className="text-sm text-[#F59E0B]">Championship played. Champion: {winnerOf(page.F!).name}. Record it on the season in the admin season tools.</p>}
+                </>
+              ) : currentRound === 0 ? (
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
                     <div>
