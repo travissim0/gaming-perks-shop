@@ -234,10 +234,10 @@ export default function ScheduleStaffTools({
     </ul>
   );
 
-  const submitPlayoffs = async (pairs: [TeamRef, TeamRef][], round: number, label: string | string[]) => {
+  const submitPlayoffs = async (pairs: [TeamRef, TeamRef][], round: number, label: string | string[], tbd = false) => {
     setBusy(true);
     try {
-      const when = localDateTimeToIso(poDate, poTime);
+      const when = tbd ? playByIso(poDate) : localDateTimeToIso(poDate, poTime);
       const res = await api('POST', {
         league: league.slug,
         season: season.season_number,
@@ -249,6 +249,7 @@ export default function ScheduleStaffTools({
           squad_a_id: a.id,
           squad_b_id: b.id,
           scheduled_at: when,
+          ...(tbd ? { time_tbd: true } : {}),
         })),
       });
       toast.success(`Created ${res.count} playoff ${res.count === 1 ? 'match' : 'matches'} · ${Array.isArray(label) ? label.join(' & ') : label}`);
@@ -262,11 +263,14 @@ export default function ScheduleStaffTools({
   };
 
   // ── Page playoff (4 teams) ──────────────────────────────────────────
-  // Game A: 1 v 2 and Game B: 3 v 4 on the same night. Game C: loser of A v winner of B, same
-  // night, for the last spot. Championship: winner of A v winner of C, a week later. The top two
-  // seeds get two shots at the final; the bottom two must win twice in one night. The higher seed
-  // is home in every game. Each game is a fixture whose title carries its label.
+  // Game A: 1 v 2, winner straight to the Championship. Game B: 3 v 4, loser out (4th).
+  // Game C: loser of A v winner of B, same night, for the last Championship spot; loser is 3rd.
+  // Championship: winner of A v winner of C, a week later, ONE game, no head start for anyone
+  // (John, 2026-10-03: "Championship is single elimination"). The higher seed is home in every
+  // game. Each game is a fixture whose title carries its label.
   const [poFormat, setPoFormat] = useState<'page' | 'bracket'>(teams.length === 4 ? 'page' : 'bracket');
+  // Game C has no fixed time: it starts once A and B are both final, so it is created Time TBD by default.
+  const [gameCTbd, setGameCTbd] = useState(true);
   const gameLabel = (f: Fixture) => f.title.split(' · ')[1] || '';
   const teamRef = (f: Fixture, side: 'a' | 'b'): TeamRef =>
     side === 'a' ? { id: f.squad_a_id!, name: f.squad_a_name || '?', tag: f.squad_a_tag } : { id: f.squad_b_id!, name: f.squad_b_name || '?', tag: f.squad_b_tag };
@@ -507,7 +511,7 @@ export default function ScheduleStaffTools({
                         <>
                           <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">Game A · top two seeds &nbsp;·&nbsp; Game B · bottom two</div>
                           <PairList pairs={pageSeedPairs} />
-                          <p className="text-[11px] text-[#8B98B0]">Winner of A goes to the Championship; loser of A gets a second life in Game C against the winner of B, the same night. The higher seed is home and picks the side in every game.</p>
+                          <p className="text-[11px] text-[#8B98B0]">Winner of A goes straight to the Championship. Loser of B is out in 4th. Loser of A plays the winner of B in Game C, the same night, for the last Championship spot; the loser of C is 3rd. The Championship is one game. The higher seed is home and picks the side in every game.</p>
                         </>
                       )}
                     </>
@@ -524,13 +528,18 @@ export default function ScheduleStaffTools({
                         </div>
                         <div>
                           <label className={labelCls}>Time (your zone)</label>
-                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          {gameCTbd ? (
+                            <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                          ) : (
+                            <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          )}
                         </div>
-                        <div className="md:col-span-2 flex justify-end">
-                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageCPair], 2, 'Game C')} className={btnPrimary}>{busy ? 'Creating…' : 'Create Game C'}</button>
+                        <div className="md:col-span-2 flex items-center justify-end gap-4">
+                          <TbdToggle checked={gameCTbd} onChange={setGameCTbd} />
+                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageCPair], 2, 'Game C', gameCTbd)} className={btnPrimary}>{busy ? 'Creating…' : 'Create Game C'}</button>
                         </div>
                       </div>
-                      <p className="text-[11px] text-[#8B98B0]">Same night as A and B by the format; start it at least 30 minutes after both are final.</p>
+                      <p className="text-[11px] text-[#8B98B0]">Game C has no fixed time: it starts once A and B are both final, at least 30 minutes after, so its referees are on standby. Leave it Time TBD and set the time on the night, which also opens its arena.</p>
                     </>
                   )}
                   {pageStep === 'waitC' && <p className="text-sm text-[#8B98B0]">Game C is on the schedule. The Championship unlocks once its result is reported.</p>}
