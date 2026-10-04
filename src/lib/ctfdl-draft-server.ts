@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getLeagues, getOpenSeason, getLatestSeason } from '@/lib/leagues';
-import { leadsTeam, type DraftBundle, type DraftPick, type DraftPlayer, type DraftRow, type DraftTeam } from '@/lib/ctfdl-draft';
+import { draftStamp, leadsTeam, type DraftBoard, type DraftBundle, type DraftMe, type DraftPick, type DraftPlayer, type DraftPresence, type DraftRow, type DraftState, type DraftTeam } from '@/lib/ctfdl-draft';
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -177,7 +177,9 @@ export async function loadPlayersWithStaffAdp(draftId: string, seasonNumber: num
     });
   }
 
-  const pool = Object.values(byId).filter((r) => !captainIds.has(r.player_id));
+  // Captains and co-captains aren't draftable, so they stay out of the pool. A player who was drafted
+  // and made co-captain afterwards is still a pick: they stay on the board with their name.
+  const pool = Object.values(byId).filter((r) => !captainIds.has(r.player_id) || !!pickByPlayer[r.player_id]);
 
   // Staff ADP (averaged staff mock-draft boards) is the staff ranking. The draft row knows its
   // season when the caller doesn't pass one.
@@ -221,47 +223,160 @@ export async function loadQueue(draftId: string, teamId: string): Promise<string
   return (data || []).map((r: any) => r.player_id);
 }
 
-export async function loadBundle(draft: DraftRow | null, viewerId: string | null): Promise<DraftBundle> {
-  const league = await ctfdlLeague();
-  const viewer = { user_id: viewerId, alias: null as string | null, is_staff: viewerId ? await isStaff(viewerId) : false, my_team_id: null as string | null };
-  if (viewerId) {
-    const { data: me } = await supabaseAdmin.from('profiles').select('in_game_alias').eq('id', viewerId).maybeSingle();
-    viewer.alias = me?.in_game_alias || null;
-  }
-
+/** The board every viewer shares: teams, picks, the pool. Nothing here depends on who is asking. */
+export async function loadBoard(draft: DraftRow | null): Promise<DraftBoard> {
+  const leagueOf = (l: Awaited<ReturnType<typeof ctfdlLeague>>) => (l ? { id: l.id, slug: l.slug, name: l.name } : null);
   if (!draft) {
-    return { draft: null, teams: [], picks: [], players: [], season: null, league: league ? { id: league.id, slug: league.slug, name: league.name } : null, server_time: new Date().toISOString(), viewer };
+    return { draft: null, teams: [], picks: [], players: [], season: null, league: leagueOf(await ctfdlLeague()), server_time: new Date().toISOString() };
   }
-
-  const { data: season } = await supabaseAdmin
-    .from('league_seasons')
-    .select('id, season_number, season_name, status')
-    .eq('id', draft.league_season_id)
-    .maybeSingle();
-
-  const teams = await loadTeams(draft.id);
-  const picks = await loadPicks(draft.id);
+  const [league, { data: season }, teams, picks] = await Promise.all([
+    ctfdlLeague(),
+    supabaseAdmin.from('league_seasons').select('id, season_number, season_name, status').eq('id', draft.league_season_id).maybeSingle(),
+    loadTeams(draft.id),
+    loadPicks(draft.id),
+  ]);
   const { players, staffBoards } = season
     ? await loadPlayersWithStaffAdp(draft.id, season.season_number, teams, picks, season.id)
     : { players: [] as DraftPlayer[], staffBoards: 0 };
-
-  if (viewerId) {
-    const mine = teams.find((t) => leadsTeam(t, viewerId));
-    if (mine) viewer.my_team_id = mine.id;
-  }
-  const bundle: DraftBundle = {
+  return {
     draft,
     teams,
     picks,
     players,
     season: season as DraftBundle['season'],
-    league: league ? { id: league.id, slug: league.slug, name: league.name } : null,
+    league: leagueOf(league),
     server_time: new Date().toISOString(),
-    viewer,
     staff_adp_boards: staffBoards,
   };
-  if (viewer.my_team_id) bundle.my_queue = await loadQueue(draft.id, viewer.my_team_id);
+}
+
+/** Who this user is in the draft: alias, staff flag, the team they lead (if any). */
+export async function loadViewer(viewerId: string | null, teams: DraftTeam[]): Promise<DraftBundle['viewer']> {
+  const viewer = { user_id: viewerId, alias: null as string | null, is_staff: false, my_team_id: null as string | null };
+  if (!viewerId) return viewer;
+  const { data: me } = await supabaseAdmin.from('profiles').select('in_game_alias, is_admin, ctf_role').eq('id', viewerId).maybeSingle();
+  viewer.alias = me?.in_game_alias || null;
+  viewer.is_staff = !!me && (me.is_admin === true || me.ctf_role === 'ctf_admin');
+  viewer.my_team_id = teams.find((t) => leadsTeam(t, viewerId))?.id || null;
+  return viewer;
+}
+
+export async function loadBundle(draft: DraftRow | null, viewerId: string | null): Promise<DraftBundle> {
+  const board = await loadBoard(draft);
+  const viewer = await loadViewer(viewerId, board.teams);
+  const bundle: DraftBundle = { ...board, viewer };
+  if (draft && viewer.my_team_id) bundle.my_queue = await loadQueue(draft.id, viewer.my_team_id);
   return bundle;
+}
+
+// ---- Shared reads ----------------------------------------------------------------------------
+// A live draft has everyone in the room asking the same questions at the same moment. These
+// answers don't depend on who is asking, so one read is shared by everybody who asks within a
+// short window (and by everybody waiting on a read that is already running).
+
+const STATE_TTL_MS = 1000;
+const BOARD_TTL_MS = 5000;
+/** A forced fresh read is skipped when the copy we have is this new, so a burst of forced reads shares one. */
+const FRESH_GAP_MS = 200;
+
+const shared = new Map<string, { at: number; value: Promise<any> }>();
+
+function sharedRead<T>(key: string, ttl: number, load: () => Promise<T>, fresh = false): Promise<T> {
+  const hit = shared.get(key);
+  if (hit && Date.now() - hit.at < (fresh ? FRESH_GAP_MS : ttl)) return hit.value;
+  const value: Promise<T> = load().catch((e) => {
+    if (shared.get(key)?.value === value) shared.delete(key);
+    throw e;
+  });
+  shared.set(key, { at: Date.now(), value });
+  return value;
+}
+
+/** Forget the shared copies after something changed a draft (best effort: this server instance only). */
+export function forgetShared(draftId: string) {
+  for (const key of [...shared.keys()]) {
+    if (key === `state:${draftId}` || key === `teams:${draftId}` || key.startsWith('board:') || key.startsWith('resolve:')) shared.delete(key);
+  }
+}
+
+const draftKey = (draftId?: string | null, seasonId?: string | null) => (draftId ? `d:${draftId}` : seasonId ? `s:${seasonId}` : 'open');
+
+export function resolveDraftShared(draftId?: string | null, seasonId?: string | null): Promise<DraftRow | null> {
+  return sharedRead(`resolve:${draftKey(draftId, seasonId)}`, BOARD_TTL_MS, () => resolveDraft(draftId, seasonId));
+}
+
+export function loadTeamsShared(draftId: string): Promise<DraftTeam[]> {
+  return sharedRead(`teams:${draftId}`, BOARD_TTL_MS, () => loadTeams(draftId));
+}
+
+export function loadBoardShared(draftId?: string | null, seasonId?: string | null, fresh = false): Promise<DraftBoard> {
+  return sharedRead(`board:${draftKey(draftId, seasonId)}`, BOARD_TTL_MS, async () => loadBoard(await resolveDraft(draftId, seasonId)), fresh);
+}
+
+// ---- Who's in the room (captains + staff) ------------------------------------------------------
+// Captains and staff check in every few seconds while the draft page is open (/api/ctfdl/draft/me).
+// The lights in the room come from these rows, so they don't depend on a live connection staying up.
+
+/** A check-in counts as "in the room" for this long (a background tab may only check in once a minute). */
+const HERE_WINDOW_MS = 90_000;
+/** Set when ctfdl_draft_presence isn't installed yet (add-ctfdl-draft-presence.sql); retried after a minute. */
+let presenceMissingUntil = 0;
+
+export async function loadHere(draftId: string): Promise<DraftPresence[] | null> {
+  if (Date.now() < presenceMissingUntil) return null;
+  const { data, error } = await supabaseAdmin
+    .from('ctfdl_draft_presence')
+    .select('user_id, alias, is_staff, team_id')
+    .eq('draft_id', draftId)
+    .gt('seen_at', new Date(Date.now() - HERE_WINDOW_MS).toISOString());
+  if (error) { presenceMissingUntil = Date.now() + 60_000; return null; }
+  return ((data || []) as any[]).map((r) => ({ user_id: r.user_id, alias: r.alias || null, is_staff: !!r.is_staff, team_id: r.team_id || null }));
+}
+
+export async function checkIn(draftId: string, viewer: DraftBundle['viewer']): Promise<boolean> {
+  if (!viewer.user_id || Date.now() < presenceMissingUntil) return false;
+  const { error } = await supabaseAdmin
+    .from('ctfdl_draft_presence')
+    .upsert({ draft_id: draftId, user_id: viewer.user_id, alias: viewer.alias, is_staff: viewer.is_staff, team_id: viewer.my_team_id, seen_at: new Date().toISOString() }, { onConflict: 'draft_id,user_id' });
+  if (error) { presenceMissingUntil = Date.now() + 60_000; return false; }
+  return true;
+}
+
+/** The draft row and its picks, read fresh. */
+export async function loadState(draftId: string): Promise<DraftState> {
+  const read = () => Promise.all([
+    supabaseAdmin.from('ctfdl_drafts').select('*').eq('id', draftId).maybeSingle(),
+    loadPicks(draftId),
+  ]);
+  const [first, here] = await Promise.all([read(), loadHere(draftId)]);
+  let [{ data: draft }, picks] = first;
+  // The row and the picks are two reads. If a pick landed between them they disagree (every turn
+  // taken has one pick row): read once more so viewers never get a half-applied pick.
+  if (draft && picks.length !== (draft as DraftRow).current_pick - 1) [{ data: draft }, picks] = await read();
+  return { draft: (draft as DraftRow) || null, picks: draft ? picks : [], here, server_time: new Date().toISOString() };
+}
+
+/**
+ * The state every viewer polls. `newerThan` is the change a viewer has just heard about (the draft
+ * row's updated_at, in ms): if the shared copy is older than that, it is read again rather than
+ * handing back a copy from before the pick.
+ */
+export async function loadStateShared(draftId: string, newerThan = 0): Promise<DraftState> {
+  const key = `state:${draftId}`;
+  const s = await sharedRead(key, STATE_TTL_MS, () => loadState(draftId));
+  if (newerThan && draftStamp(s.draft) < newerThan) return sharedRead(key, STATE_TTL_MS, () => loadState(draftId), true);
+  return s;
+}
+
+/** Viewer identity + private queue for one user. Shares the draft and team lookups with everyone else. */
+export async function loadMe(draftId: string | null, seasonId: string | null, userId: string | null, recordCheckIn: boolean): Promise<DraftMe> {
+  const draft = await resolveDraftShared(draftId, seasonId);
+  const teams = draft ? await loadTeamsShared(draft.id) : [];
+  const viewer = await loadViewer(userId, teams);
+  const me: DraftMe = { viewer, draft_id: draft?.id || null };
+  if (draft && viewer.my_team_id) me.my_queue = await loadQueue(draft.id, viewer.my_team_id);
+  if (recordCheckIn && draft && draft.status !== 'complete' && (viewer.is_staff || viewer.my_team_id)) await checkIn(draft.id, viewer);
+  return me;
 }
 
 /** Can this user see the private draft chat? Staff, or captain / co-captain of a team in the draft. */
@@ -280,19 +395,36 @@ export async function postSystemMessage(draftId: string, body: string) {
   }
 }
 
-export async function makePick(draftId: string, playerId: string | null, pickType: string, actorId: string | null) {
-  const { data, error } = await supabaseAdmin.rpc('ctfdl_draft_make_pick', {
-    p_draft_id: draftId,
-    p_player_id: playerId,
-    p_pick_type: pickType,
-    p_actor: actorId,
-  });
+/** Set when the pick function doesn't take p_expected_pick yet (add-ctfdl-draft-pick-guard.sql); retried after 5 minutes. */
+let pickGuardMissingUntil = 0;
+
+/**
+ * Make the pick for whichever team is on the clock. `expectedPick` is the overall pick number the
+ * caller believes it is making: if the draft has moved on since (another auto-pick got there first,
+ * or the captain picked at the buzzer), the pick is refused instead of landing on the NEXT team.
+ * The check runs inside the pick function when it supports it, otherwise just before the call.
+ */
+export async function makePick(draftId: string, playerId: string | null, pickType: string, actorId: string | null, expectedPick?: number | null) {
+  const args = { p_draft_id: draftId, p_player_id: playerId, p_pick_type: pickType, p_actor: actorId };
+  if (expectedPick != null) {
+    if (Date.now() >= pickGuardMissingUntil) {
+      const { data, error } = await supabaseAdmin.rpc('ctfdl_draft_make_pick', { ...args, p_expected_pick: expectedPick });
+      if (!error) { forgetShared(draftId); return data; }
+      if (error.code !== 'PGRST202') throw new Error(error.message);
+      pickGuardMissingUntil = Date.now() + 5 * 60_000;
+    }
+    const { data: now } = await supabaseAdmin.from('ctfdl_drafts').select('current_pick').eq('id', draftId).maybeSingle();
+    if (now && now.current_pick !== expectedPick) throw new Error('That pick has already been made');
+  }
+  const { data, error } = await supabaseAdmin.rpc('ctfdl_draft_make_pick', args);
   if (error) throw new Error(error.message);
+  forgetShared(draftId);
   return data;
 }
 
 export async function undoPick(draftId: string) {
   const { data, error } = await supabaseAdmin.rpc('ctfdl_draft_undo_pick', { p_draft_id: draftId });
   if (error) throw new Error(error.message);
+  forgetShared(draftId);
   return data;
 }

@@ -5,10 +5,11 @@ import { teamOnClock, leadsTeam } from '@/lib/ctfdl-draft';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/ctfdl/draft/pick { draft_id, player_id }
+ * POST /api/ctfdl/draft/pick { draft_id, player_id, overall? }
  * The captain on the clock picks for their own team; staff can pick for
  * whichever team is on the clock. Turn order and eligibility are enforced
- * again inside the ctfdl_draft_make_pick function.
+ * again inside the ctfdl_draft_make_pick function. `overall` is the pick
+ * number the room was showing when the button was pressed.
  */
 export async function POST(request: NextRequest) {
   const user = await userFromRequest(request);
@@ -20,6 +21,12 @@ export async function POST(request: NextRequest) {
   const draft = await resolveDraft(body.draft_id);
   if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 });
   if (draft.status !== 'live') return NextResponse.json({ error: 'Draft is not live' }, { status: 409 });
+  // The room says which pick it thinks it is making. If the draft has moved on (the clock ran out
+  // and auto-pick got there first), refuse rather than spend the click on the next team's turn.
+  const seen = Number(body.overall);
+  if (Number.isFinite(seen) && seen > 0 && seen !== draft.current_pick) {
+    return NextResponse.json({ error: 'That pick has already been made. The board has moved on.' }, { status: 409 });
+  }
 
   const teams = await loadTeams(draft.id);
   const onClock = teamOnClock(draft, teams);
@@ -32,7 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await makePick(draft.id, body.player_id, isCaptain ? 'captain' : 'staff', user.id);
+    const result = await makePick(draft.id, body.player_id, isCaptain ? 'captain' : 'staff', user.id, draft.current_pick);
     const bundle = await loadBundle(await resolveDraft(draft.id), user.id);
     const who = bundle.players.find((p) => p.player_id === body.player_id)?.alias || 'a player';
     const next = teamOnClock(bundle.draft, bundle.teams);

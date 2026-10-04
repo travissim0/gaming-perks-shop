@@ -5,6 +5,7 @@ import {
   isStaff,
   resolveDraft,
   loadBundle,
+  forgetShared,
   loadTeams,
   makePick,
   undoPick,
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
               .select('id');
             cleared += rows?.length || 0;
           }
+          forgetShared(draftId);
           const bundle = await loadBundle(await resolveDraft(draftId), user.id);
           return NextResponse.json({ ok: true, bundle, cleared });
         }
@@ -255,12 +257,14 @@ export async function POST(request: NextRequest) {
         if (draft.status !== 'setup') return NextResponse.json({ error: 'Only a draft that has not started can be deleted' }, { status: 409 });
         const { error } = await supabaseAdmin.from('ctfdl_drafts').delete().eq('id', draftId);
         if (error) throw new Error(error.message);
+        forgetShared(draftId);
         return NextResponse.json({ ok: true, deleted: true });
       }
       default:
         return NextResponse.json({ error: `Unknown action ${body.action}` }, { status: 400 });
     }
 
+    forgetShared(draftId);
     const bundle = await loadBundle(await resolveDraft(draftId), user.id);
     return NextResponse.json({ ok: true, bundle });
   } catch (e: any) {

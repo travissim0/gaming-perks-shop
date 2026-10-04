@@ -117,7 +117,7 @@ export default function CtfdlDraftLobbyPage() {
       const res = await fetch('/api/ctfdl/draft/pick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ draft_id: draft.id, player_id: playerId }),
+        body: JSON.stringify({ draft_id: draft.id, player_id: playerId, overall: draft.current_pick }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Pick failed');

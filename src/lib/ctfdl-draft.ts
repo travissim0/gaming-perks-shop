@@ -22,6 +22,8 @@ export interface DraftRow {
   paused_remaining: number | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Bumped by every change to the draft (pick, undo, pause…): the room uses it to tell newer from older. */
+  updated_at?: string;
 }
 
 export interface DraftTeam {
@@ -86,7 +88,59 @@ export interface DraftBundle {
   staff_adp_boards?: number;
 }
 
-/** Someone in the draft room (from Realtime presence). */
+/** The part of the board that is the same for every viewer (served from a shared, briefly cached copy). */
+export type DraftBoard = Omit<DraftBundle, 'viewer' | 'my_queue'>;
+
+/**
+ * The small part that changes during a draft: the draft row (status, pick number, clock) and the picks.
+ * Every viewer gets the same copy, so the room polls this instead of reloading the whole board.
+ */
+export interface DraftState {
+  draft: DraftRow | null;
+  picks: DraftPick[];
+  /** Captains and staff who checked in recently. Null when the check-in table isn't installed. */
+  here: DraftPresence[] | null;
+  server_time: string;
+  /** Set when `picks` only holds the picks AFTER this many (the viewer already has the earlier ones). */
+  base?: number;
+}
+
+/**
+ * Trim a state down to the picks a viewer doesn't have yet. The viewer says how many picks it holds
+ * and the start of the last one's id; if that still matches (no undo since), only the later picks go
+ * out. Anything else gets the full list.
+ */
+export function stateSince(state: DraftState, after: number, lastId: string): DraftState {
+  if (!Number.isInteger(after) || after <= 0 || !lastId || !state.picks[after - 1]?.id.startsWith(lastId)) return state;
+  return { ...state, picks: state.picks.slice(after), base: after };
+}
+
+/** Who the viewer is in this draft, and their private queue. Asked for separately from the shared board. */
+export interface DraftMe {
+  viewer: DraftBundle['viewer'];
+  my_queue?: string[];
+  draft_id: string | null;
+}
+
+/** When this copy of the draft was last changed, in ms (0 if unknown). */
+export const draftStamp = (d: DraftRow | null | undefined): number => {
+  const t = d?.updated_at ? Date.parse(d.updated_at) : NaN;
+  return Number.isFinite(t) ? t : 0;
+};
+
+/** The pool with each player's drafted flags worked out from the picks. */
+export function applyPicks(players: DraftPlayer[], picks: DraftPick[]): DraftPlayer[] {
+  const byPlayer: Record<string, DraftPick> = {};
+  picks.forEach((p) => { if (p.player_id) byPlayer[p.player_id] = p; });
+  return players.map((p) => {
+    const pk = byPlayer[p.player_id];
+    const team = pk?.team_id || null;
+    const overall = pk?.overall ?? null;
+    return p.picked_team_id === team && p.picked_overall === overall ? p : { ...p, picked_team_id: team, picked_overall: overall };
+  });
+}
+
+/** Someone in the draft room (from Realtime presence, or a captain/staff check-in). */
 export interface DraftPresence {
   user_id: string | null;
   alias: string | null;
