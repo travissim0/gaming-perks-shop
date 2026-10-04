@@ -3,6 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { HtmlContent } from '@/components/HtmlContent';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
 import { Calendar, User, ChevronLeft, Eye, Pencil } from 'lucide-react';
@@ -152,9 +153,9 @@ function renderFullContent(content: any): React.ReactNode {
 
   if (typeof content === 'string') {
     return (
-      <div
+      <HtmlContent
         className="text-gray-200 text-base sm:text-lg leading-relaxed prose prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: content }}
+        html={content}
       />
     );
   }

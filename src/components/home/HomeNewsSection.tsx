@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Orbitron } from 'next/font/google';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { HtmlContent } from '@/components/HtmlContent';
 import { Plus, ExternalLink, ChevronRight, Pencil } from 'lucide-react';
 import NewPostModal from './NewPostModal';
 
@@ -162,9 +163,9 @@ function renderFullContent(content: any): React.ReactNode {
   // HTML string
   if (typeof content === 'string') {
     return (
-      <div
+      <HtmlContent
         className="text-gray-200 text-base sm:text-lg leading-relaxed prose prose-invert max-w-none"
-        dangerouslySetInnerHTML={{ __html: content }}
+        html={content}
       />
     );
   }
