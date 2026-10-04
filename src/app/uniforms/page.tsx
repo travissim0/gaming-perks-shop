@@ -7,7 +7,7 @@
  * The sprite is baked as palette indices (scripts/bake-infantry-atlas.mjs --indexed), so
  * recolouring is a 256-entry lookup, the same palette swap the game does. man.blo keeps
  * its three recolourable ramps at indices 1-16, 17-32 and 33-48 (userPaletteStart 1,
- * userPalette 48); each ramp is the team colour scaled by the ramp's own brightness.
+ * userPalette 48); each ramp runs black -> team colour over its 16 slots, matching the client.
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -293,7 +293,7 @@ function SpritePreview({ colors }: { colors: Record<Channel, Rgb> }) {
     ramps.forEach((c, r) => {
       for (let i = 0; i < RAMP_LEN; i++) {
         const p = RAMP_START + r * RAMP_LEN + i;
-        const k = Math.max(...meta.palette[p].slice(0, 3)) / 248; // ramp brightness, 8..248
+        const k = i / (RAMP_LEN - 1); // black -> full colour, as the client's applyTeamColorsToPalette
         lut[p] = [Math.round(c.r * k), Math.round(c.g * k), Math.round(c.b * k), 255];
       }
     });
@@ -344,7 +344,7 @@ function RampStrip({ color, title }: { color: Rgb; title: string }) {
   return (
     <div className="flex" title={title}>
       {Array.from({ length: RAMP_LEN }, (_, i) => {
-        const k = (8 + 16 * i) / 248;
+        const k = i / (RAMP_LEN - 1);
         return <span key={i} className="w-2 h-4" style={{ background: `rgb(${Math.round(color.r * k)},${Math.round(color.g * k)},${Math.round(color.b * k)})` }} />;
       })}
     </div>
