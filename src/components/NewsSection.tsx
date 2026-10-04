@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
+import { HtmlContent } from '@/components/HtmlContent';
 
 interface NewsPost {
   id: string;
@@ -286,7 +287,7 @@ const NewsSection = ({
     if (!content) return null;
     
     if (typeof content === 'string') {
-      return <div dangerouslySetInnerHTML={{ __html: content }} />;
+      return <HtmlContent html={content} />;
     }
     
     // Handle ProseMirror document format
@@ -345,7 +346,7 @@ const NewsSection = ({
       );
     }
     
-    return <div dangerouslySetInnerHTML={{ __html: String(content) }} />;
+    return <HtmlContent html={String(content)} />;
   };
 
   const renderProseMirrorNode = (node: any, key: number): React.ReactNode => {
