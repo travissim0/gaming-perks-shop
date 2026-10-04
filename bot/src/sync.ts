@@ -1,12 +1,31 @@
 import type { Guild } from 'discord.js';
-import { createHash } from 'crypto';
 import { config } from './config.js';
-import { deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping } from './db.js';
+import { db, deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping, type SeasonContext } from './db.js';
 import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, syncRoleMembers, teardownTeam, vouchedLeads } from './discord.js';
 
-let lastUnlinkedHash = '';
+/**
+ * What the staff channel was last told about players who can't get a squad role. null until the
+ * first sync after a start: that sync only takes a note, so a restart never re-posts the list.
+ * After that, only the CHANGES are posted (who newly needs linking, who no longer does), never
+ * the whole list again. The full list lives on the site (CTF management → Discord).
+ */
+let lastUnlinked: Set<string> | null = null;
+let lastNotInServer: Set<string> | null = null;
+/** Set while a draft is running: the channel stays quiet and gets one summary when it ends. */
+let draftWasLive = false;
 let running = false;
 let queued = false;
+
+const LIST_MAX = 15;
+const shortList = (items: string[]) => (items.length <= LIST_MAX ? items.join(', ') : `${items.slice(0, LIST_MAX).join(', ')} and ${items.length - LIST_MAX} more`);
+
+/** Is this season's draft being run right now? Picks land every few seconds then; reporting each sync floods the channel. */
+async function draftIsLive(ctx: SeasonContext): Promise<boolean> {
+  if (ctx.league.format !== 'draft') return false;
+  const { data } = await db.from('ctfdl_drafts').select('status').eq('league_season_id', ctx.season.id).maybeSingle();
+  const status = (data as any)?.status;
+  return status === 'live' || status === 'paused';
+}
 
 /**
  * Full reconcile: site → Discord. Creates what's missing, fixes names and
@@ -67,16 +86,43 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
       lines.push(`removed leftover ${orphan.squad_name}`);
     }
 
-    // Report only when something changed or the unlinked list changed.
-    const hash = createHash('sha1').update([...unlinked, ...notInServer].sort().join('|')).digest('hex');
-    if (lines.length) await postStaff(guild, `**freeinf.org sync** (${reason})\n${lines.map((l) => `• ${l}`).join('\n')}`);
-    if (hash !== lastUnlinkedHash && (unlinked.length || notInServer.length)) {
-      const parts: string[] = [];
-      if (unlinked.length) parts.push(`**Not linked to Discord on freeinf.org** — can't get squad roles yet:\n${unlinked.map((u) => `• ${u}`).join('\n')}`);
-      if (notInServer.length) parts.push(`**Linked but not in this server:**\n${notInServer.map((u) => `• ${u}`).join('\n')}`);
-      await postStaff(guild, parts.join('\n\n'));
+    // Reporting. Roles are always applied above; this only decides what the staff channel hears.
+    const nowUnlinked = new Set(unlinked);
+    const nowNotInServer = new Set(notInServer);
+    const live = await draftIsLive(ctx).catch(() => false);
+
+    if (live) {
+      // A draft is running: say nothing per sync. One summary goes out when it ends.
+      draftWasLive = true;
+    } else if (draftWasLive) {
+      draftWasLive = false;
+      const perTeam = teams.map((t) => {
+        const waiting = t.members.filter((m) => !m.discordId).length;
+        return `• ${t.name}: ${t.members.length} on the roster${waiting ? `, ${waiting} not linked to Discord` : ''}`;
+      });
+      await postStaff(guild, [
+        `**Draft finished: squad roles are set**`,
+        ...perTeam,
+        unlinked.length
+          ? `${unlinked.length} drafted player${unlinked.length === 1 ? ' has' : 's have'} not linked Discord on freeinf.org, so they can't get a squad role yet. Captains can add them with \`/squad add @player\`. The full list is on the site: CTF management → Discord.`
+          : 'Everyone drafted has linked Discord.',
+      ].join('\n'));
+    } else {
+      if (lines.length) await postStaff(guild, `**freeinf.org sync** (${reason})\n${lines.map((l) => `• ${l}`).join('\n')}`);
+      // Only what changed since the last sync, and nothing at all on the first sync after a start.
+      if (lastUnlinked && lastNotInServer) {
+        const added = unlinked.filter((u) => !lastUnlinked!.has(u));
+        const cleared = [...lastUnlinked].filter((u) => !nowUnlinked.has(u));
+        const awayNew = notInServer.filter((u) => !lastNotInServer!.has(u));
+        const parts: string[] = [];
+        if (added.length) parts.push(`• New, not linked to Discord yet: ${shortList(added)}`);
+        if (cleared.length) parts.push(`• No longer waiting: ${shortList(cleared)}`);
+        if (awayNew.length) parts.push(`• Linked but not in this server: ${shortList(awayNew)}`);
+        if (parts.length) await postStaff(guild, `**Discord links** · ${unlinked.length} still can't get a squad role\n${parts.join('\n')}`);
+      }
     }
-    lastUnlinkedHash = hash;
+    lastUnlinked = nowUnlinked;
+    lastNotInServer = nowNotInServer;
 
     const result = `${teams.length} teams, ${lines.length} changes, ${unlinked.length} unlinked`;
     await writeState({ last_sync_at: new Date().toISOString(), last_result: result, last_error: null, season_id: ctx.season.id, guild_id: guild.id });
