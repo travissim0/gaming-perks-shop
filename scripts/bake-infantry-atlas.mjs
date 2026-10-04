@@ -22,6 +22,8 @@
  *     --name    infantry        output basename
  *     --out     public/sprites  output directory
  *     --list                    just list archive entries and exit
+ *     --indexed                 write palette indices (red channel) + the palette, so
+ *                               the browser can recolour the uniform live (/uniforms)
  */
 
 import fs from 'node:fs';
@@ -56,6 +58,7 @@ const ONLY_ROW = arg('onlyRow') !== null ? parseInt(arg('onlyRow'), 10) : null;
  * the exact encoding is still unknown. Naming the target hue is honest and verifiable;
  * the .veh triples stay recorded above for whenever parity matters.
  */
+const INDEXED = flag('indexed');
 const TINT = arg('tint') ? arg('tint').split(',').map(Number) : null;
 
 if (!BLO_PATH) {
@@ -502,6 +505,12 @@ used.forEach((f, i) => {
       const idx = f.pixels[y * f.width + x];
       if (idx === 0) continue; // transparent
       const d = ((oy + y) * atlasW + (ox + x)) * 4;
+      if (INDEXED) {
+        // Index in red, fully opaque so the browser's premultiplied canvas keeps it exact.
+        rgba[d] = idx;
+        rgba[d + 3] = 255;
+        continue;
+      }
       const a = rgbaPalette[idx * 4 + 3];
       if (a === 0) continue;
       rgba[d] = rgbaPalette[idx * 4];
@@ -539,6 +548,8 @@ fs.writeFileSync(
       // 0 usually means rows are facing directions; the renderer treats a row as a
       // direction and a column as a step of that direction's cycle.
       rowMeaning: header.rowMeaning,
+      // --indexed only: the RGBA each index draws as (shadow ramp already translucent).
+      ...(INDEXED ? { indexed: true, palette: Array.from({ length: 256 }, (_, i) => Array.from(rgbaPalette.subarray(i * 4, i * 4 + 4))) } : {}),
       frames: frameMap,
     },
     null,
