@@ -1,4 +1,5 @@
 import React from 'react';
+import { HtmlContent } from '@/components/HtmlContent';
 
 /**
  * Renders a news post body regardless of how it was stored: a TipTap /
@@ -73,7 +74,7 @@ export function renderNewsContent(content: any): React.ReactNode {
     if (trimmed.startsWith('{')) {
       try { return renderNewsContent(JSON.parse(trimmed)); } catch { /* fall through */ }
     }
-    return <div dangerouslySetInnerHTML={{ __html: content }} />;
+    return <HtmlContent html={content} />;
   }
   if (content.type === 'doc' && Array.isArray(content.content)) {
     return content.content.map((n: any, i: number) => block(n, i));
@@ -81,7 +82,7 @@ export function renderNewsContent(content: any): React.ReactNode {
   if (Array.isArray(content.blocks)) {
     return content.blocks.map((b: any, i: number) => {
       switch (b.type) {
-        case 'paragraph': return <p key={i} dangerouslySetInnerHTML={{ __html: b.data?.text || '' }} />;
+        case 'paragraph': return <HtmlContent key={i} as="p" html={b.data?.text || ''} />;
         case 'header': {
           const Tag = `h${Math.min(Math.max(b.data?.level || 2, 1), 6)}` as keyof React.JSX.IntrinsicElements;
           return <Tag key={i}>{b.data?.text}</Tag>;
