@@ -8,6 +8,7 @@ import { displayFont, bodyFont } from "@/lib/fonts";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AuthErrorBoundary } from "@/components/AuthErrorBoundary";
 import { Toaster } from "react-hot-toast";
+import { YouTubeSeekLinks } from "@/components/YouTubeSeekLinks";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -103,6 +104,7 @@ export default function RootLayout({
                 },
               }}
             />
+            <YouTubeSeekLinks />
             {children}
           </AuthProvider>
         </AuthErrorBoundary>
