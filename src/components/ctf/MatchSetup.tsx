@@ -148,10 +148,14 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     }
   };
 
-  const slotsFor = (team: Team): Record<string, Slot> => {
+  const slotsFor = (team: Team, editing = true): Record<string, Slot> => {
     if (draft[team.squad_id]) return draft[team.squad_id];
     const out: Record<string, Slot> = {};
-    team.roster.forEach((m) => { out[m.player_id] = 'out'; });
+    // Until a lineup is saved, everyone starts on the bench for whoever is setting it: the captain
+    // picks the starters and the rest are there as subs. Once one is saved, anyone not in it was left
+    // out on purpose. Someone who can only look (or a locked match) sees what is really saved: nothing.
+    const nothingSaved = editing && (!team.lineup || (team.lineup.starting.length === 0 && team.lineup.bench.length === 0));
+    team.roster.forEach((m) => { out[m.player_id] = nothingSaved ? 'bench' : 'out'; });
     team.lineup?.starting.forEach((p) => { out[p.player_id] = 'starting'; });
     team.lineup?.bench.forEach((p) => { out[p.player_id] = 'bench'; });
     return out;
@@ -319,7 +323,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   const renderTeam = (team: Team, canEdit: boolean) => {
     const isHome = team.squad_id === home.squad_id;
     const canSee = !!team.lineup;
-    const slots = canSee ? slotsFor(team) : {};
+    const slots = canSee ? slotsFor(team, canEdit) : {};
     const starting = team.roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = team.roster.filter((m) => slots[m.player_id] === 'bench');
     const dirty = !!draft[team.squad_id];
@@ -448,7 +452,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
               {over ? <span className="text-[#F87171]">Too many starters · matches are {starters}v{starters}</span>
                 : dirty ? (full ? 'Unsaved changes' : `Unsaved · ${starters - starting.length} starter${starters - starting.length === 1 ? '' : 's'} short`)
                 : submitted ? (full ? 'Saved' : `Saved · ${starters - starting.length} starter${starters - starting.length === 1 ? '' : 's'} short`)
-                : 'Not submitted yet'}
+                : 'Nothing saved yet · pick your starters, then Save lineup'}
             </span>
             <div className="flex gap-2">
               {dirty && <button type="button" onClick={() => setDraft((d) => { const n = { ...d }; delete n[team.squad_id]; return n; })} className={btnQuiet}>Discard</button>}
@@ -509,7 +513,7 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Matches are {starters}v{starters}: pick {starters} starters, everyone else you want at the match goes on the bench. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+          Matches are {starters}v{starters}. Everyone starts on the bench: click Start for your {starters} starters, and set Out only for players who won't be at the match. Save when you're done. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
         </p>
       </div>
