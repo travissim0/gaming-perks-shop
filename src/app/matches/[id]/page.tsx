@@ -865,8 +865,28 @@ export default function MatchDetailPage() {
                   <span>{game.players.length} players</span>
                   {game.winningInfo && <span className="text-[#34D399]">{game.winningInfo.winner} won</span>}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {Object.entries(game.teamStats).map(([team, players]) => {
+                {(() => {
+                  // One column per squad, away on the left and home on the right like the header above,
+                  // with each squad's starters above its bench. (The game reports the four teams in no
+                  // fixed order, which used to split a squad across the two columns.)
+                  const squadOf = (team: string) => team.replace(/\s+[TC]$/i, '').trim().toLowerCase();
+                  const weight = (ps: GamePlayer[]) => ps.reduce((n, p) => n + (p.kills || 0) + (p.deaths || 0), 0);
+                  const entries = Object.entries(game.teamStats).sort((x, y) => weight(y[1]) - weight(x[1]) || y[1].length - x[1].length);
+                  const awayTag = (b?.tag || '').toLowerCase();
+                  const homeTag = (a?.tag || '').toLowerCase();
+                  let left = entries.filter(([t]) => !!awayTag && squadOf(t) === awayTag);
+                  let right = entries.filter(([t]) => !!homeTag && squadOf(t) === homeTag);
+                  let rest = entries.filter((e) => !left.includes(e) && !right.includes(e));
+                  if (left.length === 0 && right.length === 0) {
+                    // Team names don't carry the squads' tags (a linked pickup game): group by team name.
+                    const groups = new Map<string, typeof entries>();
+                    entries.forEach((e) => { const k = squadOf(e[0]); groups.set(k, [...(groups.get(k) || []), e]); });
+                    const cols = [...groups.values()];
+                    left = cols[0] || [];
+                    right = cols[1] || [];
+                    rest = cols.slice(2).flat();
+                  }
+                  const teamTable = ([team, players]: [string, GamePlayer[]]) => {
                     const caps = players.reduce((n, p) => n + (p.flag_captures || 0), 0);
                     const won = game.winningInfo?.winner === team || players.some((p) => p.result === 'Win');
                     return (
@@ -892,8 +912,17 @@ export default function MatchDetailPage() {
                         </table>
                       </div>
                     );
-                  })}
-                </div>
+                  };
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                        <div className="space-y-3">{left.map(teamTable)}</div>
+                        <div className="space-y-3">{right.map(teamTable)}</div>
+                      </div>
+                      {rest.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">{rest.map(teamTable)}</div>}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </Card>
