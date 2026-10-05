@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -82,12 +82,15 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
     return session ? { Authorization: `Bearer ${session.access_token}` } : {};
   }, []);
 
-  const load = useCallback(async () => {
+  // `keepEdits`: a refresh the page does by itself. It must not throw away a lineup someone is
+  // halfway through setting, and a failed one leaves the panel as it was.
+  const load = useCallback(async (keepEdits = false) => {
     try {
       const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/setup`, { headers: await headers(), cache: 'no-store' });
       const j = r.ok ? await r.json() : null;
+      if (keepEdits && !j) return;
       setSetup(j);
-      setDraft({});
+      if (!keepEdits) setDraft({});
     } catch (e) {
       console.error('match setup load failed', e);
     } finally {
@@ -96,6 +99,34 @@ export default function MatchSetup({ matchId, user }: { matchId: string; user: a
   }, [matchId, headers]);
 
   useEffect(() => { load(); }, [load, user?.id]);
+
+  // The panel changes by itself at two moments: five minutes before the match (side revealed, subs
+  // open) and at the scheduled time (lineups lock). Reload it then so nobody has to refresh the page.
+  // The server decides when those moments are; if this device's clock runs ahead, ask again every
+  // 15 seconds for a few minutes rather than hammering it.
+  const phaseTries = useRef<{ phase: string; n: number }>({ phase: '', n: 0 });
+  const revealAt = setup?.side_reveal_at;
+  const kickoffAt = setup?.match.scheduled_at;
+  const phase = !setup || setup.match.time_tbd || ['completed', 'cancelled', 'expired'].includes(setup.match.status) ? null
+    : !setup.side_released ? 'reveal'
+    : !setup.match.locked ? 'lock'
+    : null;
+  useEffect(() => {
+    if (!phase || !revealAt || !kickoffAt) return;
+    const at = new Date(phase === 'reveal' ? revealAt : kickoffAt).getTime();
+    if (!Number.isFinite(at)) return;
+    if (phaseTries.current.phase !== phase) phaseTries.current = { phase, n: 0 };
+    const tries = phaseTries.current;
+    if (tries.n >= 20) return;
+    const wait = Math.max(at - Date.now(), tries.n ? 15_000 : 0) + 1_500 + Math.random() * 2_500;
+    if (wait > 12 * 3_600_000) return; // too far off for a timer; the page will be reopened before then
+    const t = setTimeout(() => {
+      tries.n += 1;
+      load(phase === 'reveal');
+    }, wait);
+    return () => clearTimeout(t);
+    // `setup` is here so a refresh that came back too early schedules the next try.
+  }, [phase, revealAt, kickoffAt, load, setup]);
 
   const post = async (body: Record<string, unknown>, label: string) => {
     setBusy(label);
