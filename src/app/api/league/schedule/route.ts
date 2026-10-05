@@ -63,6 +63,8 @@ export interface Fixture {
     no_contest: boolean;
     /** FS only: the colour the result scored as (a Green in which a round 1-3 pick played is red). */
     scored_color: 'red' | 'green' | null;
+    /** Match MVP, picked by staff or a referee after the game. */
+    mvp: string | null;
   } | null;
 }
 
@@ -127,7 +129,7 @@ export async function GET(request: NextRequest) {
       ? await supabaseAdmin.from('league_seasons').select('id').eq('league_id', lg.id).eq('season_number', season).maybeSingle()
       : { data: null };
     if (ls) {
-      const resCols = 'id, game_id, match_date, team_a_squad_id, team_b_squad_id, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result';
+      const resCols = 'id, game_id, match_date, team_a_squad_id, team_b_squad_id, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, mvp_player_name';
       const read = (c: string) => supabaseAdmin.from('league_matches').select(c).eq('league_season_id', ls.id);
       // no_contest / fs_color / fixture_id arrive with the scoring SQL files; fall back without them.
       let res = await read(`${resCols}, no_contest, fs_color, fixture_id`);
@@ -161,7 +163,8 @@ export async function GET(request: NextRequest) {
       played_at: hit.match_date,
       swapped,
       no_contest: hit.no_contest === true,
-      scored_color: hit.fs_color === 'green' ? 'green' : hit.fs_color === 'red' ? 'red' : null,
+      scored_color: (hit.fs_color === 'green' ? 'green' : hit.fs_color === 'red' ? 'red' : null) as 'red' | 'green' | null,
+      mvp: (hit.mvp_player_name as string | null) || null,
     };
   };
 

@@ -270,8 +270,12 @@ export default function MatchDetailPage() {
   // A played league match that scored nothing (a forfeited FS, or a Green that dropped to Red and
   // went over the Red limit): say so, and why, to everyone.
   const [didNotCount, setDidNotCount] = useState<string | null>(null);
+  // The recorded league result for this match: whether there is one, and its MVP.
+  const [hasResult, setHasResult] = useState(false);
+  const [mvp, setMvp] = useState<string | null>(null);
+  const [mvpPick, setMvpPick] = useState<string | null>(null); // null = not editing
   useEffect(() => {
-    if (!match?.league_slug || !match.season_number) { setDidNotCount(null); return; }
+    if (!match?.league_slug || !match.season_number) { setDidNotCount(null); setHasResult(false); setMvp(null); return; }
     let cancelled = false;
     fetch(`/api/league/schedule?league=${encodeURIComponent(match.league_slug)}&season=${match.season_number}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -279,10 +283,31 @@ export default function MatchDetailPage() {
         if (cancelled) return;
         const fx = (j?.fixtures || []).find((f: any) => f.id === match.id);
         setDidNotCount(fx ? noContestReason(fx) : null);
+        setHasResult(!!fx?.result);
+        setMvp(fx?.result?.mvp || null);
       })
       .catch(() => { if (!cancelled) setDidNotCount(null); });
     return () => { cancelled = true; };
   }, [match?.id, match?.league_slug, match?.season_number, match?.status, match?.game_id]);
+
+  // Staff and referees name the match MVP once the result is recorded.
+  const canSetMvp = isStaff || (ctfRole || '').toLowerCase().includes('referee');
+  const saveMvp = async (name: string | null) => {
+    if (!match) return;
+    setBusy('mvp');
+    try {
+      const r = await fetch(`/api/matches/${encodeURIComponent(match.id)}/mvp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ player_name: name }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save the MVP');
+      setMvp(j.mvp || null);
+      setMvpPick(null);
+      toast.success(j.mvp ? `MVP: ${j.mvp}` : 'MVP cleared');
+    } catch (e: any) { toast.error(e.message || 'Could not save the MVP'); } finally { setBusy(null); }
+  };
 
   // Staff: every game the arena ran around this match, and which one was recorded.
   const [arenaGames, setArenaGames] = useState<ArenaGames | null>(null);
@@ -555,6 +580,43 @@ export default function MatchDetailPage() {
         <section className="rounded-xl bg-[#F59E0B]/10 ring-1 ring-[#F59E0B]/40 px-4 py-3 text-sm text-[#E6EDF7]">
           <span className="font-medium text-[#F59E0B]">This match did not count in the standings.</span>{' '}
           {didNotCount.replace(/^Did not count[.:]\s*/i, '')}
+        </section>
+      )}
+
+      {/* Match MVP: everyone sees it once it's named; staff and referees name it after the result is in */}
+      {(mvp || (canSetMvp && hasResult)) && (
+        <section className="rounded-xl bg-[#131A2B] px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[#F59E0B]">Match MVP</span>
+          {mvpPick === null ? (
+            <>
+              {mvp
+                ? <Link href={`/stats/player/${encodeURIComponent(mvp)}`} className="font-display text-lg leading-none text-[#E6EDF7] hover:text-[#22D3EE]">{mvp}</Link>
+                : <span className="text-[#8B98B0]">Not named yet.</span>}
+              {canSetMvp && hasResult && (
+                <button type="button" onClick={() => setMvpPick(mvp || '')} className="text-xs text-[#F59E0B] hover:text-[#FBBF24]">{mvp ? 'Change' : 'Pick the MVP'}</button>
+              )}
+            </>
+          ) : (
+            <>
+              {game && game.players.length > 0 ? (
+                <select value={mvpPick} onChange={(e) => setMvpPick(e.target.value)} className="rounded-md bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] ring-1 ring-white/10">
+                  <option value="">Choose a player…</option>
+                  {Object.entries(game.teamStats).map(([team, players]) => (
+                    <optgroup key={team} label={team}>
+                      {[...players].sort((x, y) => x.player_name.localeCompare(y.player_name)).map((p) => (
+                        <option key={`${team}:${p.player_name}`} value={p.player_name}>{p.player_name} ({p.kills}-{p.deaths})</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              ) : (
+                <input value={mvpPick} onChange={(e) => setMvpPick(e.target.value)} placeholder="Player alias" className="rounded-md bg-[#0B0F1A] px-2 py-1.5 text-sm text-[#E6EDF7] ring-1 ring-white/10" />
+              )}
+              <button type="button" disabled={busy === 'mvp' || !mvpPick.trim()} onClick={() => saveMvp(mvpPick.trim())} className="rounded-md bg-[#F59E0B] px-3 py-1.5 text-xs font-semibold text-[#0B0F1A] hover:bg-[#FBBF24] disabled:opacity-50">Save</button>
+              {mvp && <button type="button" disabled={busy === 'mvp'} onClick={() => saveMvp(null)} className="text-xs text-[#F87171] hover:text-[#FCA5A5] disabled:opacity-50">Clear</button>}
+              <button type="button" onClick={() => setMvpPick(null)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Cancel</button>
+            </>
+          )}
         </section>
       )}
 
