@@ -40,6 +40,7 @@ export interface LeaveRequest {
   decided_by_alias: string | null;
   decided_at: string | null;
   decision_note: string | null;
+  /** (decision_note above is staff-only: /api/squads/leave-requests blanks it for everyone else.) */
   /** 'leave': the player asked. 'kick': a captain or co-captain asked for the player to be removed. Absent before add-squad-kick-requests.sql. */
   kind?: 'leave' | 'kick' | null;
   /** Kick requests: who asked. */
@@ -253,33 +254,34 @@ export async function decideLeaveRequest(caller: Caller, id: string, approve: bo
   }
 
   const verdict = approve ? 'approved' : 'denied';
-  const why = note ? `\n\nReason: ${note}` : '';
+  // The reason staff wrote is for staff only (saved on the request, shown in the staff panel):
+  // the player and the captain are told the outcome, never the reason.
   if (request.kind === 'kick') {
     // The captain who asked hears either way; the player only hears if they were actually removed.
     if (request.requested_by) {
       await messagePlayer(
         request.requested_by,
         `Your request to remove ${request.player_alias} was ${verdict}`,
-        `Your request to remove ${request.player_alias} from ${squadLabel(request)} was ${verdict} by ${caller.alias}.${why}${approve ? `\n\n${request.player_alias} is no longer on the roster.` : `\n\n${request.player_alias} stays on the roster.`}`,
+        `Your request to remove ${request.player_alias} from ${squadLabel(request)} was ${verdict} by ${caller.alias}.${approve ? `\n\n${request.player_alias} is no longer on the roster.` : `\n\n${request.player_alias} stays on the roster.`}`,
       );
     }
     if (approve) {
       await messagePlayer(
         request.player_id,
         `You were removed from ${squadLabel(request)}`,
-        `League staff (${caller.alias}) approved a request from your squad's captains to remove you from ${squadLabel(request)}.${why}\n\nYou are no longer on the roster. Contact league staff if you have questions.`,
+        `League staff (${caller.alias}) approved a request from your squad's captains to remove you from ${squadLabel(request)}.\n\nYou are no longer on the roster. Contact league staff if you have questions.`,
       );
     }
     return { request };
   }
 
   const subject = `Your request to leave ${squadLabel(request)} was ${verdict}`;
-  const text = `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${why}${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`;
+  const text = `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`;
   if (FORWARD_TO_DISCORD) {
     await queueNotice({
       user_id: request.player_id,
       kind: 'leave_decided',
-      payload: { target_id: request.player_id, target_alias: request.player_alias, squad: squadLabel(request), approved: approve, by_alias: caller.alias, note: note || null, url: request.squad_id ? `${SITE_URL}/squads/${request.squad_id}` : SITE_URL },
+      payload: { target_id: request.player_id, target_alias: request.player_alias, squad: squadLabel(request), approved: approve, by_alias: caller.alias, note: null, url: request.squad_id ? `${SITE_URL}/squads/${request.squad_id}` : SITE_URL },
       subject,
       text,
     });

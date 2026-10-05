@@ -6,6 +6,9 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+/** What a player or captain may see of a request: everything except the reason staff wrote, which is staff-only. */
+const forSender = <T extends LeaveRequest | null | undefined>(r: T): T => (r ? { ...r, decision_note: null } : r);
+
 /**
  * Roster requests on a draft-league squad (CTFDL), where the draft sets the roster: a player asks
  * to leave, or a captain / co-captain asks for a player to be removed. League staff decide.
@@ -16,7 +19,9 @@ export const dynamic = 'force-dynamic';
  * GET                staff → { requests }: everything waiting, then the most recent decisions
  * POST  { squad_id, reason? }                           the player asks to leave
  * POST  { squad_id, kind: 'kick', player_id, reason }   a captain / co-captain asks for a removal
- * PATCH { id, action: 'approve' | 'deny', note? }       staff decide; who, when and the reason are saved
+ * PATCH { id, action: 'approve' | 'deny', note? }       staff decide; who, when and the reason are saved.
+ *                                                        The reason is for staff only: it is never sent
+ *                                                        to the player or captain, here or in a message.
  * PATCH { id, action: 'cancel' }                        whoever sent a pending request withdraws it
  */
 export async function GET(request: NextRequest) {
@@ -40,7 +45,8 @@ export async function GET(request: NextRequest) {
       // A co-captain never sees a request that is about them.
       if (leads || caller.staff) kicks = rows.filter((r) => r.kind === 'kick' && r.status === 'pending' && (caller.staff || r.player_id !== caller.id));
     }
-    return NextResponse.json({ needs_request: true, mine, kick_needs_request: kickOn, kicks }, { headers: { 'Cache-Control': 'no-store' } });
+    if (caller.staff) return NextResponse.json({ needs_request: true, mine, kick_needs_request: kickOn, kicks }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ needs_request: true, mine: forSender(mine), kick_needs_request: kickOn, kicks: kicks.map(forSender) }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   if (!caller.staff) return NextResponse.json({ error: 'League staff only' }, { status: 403 });
@@ -73,7 +79,7 @@ export async function POST(request: NextRequest) {
     out = await createLeaveRequest(caller, sq, reason);
   }
   if (out.error) return NextResponse.json({ error: out.error }, { status: out.status || 500 });
-  return NextResponse.json({ ok: true, request: out.request });
+  return NextResponse.json({ ok: true, request: forSender(out.request) });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -98,7 +104,7 @@ export async function PATCH(request: NextRequest) {
       .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: 'That request has just been decided' }, { status: 409 });
-    return NextResponse.json({ ok: true, request: data });
+    return NextResponse.json({ ok: true, request: forSender(data as LeaveRequest) });
   }
 
   if (action !== 'approve' && action !== 'deny') return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

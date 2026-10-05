@@ -1510,7 +1510,6 @@ export default function SquadDetailPage() {
             <p className="mt-2 text-xs text-[#8B98B0]">
               Your last request to leave was denied{leaveReq.mine.decided_by_alias ? ` by ${leaveReq.mine.decided_by_alias}` : ''}
               {leaveReq.mine.decided_at ? ` on ${new Date(leaveReq.mine.decided_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}.
-              {leaveReq.mine.decision_note ? <> Reason: <span className="text-[#E6EDF7]">{leaveReq.mine.decision_note}</span></> : null}
             </p>
           )}
           {userSquad && userSquad.id !== squad.id && (

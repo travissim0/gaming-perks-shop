@@ -78,7 +78,7 @@ export default function LeaveRequestsPanel() {
     <>
       <Panel
         title={<>Leave and kick requests{pending.length > 0 && <span className="ml-2 rounded-full bg-[#F59E0B]/15 px-2 py-0.5 align-middle text-xs font-medium text-[#F59E0B]">{pending.length} waiting</span>}</>}
-        hint="Draft-league rosters are set by the draft: a player asks to leave, a captain asks for a player to be removed. Nobody comes off a roster until a staff member approves; the decision and its reason are kept on record."
+        hint="Draft-league rosters are set by the draft: a player asks to leave, a captain asks for a player to be removed. Nobody comes off a roster until a staff member approves. The decision and its reason are kept on record; the reason is visible to admins only."
         actions={<button type="button" onClick={load} className={btnQuiet}>Refresh</button>}
       >
         {pending.length === 0 ? (
@@ -142,7 +142,7 @@ export default function LeaveRequestsPanel() {
                       </span>
                     </div>
                     {r.reason && <div className="mt-1 text-xs text-[#8B98B0]">{r.kind === 'kick' ? 'Captain' : 'Player'}: {r.reason}</div>}
-                    {r.decision_note && <div className="mt-0.5 text-xs text-[#E6EDF7]">Staff: {r.decision_note}</div>}
+                    {r.decision_note && <div className="mt-0.5 text-xs text-[#E6EDF7]">Staff (admins only): {r.decision_note}</div>}
                   </li>
                 );
               })}
@@ -158,16 +158,14 @@ export default function LeaveRequestsPanel() {
             : `Deny: ${deciding.request.player_alias} stays on ${squadOf(deciding.request)}`}
           hint={deciding.request.kind === 'kick'
             ? (deciding.approve
-              ? 'The player comes off the roster straight away. They and the captain who asked are both told. Your name, the time and the reason below are saved with the request.'
-              : 'The player stays on the roster and is not told there was a request. The captain who asked is told. Your name, the time and the reason below are saved with the request.')
+              ? 'The player comes off the roster straight away. They and the captain who asked are both told the outcome. Your name, the time and the reason below are saved with the request; the reason is only ever shown to admins.'
+              : 'The player stays on the roster and is not told there was a request. The captain who asked is told the outcome. Your name, the time and the reason below are saved with the request; the reason is only ever shown to admins.')
             : (deciding.approve
-              ? 'The player comes off the roster straight away and is told. Your name, the time and the reason below are saved with the request.'
-              : 'The player stays on the roster and is told. Your name, the time and the reason below are saved with the request.')}
+              ? 'The player comes off the roster straight away and is told the outcome. Your name, the time and the reason below are saved with the request; the reason is only ever shown to admins.'
+              : 'The player stays on the roster and is told the outcome. Your name, the time and the reason below are saved with the request; the reason is only ever shown to admins.')}
           onClose={() => { if (!busy) setDeciding(null); }}
         >
-          <label className={labelCls}>{deciding.request.kind === 'kick'
-            ? (deciding.approve ? 'Reason for this decision (shown to the captain and the player)' : 'Reason for this decision (shown to the captain)')
-            : 'Reason for this decision (shown to the player)'}</label>
+          <label className={labelCls}>Reason for this decision (admins only, never shown to the player or captain)</label>
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} maxLength={1000} placeholder="Optional, but it helps when someone looks back at this later" className={inputCls} />
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setDeciding(null)} disabled={busy} className={btnQuiet}>Cancel</button>
