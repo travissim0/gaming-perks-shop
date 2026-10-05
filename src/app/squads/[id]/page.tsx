@@ -1165,15 +1165,34 @@ export default function SquadDetailPage() {
   };
 
   const transferOwnership = async (newCaptainId: string, newCaptainName: string) => {
-    if (!confirm(`Are you sure you want to transfer squad ownership to ${newCaptainName}? You will become a regular player.`)) return;
+    // Staff who aren't this squad's captain go through the staff route: the database function
+    // only lets the current captain hand the squad over.
+    const asStaff = isAdminOrCtfAdmin() && squad?.captain_id !== user?.id;
+    if (!confirm(asStaff
+      ? `Make ${newCaptainName} the captain of this squad? The current captain becomes a regular player.`
+      : `Are you sure you want to transfer squad ownership to ${newCaptainName}? You will become a regular player.`)) return;
 
     try {
-      const { data, error } = await supabase.rpc('transfer_squad_ownership', {
-        squad_id_param: squad?.id,
-        new_captain_id_param: newCaptainId
-      });
-
-      if (error) throw error;
+      let data: unknown = null;
+      if (asStaff) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Sign in again to do this');
+        const res = await fetch('/api/squads/transfer-captain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ squadId: squad?.id, newCaptainId }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || 'Transfer failed');
+        data = true;
+      } else {
+        const { data: ok, error } = await supabase.rpc('transfer_squad_ownership', {
+          squad_id_param: squad?.id,
+          new_captain_id_param: newCaptainId
+        });
+        if (error) throw error;
+        data = ok;
+      }
 
       if (data) {
         toast.success('Squad ownership transferred successfully!');
