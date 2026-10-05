@@ -17,8 +17,9 @@ const VERDICT: Record<string, [string, string]> = {
 };
 
 /**
- * Staff panel: requests from draft-league players to leave their squad. Staff approve or deny each
- * one with a reason; the decision, who made it and when stay on record below the open requests.
+ * Staff panel: roster requests on draft-league squads. A player asks to leave, or a captain asks for
+ * a player to be removed. Staff approve or deny each one with a reason; the decision, who made it
+ * and when stay on record below the open requests.
  * Renders nothing until the table exists (create-squad-leave-requests.sql).
  */
 export default function LeaveRequestsPanel() {
@@ -76,8 +77,8 @@ export default function LeaveRequestsPanel() {
   return (
     <>
       <Panel
-        title={<>Leave requests{pending.length > 0 && <span className="ml-2 rounded-full bg-[#F59E0B]/15 px-2 py-0.5 align-middle text-xs font-medium text-[#F59E0B]">{pending.length} waiting</span>}</>}
-        hint="Draft-league players ask to leave their squad here. They stay on the roster until a staff member approves; the decision and its reason are kept on record."
+        title={<>Leave and kick requests{pending.length > 0 && <span className="ml-2 rounded-full bg-[#F59E0B]/15 px-2 py-0.5 align-middle text-xs font-medium text-[#F59E0B]">{pending.length} waiting</span>}</>}
+        hint="Draft-league rosters are set by the draft: a player asks to leave, a captain asks for a player to be removed. Nobody comes off a roster until a staff member approves; the decision and its reason are kept on record."
         actions={<button type="button" onClick={load} className={btnQuiet}>Refresh</button>}
       >
         {pending.length === 0 ? (
@@ -89,10 +90,22 @@ export default function LeaveRequestsPanel() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm text-[#E6EDF7]">
-                      <Link href={`/stats/player/${encodeURIComponent(r.player_alias || '')}`} className="font-medium hover:text-[#22D3EE]">{r.player_alias || 'Unknown player'}</Link>
-                      {' '}wants to leave{' '}
+                      <span className={`mr-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide ${r.kind === 'kick' ? 'bg-[#F87171]/15 text-[#F87171]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.kind === 'kick' ? 'Kick' : 'Leave'}</span>
+                      {r.kind === 'kick' ? (
+                        <>
+                          <span className="font-medium">{r.requested_by_alias || 'A captain'}</span>{' '}wants{' '}
+                          <Link href={`/stats/player/${encodeURIComponent(r.player_alias || '')}`} className="font-medium hover:text-[#22D3EE]">{r.player_alias || 'Unknown player'}</Link>
+                          {' '}removed from{' '}
+                        </>
+                      ) : (
+                        <>
+                          <Link href={`/stats/player/${encodeURIComponent(r.player_alias || '')}`} className="font-medium hover:text-[#22D3EE]">{r.player_alias || 'Unknown player'}</Link>
+                          {' '}wants to leave{' '}
+                        </>
+                      )}
                       {r.squad_id ? <Link href={`/squads/${r.squad_id}`} className="font-medium hover:text-[#22D3EE]">{squadOf(r)}</Link> : <span className="font-medium">{squadOf(r)}</span>}
                     </div>
+                    {r.kind === 'kick' && <div className="mt-0.5 text-xs text-[#F59E0B]">{r.player_alias} has not been told about this request.</div>}
                     <div className="mt-0.5 text-xs text-[#8B98B0]">
                       Asked {when(r.created_at)}{r.league_slug ? ` · ${r.league_slug.toUpperCase()}${r.season_number ? ` Season ${r.season_number}` : ''}` : ''}
                     </div>
@@ -121,13 +134,14 @@ export default function LeaveRequestsPanel() {
                   <li key={r.id} className="rounded-md bg-[#1B2438]/60 px-3 py-2 text-sm">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{label}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">{r.kind === 'kick' ? 'Kick' : 'Leave'}</span>
                       <span className="text-[#E6EDF7]">{r.player_alias || 'Unknown player'}</span>
-                      <span className="text-[#8B98B0]">· {squadOf(r)}</span>
+                      <span className="text-[#8B98B0]">· {squadOf(r)}{r.kind === 'kick' && r.requested_by_alias ? ` · asked by ${r.requested_by_alias}` : ''}</span>
                       <span className="ml-auto text-xs text-[#8B98B0]">
-                        {r.status === 'cancelled' ? 'by the player' : `by ${r.decided_by_alias || 'staff'}`} · {when(r.decided_at)}
+                        {r.status === 'cancelled' && !r.decision_note ? (r.kind === 'kick' ? 'by the captain' : 'by the player') : `by ${r.decided_by_alias || 'staff'}`} · {when(r.decided_at)}
                       </span>
                     </div>
-                    {r.reason && <div className="mt-1 text-xs text-[#8B98B0]">Player: {r.reason}</div>}
+                    {r.reason && <div className="mt-1 text-xs text-[#8B98B0]">{r.kind === 'kick' ? 'Captain' : 'Player'}: {r.reason}</div>}
                     {r.decision_note && <div className="mt-0.5 text-xs text-[#E6EDF7]">Staff: {r.decision_note}</div>}
                   </li>
                 );
@@ -139,13 +153,21 @@ export default function LeaveRequestsPanel() {
 
       {deciding && (
         <Modal
-          title={deciding.approve ? `Approve: ${deciding.request.player_alias} leaves ${squadOf(deciding.request)}` : `Deny: ${deciding.request.player_alias} stays on ${squadOf(deciding.request)}`}
-          hint={deciding.approve
-            ? 'The player comes off the roster straight away and is told. Your name, the time and the reason below are saved with the request.'
-            : 'The player stays on the roster and is told. Your name, the time and the reason below are saved with the request.'}
+          title={deciding.approve
+            ? `Approve: ${deciding.request.player_alias} ${deciding.request.kind === 'kick' ? 'is removed from' : 'leaves'} ${squadOf(deciding.request)}`
+            : `Deny: ${deciding.request.player_alias} stays on ${squadOf(deciding.request)}`}
+          hint={deciding.request.kind === 'kick'
+            ? (deciding.approve
+              ? 'The player comes off the roster straight away. They and the captain who asked are both told. Your name, the time and the reason below are saved with the request.'
+              : 'The player stays on the roster and is not told there was a request. The captain who asked is told. Your name, the time and the reason below are saved with the request.')
+            : (deciding.approve
+              ? 'The player comes off the roster straight away and is told. Your name, the time and the reason below are saved with the request.'
+              : 'The player stays on the roster and is told. Your name, the time and the reason below are saved with the request.')}
           onClose={() => { if (!busy) setDeciding(null); }}
         >
-          <label className={labelCls}>Reason for this decision (shown to the player)</label>
+          <label className={labelCls}>{deciding.request.kind === 'kick'
+            ? (deciding.approve ? 'Reason for this decision (shown to the captain and the player)' : 'Reason for this decision (shown to the captain)')
+            : 'Reason for this decision (shown to the player)'}</label>
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} maxLength={1000} placeholder="Optional, but it helps when someone looks back at this later" className={inputCls} />
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => setDeciding(null)} disabled={busy} className={btnQuiet}>Cancel</button>

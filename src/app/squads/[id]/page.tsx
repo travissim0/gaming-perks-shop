@@ -139,7 +139,10 @@ export default function SquadDetailPage() {
 
   // Draft-league squads: a member asks to leave and league staff decide. `leaveReq` is null until
   // the server has said whether this squad works that way (and what the member's last request was).
-  const [leaveReq, setLeaveReq] = useState<{ needs_request: boolean; mine: LeaveRequest | null } | null>(null);
+  const [leaveReq, setLeaveReq] = useState<{ needs_request: boolean; mine: LeaveRequest | null; kick_needs_request: boolean; kicks: LeaveRequest[] } | null>(null);
+  // Captains of a draft-league squad ask staff to remove a player instead of kicking.
+  const [kickTarget, setKickTarget] = useState<{ player_id: string; alias: string } | null>(null);
+  const [kickReason, setKickReason] = useState('');
   const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
   const [leaveReason, setLeaveReason] = useState('');
   const sessionHeaders = async (): Promise<Record<string, string>> => {
@@ -155,7 +158,7 @@ export default function SquadDetailPage() {
       try {
         const r = await fetch(`/api/squads/leave-requests?squad=${encodeURIComponent(squadIdForLeave)}`, { headers: await sessionHeaders(), cache: 'no-store' });
         const j = r.ok ? await r.json() : null;
-        if (!cancelled) setLeaveReq(j ? { needs_request: !!j.needs_request, mine: j.mine || null } : null);
+        if (!cancelled) setLeaveReq(j ? { needs_request: !!j.needs_request, mine: j.mine || null, kick_needs_request: !!j.kick_needs_request, kicks: Array.isArray(j.kicks) ? j.kicks : [] } : null);
       } catch { if (!cancelled) setLeaveReq(null); }
     })();
     return () => { cancelled = true; };
@@ -172,7 +175,7 @@ export default function SquadDetailPage() {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'Could not send the request');
-      setLeaveReq({ needs_request: true, mine: j.request });
+      setLeaveReq((cur) => ({ needs_request: true, mine: j.request, kick_needs_request: !!cur?.kick_needs_request, kicks: cur?.kicks || [] }));
       setShowLeaveRequestForm(false);
       setLeaveReason('');
       toast.success('Request sent to league staff');
@@ -193,7 +196,52 @@ export default function SquadDetailPage() {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'Could not withdraw the request');
-      setLeaveReq({ needs_request: true, mine: j.request });
+      setLeaveReq((cur) => ({ needs_request: true, mine: j.request, kick_needs_request: !!cur?.kick_needs_request, kicks: cur?.kicks || [] }));
+      toast.success('Request withdrawn');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not withdraw the request');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  // Kick requests (draft-league squads): the captain asks, league staff decide.
+  const kickByRequest = !!leaveReq?.kick_needs_request && !(!!userProfile?.is_admin || userProfile?.ctf_role === 'ctf_admin');
+  const pendingKickFor = (playerId: string) => leaveReq?.kicks.find((k) => k.player_id === playerId) || null;
+  const sendKickRequest = async () => {
+    if (!squad || !kickTarget) return;
+    if (!kickReason.trim()) { toast.error('Tell league staff why'); return; }
+    setIsRequesting(true);
+    try {
+      const r = await fetch('/api/squads/leave-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await sessionHeaders()) },
+        body: JSON.stringify({ squad_id: squad.id, kind: 'kick', player_id: kickTarget.player_id, reason: kickReason }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not send the request');
+      setLeaveReq((cur) => (cur ? { ...cur, kicks: [...cur.kicks, j.request] } : cur));
+      toast.success(`Request to remove ${kickTarget.alias} sent to league staff`);
+      setKickTarget(null);
+      setKickReason('');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not send the request');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+  const withdrawKickRequest = async (req: LeaveRequest) => {
+    if (!confirm(`Withdraw the request to remove ${req.player_alias}?`)) return;
+    setIsRequesting(true);
+    try {
+      const r = await fetch('/api/squads/leave-requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(await sessionHeaders()) },
+        body: JSON.stringify({ id: req.id, action: 'cancel' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not withdraw the request');
+      setLeaveReq((cur) => (cur ? { ...cur, kicks: cur.kicks.filter((k) => k.id !== req.id) } : cur));
       toast.success('Request withdrawn');
     } catch (e: any) {
       toast.error(e.message || 'Could not withdraw the request');
@@ -1620,7 +1668,17 @@ export default function SquadDetailPage() {
                                     <button onClick={() => transferOwnership(member.player_id, member.in_game_alias)} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F59E0B] hover:bg-white/10" title="Transfer captaincy">Make captain</button>
                                   )}
                                   {member.role !== 'captain' && (isCaptain() || (canManageSquad() && member.role === 'player')) && (
-                                    <button onClick={() => kickMember(member.id, member.in_game_alias)} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F87171] hover:bg-white/10" title="Remove from squad">Kick</button>
+                                    kickByRequest ? (
+                                      (() => {
+                                        const waiting = pendingKickFor(member.player_id);
+                                        if (!waiting) return <button onClick={() => { setKickReason(''); setKickTarget({ player_id: member.player_id, alias: member.in_game_alias }); }} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F87171] hover:bg-white/10" title="Ask league staff to remove this player">Request kick</button>;
+                                        return waiting.requested_by === user?.id
+                                          ? <button onClick={() => withdrawKickRequest(waiting)} disabled={isRequesting} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F59E0B] hover:bg-white/10 disabled:opacity-50" title="Waiting for league staff. Click to withdraw the request.">Kick requested</button>
+                                          : <span className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F59E0B]" title={`${waiting.requested_by_alias || 'A captain'} asked league staff to remove this player`}>Kick requested</span>;
+                                      })()
+                                    ) : (
+                                      <button onClick={() => kickMember(member.id, member.in_game_alias)} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#F87171] hover:bg-white/10" title="Remove from squad">Kick</button>
+                                    )
                                   )}
                                 </div>
                               )}
@@ -1761,6 +1819,33 @@ export default function SquadDetailPage() {
                   ))}
                 </ul>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request a kick (draft-league squads): the captain asks, league staff approve or deny */}
+      {kickTarget && squad && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setKickTarget(null)}>
+          <div className="w-full max-w-md rounded-xl bg-[#131A2B] p-6 ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-2xl text-[#E6EDF7]">Ask staff to remove {kickTarget.alias}</h3>
+            <p className="mt-2 text-sm text-[#8B98B0]">
+              {leagueInfo?.name || 'This league'} rosters are set by the draft, so removing a player needs league staff to approve it. {kickTarget.alias} stays on the roster, and is not told, until staff decide.
+            </p>
+            <label className="mt-4 block text-[11px] uppercase tracking-wide text-[#8B98B0]">Why should they be removed?</label>
+            <textarea
+              value={kickReason}
+              onChange={(e) => setKickReason(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              placeholder="What staff need to know to decide"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setKickTarget(null)} className="rounded-md bg-white/5 px-3.5 py-2 text-sm text-[#E6EDF7] hover:bg-white/10">Cancel</button>
+              <button onClick={sendKickRequest} disabled={isRequesting || !kickReason.trim()} className="rounded-md bg-[#F87171] px-3.5 py-2 text-sm font-semibold text-[#0B0F1A] hover:bg-[#FCA5A5] disabled:opacity-50">
+                {isRequesting ? 'Sending…' : 'Send request'}
+              </button>
             </div>
           </div>
         </div>

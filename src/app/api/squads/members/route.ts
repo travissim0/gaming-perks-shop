@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { kickNeedsRequest } from '@/lib/leave-requests-server';
 
 /**
  * Squad roster management (kick / promote / demote) via service role.
@@ -51,6 +52,10 @@ export async function POST(request: NextRequest) {
     if (action === 'kick') {
       const allowed = isStaff || isCaptain || (isCoCaptain && target.role === 'player');
       if (!allowed) return NextResponse.json({ error: 'Only the captain (or staff) can remove this member' }, { status: 403 });
+      // Draft leagues: the roster is set by the draft, so a captain asks league staff instead.
+      if (!isStaff && (await kickNeedsRequest(squadId))) {
+        return NextResponse.json({ error: 'Rosters in this league are set by the draft. Send a kick request from the squad page and league staff will review it.' }, { status: 409 });
+      }
       const { error } = await supabaseAdmin.from('squad_members').delete().eq('id', memberId);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });

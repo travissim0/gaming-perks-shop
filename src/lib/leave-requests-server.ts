@@ -40,6 +40,11 @@ export interface LeaveRequest {
   decided_by_alias: string | null;
   decided_at: string | null;
   decision_note: string | null;
+  /** 'leave': the player asked. 'kick': a captain or co-captain asked for the player to be removed. Absent before add-squad-kick-requests.sql. */
+  kind?: 'leave' | 'kick' | null;
+  /** Kick requests: who asked. */
+  requested_by?: string | null;
+  requested_by_alias?: string | null;
 }
 
 export interface Caller { id: string; alias: string; staff: boolean }
@@ -77,6 +82,18 @@ export async function squadLeague(squadId: string): Promise<SquadLeague | null> 
   return { id: s.id, name: s.name, tag: s.tag ?? null, captain_id: s.captain_id ?? null, league_slug: s.league_slug ?? null, league_name: league?.name ?? null, draft: !!league?.format && league.format !== 'squad' };
 }
 
+/** Kick requests arrive with add-squad-kick-requests.sql (the `kind` column). Until then captains kick as before. */
+export async function kickRequestsInstalled(): Promise<boolean> {
+  const { error } = await supabaseAdmin.from('squad_leave_requests').select('kind', { head: true, count: 'exact' }).limit(1);
+  return !error;
+}
+
+/** A draft-league squad, with kick requests in place: a captain asks staff instead of kicking. */
+export async function kickNeedsRequest(squadId: string): Promise<boolean> {
+  const sq = await squadLeague(squadId);
+  return !!sq?.draft && (await kickRequestsInstalled());
+}
+
 /** A draft-league squad, with the request table in place: leaving goes through a request. */
 export async function leaveNeedsRequest(squadId: string): Promise<boolean> {
   const sq = await squadLeague(squadId);
@@ -93,14 +110,81 @@ async function latestSeasonNumber(leagueSlug: string | null): Promise<number | n
 
 const squadLabel = (r: Pick<LeaveRequest, 'squad_name' | 'squad_tag'>) => `${r.squad_tag ? `[${r.squad_tag}] ` : ''}${r.squad_name || 'their squad'}`;
 
+/** A site message to every league staff member. */
+async function messageStaff(subject: string, content: string) {
+  try {
+    const { data: staff } = await supabaseAdmin.from('profiles').select('id').or('is_admin.eq.true,ctf_role.eq.ctf_admin');
+    const rows = ((staff || []) as any[]).filter((p) => p.id !== SYSTEM_USER_ID).map((p) => ({ sender_id: SYSTEM_USER_ID, recipient_id: p.id, subject, content }));
+    if (rows.length) await supabaseAdmin.from('private_messages').insert(rows);
+  } catch (e) {
+    console.error('squad request: staff messages failed', e);
+  }
+}
+
+async function messagePlayer(playerId: string, subject: string, content: string) {
+  const { error } = await supabaseAdmin.from('private_messages').insert({ sender_id: SYSTEM_USER_ID, recipient_id: playerId, subject, content });
+  if (error) console.error('squad request: could not message a player', error.message);
+}
+
+/**
+ * A captain or co-captain asks league staff to remove a player (draft leagues: captains can't kick).
+ * Staff are told; the player is not, until staff decide, so staff can talk to both sides first.
+ */
+export async function createKickRequest(caller: Caller, sq: SquadLeague, targetPlayerId: string, reason: string): Promise<{ request?: LeaveRequest; error?: string; status?: number }> {
+  const { data: rows } = await supabaseAdmin.from('squad_members').select('player_id, role').eq('squad_id', sq.id).eq('status', 'active').in('player_id', [caller.id, targetPlayerId]);
+  const mine = ((rows || []) as any[]).find((r) => r.player_id === caller.id);
+  const target = ((rows || []) as any[]).find((r) => r.player_id === targetPlayerId);
+  const isCaptain = sq.captain_id === caller.id || mine?.role === 'captain';
+  const isCoCaptain = mine?.role === 'co_captain';
+  if (!isCaptain && !isCoCaptain) return { error: 'Only the captain or a co-captain can ask for a player to be removed', status: 403 };
+  if (!target) return { error: 'That player is not on this squad', status: 404 };
+  if (targetPlayerId === caller.id) return { error: 'Use Request to leave for yourself', status: 409 };
+  if (target.role === 'captain' || sq.captain_id === targetPlayerId) return { error: 'The captain cannot be removed this way', status: 409 };
+  if (isCoCaptain && !isCaptain && target.role !== 'player') return { error: 'Co-captains can only ask for players to be removed', status: 403 };
+  if (!reason) return { error: 'Tell league staff why this player should be removed', status: 400 };
+
+  // One open kick request per player. A leave request the player sent themself is separate (and private to them).
+  const { data: open } = await supabaseAdmin.from('squad_leave_requests').select('id').eq('squad_id', sq.id).eq('player_id', targetPlayerId).eq('status', 'pending').eq('kind', 'kick').limit(1);
+  if (open?.length) return { error: 'There is already a request to remove this player waiting for league staff', status: 409 };
+
+  const { data: prof } = await supabaseAdmin.from('profiles').select('in_game_alias').eq('id', targetPlayerId).maybeSingle();
+  const { data, error } = await supabaseAdmin
+    .from('squad_leave_requests')
+    .insert({
+      kind: 'kick',
+      squad_id: sq.id,
+      squad_name: sq.name,
+      squad_tag: sq.tag,
+      player_id: targetPlayerId,
+      player_alias: (prof as any)?.in_game_alias || 'Unknown',
+      requested_by: caller.id,
+      requested_by_alias: caller.alias,
+      league_slug: sq.league_slug,
+      season_number: await latestSeasonNumber(sq.league_slug),
+      reason,
+    })
+    .select('*')
+    .single();
+  if (error) return { error: error.message, status: 500 };
+  const request = data as LeaveRequest;
+
+  const league = [sq.league_name, request.season_number ? `Season ${request.season_number}` : null].filter(Boolean).join(' ');
+  await messageStaff(
+    `Kick request: ${caller.alias} wants ${request.player_alias} removed · ${squadLabel(request)}`,
+    `${caller.alias} has asked for ${request.player_alias} to be removed from ${squadLabel(request)}${league ? ` (${league})` : ''}.\n\nReason: ${reason}\n\n${request.player_alias} has not been told and stays on the roster until league staff approve or deny the request: ${REVIEW_URL}`,
+  );
+  return { request };
+}
+
 /** Create the request and tell every league staff member (site message) plus the Discord staff channel. */
 export async function createLeaveRequest(caller: Caller, sq: SquadLeague, reason: string): Promise<{ request?: LeaveRequest; error?: string; status?: number }> {
   const { data: member } = await supabaseAdmin.from('squad_members').select('id, role').eq('squad_id', sq.id).eq('player_id', caller.id).eq('status', 'active').maybeSingle();
   if (!member) return { error: 'You are not on this squad', status: 404 };
   if ((member as any).role === 'captain' || sq.captain_id === caller.id) return { error: 'You are the captain. Hand the captaincy to someone else first, or ask league staff.', status: 409 };
 
-  const { data: open } = await supabaseAdmin.from('squad_leave_requests').select('id').eq('squad_id', sq.id).eq('player_id', caller.id).eq('status', 'pending').maybeSingle();
-  if (open) return { error: 'You already have a request waiting for league staff', status: 409 };
+  // One open leave request per player. (A kick request about them is separate, and not theirs to see.)
+  const { data: open } = await supabaseAdmin.from('squad_leave_requests').select('*').eq('squad_id', sq.id).eq('player_id', caller.id).eq('status', 'pending');
+  if (((open || []) as LeaveRequest[]).some((r) => r.kind !== 'kick')) return { error: 'You already have a request waiting for league staff', status: 409 };
 
   const { data, error } = await supabaseAdmin
     .from('squad_leave_requests')
@@ -121,13 +205,7 @@ export async function createLeaveRequest(caller: Caller, sq: SquadLeague, reason
 
   const league = [sq.league_name, request.season_number ? `Season ${request.season_number}` : null].filter(Boolean).join(' ');
   const text = `${caller.alias} has asked to leave ${squadLabel(request)}${league ? ` (${league})` : ''}.\n\nReason: ${reason || 'none given'}\n\nThey stay on the roster until league staff approve or deny the request: ${REVIEW_URL}`;
-  try {
-    const { data: staff } = await supabaseAdmin.from('profiles').select('id').or('is_admin.eq.true,ctf_role.eq.ctf_admin');
-    const rows = ((staff || []) as any[]).filter((p) => p.id !== SYSTEM_USER_ID).map((p) => ({ sender_id: SYSTEM_USER_ID, recipient_id: p.id, subject: `Leave request: ${caller.alias} · ${squadLabel(request)}`, content: text }));
-    if (rows.length) await supabaseAdmin.from('private_messages').insert(rows);
-  } catch (e) {
-    console.error('leave request: staff messages failed', e);
-  }
+  await messageStaff(`Leave request: ${caller.alias} · ${squadLabel(request)}`, text);
   if (FORWARD_TO_DISCORD) await queueNotice({
     channel: 'staff',
     kind: 'leave_request',
@@ -164,9 +242,39 @@ export async function decideLeaveRequest(caller: Caller, id: string, approve: bo
   if (!saved) return { error: 'Someone else has just decided this request', status: 409 };
   const request = saved as LeaveRequest;
 
+  // The player is off the squad: any other request still open about them here has nothing left to decide.
+  if (approve && request.squad_id) {
+    await supabaseAdmin
+      .from('squad_leave_requests')
+      .update({ status: 'cancelled', decided_by: caller.id, decided_by_alias: caller.alias, decided_at: new Date().toISOString(), decision_note: 'Closed: the player had already been removed from the squad.' })
+      .eq('squad_id', request.squad_id)
+      .eq('player_id', request.player_id)
+      .eq('status', 'pending');
+  }
+
   const verdict = approve ? 'approved' : 'denied';
+  const why = note ? `\n\nReason: ${note}` : '';
+  if (request.kind === 'kick') {
+    // The captain who asked hears either way; the player only hears if they were actually removed.
+    if (request.requested_by) {
+      await messagePlayer(
+        request.requested_by,
+        `Your request to remove ${request.player_alias} was ${verdict}`,
+        `Your request to remove ${request.player_alias} from ${squadLabel(request)} was ${verdict} by ${caller.alias}.${why}${approve ? `\n\n${request.player_alias} is no longer on the roster.` : `\n\n${request.player_alias} stays on the roster.`}`,
+      );
+    }
+    if (approve) {
+      await messagePlayer(
+        request.player_id,
+        `You were removed from ${squadLabel(request)}`,
+        `League staff (${caller.alias}) approved a request from your squad's captains to remove you from ${squadLabel(request)}.${why}\n\nYou are no longer on the roster. Contact league staff if you have questions.`,
+      );
+    }
+    return { request };
+  }
+
   const subject = `Your request to leave ${squadLabel(request)} was ${verdict}`;
-  const text = `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${note ? `\n\nReason: ${note}` : ''}${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`;
+  const text = `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${why}${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`;
   if (FORWARD_TO_DISCORD) {
     await queueNotice({
       user_id: request.player_id,
@@ -176,8 +284,7 @@ export async function decideLeaveRequest(caller: Caller, id: string, approve: bo
       text,
     });
   } else {
-    const { error: pmErr } = await supabaseAdmin.from('private_messages').insert({ sender_id: SYSTEM_USER_ID, recipient_id: request.player_id, subject, content: text });
-    if (pmErr) console.error('leave request: could not message the player', pmErr.message);
+    await messagePlayer(request.player_id, subject, text);
   }
   return { request };
 }
