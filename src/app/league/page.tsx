@@ -135,7 +135,19 @@ interface LeagueResult {
   team_a_result?: string | null;
   team_b_result?: string | null;
   status?: string;
+  game_length_minutes?: number | null;
+  mvp_player_name?: string | null;
+  /** The scheduled match this result belongs to, when it has one (links the row to the match page). */
+  fixture_id?: string | null;
 }
+
+/** 15.18 minutes → "15:11". */
+const gameLength = (minutes: number | null | undefined): string | null => {
+  const m = Number(minutes);
+  if (!Number.isFinite(m) || m <= 0) return null;
+  const total = Math.round(m * 60);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
 
 interface Team {
   id: string;
@@ -938,8 +950,9 @@ export default function LeagueHome() {
                         {league!.results.slice(0, 5).map((r) => {
                           const aWin = (r.team_a_result || '').toLowerCase() === 'win' || (r.squad_a_score ?? 0) > (r.squad_b_score ?? 0);
                           const bWin = (r.team_b_result || '').toLowerCase() === 'win' || (r.squad_b_score ?? 0) > (r.squad_a_score ?? 0);
-                          return (
-                            <li key={r.id} className="rounded-md bg-[#1B2438] px-3 py-2">
+                          const length = gameLength(r.game_length_minutes);
+                          const row = (
+                            <>
                               <div className="flex items-center justify-between gap-2 text-sm">
                                 <span className={`truncate ${bWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_b_name}</span>
                                 <span className="tabular-nums font-medium shrink-0">
@@ -949,7 +962,18 @@ export default function LeagueHome() {
                                 </span>
                                 <span className={`truncate text-right ${aWin ? 'text-[#E6EDF7]' : 'text-[#8B98B0]'}`}>{r.squad_a_name}</span>
                               </div>
-                              {r.played_at && <div className="text-[11px] text-[#8B98B0] mt-0.5">{relTime(r.played_at)}{r.status && r.status !== 'Season' ? ` · ${r.status}` : ''}</div>}
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B98B0]">
+                                {r.played_at && <span>{relTime(r.played_at)}{r.status && r.status !== 'Season' ? ` · ${r.status}` : ''}</span>}
+                                {length && <span title="Game length" className="tabular-nums">{length} game</span>}
+                                {r.mvp_player_name && <span className="ml-auto truncate"><span className="text-[#F59E0B]">MVP</span> <span className="text-[#E6EDF7]">{r.mvp_player_name}</span></span>}
+                              </div>
+                            </>
+                          );
+                          return (
+                            <li key={r.id}>
+                              {r.fixture_id
+                                ? <Link href={`/matches/${r.fixture_id}`} className="block rounded-md bg-[#1B2438] hover:bg-[#222d45] px-3 py-2 transition-colors">{row}</Link>
+                                : <div className="rounded-md bg-[#1B2438] px-3 py-2">{row}</div>}
                             </li>
                           );
                         })}
