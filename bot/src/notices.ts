@@ -11,6 +11,18 @@ const ROLE_COLOUR: Record<string, number> = { referee: 0xf59e0b, commentator: 0x
 
 function embedFor(n: BotNotice): EmbedBuilder {
   const p = n.payload;
+  // A leave request was decided: tell the player what staff decided and why.
+  if (n.kind === 'leave_decided') {
+    const e = new EmbedBuilder()
+      .setColor(p.approved ? 0x34d399 : 0xf87171)
+      .setTitle(`Your request to leave ${p.squad} was ${p.approved ? 'approved' : 'denied'}`)
+      .setDescription(p.approved ? 'You are no longer on the roster.' : 'You are still on the roster.')
+      .addFields({ name: 'Decided by', value: String(p.by_alias || 'League staff'), inline: false });
+    if (p.note) e.addFields({ name: 'Reason', value: String(p.note).slice(0, 1000), inline: false });
+    if (p.url) e.setURL(p.url);
+    e.setFooter({ text: 'freeinf.org · CTF leagues' });
+    return e;
+  }
   const season = [p.league, p.season_number ? `Season ${p.season_number}` : null, p.stage_label].filter(Boolean).join(' · ');
   const teams = `${p.squad_b || 'TBD'} vs ${p.squad_a || 'TBD'}`; // away vs home, like the arena names
   const when = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:F> (<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:R>)` : p.scheduled_et || '';
@@ -34,6 +46,11 @@ function embedFor(n: BotNotice): EmbedBuilder {
 function channelLine(n: BotNotice, discordId: string | null): string {
   const p = n.payload;
   const who = discordId ? `<@${discordId}>` : `**${p.target_alias}**`;
+  // A draft-league player asked to leave their squad: staff approve or deny it on the site.
+  if (n.kind === 'leave_request') {
+    const reason = p.reason ? `\n> ${String(p.reason).slice(0, 600).replace(/\n+/g, '\n> ')}` : '\nNo reason given.';
+    return `**Leave request** · ${who} (${p.target_alias}) wants to leave **${p.squad}**${p.league ? ` · ${p.league}` : ''}${reason}\nThey stay on the roster until staff approve or deny it: <${p.url}>`;
+  }
   const teams = `${p.squad_b || 'TBD'} vs ${p.squad_a || 'TBD'}`; // away vs home, like the arena names
   const season = [p.league, p.season_number ? `S${p.season_number}` : null, p.stage_label].filter(Boolean).join(' ');
   const when = p.scheduled_at ? `<t:${Math.floor(new Date(p.scheduled_at).getTime() / 1000)}:f>` : p.scheduled_et || '';

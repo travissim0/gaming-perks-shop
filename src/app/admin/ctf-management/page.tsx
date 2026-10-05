@@ -27,6 +27,7 @@ import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 import GameClientPanel from '@/components/admin/GameClientPanel';
 import ZoneAutomationPanel from '@/components/admin/ZoneAutomationPanel';
+import LeaveRequestsPanel from '@/components/admin/LeaveRequestsPanel';
 import ScoringRulesPanel from '@/components/admin/ScoringRulesPanel';
 
 interface Squad {
@@ -763,6 +764,9 @@ export default function CTFManagementPage() {
           </div>
         </div>
       </section>
+
+      {/* Requests to leave a draft-league squad: staff approve or deny */}
+      {activeTab === 'squads' && <LeaveRequestsPanel />}
 
       {/* Squads */}
       {activeTab === 'squads' && (

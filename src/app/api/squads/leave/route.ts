@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { callerFrom, leaveNeedsRequest, supabaseAdmin as supabase } from '@/lib/leave-requests-server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
+/**
+ * POST /api/squads/leave { squadId, playerId }
+ * A player takes themself off a squad. The caller must be signed in as that player (league staff
+ * may do it for anyone). In a draft league the roster is set by the draft, so this is refused
+ * there: the player sends a leave request instead (/api/squads/leave-requests) and staff decide.
+ */
 export async function POST(request: NextRequest) {
   try {
+    const caller = await callerFrom(request);
+    if (!caller) return NextResponse.json({ error: 'Sign in again to do this' }, { status: 401 });
+
     const { squadId, playerId } = await request.json();
 
     if (!squadId || !playerId) {
@@ -15,6 +19,12 @@ export async function POST(request: NextRequest) {
         { error: 'Squad ID and Player ID are required' },
         { status: 400 }
       );
+    }
+    if (playerId !== caller.id && !caller.staff) {
+      return NextResponse.json({ error: 'You can only leave a squad for yourself' }, { status: 403 });
+    }
+    if (!caller.staff && (await leaveNeedsRequest(squadId))) {
+      return NextResponse.json({ error: 'Rosters in this league are set by the draft. Send a leave request from the squad page and league staff will review it.' }, { status: 409 });
     }
 
     // First verify the user is actually in the squad
@@ -87,4 +97,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

@@ -15,6 +15,7 @@ import { canAddPlayerToSquad, hasAdminOverride, getSquadMemberCountDisplay } fro
 import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpers';
 import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
 import { CLASS_COLORS } from '@/lib/constants';
+import type { LeaveRequest } from '@/lib/leave-requests-server';
 
 interface SquadMember {
   id: string;
@@ -135,6 +136,71 @@ export default function SquadDetailPage() {
   const [memberClasses, setMemberClasses] = useState<Record<string, string[]>>({});
   const [showInviteHistory, setShowInviteHistory] = useState(false);
   const isDraftLeague = !!leagueInfo && !!leagueInfo.format && leagueInfo.format !== 'squad';
+
+  // Draft-league squads: a member asks to leave and league staff decide. `leaveReq` is null until
+  // the server has said whether this squad works that way (and what the member's last request was).
+  const [leaveReq, setLeaveReq] = useState<{ needs_request: boolean; mine: LeaveRequest | null } | null>(null);
+  const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
+  const [leaveReason, setLeaveReason] = useState('');
+  const sessionHeaders = async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+  const squadIdForLeave = squad?.id;
+  const amMember = !!user && !!squad && squad.members.some((m) => m.player_id === user.id);
+  useEffect(() => {
+    if (!squadIdForLeave || !amMember) { setLeaveReq(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/squads/leave-requests?squad=${encodeURIComponent(squadIdForLeave)}`, { headers: await sessionHeaders(), cache: 'no-store' });
+        const j = r.ok ? await r.json() : null;
+        if (!cancelled) setLeaveReq(j ? { needs_request: !!j.needs_request, mine: j.mine || null } : null);
+      } catch { if (!cancelled) setLeaveReq(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [squadIdForLeave, amMember]);
+
+  const sendLeaveRequest = async () => {
+    if (!squad) return;
+    setIsRequesting(true);
+    try {
+      const r = await fetch('/api/squads/leave-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await sessionHeaders()) },
+        body: JSON.stringify({ squad_id: squad.id, reason: leaveReason }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not send the request');
+      setLeaveReq({ needs_request: true, mine: j.request });
+      setShowLeaveRequestForm(false);
+      setLeaveReason('');
+      toast.success('Request sent to league staff');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not send the request');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+  const withdrawLeaveRequest = async () => {
+    if (!leaveReq?.mine || !confirm('Withdraw your request to leave?')) return;
+    setIsRequesting(true);
+    try {
+      const r = await fetch('/api/squads/leave-requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(await sessionHeaders()) },
+        body: JSON.stringify({ id: leaveReq.mine.id, action: 'cancel' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not withdraw the request');
+      setLeaveReq({ needs_request: true, mine: j.request });
+      toast.success('Request withdrawn');
+    } catch (e: any) {
+      toast.error(e.message || 'Could not withdraw the request');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
 
   // Loading timeout to prevent indefinite loading
   useLoadingTimeout({
@@ -886,6 +952,7 @@ export default function SquadDetailPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(await sessionHeaders()),
         },
         body: JSON.stringify({
           squadId: squad.id,
@@ -1360,10 +1427,21 @@ export default function SquadDetailPage() {
                   {squad.banner_url ? 'Update picture' : 'Add picture'}
                 </button>
               )}
-              {canLeaveSquad() && (
+              {canLeaveSquad() && (leaveReq ? !leaveReq.needs_request : !isDraftLeague) && (
                 <button onClick={initiateLeaveSquad} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#F87171] hover:bg-white/10 disabled:opacity-50">
                   {isRequesting ? 'Leaving…' : 'Leave squad'}
                 </button>
+              )}
+              {canLeaveSquad() && leaveReq?.needs_request && (
+                leaveReq.mine?.status === 'pending' ? (
+                  <button onClick={withdrawLeaveRequest} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#8B98B0] hover:bg-white/10 disabled:opacity-50">
+                    Withdraw leave request
+                  </button>
+                ) : (
+                  <button onClick={() => setShowLeaveRequestForm(true)} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#F87171] hover:bg-white/10 disabled:opacity-50">
+                    Request to leave
+                  </button>
+                )
               )}
               {isCaptain() && (
                 <button onClick={disbandSquad} className="rounded-md px-3 py-1.5 text-sm text-[#8B98B0] hover:bg-[#F87171]/10 hover:text-[#F87171]">
@@ -1374,6 +1452,18 @@ export default function SquadDetailPage() {
           </div>
           {isCurrentMember() && !canLeaveSquad() && (
             <p className="mt-2 text-xs text-[#F59E0B]">You're the captain. Transfer ownership to another member before leaving.</p>
+          )}
+          {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'pending' && (
+            <p className="mt-2 text-xs text-[#F59E0B]">
+              Your request to leave was sent to league staff on {new Date(leaveReq.mine.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. You stay on the roster until they decide.
+            </p>
+          )}
+          {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'denied' && (
+            <p className="mt-2 text-xs text-[#8B98B0]">
+              Your last request to leave was denied{leaveReq.mine.decided_by_alias ? ` by ${leaveReq.mine.decided_by_alias}` : ''}
+              {leaveReq.mine.decided_at ? ` on ${new Date(leaveReq.mine.decided_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}.
+              {leaveReq.mine.decision_note ? <> Reason: <span className="text-[#E6EDF7]">{leaveReq.mine.decision_note}</span></> : null}
+            </p>
           )}
           {userSquad && userSquad.id !== squad.id && (
             <p className="mt-2 text-xs text-[#8B98B0]">You're a member of [{userSquad.tag}] {userSquad.name}.</p>
@@ -1671,6 +1761,33 @@ export default function SquadDetailPage() {
                   ))}
                 </ul>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request to leave (draft-league squads): goes to league staff, who approve or deny it */}
+      {showLeaveRequestForm && squad && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowLeaveRequestForm(false)}>
+          <div className="w-full max-w-md rounded-xl bg-[#131A2B] p-6 ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-2xl text-[#E6EDF7]">Request to leave [{squad.tag}] {squad.name}</h3>
+            <p className="mt-2 text-sm text-[#8B98B0]">
+              {leagueInfo?.name || 'This league'} rosters are set by the draft, so leaving needs league staff to approve it. They'll be notified and may get in touch first. You stay on the roster until they decide.
+            </p>
+            <label className="mt-4 block text-[11px] uppercase tracking-wide text-[#8B98B0]">Why do you want to leave? (optional)</label>
+            <textarea
+              value={leaveReason}
+              onChange={(e) => setLeaveReason(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              placeholder="Anything staff should know"
+              className="mt-1 w-full rounded-md border border-white/10 bg-[#0B0F1A] px-3 py-2 text-sm text-[#E6EDF7] placeholder-[#8B98B0]/70 focus:border-[#22D3EE] focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setShowLeaveRequestForm(false)} className="rounded-md bg-white/5 px-3.5 py-2 text-sm text-[#E6EDF7] hover:bg-white/10">Cancel</button>
+              <button onClick={sendLeaveRequest} disabled={isRequesting} className="rounded-md bg-[#F87171] px-3.5 py-2 text-sm font-semibold text-[#0B0F1A] hover:bg-[#FCA5A5] disabled:opacity-50">
+                {isRequesting ? 'Sending…' : 'Send request'}
+              </button>
             </div>
           </div>
         </div>
