@@ -218,6 +218,52 @@ const outcomeOf = (result: string | null): Outcome | null => {
   return /win/i.test(result) ? 'win' : 'loss';
 };
 
+export interface MatchScore {
+  kind: MatchKind;
+  /** FS only: the colour it scored as. */
+  color: FsColor | null;
+  winType: WinType | null;
+  a: { outcome: Outcome; points: number };
+  b: { outcome: Outcome; points: number };
+  /** The rule behind the points, in plain words (shown on the match page). */
+  why: string;
+}
+
+/**
+ * What one recorded result is worth under `rules`: the same checks and the same points that
+ * computeStandings applies below (keep the two in step). Null when the result doesn't score at
+ * all: a playoff, a no-contest, an unverified or forfeited FS, a row missing a team or a result.
+ */
+export function scoreMatch(m: ScoredMatch, rules: ScoringRules): MatchScore | null {
+  if ((m.match_type || 'Season') !== 'Season') return null;
+  if (!m.team_a_squad_id || !m.team_b_squad_id) return null;
+  const kind: MatchKind = m.match_kind === 'fs' ? 'fs' : 'rs';
+  if (kind === 'fs' && !rules.fs.enabled) return null;
+  if (kind === 'fs' && rules.fs.needs_verification && !m.verified) return null;
+  if (m.no_contest) return null;
+  const oa = outcomeOf(m.team_a_result);
+  const ob = outcomeOf(m.team_b_result);
+  if (!oa || !ob) return null;
+  if (kind === 'fs' && rules.fs.forfeit_no_contest && (oa === 'forfeit' || ob === 'forfeit')) return null;
+
+  const winType: WinType | null = m.win_type || winTypeFromMinutes(rules, m.game_length_minutes);
+  const color = kind === 'fs' ? fsColorOf(rules, m.fs_color) : null;
+  const table = kind === 'fs' && color === 'green' && rules.fs.colors ? rules.points.fs_green : rules.points[kind];
+  const label = kind === 'rs' ? 'Regular season match' : rules.fs.colors ? `Free-scheduled ${color === 'green' ? 'Green' : 'Red'} match` : 'Free-scheduled match';
+  const win = winType === '2ot' ? `a double-overtime win (${rules.ot2_minutes} minutes or longer) is worth ${table.ot2} points`
+    : winType === 'ot' ? `an overtime win (${rules.ot_minutes} to ${rules.ot2_minutes} minutes) is worth ${table.ot} points`
+    : `a regulation win (under ${rules.ot_minutes} minutes) is worth ${table.regulation} points`;
+  const other = oa === 'forfeit' || ob === 'forfeit' ? `a forfeit ${table.forfeit}` : `a loss ${table.loss}`;
+  return {
+    kind,
+    color,
+    winType,
+    a: { outcome: oa, points: pointsFor(rules, kind, oa, winType, color) },
+    b: { outcome: ob, points: pointsFor(rules, kind, ob, winType, color) },
+    why: `${label}: ${win}, ${other}.`,
+  };
+}
+
 /**
  * Rebuild every squad's standing from the season's results under `rules`.
  * Returns rows sorted by rank. Squads in `squadIds` with no matches get a zero row.

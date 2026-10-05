@@ -272,10 +272,13 @@ export default function MatchDetailPage() {
   const [didNotCount, setDidNotCount] = useState<string | null>(null);
   // The recorded league result for this match: whether there is one, and its MVP.
   const [hasResult, setHasResult] = useState(false);
+  // What the recorded result was worth: game length, how the win was classed, and the standings
+  // points each side got under the season's rules (a = home, b = away), with the rule in words.
+  const [scored, setScored] = useState<{ length_minutes: number | null; win_type: string | null; points: { a: number; b: number; why: string } | null } | null>(null);
   const [mvp, setMvp] = useState<string | null>(null);
   const [mvpPick, setMvpPick] = useState<string | null>(null); // null = not editing
   useEffect(() => {
-    if (!match?.league_slug || !match.season_number) { setDidNotCount(null); setHasResult(false); setMvp(null); return; }
+    if (!match?.league_slug || !match.season_number) { setDidNotCount(null); setHasResult(false); setMvp(null); setScored(null); return; }
     let cancelled = false;
     fetch(`/api/league/schedule?league=${encodeURIComponent(match.league_slug)}&season=${match.season_number}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -285,6 +288,7 @@ export default function MatchDetailPage() {
         setDidNotCount(fx ? noContestReason(fx) : null);
         setHasResult(!!fx?.result);
         setMvp(fx?.result?.mvp || null);
+        setScored(fx?.result ? { length_minutes: fx.result.length_minutes ?? null, win_type: fx.result.win_type ?? null, points: fx.result.points ?? null } : null);
       })
       .catch(() => { if (!cancelled) setDidNotCount(null); });
     return () => { cancelled = true; };
@@ -717,6 +721,11 @@ export default function MatchDetailPage() {
                         </span>
                       )}
                       {t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}
+                      {played && scored?.points && (
+                        <span className={`ml-1.5 tabular-nums ${t.won ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`} title="Standings points for this match">
+                          · +{t.home ? scored.points.a : scored.points.b} pts
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -724,11 +733,19 @@ export default function MatchDetailPage() {
             ))}
             <div className="order-2 text-center px-2">
               {played && (aWon || bWon) ? (
-                <div className="font-display text-5xl leading-none" title="CTF has no score: win or loss">
-                  <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
-                  <span className="text-white/20 mx-2">·</span>
-                  <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
-                </div>
+                <>
+                  <div className="font-display text-5xl leading-none" title="CTF has no score: win or loss">
+                    <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
+                    <span className="text-white/20 mx-2">·</span>
+                    <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
+                  </div>
+                  {scored?.length_minutes != null && (
+                    <div className="mt-2 text-xs text-[#8B98B0] tabular-nums" title="Game length">
+                      {(() => { const t = Math.round(scored.length_minutes * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; })()}
+                      {scored.win_type ? ` · ${scored.win_type === '2ot' ? 'double overtime' : scored.win_type === 'ot' ? 'overtime' : 'regulation'}` : ''}
+                    </div>
+                  )}
+                </>
               ) : match.winner_name ? (
                 <div className="text-sm text-[#34D399]">{match.winner_name} won</div>
               ) : (
@@ -736,6 +753,9 @@ export default function MatchDetailPage() {
               )}
             </div>
           </div>
+          {played && scored?.points && (
+            <p className="mt-3 text-center text-xs text-[#8B98B0]">{scored.points.why}</p>
+          )}
           {(a?.members.length || b?.members.length) ? (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {[b, a].map((s, i) => s && (

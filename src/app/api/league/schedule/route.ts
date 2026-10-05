@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { announceMatchTime } from '@/lib/notices-server';
+import { normalizeRules, scoreMatch, type ScoredMatch, type ScoringRules } from '@/lib/scoring';
 
 /**
  * League schedule (fixtures).
@@ -65,6 +66,15 @@ export interface Fixture {
     scored_color: 'red' | 'green' | null;
     /** Match MVP, picked by staff or a referee after the game. */
     mvp: string | null;
+    /** How long the game ran, in minutes (15.18 = 15:11). */
+    length_minutes: number | null;
+    /** How the win was classed under the season's rules. */
+    win_type: 'regulation' | 'ot' | '2ot' | null;
+    /**
+     * Standings points each side got for this result, and the rule behind them. Null when the
+     * result doesn't score (a playoff, a no-contest, an FS that wasn't verified).
+     */
+    points: { a: number; b: number; why: string } | null;
   } | null;
 }
 
@@ -117,6 +127,7 @@ export async function GET(request: NextRequest) {
 
   // Reported results for this season.
   let results: any[] = [];
+  let rules: ScoringRules | null = null;
   if (league === 'ctfpl') {
     const { data } = await supabaseAdmin
       .from('ctfpl_matches')
@@ -129,10 +140,14 @@ export async function GET(request: NextRequest) {
       ? await supabaseAdmin.from('league_seasons').select('id').eq('league_id', lg.id).eq('season_number', season).maybeSingle()
       : { data: null };
     if (ls) {
+      // The season's scoring rules, for the points each result was worth (absent before add-season-scoring.sql).
+      const { data: ruleRow, error: ruleErr } = await supabaseAdmin.from('league_seasons').select('scoring_rules').eq('id', ls.id).maybeSingle();
+      if (!ruleErr) rules = normalizeRules((ruleRow as any)?.scoring_rules);
       const resCols = 'id, game_id, match_date, team_a_squad_id, team_b_squad_id, team_a_name, team_b_name, team_a_kills, team_b_kills, team_a_result, team_b_result, mvp_player_name';
       const read = (c: string) => supabaseAdmin.from('league_matches').select(c).eq('league_season_id', ls.id);
       // no_contest / fs_color / fixture_id arrive with the scoring SQL files; fall back without them.
-      let res = await read(`${resCols}, no_contest, fs_color, fixture_id`);
+      let res = await read(`${resCols}, no_contest, fs_color, fixture_id, match_type, match_kind, win_type, verified, game_length_minutes`);
+      if (res.error) res = await read(`${resCols}, no_contest, fs_color, fixture_id`);
       if (res.error) res = await read(resCols);
       results = (res.data as any[]) || [];
     }
@@ -154,6 +169,10 @@ export async function GET(request: NextRequest) {
     if (!hit) return null;
     used.add(hit.id);
     const swapped = hit.team_a_squad_id !== m.squad_a_id;
+    // Points under the season's rules, worked out the same way the standings are. Only when the
+    // row carries the scoring columns (match_kind is absent on old rows and on CTFPL).
+    const score = rules && hit.match_kind !== undefined ? scoreMatch(hit as ScoredMatch, rules) : null;
+    const length = Number(hit.game_length_minutes);
     return {
       id: hit.id,
       a_score: swapped ? hit.team_b_kills : hit.team_a_kills,
@@ -165,6 +184,9 @@ export async function GET(request: NextRequest) {
       no_contest: hit.no_contest === true,
       scored_color: (hit.fs_color === 'green' ? 'green' : hit.fs_color === 'red' ? 'red' : null) as 'red' | 'green' | null,
       mvp: (hit.mvp_player_name as string | null) || null,
+      length_minutes: Number.isFinite(length) && length > 0 ? length : null,
+      win_type: score?.winType ?? null,
+      points: score ? { a: swapped ? score.b.points : score.a.points, b: swapped ? score.a.points : score.b.points, why: score.why } : null,
     };
   };
 
