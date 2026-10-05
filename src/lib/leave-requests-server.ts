@@ -17,6 +17,13 @@ export const supabaseAdmin = createClient(
 
 export const REVIEW_URL = `${SITE_URL}/admin/ctf-management?tab=squads`;
 
+/**
+ * Leave requests stay on the site for now (John, 2026-10-05): staff and players get site messages
+ * only. Set to true to also post new requests in the Discord staff channel and DM the player the
+ * outcome; the bot already knows both notice kinds (leave_request, leave_decided).
+ */
+const FORWARD_TO_DISCORD = false;
+
 export interface LeaveRequest {
   id: string;
   squad_id: string | null;
@@ -121,7 +128,7 @@ export async function createLeaveRequest(caller: Caller, sq: SquadLeague, reason
   } catch (e) {
     console.error('leave request: staff messages failed', e);
   }
-  await queueNotice({
+  if (FORWARD_TO_DISCORD) await queueNotice({
     channel: 'staff',
     kind: 'leave_request',
     payload: { target_id: caller.id, target_alias: caller.alias, squad: squadLabel(request), league, reason: reason || null, url: REVIEW_URL },
@@ -158,12 +165,19 @@ export async function decideLeaveRequest(caller: Caller, id: string, approve: bo
   const request = saved as LeaveRequest;
 
   const verdict = approve ? 'approved' : 'denied';
-  await queueNotice({
-    user_id: request.player_id,
-    kind: 'leave_decided',
-    payload: { target_id: request.player_id, target_alias: request.player_alias, squad: squadLabel(request), approved: approve, by_alias: caller.alias, note: note || null, url: request.squad_id ? `${SITE_URL}/squads/${request.squad_id}` : SITE_URL },
-    subject: `Your request to leave ${squadLabel(request)} was ${verdict}`,
-    text: `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${note ? `\n\nReason: ${note}` : ''}${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`,
-  });
+  const subject = `Your request to leave ${squadLabel(request)} was ${verdict}`;
+  const text = `Your request to leave ${squadLabel(request)} was ${verdict} by ${caller.alias}.${note ? `\n\nReason: ${note}` : ''}${approve ? '\n\nYou are no longer on the roster.' : '\n\nYou are still on the roster.'}`;
+  if (FORWARD_TO_DISCORD) {
+    await queueNotice({
+      user_id: request.player_id,
+      kind: 'leave_decided',
+      payload: { target_id: request.player_id, target_alias: request.player_alias, squad: squadLabel(request), approved: approve, by_alias: caller.alias, note: note || null, url: request.squad_id ? `${SITE_URL}/squads/${request.squad_id}` : SITE_URL },
+      subject,
+      text,
+    });
+  } else {
+    const { error: pmErr } = await supabaseAdmin.from('private_messages').insert({ sender_id: SYSTEM_USER_ID, recipient_id: request.player_id, subject, content: text });
+    if (pmErr) console.error('leave request: could not message the player', pmErr.message);
+  }
   return { request };
 }
