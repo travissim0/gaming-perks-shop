@@ -102,6 +102,23 @@ At zero the game ends/resets and the script starts the match with the placed pla
   fight that — only reset the timer when `scheduled_at` actually changed since you last set it.
 - Once the game has started (`status: in_progress`), leave the timer alone.
 
+## Spectators (`*allowspec`)
+
+A league match is open to watch: nobody playing in it may switch spectating of themself off.
+Apply the equivalent of the mod command `*allowspec` to every match arena the zone opens,
+together with the lock and spec quiet. Requested by league staff on 2026-10-05; not yet confirmed
+as implemented.
+
+- **Every league match**, no flag from the site: RS, FS and playoffs alike. If a league ever
+  needs it off, the site can add an on/off field to the queue; until then, always on.
+- **If the setting is per player** rather than per arena, set it when each player is placed and
+  again in the reconcile step, so a sub who comes in or a player who rejoins is covered too.
+- **It has to survive restarts** inside the arena (warm-ups, `*restart`, the timer starting the game).
+- **Run by hand** matches are not touched by the zone, so the referee types `*allowspec`
+  themself, as with `*lock`, `*specquiet` and `*timer`.
+- The field or call behind `*allowspec` is not written down here yet: fill it in under
+  "Server calls used" once it is in.
+
 `client.players` is the **desired state**: every listed player, the team they
 belong on, and whether they sit in spec. It already reflects subs. Players
 not listed are not part of the match.
@@ -144,9 +161,9 @@ spec quiet, placement, subs and both game reports all worked once these were sor
 
 | When | Do |
 |---|---|
-| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Start the countdown: `*timer <starts_in_min>` (see Match timer). Make sure the four `client.teams` exist. |
+| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Apply `*allowspec` so nobody in the match can block spectators (see Spectators). Start the countdown: `*timer <starts_in_min>` (see Match timer). Make sure the four `client.teams` exist. |
 | `side_released == true` and `client.ready` | Place everyone: for each `client.players` entry, if `spec` is false → `player.unspec(getTeamByName(team))`; if `spec` is true → `player.spec(team)` (spec'd, sitting on the bench team name). Anyone in the arena who is not in the list → spec. |
-| every poll while `status` is scheduled/in_progress | **Reconcile**: compare each player's actual team/spec against the desired state and move only those that differ. That is what makes subs work: the site swaps the two rows and `updated_at` bumps. `updated_at` also bumps at the side release, so a zone that skips unchanged matches still gets the placement moment. If you cache, key the skip on `updated_at` **and** `side_released`, and never skip a match whose arena you haven't finished setting up (lock / spec quiet / teams). |
+| every poll while `status` is scheduled/in_progress | **Reconcile**: compare each player's actual team/spec against the desired state and move only those that differ. That is what makes subs work: the site swaps the two rows and `updated_at` bumps. `updated_at` also bumps at the side release, so a zone that skips unchanged matches still gets the placement moment. If you cache, key the skip on `updated_at` **and** `side_released`, and never skip a match whose arena you haven't finished setting up (lock / spec quiet / allowspec / teams). |
 | a player enters the arena | Place them per the desired state at once (or on the next poll). Not in the list → spec. |
 | the game starts | `POST /api/matches/<id>/game` `{ "game_id": "<the zone's game id>", "status": "in_progress" }` with the key. Marks the match live. |
 | the game ends | `POST /api/matches/<id>/game` `{ "game_id": "…", "status": "played" }`. The site links the game's stats to the match and **records the result itself**: the winning team from the stat rows, the win type (regulation / OT / 2OT) from the game length under the season's rules, standings rebuilt. The reply's `result.recorded` says whether it worked; if the stat rows haven't landed yet (`reason: "no stat rows for this game yet"`), call again a minute later. Staff can remove a wrong result in the match manager and re-enter it. |
@@ -180,6 +197,7 @@ All public in the Infantry server source (`dotnetcore/Server/Game`):
 
 - `ZoneServer.newArena(string name, bool namedArena)` — create; scripts reach it via `_arena._server`.
 - `Arena._bLocked` (spec lock), `Arena._specQuiet` — public fields.
+- Whatever `*allowspec` sets (field name to be confirmed on the zone side; see Spectators).
 - `Player.unspec(Team)`, `Player.spec(string teamName)`, `Arena.getTeamByName(string)`.
 
 The existing OvD automation's poll loop and the dueling connector's HTTP
