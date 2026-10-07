@@ -111,8 +111,8 @@ export async function announceMatchTime(matchId: string, moved = false): Promise
 export interface Notice {
   /** Who to DM. Omit for a channel-only post. */
   user_id?: string | null;
-  /** Also post in this channel. */
-  channel?: 'referee' | 'staff' | null;
+  /** Also post in this channel: 'referee', 'staff', or a Discord channel id. */
+  channel?: 'referee' | 'staff' | string | null;
   kind: string;
   payload: Record<string, unknown>;
   /** Plain-text version for the site-message fallback. */

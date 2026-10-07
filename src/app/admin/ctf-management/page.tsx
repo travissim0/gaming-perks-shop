@@ -749,6 +749,7 @@ export default function CTFManagementPage() {
                 Public pool <ExternalLink className="w-3.5 h-3.5" />
               </Link>
               {ctx?.league.format === 'draft' && <Link href="/league/ctfdl/draft" className={btnQuiet}>Draft lobby</Link>}
+              {ctx?.league.format === 'draft' && <Link href="/league/trades" className={btnQuiet}>Trades</Link>}
               <Link href="/league/schedule" className={btnQuiet}>Schedule</Link>
             </div>
           </div>

@@ -46,6 +46,8 @@ function embedFor(n: BotNotice): EmbedBuilder {
 function channelLine(n: BotNotice, discordId: string | null): string {
   const p = n.payload;
   const who = discordId ? `<@${discordId}>` : `**${p.target_alias}**`;
+  // Notices that carry their own wording (trades) are posted as they are.
+  if (typeof p.text === 'string' && p.text) return p.text;
   // A draft-league player asked to leave their squad: staff approve or deny it on the site.
   if (n.kind === 'leave_request') {
     const reason = p.reason ? `\n> ${String(p.reason).slice(0, 600).replace(/\n+/g, '\n> ')}` : '\nNo reason given.';
@@ -100,7 +102,8 @@ export async function deliverNotices(client: Client, guild: Guild) {
           }
         } else if (!discordId) errors.push('dm: not linked');
       }
-      const channelId = n.channel === 'referee' ? config.refChannelId : n.channel === 'staff' ? config.staffChannelId : null;
+      // A channel id may be given directly (the captains' channel for trades).
+      const channelId = n.channel === 'referee' ? config.refChannelId : n.channel === 'staff' ? config.staffChannelId : /^\d{10,}$/.test(n.channel || '') ? n.channel : null;
       if (n.channel && !channelId) errors.push(`${n.channel} channel not configured`);
       if (channelId && !config.dryRun) {
         const ch = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));

@@ -1572,7 +1572,7 @@ export default function SquadDetailPage() {
                 {isDraftLeague ? (
                   <>
                     Set by the {leagueInfo?.name} draft
-                    {leagueInfo?.slug === 'ctfdl' && <> · <Link href="/league/ctfdl/draft/recap" className="text-[#22D3EE] hover:underline">Recap</Link></>}
+                    {leagueInfo?.slug === 'ctfdl' && <> · <Link href="/league/ctfdl/draft/recap" className="text-[#22D3EE] hover:underline">Recap</Link> · <Link href="/league/trades" className="text-[#22D3EE] hover:underline" title="Trades between squads: captains propose, the league approves">Trades</Link></>}
                   </>
                 ) : (
                   <>R regular · T transitional (exempt from limit)</>

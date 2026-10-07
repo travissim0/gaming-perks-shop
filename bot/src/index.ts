@@ -7,6 +7,7 @@ import { onSquadInteraction, squadCommand } from './squad.js';
 import { checkSignups, onSignupMessage, onSignupsInteraction, signupsCommand, startSignupWatch } from './signups.js';
 import { deliverNotices } from './notices.js';
 import { queueRefReminders } from './refReminders.js';
+import { runDueTrades } from './trades.js';
 
 /**
  * FreeInf CTF bot.
@@ -69,6 +70,8 @@ client.once('ready', async () => {
   setInterval(() => deliverNotices(client, guild!), 30_000);
   await queueRefReminders();
   setInterval(queueRefReminders, 10 * 60_000); // day-of "needs a referee" posts
+  await runDueTrades();
+  setInterval(runDueTrades, 5 * 60_000); // squad trades: complete / escalate when their window ends
   startSignupWatch(guild);
 
   db.channel('freeinf-bot')

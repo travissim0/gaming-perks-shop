@@ -64,8 +64,9 @@ export const tableMissing = (error: { message?: string; code?: string } | null |
   !!error && (error.code === '42P01' || error.code === 'PGRST205' || /does not exist|could not find the table/i.test(error.message || ''));
 
 export async function requestsInstalled(): Promise<boolean> {
-  const { error } = await supabaseAdmin.from('squad_leave_requests').select('id', { head: true, count: 'exact' }).limit(1);
-  return !tableMissing(error);
+  // Not a HEAD request: for a missing table that comes back as an empty error with no code.
+  const { error } = await supabaseAdmin.from('squad_leave_requests').select('id').limit(1);
+  return !error;
 }
 
 export interface SquadLeague { id: string; name: string; tag: string | null; captain_id: string | null; league_slug: string | null; league_name: string | null; draft: boolean }
@@ -85,7 +86,7 @@ export async function squadLeague(squadId: string): Promise<SquadLeague | null> 
 
 /** Kick requests arrive with add-squad-kick-requests.sql (the `kind` column). Until then captains kick as before. */
 export async function kickRequestsInstalled(): Promise<boolean> {
-  const { error } = await supabaseAdmin.from('squad_leave_requests').select('kind', { head: true, count: 'exact' }).limit(1);
+  const { error } = await supabaseAdmin.from('squad_leave_requests').select('kind').limit(1);
   return !error;
 }
 
