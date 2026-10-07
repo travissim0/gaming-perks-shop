@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
-  BUCKET_LABEL, COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, primaryRole, roleColor, roleRank, rolesTitle, sideBucket, sideLean, tagsFor,
-  type ColorSource, type PlayerRoles, type RoleKey, type SideBucket,
+  COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, placeSides, primaryRole, roleColor, roleRank, rolesTitle, sideGaps, sideLean, tagsFor,
+  type ColorSource, type PlayerRoles, type RoleKey, type SideLetter, type SidePlacement,
 } from '@/lib/ctf-roles';
 
 /**
@@ -16,7 +16,7 @@ export type RolesMap = Record<string, PlayerRoles>;
 export interface RosterPrefs {
   /** Colour and tag names from the draft registration or from mix play. */
   color: ColorSource;
-  /** 'side' = grouped into offense / defense / either, support roles first within each. */
+  /** 'side' = suggested offense / defense groups, support roles first within each. */
   sort: 'side' | 'role' | 'alpha';
   /** 'game' = black, tight, small type, closer to the in-game player list. */
   skin: 'site' | 'game';
@@ -50,36 +50,82 @@ export function sortByPrefs<T extends { alias: string }>(list: T[], idOf: (x: T)
   return [...list].sort((a, b) => roleRank(roles[idOf(a)], prefs.color) - roleRank(roles[idOf(b)], prefs.color) || a.alias.localeCompare(b.alias));
 }
 
+export const SIDE_COLOR: Record<SideLetter, string> = { O: '#FB923C', D: '#60A5FA' };
+
+export interface Bucket<T> { key: SideLetter | 'all'; label: string; items: T[]; place: Record<string, SidePlacement> }
+
 /**
- * Offense / defense / either buckets from each player's lean (mixes, else draft sides).
- * One bucket holding everyone when the viewer isn't sorting by side. Empty buckets are dropped.
+ * Suggested offense / defense split (placeSides in ctf-roles.ts): their own lean first,
+ * then either-side players to cover a missing support role, then to even the numbers.
+ * One bucket holding everyone when the viewer isn't grouping by side.
  */
-export function bucketBySide<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs): { key: SideBucket | 'all'; label: string; items: T[] }[] {
+export function bucketBySide<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs): Bucket<T>[] {
   const sorted = sortByPrefs(list, idOf, roles, prefs);
-  if (prefs.sort !== 'side') return [{ key: 'all', label: '', items: sorted }];
-  return (['O', 'D', 'F'] as SideBucket[])
-    .map((k) => ({ key: k, label: BUCKET_LABEL[k], items: sorted.filter((x) => sideBucket(roles[idOf(x)]) === k) }))
+  if (prefs.sort !== 'side') return [{ key: 'all', label: '', items: sorted, place: {} }];
+  const place = placeSides(sorted.map(idOf), roles, prefs.color);
+  return (['O', 'D'] as SideLetter[])
+    .map((k) => ({ key: k, label: k === 'O' ? 'Offense' : 'Defense', items: sorted.filter((x) => place[idOf(x)]?.side === k), place }))
     .filter((b) => b.items.length > 0);
 }
 
-/** A bucket's header: name, head count, and the support roles in it (mains only). */
-export function BucketHeader({ k, label, ids, roles, src, note, className = '' }: { k: SideBucket | 'all'; label: string; ids: string[]; roles: RolesMap; src: ColorSource; note?: string; className?: string }) {
+/** A side's header: name, head count, support mains, and any support it has no main for. */
+export function BucketHeader({ k, label, ids, roles, src, note, className = '' }: { k: SideLetter | 'all'; label: string; ids: string[]; roles: RolesMap; src: ColorSource; note?: string; className?: string }) {
   if (k === 'all') return null;
-  const color = k === 'O' ? '#FB923C' : k === 'D' ? '#60A5FA' : '#8B98B0';
+  const color = SIDE_COLOR[k];
   const support = COVERAGE_ROLES.map((r) => ({ r, n: ids.filter((id) => covers(roles[id], r, src) === 'main').length })).filter((x) => x.n > 0);
+  const gaps = sideGaps(k, ids, roles, src);
   return (
-    <div className={`flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide leading-4 ${className}`} title={k === 'F' ? 'Plays both sides, or not enough mix games to tell. A suggestion only.' : `Leans ${label.toLowerCase()} in mixes (or by draft roles). A suggestion only.`}>
-      <span style={{ color }}>{label} <span className="text-[#8B98B0] tabular-nums">{ids.length}</span>{note ? <span className="ml-1.5 normal-case tracking-normal text-[#8B98B0]/80">{note}</span> : null}</span>
-      <span className="flex gap-1.5 normal-case tracking-normal opacity-70">
-        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }}>{ROLE_META[x.r].short} {x.n}</span>)}
+    <div
+      className={`flex items-center justify-between gap-2 border-l-[3px] px-2 text-[11px] leading-5 ${className}`}
+      style={{ borderColor: color, backgroundColor: `${color}14` }}
+      title={`Suggested ${label.toLowerCase()}: players who lean ${label.toLowerCase()} in mixes (or by draft roles), plus either-side players placed to cover support or even the numbers. Nothing is enforced.`}
+    >
+      <span className="font-semibold uppercase tracking-wide" style={{ color }}>
+        {label} <span className="font-normal text-[#8B98B0] tabular-nums">{ids.length}</span>
+        {note ? <span className="ml-1.5 font-normal normal-case tracking-normal text-[#8B98B0]/80">{note}</span> : null}
+      </span>
+      <span className="flex gap-1.5 text-[10px]">
+        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }} className="opacity-80">{ROLE_META[x.r].short} {x.n}</span>)}
+        {gaps.map((r) => <span key={r} className="text-[#F87171]/80" title={`No ${ROLE_META[r].label} main suggested for ${label.toLowerCase()}`}>no {ROLE_META[r].short}</span>)}
       </span>
     </div>
   );
 }
 
-export function PlayerName({ alias, roles, src, className = '' }: { alias: string; roles?: PlayerRoles; src: ColorSource; className?: string }) {
+/** Rows under a side header carry its colour down the left edge. */
+export const sideRail = (k: SideLetter | 'all') => (k === 'all' ? undefined : { borderLeft: `3px solid ${SIDE_COLOR[k]}55` });
+
+/** Why an either-side player sits in this group. Nothing for players who lean this way themselves. */
+export function PlaceMark({ p }: { p?: SidePlacement }) {
+  if (!p || p.why === 'lean') return null;
+  if (p.why === 'need' && p.role) {
+    return (
+      <span className="shrink-0 text-[9px] opacity-75" style={{ color: ROLE_META[p.role].color }} title={`Plays either side. Suggested for ${p.side === 'D' ? 'defense' : 'offense'} to cover ${ROLE_META[p.role].label}.`}>
+        ⇄ {ROLE_META[p.role].short}
+      </span>
+    );
+  }
+  return <span className="shrink-0 text-[10px] text-[#8B98B0]/60" title="Plays either side (or not enough mix games to tell). Placed here to even the numbers.">⇄</span>;
+}
+
+/**
+ * A name in its class colour. With a coverage role focused, mains of that role get a solid
+ * underline in the role colour and secondaries a dashed one, so the two read apart.
+ */
+export function PlayerName({ alias, roles, src, focus = null, className = '' }: { alias: string; roles?: PlayerRoles; src: ColorSource; focus?: RoleKey | null; className?: string }) {
+  const tier = focus ? covers(roles, focus, src) : null;
+  const style: CSSProperties = { color: roleColor(primaryRole(roles, src)) };
+  if (tier && focus) {
+    style.textDecorationLine = 'underline';
+    style.textDecorationColor = ROLE_META[focus].color;
+    style.textUnderlineOffset = '3px';
+    style.textDecorationStyle = tier === 'main' ? 'solid' : 'dashed';
+    style.textDecorationThickness = tier === 'main' ? '2px' : '1px';
+    if (tier === 'main') style.fontWeight = 600;
+    else style.opacity = 0.8;
+  }
   return (
-    <span className={className} style={{ color: roleColor(primaryRole(roles, src)) }} title={rolesTitle(alias, roles)}>
+    <span className={className} style={style} title={`${rolesTitle(alias, roles)}${tier && focus ? `\n${ROLE_META[focus].label}: ${tier === 'main' ? 'main' : 'secondary'}` : ''}`}>
       {alias}
     </span>
   );

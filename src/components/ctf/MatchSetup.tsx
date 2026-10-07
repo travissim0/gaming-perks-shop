@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { RoleKey } from '@/lib/ctf-roles';
-import { BucketHeader, Coverage, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
+import { BucketHeader, Coverage, PlaceMark, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
@@ -404,6 +404,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     const tenIn = roster.filter((m) => slots[m.player_id] !== 'out' && ten[m.player_id] === 'in');
     const tenOut = roster.filter((m) => slots[m.player_id] !== 'out' && ten[m.player_id] === 'out');
     const pairs = canSee ? tenPairs(team) : { go: [], back: [] };
+    const canSub = !!(isHome ? viewer?.can_sub_home : viewer?.can_sub_away);
 
     return (
       <div className={`rounded-md overflow-hidden ${game ? 'bg-black ring-1 ring-[#2a2a2a]' : 'bg-[#1B2438]'}`} style={gameFont}>
@@ -412,11 +413,11 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             <div className={`${game ? 'text-[13px] font-bold text-[#F5E27A]' : 'font-display text-lg text-[#E6EDF7]'} leading-tight`}>
               {team.tag} <span className="text-xs font-sans font-normal text-[#8B98B0]">{isHome ? 'home' : 'away'}{team.side ? ` · ${SIDE_LABEL[team.side]}` : ''}</span>
             </div>
-            <div className="text-[11px] text-[#8B98B0] leading-tight">
-              {team.team_starting
-                ? <>Starters on <span className="text-[#34D399]">{team.team_starting}</span> · bench in spec on <span className="text-[#E6EDF7]">{team.team_bench}</span></>
-                : canSee ? 'Team names are set once the side is known.' : null}
-            </div>
+            {team.team_starting && (
+              <div className="text-[11px] text-[#8B98B0] leading-tight">
+                Starters on <span className="text-[#34D399]">{team.team_starting}</span> · bench in spec on <span className="text-[#E6EDF7]">{team.team_bench}</span>
+              </div>
+            )}
           </div>
           {canSee ? (
             <div className="text-xs tabular-nums text-[#8B98B0]"><span className={over ? 'text-[#F87171]' : full ? 'text-[#34D399]' : 'text-[#F59E0B]'}>{starting.length}/{starters}</span> starting · {bench.length} bench</div>
@@ -443,6 +444,37 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
           </div>
         )}
 
+        {/* 10-man: one big button for this squad's captains (and staff / referees) once subs are open.
+            Trial feature: it only makes the planned subs, nothing in the game triggers it. */}
+        {canSee && (pairs.go.length > 0 || pairs.back.length > 0) && (canSub || canEdit) && (
+          <div className={`px-3 py-2 border-b ${rule} bg-[#d946ef]/[0.06]`}>
+            {(() => {
+              const goingBack = pairs.go.length === 0;
+              const list = goingBack ? pairs.back : pairs.go;
+              const what = list.map((p) => `${p.in.alias} in for ${p.out.alias}`).join(', ');
+              return (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { if (confirm(`${goingBack ? 'Revert' : 'Execute'} 10-man subs for ${team.tag}?\n\n${list.map((p) => `${p.in.alias} in for ${p.out.alias}`).join('\n')}`)) runTen(team, list); }}
+                    disabled={!canSub || busy !== null}
+                    className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${goingBack ? 'bg-white/10 text-[#E6EDF7] hover:bg-white/15' : 'bg-[#d946ef] text-white hover:bg-[#e879f9]'}`}
+                    title={canSub ? undefined : 'Opens when the side is released, five minutes before the match'}
+                  >
+                    {goingBack ? 'Revert 10-man subs' : 'Execute 10-man subs'}
+                  </button>
+                  <span className="min-w-0 text-[11px] text-[#8B98B0]">
+                    <span className="text-[#E6EDF7]">{what}</span>
+                    {canSub
+                      ? (auto.enabled ? ' · the zone applies it within about a minute' : ' · zone automation is off: a referee moves them by hand')
+                      : ' · available once subs open'}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {!canSee ? (
           <p className="px-3 py-2 text-xs text-[#8B98B0]">{team.tag}&apos;s lineup is private to their captains and staff.</p>
         ) : team.roster.length === 0 ? (
@@ -458,9 +490,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                   roles={roles}
                   src={src}
                   note={`${bk.items.filter((m) => slots[m.player_id] === 'starting').length} starting`}
-                  className={`px-3 pt-1.5 pb-0.5 ${game ? '' : 'bg-white/[0.02]'}`}
+                  className="mt-1 first:mt-0"
                 />
-                <ul className={game ? '' : 'divide-y divide-white/[0.04]'}>
+                <ul className={game ? '' : 'divide-y divide-white/[0.04]'} style={sideRail(bk.key)}>
                   {bk.items.map((m) => {
                     const s = slots[m.player_id];
                     const r = roles[m.player_id];
@@ -468,7 +500,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                     return (
                       <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
                         <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                          <PlayerName alias={m.alias} roles={r} src={src} className="min-w-0 truncate" />
+                          <PlayerName alias={m.alias} roles={r} src={src} focus={f} className="min-w-0 truncate" />
+                          <PlaceMark p={bk.place[m.player_id]} />
                           {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
                           {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
                           {/* Details only on hover: the colour carries the class at a glance. */}
@@ -482,7 +515,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                             type="button"
                             onClick={() => cycleTen(team, m.player_id, s)}
                             title={t === 'in' ? 'Subs in on 10-man. Click to switch to sub out.' : t === 'out' ? 'Subs out on 10-man. Click to clear.' : s === 'starting' ? 'Mark to sub out on 10-man' : 'Mark to sub in on 10-man (e.g. your 10-man infil)'}
-                            className={`shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7] sm:invisible sm:group-hover:visible'}`}
+                            className={`shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
                           >
                             10M{t ? ` ${t}` : ''}
                           </button>
@@ -518,10 +551,11 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                 <div className={game ? 'text-[11px] leading-[15px]' : 'text-[13px] leading-5'}>
                   {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, prefs).map((bk) => (
                     <div key={bk.key}>
-                      <BucketHeader k={bk.key} label={bk.label} ids={bk.items.map((m) => m.player_id)} roles={roles} src={src} className="mt-0.5 opacity-80" />
+                      <BucketHeader k={bk.key} label={bk.label} ids={bk.items.map((m) => m.player_id)} roles={roles} src={src} className="mt-1" />
                       {bk.items.map((m) => (
-                        <div key={m.player_id} className={`group flex items-center gap-1.5 whitespace-nowrap ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
-                          <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} className="min-w-0 truncate" />
+                        <div key={m.player_id} style={sideRail(bk.key)} className={`group flex items-center gap-1.5 whitespace-nowrap ${bk.key === 'all' ? '' : 'pl-2'} ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
+                          <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} focus={f} className="min-w-0 truncate" />
+                          <PlaceMark p={bk.place[m.player_id]} />
                           <TenTag v={ten[m.player_id]} />
                           <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
                             <SideLean roles={roles[m.player_id]} />
@@ -564,16 +598,6 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                 {roster.filter((m) => slots[m.player_id] === 'out' && !(isGreen && m.green_ok === false)).map((m) => <option key={m.player_id} value={m.player_id}>{m.alias}</option>)}
               </select>
               <button type="button" onClick={() => makeSub(team)} disabled={busy !== null || !subPick[team.squad_id]?.out || !subPick[team.squad_id]?.in} className={btnPrimary}>Make sub</button>
-              {pairs.go.length > 0 && (
-                <button type="button" onClick={() => runTen(team, pairs.go)} disabled={busy !== null} className="px-3 py-2 rounded-md text-sm bg-[#d946ef]/20 text-[#f0abfc] hover:bg-[#d946ef]/30 disabled:opacity-50 transition-colors" title={pairs.go.map((p) => `${p.in.alias} in for ${p.out.alias}`).join('\n')}>
-                  Go 10-man
-                </button>
-              )}
-              {pairs.back.length > 0 && (
-                <button type="button" onClick={() => runTen(team, pairs.back)} disabled={busy !== null} className={btnQuiet} title={pairs.back.map((p) => `${p.in.alias} back in for ${p.out.alias}`).join('\n')}>
-                  Undo 10-man
-                </button>
-              )}
             </div>
             <p className="text-[11px] text-[#8B98B0]">
               {auto.enabled
@@ -657,7 +681,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Matches are {starters}v{starters}. Everyone starts on the bench: click Start for your {starters} starters, and set Out only for players who won't be at the match. Mark 10M on a bench player to sub them in when you go 10-man (your 10-man infil) and on the starter they replace; Go 10-man then makes those subs. Save when you're done. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+          Matches are {starters}v{starters}. Everyone starts on the bench: click Start for your {starters} starters, and set Out only for players who won't be at the match. Mark 10M on a bench player to sub them in when you go 10-man (your 10-man infil) and on the starter they replace; Execute 10-man subs then makes those subs in one go (and Revert swaps them back). Save when you're done. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
         </p>
       </div>

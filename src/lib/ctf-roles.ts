@@ -154,12 +154,68 @@ export function sideLean(p: PlayerRoles | null | undefined): { side: SideLetter 
 }
 
 export type SideBucket = 'O' | 'D' | 'F';
-export const BUCKET_LABEL: Record<SideBucket, string> = { O: 'Offense', D: 'Defense', F: 'Either side' };
 
 /** Where a player fits best: offense, defense, or either (both / not enough to tell). A suggestion only. */
 export function sideBucket(p: PlayerRoles | null | undefined): SideBucket {
   const l = sideLean(p);
   return l && l.side !== 'OD' ? l.side : 'F';
+}
+
+/**
+ * Support each side should have a main for, most important first. Players who play
+ * either side are placed to fill these before anything else (ron, the squad's only
+ * engineer, goes to defense). Tune here.
+ */
+export const SIDE_NEEDS: [SideLetter, RoleKey][] = [['D', 'ENG'], ['D', 'MED'], ['O', 'MED'], ['D', 'SL'], ['O', 'SL']];
+
+export interface SidePlacement {
+  side: SideLetter;
+  /** lean = their own O/D lean; need = an either-side player placed to cover a missing role; balance = evens the numbers. */
+  why: 'lean' | 'need' | 'balance';
+  role?: RoleKey;
+}
+
+/** Offense share (0..1) from mixes, else 0.5. */
+const offenseShare = (p: PlayerRoles | null | undefined) => {
+  const o = p?.mix?.offense || 0;
+  const d = p?.mix?.defense || 0;
+  return o + d ? o / (o + d) : 0.5;
+};
+
+/**
+ * Suggested offense / defense split for a group of players. Never enforced: it only
+ * groups the list so a captain can see what each side has.
+ */
+export function placeSides(ids: string[], roles: Record<string, PlayerRoles>, src: ColorSource): Record<string, SidePlacement> {
+  const out: Record<string, SidePlacement> = {};
+  const flex: string[] = [];
+  ids.forEach((id) => {
+    const b = sideBucket(roles[id]);
+    if (b === 'F') flex.push(id);
+    else out[id] = { side: b, why: 'lean' };
+  });
+  const sideHas = (side: SideLetter, role: RoleKey) => ids.some((id) => out[id]?.side === side && covers(roles[id], role, src) === 'main');
+  for (const [side, role] of SIDE_NEEDS) {
+    if (sideHas(side, role)) continue;
+    const free = flex.filter((id) => !out[id]);
+    const pick = free.find((id) => covers(roles[id], role, src) === 'main') || free.find((id) => covers(roles[id], role, src) === 'sec');
+    if (pick) out[pick] = { side, why: 'need', role };
+  }
+  // Everyone left evens out the numbers, leaning the way they lean.
+  flex
+    .filter((id) => !out[id])
+    .sort((a, b) => offenseShare(roles[b]) - offenseShare(roles[a]))
+    .forEach((id) => {
+      const o = ids.filter((x) => out[x]?.side === 'O').length;
+      const d = ids.filter((x) => out[x]?.side === 'D').length;
+      out[id] = { side: o < d ? 'O' : d < o ? 'D' : offenseShare(roles[id]) >= 0.5 ? 'O' : 'D', why: 'balance' };
+    });
+  return out;
+}
+
+/** Needed roles a side has no main for. */
+export function sideGaps(side: SideLetter, ids: string[], roles: Record<string, PlayerRoles>, src: ColorSource): RoleKey[] {
+  return SIDE_NEEDS.filter(([s]) => s === side).map(([, r]) => r).filter((r) => !ids.some((id) => covers(roles[id], r, src) === 'main'));
 }
 
 /**

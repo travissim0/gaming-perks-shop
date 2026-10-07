@@ -794,7 +794,7 @@ export default function MatchDetailPage() {
                     {sortByPrefs(s.members, (m) => m.id, roles, prefs).map((m) => (
                       <span key={m.id} className={`inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
                         <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
-                          <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} />
+                          <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} focus={rosterFocus[s.id] || null} />
                         </Link>
                         <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
                       </span>
