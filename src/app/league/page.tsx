@@ -123,6 +123,8 @@ interface UpcomingMatch {
   squad_a_name?: string;
   squad_b_name?: string;
   match_type: string;
+  stage?: string | null;
+  fs_color?: string | null;
 }
 
 interface LeagueResult {
@@ -544,8 +546,11 @@ export default function LeagueHome() {
           .eq('status', 'scheduled')
           .order('scheduled_at', { ascending: true })
           .limit(12);
-        // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
-        let { data, error } = await run(`${cols}, time_tbd`);
+        // time_tbd (add-match-time-tbd.sql), stage (add-league-schedule.sql) and fs_color
+        // (add-fs-colors.sql) arrive with their SQL files; fall back step by step without them.
+        let { data, error } = await run(`${cols}, time_tbd, stage, fs_color`);
+        if (error && /fs_color/.test(error.message)) ({ data, error } = await run(`${cols}, time_tbd, stage`));
+        if (error && /stage/.test(error.message)) ({ data, error } = await run(`${cols}, time_tbd`));
         if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(cols));
         if (!error && data) {
           // "This week" = one Mon–Sun league week: the week of the next match, not the next
@@ -558,6 +563,8 @@ export default function LeagueHome() {
             scheduled_at: m.scheduled_at,
             time_tbd: m.time_tbd === true,
             match_type: m.match_type,
+            stage: m.stage ?? null,
+            fs_color: m.fs_color ?? null,
             squad_a_name: m.squad_a?.name,
             squad_b_name: m.squad_b?.name,
           })));
@@ -934,7 +941,15 @@ export default function LeagueHome() {
                                   </>
                                 ) : m.title}
                               </div>
-                              <div className="text-[11px] text-[#8B98B0]">{m.time_tbd ? `Time TBD · ${playByLabel(m.scheduled_at)}` : whenLabel(m.scheduled_at)}</div>
+                              <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B98B0]">
+                                <span>{m.time_tbd ? `Time TBD · ${playByLabel(m.scheduled_at)}` : whenLabel(m.scheduled_at)}</span>
+                                {m.stage === 'fs' && (
+                                  <span className={m.fs_color === 'green' ? 'text-[#34D399]' : m.fs_color === 'red' ? 'text-[#F87171]' : ''} title={m.fs_color === 'green' ? 'Free-scheduled Green: captain and later-round picks only, worth double' : m.fs_color === 'red' ? 'Free-scheduled Red: a normal match with full lineups' : 'Free-scheduled match'}>
+                                    {m.fs_color === 'green' ? 'FS Green' : m.fs_color === 'red' ? 'FS Red' : 'Free scheduled'}
+                                  </span>
+                                )}
+                                {m.stage === 'playoff' && <span className="text-[#F59E0B]">Playoffs</span>}
+                              </div>
                             </Link>
                           </li>
                         ))}

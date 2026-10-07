@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         league_slug,
         season_number,
         week,
-        stage,${withTbd ? '\n        time_tbd,' : ''}
+        stage,${withTbd ? '\n        time_tbd,\n        fs_color,' : ''}
         profiles!matches_created_by_fkey(in_game_alias),
         squad_a:squads!matches_squad_a_id_fkey(name, tag, banner_url),
         squad_b:squads!matches_squad_b_id_fkey(name, tag, banner_url),
@@ -94,9 +94,9 @@ export async function GET(req: NextRequest) {
     return finalQuery.limit(limit);
     };
 
-    // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
+    // time_tbd (add-match-time-tbd.sql) and fs_color (add-fs-colors.sql) arrive with their SQL files.
     let { data, error } = await run(true);
-    if (error && /time_tbd/.test(error.message)) ({ data, error } = await run(false));
+    if (error && /time_tbd|fs_color/.test(error.message)) ({ data, error } = await run(false));
 
     if (error) {
       console.error('Error fetching matches:', error);

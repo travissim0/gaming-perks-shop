@@ -65,6 +65,8 @@ interface Match {
   season_number?: number | null;
   week?: number | null;
   stage?: string | null;
+  /** FS only: Red (normal lineups) or Green (captain + later-round picks, worth double). */
+  fs_color?: 'red' | 'green' | null;
 }
 
 interface SquadInfo { id: string; name: string; tag: string | null; banner_url: string | null; members: { id: string; alias: string }[] }
@@ -534,12 +536,20 @@ export default function MatchDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.league_slug ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>
-                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ` · Playoffs${/^(Game [A-Z]|Championship|Final)/.test(match.title.split(' · ')[1] || '') ? ` · ${match.title.split(' · ')[1]}` : ''}` : match.stage === 'fs' ? ' · Free scheduled' : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
+                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ` · Playoffs${/^(Game [A-Z]|Championship|Final)/.test(match.title.split(' · ')[1] || '') ? ` · ${match.title.split(' · ')[1]}` : ''}` : match.stage === 'fs' ? (match.fs_color === 'green' ? ' · FS Green' : match.fs_color === 'red' ? ' · FS Red' : ' · Free scheduled') : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
               </span>
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium inline-flex items-center gap-1 ${statusPill.cls}`}>
                 {live && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
                 {statusPill.label}
               </span>
+              {match.stage === 'fs' && (match.fs_color === 'green' || match.fs_color === 'red') && (
+                <span
+                  className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.fs_color === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}
+                  title={match.fs_color === 'green' ? 'Free-scheduled Green: only the captain and later-round picks play; worth double a Red' : 'Free-scheduled Red: a normal match with full lineups'}
+                >
+                  {match.fs_color === 'green' ? 'FS Green' : 'FS Red'}
+                </span>
+              )}
             </div>
             <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">
               {/* Away first, home second, like the rulebook's arena names and every other CTF page. */}
