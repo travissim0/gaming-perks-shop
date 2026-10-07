@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { RoleKey } from '@/lib/ctf-roles';
+import LineupField from '@/components/ctf/LineupField';
 import { BucketHeader, Coverage, PlaceMark, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
@@ -63,6 +64,8 @@ interface Setup {
 }
 
 const SIDE_LABEL: Record<Side, string> = { titan: 'Titan', collective: 'Collective' };
+/** Titan green, Collective red: lime and rose, kept clear of the SL green and Infantry red. */
+const SIDE_COLOR: Record<Side, string> = { titan: '#A3E635', collective: '#FB7185' };
 const btnQuiet = 'px-3 py-2 rounded-md text-sm bg-white/5 text-[#E6EDF7] hover:bg-white/10 transition-colors disabled:opacity-50';
 const btnPrimary = 'px-3.5 py-2 rounded-md text-sm font-medium bg-[#22D3EE] text-[#0B0F1A] hover:bg-[#67E8F9] disabled:opacity-50 transition-colors';
 
@@ -411,7 +414,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         <div className={`px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-b ${rule}`}>
           <div>
             <div className={`${game ? 'text-[13px] font-bold text-[#F5E27A]' : 'font-display text-lg text-[#E6EDF7]'} leading-tight`}>
-              {team.tag} <span className="text-xs font-sans font-normal text-[#8B98B0]">{isHome ? 'home' : 'away'}{team.side ? ` · ${SIDE_LABEL[team.side]}` : ''}</span>
+              {team.tag} <span className="text-xs font-sans font-normal text-[#8B98B0]">{isHome ? 'home' : 'away'}{team.side && <> · <span style={{ color: SIDE_COLOR[team.side] }}>{SIDE_LABEL[team.side]}</span></>}</span>
             </div>
             {team.team_starting && (
               <div className="text-[11px] text-[#8B98B0] leading-tight">
@@ -479,6 +482,19 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
           <p className="px-3 py-2 text-xs text-[#8B98B0]">{team.tag}&apos;s lineup is private to their captains and staff.</p>
         ) : team.roster.length === 0 ? (
           <p className="px-3 py-2 text-sm text-[#8B98B0]">No players on the roster yet.</p>
+        ) : prefs.view === 'field' ? (
+          <LineupField
+            matchId={match.id}
+            squadId={team.squad_id}
+            side={team.side}
+            players={roster.map((m) => ({ player_id: m.player_id, alias: m.alias, role: m.role, slot: slots[m.player_id] || 'out', ten_man: ten[m.player_id] || null, blocked: isGreen && m.green_ok === false }))}
+            roles={roles}
+            src={src}
+            canEdit={canEdit}
+            starters={starters}
+            focus={f}
+            onSlot={(pid, slot) => setSlot(team, pid, slot)}
+          />
         ) : canEdit ? (
           <div className={game ? 'py-0.5' : ''}>
             {bucketBySide(roster, (m) => m.player_id, roles, prefs).map((bk) => (
@@ -661,7 +677,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                   type="button"
                   onClick={() => post({ action: 'set_side', side: s }, `${home.tag} takes ${SIDE_LABEL[s]}`)}
                   disabled={busy !== null || home.side === s}
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${home.side === s ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'} disabled:opacity-70`}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ring-1 transition-colors disabled:opacity-70 ${home.side === s ? 'ring-current' : 'ring-transparent hover:brightness-125'}`}
+                  style={{ color: SIDE_COLOR[s], backgroundColor: `${SIDE_COLOR[s]}${home.side === s ? '33' : '1a'}` }}
                 >
                   {SIDE_LABEL[s]}
                 </button>

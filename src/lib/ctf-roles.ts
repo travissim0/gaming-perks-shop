@@ -164,9 +164,9 @@ export function sideBucket(p: PlayerRoles | null | undefined): SideBucket {
 /**
  * Support each side should have a main for, most important first. Players who play
  * either side are placed to fill these before anything else (ron, the squad's only
- * engineer, goes to defense). Tune here.
+ * engineer, goes to defense). Squad leaders are an offense role. Tune here.
  */
-export const SIDE_NEEDS: [SideLetter, RoleKey][] = [['D', 'ENG'], ['D', 'MED'], ['O', 'MED'], ['D', 'SL'], ['O', 'SL']];
+export const SIDE_NEEDS: [SideLetter, RoleKey][] = [['D', 'ENG'], ['O', 'SL'], ['D', 'MED'], ['O', 'MED']];
 
 export interface SidePlacement {
   side: SideLetter;

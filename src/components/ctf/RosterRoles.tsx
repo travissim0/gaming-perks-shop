@@ -20,10 +20,12 @@ export interface RosterPrefs {
   sort: 'side' | 'role' | 'alpha';
   /** 'game' = black, tight, small type, closer to the in-game player list. */
   skin: 'site' | 'game';
+  /** 'field' = experimental sprite view of the lineups (LineupField.tsx). */
+  view: 'list' | 'field';
 }
 
 const PREFS_KEY = 'match-roster-prefs-v2';
-const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'side', skin: 'site' };
+const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'side', skin: 'site', view: 'list' };
 
 /** Per-viewer view settings, remembered in this browser when it allows it. */
 export function useRosterPrefs(): [RosterPrefs, (p: Partial<RosterPrefs>) => void] {
@@ -76,17 +78,17 @@ export function BucketHeader({ k, label, ids, roles, src, note, className = '' }
   const gaps = sideGaps(k, ids, roles, src);
   return (
     <div
-      className={`flex items-center justify-between gap-2 border-l-[3px] px-2 text-[11px] leading-5 ${className}`}
+      className={`grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-l-[3px] px-2 text-[11px] leading-5 ${className}`}
       style={{ borderColor: color, backgroundColor: `${color}14` }}
       title={`Suggested ${label.toLowerCase()}: players who lean ${label.toLowerCase()} in mixes (or by draft roles), plus either-side players placed to cover support or even the numbers. Nothing is enforced.`}
     >
-      <span className="font-semibold uppercase tracking-wide" style={{ color }}>
-        {label} <span className="font-normal text-[#8B98B0] tabular-nums">{ids.length}</span>
-        {note ? <span className="ml-1.5 font-normal normal-case tracking-normal text-[#8B98B0]/80">{note}</span> : null}
+      <span className="text-[10px] text-[#8B98B0]/80 truncate">{note}</span>
+      <span className="text-center font-semibold uppercase tracking-[0.15em]" style={{ color }}>
+        {label} <span className="font-normal tracking-normal text-[#8B98B0] tabular-nums">{ids.length}</span>
       </span>
-      <span className="flex gap-1.5 text-[10px]">
-        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }} className="opacity-80">{ROLE_META[x.r].short} {x.n}</span>)}
-        {gaps.map((r) => <span key={r} className="text-[#F87171]/80" title={`No ${ROLE_META[r].label} main suggested for ${label.toLowerCase()}`}>no {ROLE_META[r].short}</span>)}
+      <span className="flex flex-wrap justify-end gap-x-1.5 text-[10px] leading-4">
+        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }} className="whitespace-nowrap opacity-80">{ROLE_META[x.r].short} {x.n}</span>)}
+        {gaps.map((r) => <span key={r} className="whitespace-nowrap text-[#F87171]/80" title={`No ${ROLE_META[r].label} main suggested for ${label.toLowerCase()}`}>no {ROLE_META[r].short}</span>)}
       </span>
     </div>
   );
@@ -222,6 +224,9 @@ export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChan
       </span>
       <span className="inline-flex items-center gap-1">
         Skin <Seg value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />
+      </span>
+      <span className="inline-flex items-center gap-1" title="Field: lineups drawn with the in-game characters and flag. Experimental.">
+        View <Seg value={prefs.view} options={[['list', 'List'], ['field', 'Field (beta)']]} onChange={(view) => onChange({ view })} />
       </span>
       <span className="inline-flex flex-wrap items-center gap-x-1.5">
         {ROLE_ORDER.map((k) => (
