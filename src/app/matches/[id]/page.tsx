@@ -12,6 +12,7 @@ import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
+import MenuButton, { type MenuItem } from '@/components/ctf/MenuButton';
 import { Coverage, PlayerName, RosterControls, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
 import type { RoleKey } from '@/lib/ctf-roles';
 import { canFillCrewRole } from '@/lib/crewRoles';
@@ -245,6 +246,10 @@ export default function MatchDetailPage() {
       setIsAdmin(!!(data as any)?.is_admin);
     });
   }, [user]);
+
+  // Folding the roster list when Match setup already lists everyone for this viewer.
+  const [lineupsShown, setLineupsShown] = useState(false);
+  const [rostersOpen, setRostersOpen] = useState(false);
 
   // ── Permissions ─────────────────────────────────────────────────────
   const isStaff = isAdmin || (ctfRole || '').toLowerCase() === 'ctf_admin';
@@ -533,6 +538,21 @@ export default function MatchDetailPage() {
     );
   }
 
+  // Organiser / staff actions, tucked into one menu so captains see the match, not the admin.
+  const manageItems: MenuItem[] = [];
+  if (isStaff && match.league_slug && !played && !notPlayed && !live) {
+    manageItems.push({ label: match.time_tbd ? 'Set time' : 'Change time', onClick: () => (panel === 'time' ? setPanel('none') : openTime()) });
+  }
+  manageItems.push(
+    { label: 'Set result', onClick: () => setPanel(panel === 'result' ? 'none' : 'result'), disabled: !hasTeams },
+    { label: match.game_id ? 'Change game' : 'Link game', onClick: () => (panel === 'link' ? setPanel('none') : openLink()) },
+    { label: match.vod_url ? 'Edit video' : 'Add video', onClick: () => setPanel(panel === 'video' ? 'none' : 'video') },
+  );
+  if (!match.league_slug) manageItems.push({ label: 'Delete match', danger: true, onClick: remove, disabled: busy === 'delete' });
+  // Match setup lists every player for this viewer: fold the roster list above it away by default.
+  const setupShown = !!(match.squad_a_id && match.squad_b_id && !played && !notPlayed);
+  const foldRosters = setupShown && lineupsShown && !rostersOpen;
+
   return shell(
     <>
       <Link href={match.league_slug ? `/league/schedule?league=${match.league_slug}` : '/matches'} className="inline-flex items-center gap-1 text-xs text-[#8B98B0] hover:text-[#22D3EE]">
@@ -546,7 +566,7 @@ export default function MatchDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.league_slug ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>
-                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ` · Playoffs${/^(Game [A-Z]|Championship|Final)/.test(match.title.split(' · ')[1] || '') ? ` · ${match.title.split(' · ')[1]}` : ''}` : match.stage === 'fs' ? (match.fs_color === 'green' ? ' · FS Green' : match.fs_color === 'red' ? ' · FS Red' : ' · Free scheduled') : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
+                {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ` · Playoffs${/^(Game [A-Z]|Championship|Final)/.test(match.title.split(' · ')[1] || '') ? ` · ${match.title.split(' · ')[1]}` : ''}` : match.stage === 'fs' ? (match.fs_color === 'green' || match.fs_color === 'red' ? '' : ' · Free scheduled') : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
               </span>
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium inline-flex items-center gap-1 ${statusPill.cls}`}>
                 {live && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
@@ -586,14 +606,8 @@ export default function MatchDetailPage() {
             {match.description && <p className="mt-1.5 text-sm text-[#8B98B0] max-w-2xl whitespace-pre-line">{match.description}</p>}
           </div>
           {canManage && (
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              {isStaff && match.league_slug && !played && !notPlayed && !live && (
-                <button type="button" onClick={() => (panel === 'time' ? setPanel('none') : openTime())} className={btnQuiet}>{match.time_tbd ? 'Set time' : 'Change time'}</button>
-              )}
-              <button type="button" onClick={() => setPanel(panel === 'result' ? 'none' : 'result')} className={btnQuiet} disabled={!hasTeams}>Set result</button>
-              <button type="button" onClick={() => (panel === 'link' ? setPanel('none') : openLink())} className={btnQuiet}>{match.game_id ? 'Change game' : 'Link game'}</button>
-              <button type="button" onClick={() => setPanel(panel === 'video' ? 'none' : 'video')} className={btnQuiet}>{match.vod_url ? 'Edit video' : 'Add video'}</button>
-              {!match.league_slug && <button type="button" onClick={remove} disabled={busy === 'delete'} className="px-3 py-2 rounded-md text-sm text-[#F87171] hover:bg-[#F87171]/10 disabled:opacity-50">Delete</button>}
+            <div className="flex lg:justify-end">
+              <MenuButton label="Manage match" items={manageItems} />
             </div>
           )}
         </div>
@@ -776,11 +790,18 @@ export default function MatchDetailPage() {
           {played && scored?.points && (
             <p className="mt-3 text-center text-xs text-[#8B98B0]">{scored.points.why}</p>
           )}
-          {(a?.members.length || b?.members.length) ? (
+          {(a?.members.length || b?.members.length) && foldRosters ? (
+            <div className="mt-3 text-center">
+              <button type="button" onClick={() => setRostersOpen(true)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">
+                Show full rosters ▾
+              </button>
+            </div>
+          ) : (a?.members.length || b?.members.length) ? (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {[b, a].map((s, i) => s && (
                 <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
-                  <div className={`mb-1 flex ${i === 0 ? 'sm:justify-end' : ''}`}>
+                  {/* The lineup cards below carry the coverage when they're shown. */}
+                  {!(setupShown && lineupsShown) && <div className={`mb-1 flex ${i === 0 ? 'sm:justify-end' : ''}`}>
                     <Coverage
                       ids={s.members.map((m) => m.id)}
                       roles={roles}
@@ -789,14 +810,17 @@ export default function MatchDetailPage() {
                       focus={rosterFocus[s.id] || null}
                       onFocus={(k) => setRosterFocus((x) => ({ ...x, [s.id]: k }))}
                     />
-                  </div>
+                  </div>}
                   <div className={`flex flex-wrap gap-0.5 ${i === 0 ? 'sm:justify-end' : ''}`}>
                     {sortByPrefs(s.members, (m) => m.id, roles, prefs).map((m) => (
-                      <span key={m.id} className={`inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
+                      <span key={m.id} className={`group inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
                         <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
                           <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} focus={rosterFocus[s.id] || null} />
                         </Link>
-                        <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
+                        {/* Message icon on hover (always on touch screens, which have no hover). */}
+                        <span className="inline-flex sm:hidden sm:group-hover:inline-flex">
+                          <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
+                        </span>
                       </span>
                     ))}
                   </div>
@@ -804,9 +828,15 @@ export default function MatchDetailPage() {
               ))}
             </div>
           ) : null}
-          {(a?.members.length || b?.members.length) ? (
-            <div className="mt-3 pt-2 border-t border-white/[0.06]">
+          {/* Display settings live in the Match setup header when its lineups are shown; here otherwise. */}
+          {(a?.members.length || b?.members.length) && !(setupShown && lineupsShown) ? (
+            <div className="mt-3 flex justify-end pt-2 border-t border-white/[0.06]">
               <RosterControls prefs={prefs} onChange={setPrefs} />
+            </div>
+          ) : null}
+          {(a?.members.length || b?.members.length) && setupShown && lineupsShown && rostersOpen ? (
+            <div className="mt-2 text-center">
+              <button type="button" onClick={() => setRostersOpen(false)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Hide rosters ▴</button>
             </div>
           ) : null}
         </section>
@@ -815,7 +845,7 @@ export default function MatchDetailPage() {
       {/* Side + lineups (both teams set, not yet played) */}
       {match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
         // Re-mount when the time changes so the lock and side-release wording follow it.
-        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} roles={roles} prefs={prefs} onPrefs={setPrefs} />
+        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} roles={roles} prefs={prefs} onPrefs={setPrefs} onLineupsShown={setLineupsShown} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

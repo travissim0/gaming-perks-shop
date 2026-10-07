@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { PLAN_CLASSES, ROLE_META, type RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
+import MenuButton, { type MenuItem } from '@/components/ctf/MenuButton';
 import { BucketHeader, Coverage, PlaceMark, PlanAckTag, PlanClassTag, PlayerName, RosterControls, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
@@ -83,7 +84,11 @@ const Flag = ({ on, label }: { on: boolean; label: string }) => (
   </span>
 );
 
-export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { matchId: string; user: any; roles: RolesMap; prefs: RosterPrefs; onPrefs: (p: Partial<RosterPrefs>) => void }) {
+export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLineupsShown }: {
+  matchId: string; user: any; roles: RolesMap; prefs: RosterPrefs; onPrefs: (p: Partial<RosterPrefs>) => void;
+  /** Whether this viewer sees lineups here; the page then folds its own roster list away. */
+  onLineupsShown?: (shown: boolean) => void;
+}) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -136,6 +141,12 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
   }, [matchId, headers]);
 
   useEffect(() => { load(); }, [load, user?.id]);
+
+  useEffect(() => {
+    if (!onLineupsShown) return;
+    const v = setup?.viewer;
+    onLineupsShown(!!setup && !setup.pending_sql && !!v && (v.is_staff || v.leads_home || v.leads_away || !!v.member_home || !!v.member_away || (!!v.is_referee && setup.side_released)));
+  }, [setup, onLineupsShown]);
 
   // The panel changes by itself at two moments: five minutes before the match (side revealed, subs
   // open) and at the scheduled time (lineups lock). Reload it then so nobody has to refresh the page.
@@ -298,9 +309,9 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
     setChatDraft(null);
   };
   const chatRow = setup.can_see_match_chat ? (
-    <div className="rounded-md bg-[#1B2438] px-3 py-2.5">
+    <div className="rounded-md bg-[#1B2438] px-3 py-1.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Match chat</span>
+        <span className="text-[10px] uppercase tracking-wide text-[#8B98B0] cursor-help" title="For raising things with the referees during the match. Only league staff, referees and both squads' captains and co-captains can see this.">Match chat ⓘ</span>
         {chatDraft !== null ? (
           <>
             <input
@@ -325,15 +336,14 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
                 <span className="text-[11px] text-[#8B98B0]">in game, add it to your chats: <span className="font-mono text-[#E6EDF7]">?chatadd {setup.match_chat}</span></span>
               </>
             ) : (
-              <span className="text-sm text-[#8B98B0]">{viewer?.can_set_match_chat ? 'Not set yet.' : 'The referee hasn’t set one yet.'}</span>
+              <span className="text-sm text-[#8B98B0]">{viewer?.can_set_match_chat ? 'Not set' : 'Not set by the referee yet'}</span>
             )}
             {viewer?.can_set_match_chat && (
-              <button type="button" onClick={() => setChatDraft(setup.match_chat || '')} className="text-xs text-[#F59E0B] hover:text-[#FBBF24]">{setup.match_chat ? 'Change' : 'Set chat name'}</button>
+              <button type="button" onClick={() => setChatDraft(setup.match_chat || '')} className="text-xs text-[#F59E0B] hover:text-[#FBBF24]">{setup.match_chat ? 'Change' : 'Set'}</button>
             )}
           </>
         )}
       </div>
-      <p className="mt-1 text-[11px] text-[#8B98B0]">For raising things with the referees during the match. Only league staff, referees and both squads’ captains and co-captains can see this.</p>
     </div>
   ) : null;
 
@@ -384,7 +394,6 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
   const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   // While the match time is TBD there is no reveal time to quote yet.
   const revealAt = match.time_tbd ? 'five minutes before the match, once its time is set' : `at ${revealTime}, five minutes before the match`;
-  const revealUntil = match.time_tbd ? 'five minutes before the match, once its time is set' : `${revealTime}, five minutes before the match`;
   const sidesLine = home.side ? `${away.tag} · ${SIDE_LABEL[away.side!]}  ·  ${home.tag} · ${SIDE_LABEL[home.side]}` : null;
 
   // Public / uninvolved view: progress flags, plus the sides once released.
@@ -414,20 +423,32 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
     );
   }
 
+  // "6:55 PM" (5 min before the match), or the TBD wording when there is no time yet.
+  const revealShort = match.time_tbd ? 'five minutes before the match, once its time is set' : `${revealTime} (5 min before the match)`;
   const sideText = (() => {
     if (home.side) {
       const base = `${home.tag} picked ${SIDE_LABEL[home.side]} · ${away.tag} plays ${SIDE_LABEL[away.side!]}.`;
       if (viewer?.is_staff) return base;
-      if (viewer?.leads_home) return setup.side_released ? `${base} ${away.tag} can see this now.` : `${base} Hidden from ${away.tag} and the public until ${revealUntil}.`;
+      if (viewer?.leads_home) return setup.side_released ? `${base} ${away.tag} can see this now.` : `${base} Hidden from ${away.tag} until ${revealShort}.`;
       return base; // away leads, after release
     }
-    if (viewer?.can_pick_side) return `${home.tag} is home: pick your side. Your pick stays hidden from ${away.tag} and the public until ${revealUntil}.`;
+    if (viewer?.can_pick_side) return `Pick your side (${home.tag} is home). Hidden from ${away.tag} and the public until ${revealShort}.`;
     if (viewer?.leads_home) return `${home.tag} is home and picks the side.`;
     // Away leads before release: the pick itself is hidden from them.
     return progress.side_picked
       ? `${home.tag} (home) has picked a side. It is released to you ${revealAt}.`
       : `Waiting on ${home.name} (home) to pick a side. It is released to you ${revealAt}.`;
   })();
+
+  // Staff / referee controls, out of the captains' way.
+  const staffItems: MenuItem[] = [];
+  if (viewer?.is_staff) staffItems.push({ label: 'Swap home / away', onClick: () => post({ action: 'swap_home' }, 'Home and away swapped'), disabled: busy !== null });
+  if ((viewer?.is_staff || viewer?.is_referee) && auto.reason !== 'site') {
+    staffItems.push(auto.enabled
+      ? { label: 'Run by hand (no zone automation)', danger: true, disabled: busy !== null, title: 'Take this match out of the zone queue',
+          onClick: () => { if (confirm('Take this match out of the zone queue? The zone will not open its arena, place anyone or apply subs; referees run it by hand.')) post({ action: 'set_manual_zone', manual: true }, 'This match is now run by hand'); } }
+      : { label: 'Automate again', disabled: busy !== null, onClick: () => post({ action: 'set_manual_zone', manual: false }, 'Zone automation is back on for this match') });
+  }
 
   const game = prefs.skin === 'game';
   const src = prefs.color;
@@ -524,11 +545,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
               </div>
             )}
           </div>
-          {canSee ? (
-            <div className="text-xs tabular-nums text-[#8B98B0]"><span className={over ? 'text-[#F87171]' : full ? 'text-[#34D399]' : 'text-[#F59E0B]'}>{starting.length}/{starters}</span> starting · {bench.length} bench</div>
-          ) : (
-            <Flag on={submitted} label={submitted ? 'Lineup submitted' : 'No lineup yet'} />
-          )}
+          {!canSee && <Flag on={submitted} label={submitted ? 'Lineup submitted' : 'No lineup yet'} />}
         </div>
 
         {team.roster.length > 0 && (
@@ -639,7 +656,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
               return (
                 <div key={slot} className="mt-1 first:mt-0">
                   <div className="flex items-center gap-2 border-l-2 px-3 text-[10px] uppercase tracking-[0.15em] leading-5" style={{ borderColor: color, color, backgroundColor: `${color}10` }}>
-                    {label} <span className="font-normal tracking-normal tabular-nums text-[#8B98B0]">{count}</span>
+                    {label} <span className={`font-normal tracking-normal tabular-nums ${slot !== 'starting' ? 'text-[#8B98B0]' : over ? 'text-[#F87171]' : full ? 'text-[#34D399]' : 'text-[#F59E0B]'}`}>{count}</span>
                     {slot === 'starting' && over && <span className="normal-case tracking-normal text-[#F87171]">too many</span>}
                   </div>
                   {list.length === 0 ? (
@@ -726,7 +743,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
           <div className="px-3 py-1.5 space-y-1.5">
             {([['Starting', starting, team.team_starting], ['Bench', bench, team.team_bench]] as const).map(([label, list, teamName]) => (
               <div key={label}>
-                <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] leading-4">{label}{teamName ? ` · ${teamName}` : ''}</div>
+                <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] leading-4">{label} <span className="tabular-nums">{label === 'Starting' ? `${list.length}/${starters}` : list.length}</span>{teamName ? ` · ${teamName}` : ''}</div>
                 <div className={game ? 'text-[11px] leading-[15px]' : 'text-[13px] leading-5'}>
                   {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, { ...prefs, sort: label === 'Starting' && Object.keys(plan).length ? 'side' : prefs.sort === 'alpha' ? 'alpha' : 'role' }, plan).map((bk) => (
                     <div key={bk.key}>
@@ -820,11 +837,8 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
         <div className="flex items-center gap-3 text-xs text-[#8B98B0]">
           {match.arena && <span className="font-mono text-[#E6EDF7]" title="The in-game arena the zone opens for this match">{match.arena}</span>}
           {locked ? <span className="rounded bg-white/5 px-1.5 py-0.5 uppercase tracking-wide">{viewer?.sub_window ? 'Live · subs open' : 'Locked'}</span> : progress.ready ? <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 uppercase tracking-wide text-[#34D399]">Ready</span> : null}
-          {viewer?.is_staff && (
-            <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
-          )}
-          {manualSwitch}
-          <RosterControls prefs={prefs} onChange={onPrefs} legend={false} />
+          <MenuButton label="Manage" items={staffItems} />
+          <RosterControls prefs={prefs} onChange={onPrefs} />
         </div>
       </div>
 
@@ -833,7 +847,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
         {greenNote}
         {chatRow}
         {/* Side */}
-        <div className="rounded-md bg-[#1B2438] px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="rounded-md bg-[#1B2438] px-3 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="text-sm text-[#E6EDF7]">{sideText}</div>
           {viewer?.can_pick_side && (
             <div className="flex gap-1.5">
@@ -863,10 +877,13 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
           {renderTeam(home, !!viewer?.can_edit_home)}
         </div>
 
-        <p className="text-[11px] text-[#8B98B0]">
-          Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense. Your squad's players see the lineup and the plan; league staff and referees see who starts, sits and is out, never the plan; the other squad sees neither. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
-          From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
-        </p>
+        <details className="text-[11px] text-[#8B98B0]">
+          <summary className="cursor-pointer select-none hover:text-[#E6EDF7]">How lineups work</summary>
+          <p className="mt-1.5">
+            Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense. Your squad's players see the lineup and the plan; league staff and referees see who starts, sits and is out, never the plan; the other squad sees neither. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+            From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
+          </p>
+        </details>
       </div>
     </section>
   );

@@ -256,9 +256,9 @@ export function RoleLegend({ className = '' }: { className?: string }) {
 
 /**
  * Display settings for rosters and lineups: one small button that opens a panel with the
- * choices spelled out. `legend` adds the class colour key beside it.
+ * choices spelled out and the class colour key.
  */
-export function RosterControls({ prefs, onChange, legend = true }: { prefs: RosterPrefs; onChange: (p: Partial<RosterPrefs>) => void; legend?: boolean }) {
+export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChange: (p: Partial<RosterPrefs>) => void }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -269,9 +269,7 @@ export function RosterControls({ prefs, onChange, legend = true }: { prefs: Rost
     return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', esc); };
   }, [open]);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-      {legend ? <RoleLegend /> : <span />}
-      <span className="relative" onClick={(e) => e.stopPropagation()}>
+    <span className="relative inline-block" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -289,10 +287,13 @@ export function RosterControls({ prefs, onChange, legend = true }: { prefs: Rost
             <Choice label="Order" hint="support classes first, or by name" value={prefs.sort === 'alpha' ? 'alpha' : 'role'} options={[['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
             <Choice label="View" hint="field draws the in-game characters" value={prefs.view} options={[['list', 'List'], ['field', 'Field (beta)']]} onChange={(view) => onChange({ view })} />
             <Choice label="Skin" hint="site or in-game look" value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />
+            <div>
+              <div className="text-[11px] font-medium text-[#E6EDF7]">Class colours</div>
+              <RoleLegend className="mt-1" />
+            </div>
             <p className="text-[10px] text-[#8B98B0]/80">Only changes how this page looks for you.</p>
           </div>
         )}
-      </span>
-    </div>
+    </span>
   );
 }
