@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { PLAN_CLASSES, ROLE_META, type RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
-import { BucketHeader, Coverage, PlaceMark, PlanClassTag, PlayerName, RosterControls, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
+import { BucketHeader, Coverage, PlaceMark, PlanAckTag, PlanClassTag, PlayerName, RosterControls, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
@@ -31,7 +31,11 @@ interface Member {
   draft_round?: number | null;
 }
 type PlanSide = 'O' | 'D';
-interface Entry { player_id: string; alias: string; ten_man?: TenMan | null; plan_side?: PlanSide | null; plan_class?: RoleKey | null }
+interface Entry {
+  player_id: string; alias: string; ten_man?: TenMan | null; plan_side?: PlanSide | null; plan_class?: RoleKey | null;
+  /** The player's in-game answer (?y / ?n) and what they suggested instead. */
+  plan_ack?: 'yes' | 'no' | null; plan_suggest_side?: PlanSide | null; plan_suggest_class?: RoleKey | null;
+}
 interface Team {
   squad_id: string; name: string; tag: string;
   side: Side | null; team_starting: string | null; team_bench: string | null;
@@ -494,6 +498,9 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
     const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id] || !!classDraft[team.squad_id];
     const plan = canSee ? planFor(team) : {};
     const classes = canSee ? classFor(team) : {};
+    // In-game answers, keyed by player (saved state only: they come from the zone).
+    const acks = new Map<string, Entry>([...(team.lineup?.starting || []), ...(team.lineup?.bench || [])].map((e) => [e.player_id, e]));
+    const ackTag = (pid: string) => { const e = acks.get(pid); return e ? <PlanAckTag ack={e.plan_ack} side={e.plan_suggest_side} cls={e.plan_suggest_class} /> : null; };
     const submitted = isHome ? progress.home_lineup_set : progress.away_lineup_set;
     const full = starting.length >= starters;
     const over = starting.length > starters;
@@ -663,6 +670,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
                                 {blocked && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
                                 {/* Planned notes stay visible but quiet in the Lineup tab; they are edited in Plan. */}
                                 {mode === 'lineup' && <PlanClassTag k={classes[m.player_id]} />}
+                                {ackTag(m.player_id)}
                                 {mode === 'lineup' && <TenTag v={t} />}
                                 {mode === 'plan' && <PlaceMark p={bk.place[m.player_id]} />}
                                 <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
@@ -727,6 +735,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { m
                         <div key={m.player_id} style={sideRail(bk.key)} className={`group flex items-center gap-1.5 whitespace-nowrap ${bk.key === 'all' ? '' : 'pl-2'} ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
                           <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
                           <PlanClassTag k={classes[m.player_id]} />
+                          {ackTag(m.player_id)}
                           <PlaceMark p={bk.place[m.player_id]} />
                           <TenTag v={ten[m.player_id]} />
                           <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">

@@ -132,11 +132,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Strategy fields (10-man, O / D, class) only come from someone on the squad. Anyone else
     // editing (staff from outside it) never saw them, so keep what is stored rather than wiping it.
     const strategy = seesStrategy(sq, viewer);
-    let kept: Record<string, Record<string, unknown>> = {};
-    if (!strategy) {
-      const { data: old } = await supabaseAdmin.from('match_lineups').select('*').eq('match_id', id).eq('squad_id', sq.id);
-      kept = Object.fromEntries((old || []).map((r: any) => [r.player_id, { ten_man: r.ten_man ?? null, plan_side: r.plan_side ?? null, plan_class: r.plan_class ?? null }]));
-    }
+    // The rows as they stand: for staff edits (keep the plan) and for the players' in-game answers.
+    const { data: oldRows } = await supabaseAdmin.from('match_lineups').select('*').eq('match_id', id).eq('squad_id', sq.id);
+    const oldBy = new Map<string, any>((oldRows || []).map((r: any) => [r.player_id, r]));
+    const kept: Record<string, Record<string, unknown>> = strategy ? {} : Object.fromEntries((oldRows || []).map((r: any) => [r.player_id, { ten_man: r.ten_man ?? null, plan_side: r.plan_side ?? null, plan_class: r.plan_class ?? null }]));
     const keptOr = (field: string, given: Record<string, unknown>) => (strategy ? given : Object.fromEntries(Object.entries(kept).map(([pid, v]) => [pid, v[field]])));
     // 10-man plan. Not tied to the slot: once they have gone 10-man the 'in' player is a starter.
     const tenIn = keptOr('ten_man', body.ten_man && typeof body.ten_man === 'object' ? body.ten_man as Record<string, unknown> : {});
@@ -145,9 +144,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const planSide = (pid: string): PlanSide | null => (planIn[pid] === 'O' || planIn[pid] === 'D' ? planIn[pid] as PlanSide : null);
     const classIn = keptOr('plan_class', body.plan_class && typeof body.plan_class === 'object' ? body.plan_class as Record<string, unknown> : {});
     const planClass = (pid: string): PlanClass | null => (isPlanClass(classIn[pid]) ? classIn[pid] : null);
+    // A player's ?y / ?n answer stands while what they were asked (side + class) is unchanged;
+    // a new ask clears it so the zone asks them again.
+    const ack = (pid: string) => {
+      const o = oldBy.get(pid);
+      if (!o || !o.plan_ack || (o.plan_side ?? null) !== planSide(pid) || (o.plan_class ?? null) !== planClass(pid)) {
+        return { plan_ack: null, plan_ack_at: null, plan_suggest_side: null, plan_suggest_class: null };
+      }
+      return { plan_ack: o.plan_ack, plan_ack_at: o.plan_ack_at ?? null, plan_suggest_side: o.plan_suggest_side ?? null, plan_suggest_class: o.plan_suggest_class ?? null };
+    };
+    const row = (player_id: string, slot: 'starting' | 'bench', position: number) => ({
+      match_id: id, squad_id: sq.id, player_id, slot, position,
+      ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), ...ack(player_id),
+      set_by: viewer.id, updated_at: now,
+    });
     const rows: Record<string, unknown>[] = [
-      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), set_by: viewer.id, updated_at: now })),
-      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), set_by: viewer.id, updated_at: now })),
+      ...starting.map((player_id, i) => row(player_id, 'starting', i)),
+      ...bench.map((player_id, i) => row(player_id, 'bench', i)),
     ];
     const { error: delErr } = await supabaseAdmin.from('match_lineups').delete().eq('match_id', id).eq('squad_id', sq.id);
     if (delErr) return fail(delErr);

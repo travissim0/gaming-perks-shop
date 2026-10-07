@@ -52,10 +52,16 @@ export const missingTable = (msg: string | undefined) => /match_setup|match_line
  * Lineup columns added after the table: ten_man (add-match-ten-man.sql) and plan_side
  * (add-match-plan-side.sql). Reads and writes drop whichever one is not there yet.
  */
-export const OPTIONAL_LINEUP_COLS = ['ten_man', 'plan_side', 'plan_class'] as const;
+export const OPTIONAL_LINEUP_COLS = ['ten_man', 'plan_side', 'plan_class', 'plan_ack', 'plan_ack_at', 'plan_suggest_side', 'plan_suggest_class'] as const;
 export type OptionalLineupCol = (typeof OPTIONAL_LINEUP_COLS)[number];
-export const SQL_FOR_COL: Record<OptionalLineupCol, string> = { ten_man: 'add-match-ten-man.sql', plan_side: 'add-match-plan-side.sql', plan_class: 'add-match-plan-class.sql' };
-export const PLAN_LABEL: Record<OptionalLineupCol, string> = { ten_man: '10-man plan', plan_side: 'Offense / defense plan', plan_class: 'Class plan' };
+export const SQL_FOR_COL: Record<OptionalLineupCol, string> = {
+  ten_man: 'add-match-ten-man.sql', plan_side: 'add-match-plan-side.sql', plan_class: 'add-match-plan-class.sql',
+  plan_ack: 'add-match-plan-ack.sql', plan_ack_at: 'add-match-plan-ack.sql', plan_suggest_side: 'add-match-plan-ack.sql', plan_suggest_class: 'add-match-plan-ack.sql',
+};
+export const PLAN_LABEL: Record<OptionalLineupCol, string> = {
+  ten_man: '10-man plan', plan_side: 'Offense / defense plan', plan_class: 'Class plan',
+  plan_ack: 'In-game answer', plan_ack_at: 'In-game answer', plan_suggest_side: 'In-game answer', plan_suggest_class: 'In-game answer',
+};
 /** The optional column an error complains about, if any. */
 export const missingLineupCol = (msg: string | undefined): OptionalLineupCol | null =>
   OPTIONAL_LINEUP_COLS.find((c) => new RegExp(c, 'i').test(String(msg || ''))) || null;
@@ -68,6 +74,8 @@ export type PlanSide = 'O' | 'D';
 /** The class the captain plans a player on for this match (ctf-roles RoleKey, 10-man infil = IFL). Planning only. */
 export const PLAN_CLASSES = ['INF', 'HVY', 'SL', 'MED', 'ENG', 'IFL', 'JT'] as const;
 export type PlanClass = (typeof PLAN_CLASSES)[number];
+/** A player's in-game answer to their captain's plan (?y / ?n in the zone). */
+export type PlanAck = 'yes' | 'no';
 export const isPlanClass = (v: unknown): v is PlanClass => typeof v === 'string' && (PLAN_CLASSES as readonly string[]).includes(v);
 
 /**
@@ -270,7 +278,11 @@ export function buildPayload(
   const homeNames = teamNames(home, side);
   const awayNames = teamNames(away, side ? OTHER[side] : null);
 
-  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null; plan_side: PlanSide | null; plan_class: PlanClass | null };
+  type Entry = {
+    player_id: string; alias: string; position: number; ten_man: TenMan | null; plan_side: PlanSide | null; plan_class: PlanClass | null;
+    /** The player's answer in game, and what they suggested instead on a no. */
+    plan_ack: PlanAck | null; plan_suggest_side: PlanSide | null; plan_suggest_class: PlanClass | null;
+  };
   const bySquad: Record<string, { starting: Entry[]; bench: Entry[] }> = {};
   for (const sq of [home, away]) if (sq) bySquad[sq.id] = { starting: [], bench: [] };
   const aliasOf = new Map<string, string>();
@@ -278,7 +290,10 @@ export function buildPayload(
   lineupRows.forEach((l: any) => {
     const b = bySquad[l.squad_id];
     if (!b) return;
-    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null, plan_side: l.plan_side === 'O' || l.plan_side === 'D' ? l.plan_side : null, plan_class: isPlanClass(l.plan_class) ? l.plan_class : null });
+    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null, plan_side: l.plan_side === 'O' || l.plan_side === 'D' ? l.plan_side : null, plan_class: isPlanClass(l.plan_class) ? l.plan_class : null,
+      plan_ack: l.plan_ack === 'yes' || l.plan_ack === 'no' ? l.plan_ack : null,
+      plan_suggest_side: l.plan_suggest_side === 'O' || l.plan_suggest_side === 'D' ? l.plan_suggest_side : null,
+      plan_suggest_class: isPlanClass(l.plan_suggest_class) ? l.plan_suggest_class : null });
   });
   Object.values(bySquad).forEach((b) => { b.starting.sort((x, y) => x.position - y.position); b.bench.sort((x, y) => x.position - y.position); });
 
@@ -304,7 +319,7 @@ export function buildPayload(
   const stratHome = seesStrategy(home, viewer);
   const stratAway = seesStrategy(away, viewer);
   const noStrategy = (b: { starting: Entry[]; bench: Entry[] }) => {
-    const strip = (e: Entry): Entry => ({ ...e, ten_man: null, plan_side: null, plan_class: null });
+    const strip = (e: Entry): Entry => ({ ...e, ten_man: null, plan_side: null, plan_class: null, plan_ack: null, plan_suggest_side: null, plan_suggest_class: null });
     return { starting: b.starting.map(strip), bench: b.bench.map(strip) };
   };
   const subWindow = isSubWindow(match);
@@ -322,16 +337,20 @@ export function buildPayload(
         }
       : null;
 
-  const players: { alias: string; player_id: string; squad_tag: string; team: string; spec: boolean; slot: 'starting' | 'bench' }[] = [];
+  // Each player's own plan rides along for the zone only: it whispers it to that player before the
+  // match and asks ?y / ?n. Nobody else is told, and no other viewer gets these fields.
+  type ClientPlayer = { alias: string; player_id: string; squad_tag: string; team: string; spec: boolean; slot: 'starting' | 'bench'; plan_side: PlanSide | null; plan_class: PlanClass | null; plan_ack: PlanAck | null };
+  const players: ClientPlayer[] = [];
+  const planOf = (p: Entry) => ({ plan_side: p.plan_side, plan_class: p.plan_class, plan_ack: p.plan_ack });
   if (full) {
     const push = (sq: Squad | null, names: { starting: string | null; bench: string | null }) => {
       if (!sq || !names.starting || !names.bench) return;
       bySquad[sq.id].starting.forEach((p) => {
         // FS Green safety net: a player who may not play is never placed, whatever the lineup rows say.
-        if (green?.blocked.has(p.player_id)) players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench' });
-        else players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.starting!, spec: false, slot: 'starting' });
+        if (green?.blocked.has(p.player_id)) players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench', ...planOf(p) });
+        else players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.starting!, spec: false, slot: 'starting', ...planOf(p) });
       });
-      bySquad[sq.id].bench.forEach((p) => players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench' }));
+      bySquad[sq.id].bench.forEach((p) => players.push({ alias: p.alias, player_id: p.player_id, squad_tag: tagOf(sq), team: names.bench!, spec: true, slot: 'bench', ...planOf(p) }));
     };
     push(home, homeNames);
     push(away, awayNames);

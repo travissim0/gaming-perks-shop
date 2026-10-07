@@ -137,6 +137,18 @@ export function PlanClassTag({ k }: { k?: RoleKey | null }) {
   );
 }
 
+/** The player's in-game answer to their plan: a check for ?y, what they'd rather play for ?n. */
+export function PlanAckTag({ ack, side, cls }: { ack?: 'yes' | 'no' | null; side?: 'O' | 'D' | null; cls?: RoleKey | null }) {
+  if (!ack) return null;
+  if (ack === 'yes') return <span className="shrink-0 text-[11px] font-bold leading-none text-[#34D399]" title="Accepted in game (?y)">✓</span>;
+  const want = [side, cls ? ROLE_META[cls].short : null].filter(Boolean).join(' ');
+  return (
+    <span className="shrink-0 rounded-sm bg-[#F59E0B]/15 px-1 text-[9px] font-semibold leading-[14px] text-[#F59E0B]" title={want ? `Declined in game; would rather play ${want}` : 'Declined in game (?n)'}>
+      {want ? `wants ${want}` : 'declined'}
+    </span>
+  );
+}
+
 /** Tiny tags: mains bright, secondaries dim. Sides prefix the class ("D INF"). */
 export function RoleTags({ roles, src, max = 4, className = '' }: { roles?: PlayerRoles; src: ColorSource; max?: number; className?: string }) {
   const tags = tagsFor(roles, src);

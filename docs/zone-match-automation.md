@@ -191,6 +191,28 @@ handling beyond reconciling the desired state.
 Keep the ids you've already announced per match; for each new one, send `message` to the
 arena instead of a generic "Lineup updated from freeinf.org (1 player moved)".
 
+## Captain's plan (`?y` / `?n`)
+
+Captains can plan a side (offense / defense) and a class for each player on the match page. That
+plan is private to the squad: league staff and referees don't see it on the site. The zone gets
+each listed player's **own** plan in `client.players[]` so it can ask them privately:
+
+```json
+{ "alias": "Soup", "team": "TSTA T", "spec": false, "slot": "starting",
+  "plan_side": "D", "plan_class": "MED", "plan_ack": null }
+```
+
+- `plan_side`: `"O"` / `"D"` / null. `plan_class`: `INF HVY SL MED ENG IFL JT` / null.
+  `plan_ack`: `"yes"` / `"no"` once they've answered, else null.
+- Before kick-off, the zone whispers each player in the arena with a plan and no answer:
+  "Your captain has requested you play DEFENSE as Field Medic." plus how to answer. Never to anyone else.
+- `?y` accepts and switches them to that class (the `?swap` path, free). `?n` declines; `?n d`, `?n med`,
+  `?n o hvy` suggest what they'd rather play. Replies are only taken before kick-off.
+- The answer goes to `POST /api/matches/{id}/plan-response` (X-Client-Key):
+  `{ "alias": "Soup", "answer": "yes" | "no", "side"?: "O" | "D", "class"?: "MED" }`.
+  The captain sees ✓ or "wants O HVY" next to the player. If the captain changes what that player is
+  asked, the answer is cleared and the zone asks again. `*matchauto ask` re-asks everyone unanswered.
+
 ## Server calls used
 
 All public in the Infantry server source (`dotnetcore/Server/Game`):
