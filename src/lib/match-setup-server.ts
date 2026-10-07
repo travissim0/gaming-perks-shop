@@ -216,6 +216,17 @@ export async function viewerFor(request: NextRequest): Promise<Viewer> {
   };
 }
 
+/** On this squad's roster (captain, co-captain or player)? */
+export const memberOf = (sq: Squad | null | undefined, userId: string | null) =>
+  !!sq && !!userId && sq.members.some((m) => m.player_id === userId);
+
+/**
+ * Who may see a squad's strategy: its planned classes, offense / defense plan and 10-man marks.
+ * Only the squad itself (captains, co-captains and players). Not league staff or referees
+ * unless they are on that roster, and never the zone: they get start / bench / out only.
+ */
+export const seesStrategy = (sq: Squad | null | undefined, viewer: Viewer) => memberOf(sq, viewer.id);
+
 export const leads = (sq: Squad | null | undefined, userId: string | null) =>
   !!sq && !!userId && (sq.captain_id === userId || sq.members.some((m) => m.player_id === userId && m.role !== 'player'));
 
@@ -276,24 +287,38 @@ export function buildPayload(
   const ready = !!side && homeSet && awaySet;
 
   // ---- Visibility ---------------------------------------------------------
+  // Two tiers per squad. The lineup (start / bench / out): the squad itself, staff, the game
+  // client, and referees once the side is released. The strategy (planned classes, offense /
+  // defense, 10-man marks): the squad itself only (seesStrategy). An admin who plays on one of the
+  // two squads sees the other squad's start / bench / out, never its strategy.
   const full = viewer.staff || viewer.client;
   const leadsHome = leads(home, viewer.id);
   const leadsAway = leads(away, viewer.id);
+  const memberHome = memberOf(home, viewer.id);
+  const memberAway = memberOf(away, viewer.id);
   const released = sideReleased(match);
   const refSees = viewer.referee && released;
-  const seeSide = full || leadsHome || released;
-  const seeHome = full || leadsHome || refSees;
-  const seeAway = full || leadsAway || refSees;
+  const seeSide = full || memberHome || released;
+  const seeHome = full || memberHome || refSees;
+  const seeAway = full || memberAway || refSees;
+  const stratHome = seesStrategy(home, viewer);
+  const stratAway = seesStrategy(away, viewer);
+  const noStrategy = (b: { starting: Entry[]; bench: Entry[] }) => {
+    const strip = (e: Entry): Entry => ({ ...e, ten_man: null, plan_side: null, plan_class: null });
+    return { starting: b.starting.map(strip), bench: b.bench.map(strip) };
+  };
   const subWindow = isSubWindow(match);
 
-  const teamBlock = (sq: Squad | null, s: Side | null, names: { starting: string | null; bench: string | null }, reveal: boolean) =>
+  const teamBlock = (sq: Squad | null, s: Side | null, names: { starting: string | null; bench: string | null }, reveal: boolean, strategy: boolean) =>
     sq
       ? {
           squad_id: sq.id, name: sq.name, tag: tagOf(sq), roster: sq.members,
           side: seeSide ? s : null,
           team_starting: seeSide ? names.starting : null,
           team_bench: seeSide ? names.bench : null,
-          lineup: reveal ? bySquad[sq.id] : null,
+          lineup: reveal ? (strategy ? bySquad[sq.id] : noStrategy(bySquad[sq.id])) : null,
+          /** Whether `lineup` carries the strategy fields (planned classes, O / D, 10-man) for this viewer. */
+          strategy: reveal && strategy,
         }
       : null;
 
@@ -346,8 +371,8 @@ export function buildPayload(
      */
     match_chat: viewer.staff || viewer.referee || leadsHome || leadsAway ? (setupRow?.ref_chat || null) : null,
     can_see_match_chat: viewer.staff || viewer.referee || leadsHome || leadsAway,
-    home: teamBlock(home, side, homeNames, seeHome),
-    away: teamBlock(away, side ? OTHER[side] : null, awayNames, seeAway),
+    home: teamBlock(home, side, homeNames, seeHome, stratHome),
+    away: teamBlock(away, side ? OTHER[side] : null, awayNames, seeAway, stratAway),
     /** Public progress flags — no values. */
     progress: { side_picked: !!side, home_lineup_set: homeSet, away_lineup_set: awaySet, ready },
     /** Starters per side (10v10). */
@@ -379,6 +404,8 @@ export function buildPayload(
           is_referee: viewer.referee,
           leads_home: leadsHome,
           leads_away: leadsAway,
+          member_home: memberHome,
+          member_away: memberAway,
           can_pick_side: viewer.staff || (!locked && leadsHome),
           can_edit_home: viewer.staff || (!locked && leadsHome),
           can_edit_away: viewer.staff || (!locked && leadsAway),

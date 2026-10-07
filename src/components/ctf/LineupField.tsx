@@ -24,7 +24,8 @@ import type { RolesMap } from '@/components/ctf/RosterRoles';
 
 type Slot = 'starting' | 'bench' | 'out';
 type Side = 'titan' | 'collective';
-type Zone = 'O' | 'D' | 'bench' | 'out';
+/** S = starting, without an offense / defense split (viewers who don't see the squad's plan). */
+type Zone = 'O' | 'D' | 'S' | 'bench' | 'out';
 
 export interface FieldPlayer {
   player_id: string;
@@ -203,13 +204,15 @@ const SIDE_TINT: Record<SideLetter, string> = { O: '#FB923C', D: '#60A5FA' };
 const TILE_W = 72;
 
 export default function LineupField({
-  side, players, roles, src, canEdit, starters, focus, plan, onSlot, onPlan, classes, onClass, onTen,
+  side, players, roles, src, canEdit, strategy, starters, focus, plan, onSlot, onPlan, classes, onClass, onTen,
 }: {
   side: Side | null;
   players: FieldPlayer[];
   roles: RolesMap;
   src: ColorSource;
   canEdit: boolean;
+  /** Sees this squad's plan (its own members only): offense / defense halves, class and 10M. */
+  strategy: boolean;
   starters: number;
   focus: RoleKey | null;
   /** The captain's saved / unsaved offense-defense plan. */
@@ -240,13 +243,13 @@ export default function LineupField({
     const p = players.find((x) => x.player_id === id);
     if (!p) return;
     setSel(null);
-    if (zone === 'O' || zone === 'D') {
+    if (zone === 'O' || zone === 'D' || zone === 'S') {
       if (p.slot !== 'starting') {
         if (p.blocked) { toast.error('FS Green: only the captain and later-round picks can start'); return; }
         if (starting.length >= starters) { toast.error(`${starters} starters already: bench someone first`); return; }
         onSlot(id, 'starting');
       }
-      onPlan(id, zone);
+      if (zone !== 'S') onPlan(id, zone);
       return;
     }
     if (p.slot !== zone) onSlot(id, zone);
@@ -318,12 +321,29 @@ export default function LineupField({
     </div>
   );
 
+  const startingZone = (
+    <div
+      {...zoneProps('S')}
+      className={`relative min-h-[150px] rounded-md bg-[#34D399]/[0.06] p-1.5 transition-colors ${over === 'S' ? 'ring-1 ring-inset ring-[#34D399]/50' : ''}`}
+    >
+      <div className="mb-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.15em] text-[#34D399]">
+        Starting <span className="font-normal tracking-normal text-[#8B98B0] tabular-nums">{starting.length}/{starters}</span>
+      </div>
+      <div className="pointer-events-none absolute left-1 top-5"><Flag side={side} /></div>
+      <div className="flex flex-wrap justify-center pl-[84px]">
+        {starting.map((p) => tile(p, FACE.south))}
+      </div>
+      {starting.length === 0 && <p className="mt-8 pl-[84px] text-center text-[11px] text-[#8B98B0]/60">{canEdit ? 'Drag players here' : 'Nobody yet'}</p>}
+    </div>
+  );
+
   const picked = canEdit && sel ? players.find((p) => p.player_id === sel) || null : null;
   const chip = (on: boolean) => `rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${on ? '' : 'opacity-70 hover:opacity-100'}`;
   const actionBar = picked && (
     <div className="sticky top-0 z-20 rounded-md bg-[#0B0F1A] px-2 py-1.5 ring-1 ring-[#22D3EE]/40" onClick={(e) => e.stopPropagation()}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-[#8B98B0]">
         <span className="font-semibold text-[#E6EDF7]">{picked.alias}</span>
+        {strategy && (<>
         <span className="flex flex-wrap items-center gap-1">
           Class
           {PLAN_CLASSES.map((c) => {
@@ -346,13 +366,14 @@ export default function LineupField({
             >{v ?? '–'}</button>
           ))}
         </span>
+        </>)}
         <span className="flex items-center gap-1">
           {picked.slot !== 'bench' && <button type="button" onClick={() => move(picked.player_id, 'bench')} className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[11px] text-[#22D3EE] hover:bg-[#22D3EE]/25">Bench</button>}
           {picked.slot !== 'out' && <button type="button" onClick={() => move(picked.player_id, 'out')} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#E6EDF7] hover:bg-white/10">Out</button>}
           <button type="button" onClick={() => setSel(null)} className="px-1 text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Close">✕</button>
         </span>
       </div>
-      <p className="mt-0.5 text-[10px] text-[#8B98B0]/70">Tap Defense or Offense to start them there.</p>
+      <p className="mt-0.5 text-[10px] text-[#8B98B0]/70">{strategy ? 'Tap Defense or Offense to start them there.' : 'Tap Starting to start them.'}</p>
     </div>
   );
 
@@ -360,10 +381,12 @@ export default function LineupField({
     <div className="space-y-1.5 px-2 py-2" onClick={() => setSel(null)}>
       <style>{ANIM_CSS}</style>
       {actionBar}
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-        {half('D', defense)}
-        {half('O', offense)}
-      </div>
+      {strategy ? (
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {half('D', defense)}
+          {half('O', offense)}
+        </div>
+      ) : startingZone}
       <div
         {...zoneProps('bench')}
         className={`rounded-md bg-black/20 p-1.5 transition-colors ${over === 'bench' ? 'ring-1 ring-inset ring-[#22D3EE]/50' : ''}`}

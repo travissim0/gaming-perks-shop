@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { PLAN_CLASSES, ROLE_META, type RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
-import { BucketHeader, Coverage, PlaceMark, PlanClassTag, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
+import { BucketHeader, Coverage, PlaceMark, PlanClassTag, PlayerName, RosterControls, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
@@ -38,6 +38,8 @@ interface Team {
   roster: Member[];
   /** Only present when the viewer may see this squad's lineup. */
   lineup: { starting: Entry[]; bench: Entry[] } | null;
+  /** The lineup carries this squad's strategy (classes, O / D, 10-man): only for its own members. */
+  strategy?: boolean;
 }
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
 interface Setup {
@@ -58,6 +60,7 @@ interface Setup {
   can_see_match_chat?: boolean;
   viewer: {
     is_staff: boolean; is_referee?: boolean; leads_home: boolean; leads_away: boolean;
+    member_home?: boolean; member_away?: boolean;
     can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean;
     can_sub_home?: boolean; can_sub_away?: boolean; sub_window?: boolean;
     can_set_match_chat?: boolean;
@@ -76,7 +79,7 @@ const Flag = ({ on, label }: { on: boolean; label: string }) => (
   </span>
 );
 
-export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: string; user: any; roles: RolesMap; prefs: RosterPrefs }) {
+export default function MatchSetup({ matchId, user, roles, prefs, onPrefs }: { matchId: string; user: any; roles: RolesMap; prefs: RosterPrefs; onPrefs: (p: Partial<RosterPrefs>) => void }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -345,7 +348,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       The arena is not opened and nobody is placed automatically. Referees: open <span className="font-mono">{match.arena || 'the match arena'}</span>, lock it, and move players onto their teams by hand from the lineups below.
     </div>
   );
-  const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || (!!viewer.is_referee && setup.side_released));
+  // Squad members (not just captains) see their own squad's lineup and plan, read-only.
+  const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || !!viewer.member_home || !!viewer.member_away || (!!viewer.is_referee && setup.side_released));
   const subs = setup.subs || [];
   const makeSub = (team: Team) => {
     const pick = subPick[team.squad_id];
@@ -400,7 +404,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         {chatRow && <div className="px-4 pb-2">{chatRow}</div>}
         <p className="px-4 pb-3 text-[11px] text-[#8B98B0]">
           {setup.side_released ? 'Sides are out. ' : `Sides are released ${revealAt}. `}
-          Lineups stay private to each squad's captains and league staff.
+          Lineups stay private to each squad, league staff and the referees; each squad's plan (classes, 10-man, offense / defense) only to its own players.
         </p>
       </section>
     );
@@ -483,7 +487,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     const starting = roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = roster.filter((m) => slots[m.player_id] === 'bench');
     const outList = roster.filter((m) => slots[m.player_id] === 'out');
-    const mode = modes[team.squad_id] || 'lineup';
+    // Strategy (Plan tab, planned classes, O / D, 10-man) only for the squad's own members.
+    const strategy = !!team.strategy;
+    const mode = strategy ? modes[team.squad_id] || 'lineup' : 'lineup';
     const setMode = setModes;
     const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id] || !!classDraft[team.squad_id];
     const plan = canSee ? planFor(team) : {};
@@ -578,6 +584,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             roles={roles}
             src={src}
             canEdit={canEdit}
+            strategy={strategy}
             starters={starters}
             focus={f}
             onSlot={(pid, slot) => setSlot(team, pid, slot)}
@@ -590,6 +597,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         ) : canEdit ? (
           <div className={game ? 'pb-0.5' : ''}>
             {/* Lineup (who starts, sits, is out: what the zone uses) vs Plan (optional, squad-only notes). */}
+            {strategy ? (
             <div className="flex items-center justify-between gap-2 px-3 pt-1.5 pb-1">
               <span className="inline-flex rounded bg-[#0B0F1A] p-px text-[11px]">
                 {(['lineup', 'plan'] as const).map((k) => (
@@ -607,6 +615,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                 {mode === 'lineup' ? 'Start / bench / out: what the zone uses' : 'Optional notes for your squad: class, 10-man, O / D. The zone ignores these.'}
               </span>
             </div>
+            ) : (
+              <p className="px-3 pt-1.5 pb-1 text-[10px] text-[#8B98B0]/80">Start / bench / out only. {team.tag}&apos;s plan (classes, 10-man, offense / defense) is private to its own players.</p>
+            )}
             {([
               ['starting', 'Starting', `${starting.length}/${starters}`, '#34D399'],
               ['bench', 'Bench', String(bench.length), '#22D3EE'],
@@ -804,6 +815,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             <button type="button" onClick={() => post({ action: 'swap_home' }, 'Home and away swapped')} disabled={busy !== null} className="text-[#F59E0B] hover:text-[#FBBF24] disabled:opacity-50">Swap home/away</button>
           )}
           {manualSwitch}
+          <RosterControls prefs={prefs} onChange={onPrefs} legend={false} />
         </div>
       </div>
 
@@ -843,7 +855,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense, all just for your squad. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+          Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense. Your squad's players see the lineup and the plan; league staff and referees see who starts, sits and is out, never the plan; the other squad sees neither. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
         </p>
       </div>

@@ -206,40 +206,80 @@ export function Coverage({ ids, roles, src, label, focus, onFocus }: {
 export const dimmed = (roles: PlayerRoles | undefined, focus: RoleKey | null, src: ColorSource) =>
   !!focus && !covers(roles, focus, src);
 
-function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+/** One labelled choice in the Display panel: full-width buttons, easy to hit. */
+function Choice<T extends string>({ label, hint, value, options, onChange }: { label: string; hint: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
-    <span className="inline-flex rounded bg-[#0B0F1A] p-px">
-      {options.map(([v, l]) => (
-        <button key={v} type="button" onClick={() => onChange(v)} className={`rounded-sm px-1.5 leading-[18px] transition-colors ${value === v ? 'bg-white/10 text-[#E6EDF7]' : 'text-[#8B98B0] hover:text-[#E6EDF7]'}`}>{l}</button>
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-medium text-[#E6EDF7]">{label}</span>
+        <span className="text-[10px] text-[#8B98B0]">{hint}</span>
+      </div>
+      <div className="mt-1 grid gap-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+        {options.map(([v, l]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(v)}
+            className={`rounded-md px-2 py-1 text-xs transition-colors ${value === v ? 'bg-[#22D3EE]/15 text-[#22D3EE] ring-1 ring-[#22D3EE]/40' : 'bg-white/5 text-[#8B98B0] hover:bg-white/10 hover:text-[#E6EDF7]'}`}
+          >{l}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The class colour key: a dot and short name per class. */
+export function RoleLegend({ className = '' }: { className?: string }) {
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] ${className}`}>
+      {ROLE_ORDER.map((k) => (
+        <span key={k} className="inline-flex items-center gap-1" title={ROLE_META[k].label}>
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ROLE_META[k].color }} />
+          <span style={{ color: ROLE_META[k].color }}>{ROLE_META[k].short}</span>
+        </span>
       ))}
     </span>
   );
 }
 
-/** Colour source, sort, skin, and the colour legend. */
-export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChange: (p: Partial<RosterPrefs>) => void }) {
+/**
+ * Display settings for rosters and lineups: one small button that opens a panel with the
+ * choices spelled out. `legend` adds the class colour key beside it.
+ */
+export function RosterControls({ prefs, onChange, legend = true }: { prefs: RosterPrefs; onChange: (p: Partial<RosterPrefs>) => void; legend?: boolean }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-[#8B98B0]">
-      <span className="inline-flex items-center gap-1" title="Draft = their league registration (mains, then secondaries). Mix = what they actually played in CTF mixes.">
-        Colour <Seg value={prefs.color} options={[['draft', 'Draft'], ['mix', 'Mixes']]} onChange={(color) => onChange({ color })} />
-      </span>
-      <span className="inline-flex items-center gap-1">
-        Order <Seg value={prefs.sort === 'alpha' ? 'alpha' : 'role'} options={[['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
-      </span>
-      <span className="inline-flex items-center gap-1">
-        Skin <Seg value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />
-      </span>
-      <span className="inline-flex items-center gap-1" title="Field: lineups drawn with the in-game characters and flag. Experimental.">
-        View <Seg value={prefs.view} options={[['list', 'List'], ['field', 'Field (beta)']]} onChange={(view) => onChange({ view })} />
-      </span>
-      <span className="inline-flex flex-wrap items-center gap-x-1.5">
-        {ROLE_ORDER.map((k) => (
-          <span key={k} className="inline-flex items-center gap-0.5" title={ROLE_META[k].label}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ROLE_META[k].color }} />
-            <span style={{ color: ROLE_META[k].color }}>{ROLE_META[k].short}</span>
-          </span>
-        ))}
-        <span className="text-[#FB923C]" title="Offense lean">O</span><span className="text-[#60A5FA]" title="Defense lean">D</span>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+      {legend ? <RoleLegend /> : <span />}
+      <span className="relative" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors ${open ? 'bg-white/10 text-[#E6EDF7]' : 'bg-white/5 text-[#8B98B0] hover:bg-white/10 hover:text-[#E6EDF7]'}`}
+          title="How rosters and lineups are shown (just for you)"
+        >
+          <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><path d="M2 4h12M2 8h12M2 12h12" /><circle cx="5" cy="4" r="1.5" fill="currentColor" /><circle cx="11" cy="8" r="1.5" fill="currentColor" /><circle cx="7" cy="12" r="1.5" fill="currentColor" /></svg>
+          Display
+          <span className="text-[#8B98B0]/80">{prefs.color === 'mix' ? 'Mixes' : 'Draft'} · {prefs.view === 'field' ? 'Field' : 'List'}</span>
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full z-40 mt-1 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-lg bg-[#0B0F1A] p-3 shadow-xl ring-1 ring-white/10">
+            <Choice label="Colour names by" hint="draft roles or mix play" value={prefs.color} options={[['draft', 'Draft'], ['mix', 'Mixes']]} onChange={(color) => onChange({ color })} />
+            <Choice label="Order" hint="support classes first, or by name" value={prefs.sort === 'alpha' ? 'alpha' : 'role'} options={[['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
+            <Choice label="View" hint="field draws the in-game characters" value={prefs.view} options={[['list', 'List'], ['field', 'Field (beta)']]} onChange={(view) => onChange({ view })} />
+            <Choice label="Skin" hint="site or in-game look" value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />
+            <p className="text-[10px] text-[#8B98B0]/80">Only changes how this page looks for you.</p>
+          </div>
+        )}
       </span>
     </div>
   );

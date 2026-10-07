@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, supabaseAdmin, viewerFor,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor,
   PLAN_LABEL, SQL_FOR_COL, isPlanClass, type PlanClass, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
 
@@ -129,12 +129,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (bad.length) return NextResponse.json({ error: `This is an FS Green match: only the captain and round ${green.minRound}+ picks can start. ${bad.join(', ')} ${bad.length === 1 ? 'was' : 'were'} drafted in rounds 1–${green.minRound - 1} and stay${bad.length === 1 ? 's' : ''} on the bench.` }, { status: 400 });
     }
 
+    // Strategy fields (10-man, O / D, class) only come from someone on the squad. Anyone else
+    // editing (staff from outside it) never saw them, so keep what is stored rather than wiping it.
+    const strategy = seesStrategy(sq, viewer);
+    let kept: Record<string, Record<string, unknown>> = {};
+    if (!strategy) {
+      const { data: old } = await supabaseAdmin.from('match_lineups').select('*').eq('match_id', id).eq('squad_id', sq.id);
+      kept = Object.fromEntries((old || []).map((r: any) => [r.player_id, { ten_man: r.ten_man ?? null, plan_side: r.plan_side ?? null, plan_class: r.plan_class ?? null }]));
+    }
+    const keptOr = (field: string, given: Record<string, unknown>) => (strategy ? given : Object.fromEntries(Object.entries(kept).map(([pid, v]) => [pid, v[field]])));
     // 10-man plan. Not tied to the slot: once they have gone 10-man the 'in' player is a starter.
-    const tenIn = body.ten_man && typeof body.ten_man === 'object' ? body.ten_man as Record<string, unknown> : {};
+    const tenIn = keptOr('ten_man', body.ten_man && typeof body.ten_man === 'object' ? body.ten_man as Record<string, unknown> : {});
     const tenMan = (pid: string): TenMan | null => (tenIn[pid] === 'in' || tenIn[pid] === 'out' ? tenIn[pid] as TenMan : null);
-    const planIn = body.plan_side && typeof body.plan_side === 'object' ? body.plan_side as Record<string, unknown> : {};
+    const planIn = keptOr('plan_side', body.plan_side && typeof body.plan_side === 'object' ? body.plan_side as Record<string, unknown> : {});
     const planSide = (pid: string): PlanSide | null => (planIn[pid] === 'O' || planIn[pid] === 'D' ? planIn[pid] as PlanSide : null);
-    const classIn = body.plan_class && typeof body.plan_class === 'object' ? body.plan_class as Record<string, unknown> : {};
+    const classIn = keptOr('plan_class', body.plan_class && typeof body.plan_class === 'object' ? body.plan_class as Record<string, unknown> : {});
     const planClass = (pid: string): PlanClass | null => (isPlanClass(classIn[pid]) ? classIn[pid] : null);
     const rows: Record<string, unknown>[] = [
       ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), set_by: viewer.id, updated_at: now })),

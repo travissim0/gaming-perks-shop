@@ -815,7 +815,7 @@ export default function MatchDetailPage() {
       {/* Side + lineups (both teams set, not yet played) */}
       {match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
         // Re-mount when the time changes so the lock and side-release wording follow it.
-        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} roles={roles} prefs={prefs} />
+        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} roles={roles} prefs={prefs} onPrefs={setPrefs} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
