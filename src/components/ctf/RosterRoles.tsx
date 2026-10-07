@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, primaryRole, roleColor, roleRank, rolesTitle, sideLean, tagsFor,
-  type ColorSource, type PlayerRoles, type RoleKey,
+  BUCKET_LABEL, COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, primaryRole, roleColor, roleRank, rolesTitle, sideBucket, sideLean, tagsFor,
+  type ColorSource, type PlayerRoles, type RoleKey, type SideBucket,
 } from '@/lib/ctf-roles';
 
 /**
@@ -16,13 +16,14 @@ export type RolesMap = Record<string, PlayerRoles>;
 export interface RosterPrefs {
   /** Colour and tag names from the draft registration or from mix play. */
   color: ColorSource;
-  sort: 'alpha' | 'role';
+  /** 'side' = grouped into offense / defense / either, support roles first within each. */
+  sort: 'side' | 'role' | 'alpha';
   /** 'game' = black, tight, small type, closer to the in-game player list. */
   skin: 'site' | 'game';
 }
 
-const PREFS_KEY = 'match-roster-prefs';
-const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'alpha', skin: 'site' };
+const PREFS_KEY = 'match-roster-prefs-v2';
+const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'side', skin: 'site' };
 
 /** Per-viewer view settings, remembered in this browser when it allows it. */
 export function useRosterPrefs(): [RosterPrefs, (p: Partial<RosterPrefs>) => void] {
@@ -45,8 +46,35 @@ export function useRosterPrefs(): [RosterPrefs, (p: Partial<RosterPrefs>) => voi
 
 /** Sort players for display: as given (alpha), or support roles first. */
 export function sortByPrefs<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs): T[] {
-  if (prefs.sort !== 'role') return list;
+  if (prefs.sort === 'alpha') return list;
   return [...list].sort((a, b) => roleRank(roles[idOf(a)], prefs.color) - roleRank(roles[idOf(b)], prefs.color) || a.alias.localeCompare(b.alias));
+}
+
+/**
+ * Offense / defense / either buckets from each player's lean (mixes, else draft sides).
+ * One bucket holding everyone when the viewer isn't sorting by side. Empty buckets are dropped.
+ */
+export function bucketBySide<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs): { key: SideBucket | 'all'; label: string; items: T[] }[] {
+  const sorted = sortByPrefs(list, idOf, roles, prefs);
+  if (prefs.sort !== 'side') return [{ key: 'all', label: '', items: sorted }];
+  return (['O', 'D', 'F'] as SideBucket[])
+    .map((k) => ({ key: k, label: BUCKET_LABEL[k], items: sorted.filter((x) => sideBucket(roles[idOf(x)]) === k) }))
+    .filter((b) => b.items.length > 0);
+}
+
+/** A bucket's header: name, head count, and the support roles in it (mains only). */
+export function BucketHeader({ k, label, ids, roles, src, note, className = '' }: { k: SideBucket | 'all'; label: string; ids: string[]; roles: RolesMap; src: ColorSource; note?: string; className?: string }) {
+  if (k === 'all') return null;
+  const color = k === 'O' ? '#FB923C' : k === 'D' ? '#60A5FA' : '#8B98B0';
+  const support = COVERAGE_ROLES.map((r) => ({ r, n: ids.filter((id) => covers(roles[id], r, src) === 'main').length })).filter((x) => x.n > 0);
+  return (
+    <div className={`flex items-center justify-between gap-2 text-[10px] uppercase tracking-wide leading-4 ${className}`} title={k === 'F' ? 'Plays both sides, or not enough mix games to tell. A suggestion only.' : `Leans ${label.toLowerCase()} in mixes (or by draft roles). A suggestion only.`}>
+      <span style={{ color }}>{label} <span className="text-[#8B98B0] tabular-nums">{ids.length}</span>{note ? <span className="ml-1.5 normal-case tracking-normal text-[#8B98B0]/80">{note}</span> : null}</span>
+      <span className="flex gap-1.5 normal-case tracking-normal opacity-70">
+        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }}>{ROLE_META[x.r].short} {x.n}</span>)}
+      </span>
+    </div>
+  );
 }
 
 export function PlayerName({ alias, roles, src, className = '' }: { alias: string; roles?: PlayerRoles; src: ColorSource; className?: string }) {
@@ -144,7 +172,7 @@ export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChan
         Colour <Seg value={prefs.color} options={[['draft', 'Draft'], ['mix', 'Mixes']]} onChange={(color) => onChange({ color })} />
       </span>
       <span className="inline-flex items-center gap-1">
-        Sort <Seg value={prefs.sort} options={[['alpha', 'A–Z'], ['role', 'Role']]} onChange={(sort) => onChange({ sort })} />
+        Group <Seg value={prefs.sort} options={[['side', 'O / D'], ['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
       </span>
       <span className="inline-flex items-center gap-1">
         Skin <Seg value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />

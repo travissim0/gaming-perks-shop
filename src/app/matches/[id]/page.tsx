@@ -12,7 +12,7 @@ import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
-import { Coverage, PlayerName, RosterControls, SideLean, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
+import { Coverage, PlayerName, RosterControls, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
 import type { RoleKey } from '@/lib/ctf-roles';
 import { canFillCrewRole } from '@/lib/crewRoles';
 import { localDateTimeToIso, noContestReason, playByIso } from '@/lib/schedule';
@@ -796,7 +796,6 @@ export default function MatchDetailPage() {
                         <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
                           <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} />
                         </Link>
-                        <SideLean roles={roles[m.id]} />
                         <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
                       </span>
                     ))}

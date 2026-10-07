@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { RoleKey } from '@/lib/ctf-roles';
-import { Coverage, PlayerName, RoleTags, SideLean, dimmed, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
+import { BucketHeader, Coverage, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
@@ -448,62 +448,87 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         ) : team.roster.length === 0 ? (
           <p className="px-3 py-2 text-sm text-[#8B98B0]">No players on the roster yet.</p>
         ) : canEdit ? (
-          <ul className={game ? 'py-0.5' : 'divide-y divide-white/[0.04]'}>
-            {roster.map((m) => {
-              const s = slots[m.player_id];
-              const r = roles[m.player_id];
-              const t = ten[m.player_id] || null;
-              return (
-                <li key={m.player_id} className={`flex items-center gap-1.5 ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
-                  <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                    <PlayerName alias={m.alias} roles={r} src={src} className="min-w-0 truncate" />
-                    {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
-                    {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
-                    <SideLean roles={r} />
-                    <RoleTags roles={r} src={src} max={3} className="hidden sm:inline-flex shrink-0" />
-                  </span>
-                  {s !== 'out' && (
-                    <button
-                      type="button"
-                      onClick={() => cycleTen(team, m.player_id, s)}
-                      title={t === 'in' ? 'Subs in on 10-man. Click to switch to sub out.' : t === 'out' ? 'Subs out on 10-man. Click to clear.' : s === 'starting' ? 'Mark to sub out on 10-man' : 'Mark to sub in on 10-man (e.g. your 10-man infil)'}
-                      className={`shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/40 hover:text-[#8B98B0]'}`}
-                    >
-                      10M{t ? ` ${t}` : ''}
-                    </button>
-                  )}
-                  <span className="flex shrink-0 gap-px">
-                    {(['starting', 'bench', 'out'] as Slot[]).map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setSlot(team, m.player_id, k)}
-                        disabled={k === 'starting' && ((s !== 'starting' && full) || (isGreen && m.green_ok === false))}
-                        title={k === 'starting' && isGreen && m.green_ok === false ? `FS Green: only the captain and round ${minRound}+ picks can start` : k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
-                        className={`rounded-sm px-1.5 text-[10px] leading-[16px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${s === k
-                          ? k === 'starting' ? 'bg-[#34D399]/20 text-[#34D399]' : k === 'bench' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/10 text-[#E6EDF7]'
-                          : 'text-[#8B98B0] hover:bg-white/5'}`}
-                      >
-                        {k === 'starting' ? 'Start' : k === 'bench' ? 'Bench' : 'Out'}
-                      </button>
-                    ))}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+          <div className={game ? 'py-0.5' : ''}>
+            {bucketBySide(roster, (m) => m.player_id, roles, prefs).map((bk) => (
+              <div key={bk.key}>
+                <BucketHeader
+                  k={bk.key}
+                  label={bk.label}
+                  ids={bk.items.map((m) => m.player_id)}
+                  roles={roles}
+                  src={src}
+                  note={`${bk.items.filter((m) => slots[m.player_id] === 'starting').length} starting`}
+                  className={`px-3 pt-1.5 pb-0.5 ${game ? '' : 'bg-white/[0.02]'}`}
+                />
+                <ul className={game ? '' : 'divide-y divide-white/[0.04]'}>
+                  {bk.items.map((m) => {
+                    const s = slots[m.player_id];
+                    const r = roles[m.player_id];
+                    const t = ten[m.player_id] || null;
+                    return (
+                      <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
+                        <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                          <PlayerName alias={m.alias} roles={r} src={src} className="min-w-0 truncate" />
+                          {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
+                          {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
+                          {/* Details only on hover: the colour carries the class at a glance. */}
+                          <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
+                            <SideLean roles={r} />
+                            <RoleTags roles={r} src={src} max={4} />
+                          </span>
+                        </span>
+                        {s !== 'out' && (
+                          <button
+                            type="button"
+                            onClick={() => cycleTen(team, m.player_id, s)}
+                            title={t === 'in' ? 'Subs in on 10-man. Click to switch to sub out.' : t === 'out' ? 'Subs out on 10-man. Click to clear.' : s === 'starting' ? 'Mark to sub out on 10-man' : 'Mark to sub in on 10-man (e.g. your 10-man infil)'}
+                            className={`shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7] sm:invisible sm:group-hover:visible'}`}
+                          >
+                            10M{t ? ` ${t}` : ''}
+                          </button>
+                        )}
+                        <span className="flex shrink-0 gap-px">
+                          {(['starting', 'bench', 'out'] as Slot[]).map((k) => (
+                            <button
+                              key={k}
+                              type="button"
+                              onClick={() => setSlot(team, m.player_id, k)}
+                              disabled={k === 'starting' && ((s !== 'starting' && full) || (isGreen && m.green_ok === false))}
+                              title={k === 'starting' && isGreen && m.green_ok === false ? `FS Green: only the captain and round ${minRound}+ picks can start` : k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
+                              className={`rounded-sm px-1.5 text-[10px] leading-[16px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${s === k
+                                ? k === 'starting' ? 'bg-[#34D399]/20 text-[#34D399]' : k === 'bench' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/10 text-[#E6EDF7]'
+                                : 'text-[#8B98B0]/70 hover:bg-white/5'}`}
+                            >
+                              {k === 'starting' ? 'Start' : k === 'bench' ? 'Bench' : 'Out'}
+                            </button>
+                          ))}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="px-3 py-1.5 space-y-1.5">
             {([['Starting', starting, team.team_starting], ['Bench', bench, team.team_bench]] as const).map(([label, list, teamName]) => (
               <div key={label}>
                 <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] leading-4">{label}{teamName ? ` · ${teamName}` : ''}</div>
                 <div className={game ? 'text-[11px] leading-[15px]' : 'text-[13px] leading-5'}>
-                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : list.map((m) => (
-                    <div key={m.player_id} className={`flex items-center gap-1.5 whitespace-nowrap ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
-                      <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} className="min-w-0 truncate" />
-                      <SideLean roles={roles[m.player_id]} />
-                      <RoleTags roles={roles[m.player_id]} src={src} max={3} className="hidden sm:inline-flex shrink-0" />
-                      <TenTag v={ten[m.player_id]} />
+                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, prefs).map((bk) => (
+                    <div key={bk.key}>
+                      <BucketHeader k={bk.key} label={bk.label} ids={bk.items.map((m) => m.player_id)} roles={roles} src={src} className="mt-0.5 opacity-80" />
+                      {bk.items.map((m) => (
+                        <div key={m.player_id} className={`group flex items-center gap-1.5 whitespace-nowrap ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
+                          <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} className="min-w-0 truncate" />
+                          <TenTag v={ten[m.player_id]} />
+                          <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
+                            <SideLean roles={roles[m.player_id]} />
+                            <RoleTags roles={roles[m.player_id]} src={src} max={4} />
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

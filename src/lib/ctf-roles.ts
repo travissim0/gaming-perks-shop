@@ -153,6 +153,15 @@ export function sideLean(p: PlayerRoles | null | undefined): { side: SideLetter 
   return null;
 }
 
+export type SideBucket = 'O' | 'D' | 'F';
+export const BUCKET_LABEL: Record<SideBucket, string> = { O: 'Offense', D: 'Defense', F: 'Either side' };
+
+/** Where a player fits best: offense, defense, or either (both / not enough to tell). A suggestion only. */
+export function sideBucket(p: PlayerRoles | null | undefined): SideBucket {
+  const l = sideLean(p);
+  return l && l.side !== 'OD' ? l.side : 'F';
+}
+
 /**
  * Does the player cover this role? 'main', 'sec' or null, from the chosen source.
  * 10-man infil always comes from the draft: the stats can't tell a 10-man infil from any other.
