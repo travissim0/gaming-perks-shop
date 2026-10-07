@@ -18,6 +18,8 @@ export const ROLE_ORDER: RoleKey[] = ['SL', 'MED', 'ENG', '10M', 'IFL', 'HVY', '
 export const SUPPORT_ROLES: RoleKey[] = ['SL', 'MED', 'ENG'];
 /** Classes that only ever play one side in league play. Medics are always defense. */
 export const ROLE_SIDE: Partial<Record<RoleKey, 'O' | 'D'>> = { MED: 'D' };
+/** Classes a captain can plan someone on for a match (10-man infil plays Infiltrator). */
+export const PLAN_CLASSES: RoleKey[] = ['INF', 'HVY', 'SL', 'MED', 'ENG', 'IFL', 'JT'];
 /** The roles worth counting at a glance. */
 export const COVERAGE_ROLES: RoleKey[] = ['SL', 'MED', 'ENG', '10M', 'IFL'];
 

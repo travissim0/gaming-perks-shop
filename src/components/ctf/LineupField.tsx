@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, type CSSProperties, type DragEvent } from 'react';
 import { toast } from 'react-hot-toast';
-import { ROLE_META, covers, placeSides, primaryRole, roleColor, rolesTitle, type ColorSource, type RoleKey, type SideLetter } from '@/lib/ctf-roles';
+import { PLAN_CLASSES, ROLE_META, covers, placeSides, primaryRole, roleColor, rolesTitle, type ColorSource, type RoleKey, type SideLetter } from '@/lib/ctf-roles';
 import type { RolesMap } from '@/components/ctf/RosterRoles';
 
 /**
@@ -201,8 +201,6 @@ const ANIM_CSS = `
 
 const SIDE_TINT: Record<SideLetter, string> = { O: '#FB923C', D: '#60A5FA' };
 const TILE_W = 72;
-/** Classes a captain can plan someone on (10-man infil plays Infiltrator). */
-const PLAN_CLASSES: RoleKey[] = ['INF', 'HVY', 'SL', 'MED', 'ENG', 'IFL', 'JT'];
 
 export default function LineupField({
   side, players, roles, src, canEdit, starters, focus, plan, onSlot, onPlan, classes, onClass, onTen,

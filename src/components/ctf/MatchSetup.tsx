@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
-import type { RoleKey } from '@/lib/ctf-roles';
+import { PLAN_CLASSES, ROLE_META, type RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
 import { BucketHeader, Coverage, PlaceMark, PlanClassTag, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
@@ -92,6 +92,16 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
   const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
   // Coverage role highlighted per squad.
   const [focus, setFocus] = useState<Record<string, RoleKey | null>>({});
+  // List view: the player whose class picker is open.
+  const [classMenu, setClassMenu] = useState<string | null>(null);
+  useEffect(() => {
+    if (!classMenu) return;
+    const close = () => setClassMenu(null);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', esc); };
+  }, [classMenu]);
   // Match chat name being typed by staff / a referee; null = showing the saved one.
   const [chatDraft, setChatDraft] = useState<string | null>(null);
 
@@ -548,7 +558,6 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                       <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
                         <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
                           <PlayerName alias={m.alias} roles={r} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
-                          <PlanClassTag k={classes[m.player_id]} />
                           <PlaceMark p={bk.place[m.player_id]} />
                           {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
                           {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
@@ -558,6 +567,41 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                             <RoleTags roles={r} src={src} max={4} />
                           </span>
                         </span>
+                        {s !== 'out' && (
+                          <span className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setClassMenu((x) => (x === m.player_id ? null : m.player_id)); }}
+                              aria-label={`Planned class for ${m.alias}`}
+                              aria-expanded={classMenu === m.player_id}
+                              title="Class you plan them on for this match (your squad only; the zone ignores it)"
+                              className={`rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${classes[m.player_id] ? '' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
+                              style={classes[m.player_id] ? { color: '#0B0F1A', backgroundColor: ROLE_META[classes[m.player_id]!].color } : undefined}
+                            >
+                              {classes[m.player_id] ? ROLE_META[classes[m.player_id]!].short : 'Class'}
+                            </button>
+                            {classMenu === m.player_id && (
+                              <span className="absolute right-0 top-full z-30 mt-0.5 flex gap-0.5 rounded-md bg-[#0B0F1A] p-1 shadow-lg ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
+                                {PLAN_CLASSES.map((c) => {
+                                  const on = classes[m.player_id] === c;
+                                  return (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      onClick={() => { setClass(team, m.player_id, on ? null : c); setClassMenu(null); }}
+                                      title={on ? 'Clear: back to what they usually play' : ROLE_META[c].label}
+                                      className="rounded-sm px-1.5 text-[10px] font-semibold leading-[18px]"
+                                      style={{ color: on ? '#0B0F1A' : ROLE_META[c].color, backgroundColor: on ? ROLE_META[c].color : `${ROLE_META[c].color}1f` }}
+                                    >{ROLE_META[c].short}</button>
+                                  );
+                                })}
+                                {classes[m.player_id] && (
+                                  <button type="button" onClick={() => { setClass(team, m.player_id, null); setClassMenu(null); }} className="px-1 text-[10px] text-[#8B98B0] hover:text-[#E6EDF7]" title="Clear the planned class">✕</button>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        )}
                         {s !== 'out' && (
                           <button
                             type="button"
