@@ -417,7 +417,7 @@ export default function LineupField({
       )}
       {canEdit && (
         <p className="text-center text-[10px] text-[#8B98B0]/70">
-          Drag players, or tap one to set their class, 10-man role, bench or out, then tap where they go. Everything saves with Save lineup. Offense / defense and planned classes are your squad&apos;s own plan: private like the lineup, and the zone ignores them.
+          Drag players, or tap one to set their class, 10-man role, bench or out, then tap where they go. Everything saves with Save lineup. Offense / defense and planned classes are your squad&apos;s own plan, private like the lineup. Before the match the zone asks each player in game to confirm their class and side.
         </p>
       )}
     </div>

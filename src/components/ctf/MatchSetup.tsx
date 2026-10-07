@@ -474,7 +474,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
         onClick={(e) => { e.stopPropagation(); setClassMenu((x) => (x === m.player_id ? null : m.player_id)); }}
         aria-label={`Planned class for ${m.alias}`}
         aria-expanded={classMenu === m.player_id}
-        title="Class you plan them on for this match (your squad only; the zone ignores it)"
+        title="Class you plan them on for this match. Your squad only; before the match the zone asks them in game to switch to it."
         className={`rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${classes[m.player_id] ? '' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
         style={classes[m.player_id] ? { color: '#0B0F1A', backgroundColor: ROLE_META[classes[m.player_id]!].color } : undefined}
       >
@@ -636,7 +636,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
                 ))}
               </span>
               <span className="text-[10px] text-[#8B98B0]/80 text-right">
-                {mode === 'lineup' ? 'Start / bench / out: what the zone uses' : 'Optional notes for your squad: class, 10-man, O / D. The zone ignores these.'}
+                {mode === 'lineup' ? 'Start / bench / out: what the zone uses' : 'Optional, squad-only. The zone asks each player in game to confirm their class / side (?y switches them); 10M marks drive Execute 10-man subs.'}
               </span>
             </div>
             ) : (
@@ -880,7 +880,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
         <details className="text-[11px] text-[#8B98B0]">
           <summary className="cursor-pointer select-none hover:text-[#E6EDF7]">How lineups work</summary>
           <p className="mt-1.5">
-            Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense. Your squad's players see the lineup and the plan; league staff and referees see who starts, sits and is out, never the plan; the other squad sees neither. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+            Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense. Before the match the zone messages each player their planned class and side: ?y accepts (and switches their class), ?n suggests something else, and the answer shows here. Your squad's players see the lineup and the plan; league staff and referees see who starts, sits and is out, never the plan; the other squad sees neither. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
             From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
           </p>
         </details>

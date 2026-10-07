@@ -549,6 +549,13 @@ export default function MatchDetailPage() {
     { label: match.vod_url ? 'Edit video' : 'Add video', onClick: () => setPanel(panel === 'video' ? 'none' : 'video') },
   );
   if (!match.league_slug) manageItems.push({ label: 'Delete match', danger: true, onClick: remove, disabled: busy === 'delete' });
+  // FS matches carry "…free-scheduled match proposed by <squad>." as their description: show a Proposed
+  // tag on that squad instead of the sentence. Any other description still shows.
+  const fsProposer = (() => {
+    const m = /free-scheduled match proposed by (.+?)\.?\s*$/i.exec(match.description || '');
+    return match.stage === 'fs' && m ? m[1].trim() : null;
+  })();
+  const extraDescription = fsProposer ? null : match.description;
   // Match setup lists every player for this viewer: fold the roster list above it away by default.
   const setupShown = !!(match.squad_a_id && match.squad_b_id && !played && !notPlayed);
   const foldRosters = setupShown && lineupsShown && !rostersOpen;
@@ -562,9 +569,9 @@ export default function MatchDetailPage() {
       {/* Header strip */}
       <section className="relative overflow-hidden rounded-xl bg-[#131A2B]">
         <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 10% 20%, rgba(34,211,238,0.12), transparent 40%)' }} />
-        <div className="relative px-5 sm:px-6 py-5 flex flex-col lg:flex-row lg:items-end gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap text-[11px] mb-1">
+        <div className="relative px-4 sm:px-5 py-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap text-[11px]">
               <span className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.league_slug ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>
                 {match.league_slug ? `${match.league_slug.toUpperCase()}${match.season_number ? ` S${match.season_number}` : ''}${match.stage === 'playoff' ? ` · Playoffs${/^(Game [A-Z]|Championship|Final)/.test(match.title.split(' · ')[1] || '') ? ` · ${match.title.split(' · ')[1]}` : ''}` : match.stage === 'fs' ? (match.fs_color === 'green' || match.fs_color === 'red' ? '' : ' · Free scheduled') : match.week ? ` · Week ${match.week}` : ''}` : TYPE_LABEL[match.match_type]}
               </span>
@@ -581,35 +588,144 @@ export default function MatchDetailPage() {
                 </span>
               )}
             </div>
-            <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">
-              {/* Away first, home second, like the rulebook's arena names and every other CTF page. */}
-              {hasTeams ? `${b?.name || match.squad_b_name || 'TBD'} vs ${a?.name || match.squad_a_name || 'TBD'}` : match.title}
-            </h1>
-            <div className="mt-2 flex items-center gap-x-3 gap-y-1 flex-wrap text-sm text-[#8B98B0]">
-              {match.time_tbd ? (
-                // No kick-off time was ever agreed: say so while it's unplayed, show nothing timed after.
-                played || live || notPlayed
-                  ? <span className="text-[#E6EDF7]">{live ? 'Live now' : 'No set time'}</span>
-                  : <><span className="text-[#F59E0B]">Time TBD</span><span className="text-white/20">·</span><span className="text-[#E6EDF7]">play by {when.day}</span></>
-              ) : (
-                <>
-                  <span className="text-[#E6EDF7]">{when.day}</span>
-                  <span className="text-white/20">·</span>
-                  <span className="text-[#E6EDF7]">{when.time}</span>{when.tz && <span>{when.tz}</span>}
-                </>
-              )}
-              {(match.map_name || match.game_mode) && (<><span className="text-white/20">·</span><span>{[match.game_mode, match.map_name].filter(Boolean).join(' · ')}</span></>)}
-              <span className="text-white/20">·</span>
-              <span>Created by {match.created_by_alias}</span>
-            </div>
-            {hasTeams && match.title && !match.title.includes(' vs ') && <p className="mt-1 text-sm text-[#8B98B0]">{match.title}</p>}
-            {match.description && <p className="mt-1.5 text-sm text-[#8B98B0] max-w-2xl whitespace-pre-line">{match.description}</p>}
+            {canManage && <MenuButton label="Manage match" items={manageItems} />}
           </div>
-          {canManage && (
-            <div className="flex lg:justify-end">
-              <MenuButton label="Manage match" items={manageItems} />
+          <div className="mt-2.5 flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-5">
+            <div className="min-w-0 flex-1">
+              {hasTeams ? (
+                <>
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                    {/* Away on the left, home on the right: the order arenas are named ("CTFDL AWAY-HOME"). */}
+                    {[{ s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'right', home: false }, { s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'left', home: true }].map((t, i) => (
+                      <div key={i} className={`min-w-0 flex items-center gap-3 ${t.align === 'right' ? 'flex-row-reverse text-right' : ''} ${i === 1 ? 'order-3' : ''}`}>
+                        {/* The tag tile only on wider screens: on a phone the names need the room. */}
+                      <span className="hidden sm:block"><TeamMark tag={t.s?.tag || t.tag} name={t.s?.name || t.name} size="lg" /></span>
+                        <div className="min-w-0">
+                          {t.id ? (
+                            <Link href={`/squads/${t.id}`} className={`block font-display text-2xl sm:text-4xl leading-none truncate hover:text-[#22D3EE] ${played && !t.won ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'}`}>{t.s?.name || t.name}</Link>
+                          ) : (
+                            <span className="block font-display text-2xl sm:text-4xl leading-none text-[#8B98B0]">TBD</span>
+                          )}
+                          {t.s && (
+                            <span className="mt-1 block text-xs text-[#8B98B0]">
+                              {match.squad_a_id && match.squad_b_id && (
+                                <span className={`mr-1.5 text-[10px] uppercase tracking-wide ${t.home ? 'text-[#F59E0B]/80' : 'text-[#8B98B0]/70'}`} title={t.home ? 'Home team picks the side' : undefined}>
+                                  {t.home ? 'Home' : 'Away'}
+                                </span>
+                              )}
+                              {fsProposer && (t.s?.name || t.name || '').toLowerCase() === fsProposer.toLowerCase() && (
+                                <span className="mr-1.5 rounded-sm bg-[#A78BFA]/15 px-1 text-[10px] uppercase tracking-wide text-[#A78BFA]" title="This squad proposed the free-scheduled match">Proposed</span>
+                              )}
+                              {t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}
+                              {played && scored?.points && (
+                                <span className={`ml-1.5 tabular-nums ${t.won ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`} title="Standings points for this match">
+                                  · +{t.home ? scored.points.a : scored.points.b} pts
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="order-2 text-center px-2">
+                      {played && (aWon || bWon) ? (
+                        <>
+                          <div className="font-display text-5xl leading-none" title="CTF has no score: win or loss">
+                            <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
+                            <span className="text-white/20 mx-2">·</span>
+                            <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
+                          </div>
+                          {scored?.length_minutes != null && (
+                            <div className="mt-2 text-xs text-[#8B98B0] tabular-nums" title="Game length">
+                              {(() => { const t = Math.round(scored.length_minutes * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; })()}
+                              {scored.win_type ? ` · ${scored.win_type === '2ot' ? 'double overtime' : scored.win_type === 'ot' ? 'overtime' : 'regulation'}` : ''}
+                            </div>
+                          )}
+                        </>
+                      ) : match.winner_name ? (
+                        <div className="text-sm text-[#34D399]">{match.winner_name} won</div>
+                      ) : (
+                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8B98B0]">vs</span>
+                      )}
+                    </div>
+                  </div>
+                  {played && scored?.points && (
+                    <p className="mt-3 text-center text-xs text-[#8B98B0]">{scored.points.why}</p>
+                  )}
+                </>
+              ) : (
+                <h1 className="font-display text-4xl sm:text-5xl leading-none text-[#E6EDF7]">{match.title}</h1>
+              )}
+              {hasTeams && match.title && !match.title.includes(' vs ') && <p className="mt-1 text-sm text-[#8B98B0]">{match.title}</p>}
+              {extraDescription && <p className="mt-1.5 text-sm text-[#8B98B0] max-w-2xl whitespace-pre-line">{extraDescription}</p>}
             </div>
-          )}
+              {/* When: the most important line on the page before the match, so it gets the big type. */}
+              <div className="shrink-0 lg:min-w-[13rem] lg:border-l lg:border-white/[0.08] lg:pl-5 lg:text-right">
+                {match.time_tbd ? (
+                  played || live || notPlayed
+                    ? <div className="font-display text-3xl leading-none text-[#E6EDF7]">{live ? 'Live now' : 'No set time'}</div>
+                    : <><div className="font-display text-3xl leading-none text-[#F59E0B]">Time TBD</div><div className="mt-1 text-sm font-medium text-[#E6EDF7]">Play by {when.day}</div></>
+                ) : (
+                  <>
+                    <div className="font-display text-4xl leading-none text-[#22D3EE] tabular-nums">
+                      {when.time}{when.tz && <span className="ml-1.5 text-base text-[#8B98B0]">{when.tz}</span>}
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-[#E6EDF7]">{when.day}</div>
+                  </>
+                )}
+                {(match.map_name || match.game_mode) && <div className="mt-0.5 text-xs text-[#8B98B0]">{[match.game_mode, match.map_name].filter(Boolean).join(' · ')}</div>}
+                <div className="mt-1 text-[10px] text-[#8B98B0]/60">Created by {match.created_by_alias}</div>
+              </div>
+          </div>
+          {(a?.members.length || b?.members.length) && foldRosters ? (
+            <div className="mt-3 text-center">
+              <button type="button" onClick={() => setRostersOpen(true)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">
+                Show full rosters ▾
+              </button>
+            </div>
+          ) : (a?.members.length || b?.members.length) ? (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {[b, a].map((s, i) => s && (
+                <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
+                  {/* The lineup cards below carry the coverage when they're shown. */}
+                  {!(setupShown && lineupsShown) && <div className={`mb-1 flex ${i === 0 ? 'sm:justify-end' : ''}`}>
+                    <Coverage
+                      ids={s.members.map((m) => m.id)}
+                      roles={roles}
+                      src={prefs.color}
+                      label="Roster"
+                      focus={rosterFocus[s.id] || null}
+                      onFocus={(k) => setRosterFocus((x) => ({ ...x, [s.id]: k }))}
+                    />
+                  </div>}
+                  <div className={`flex flex-wrap gap-0.5 ${i === 0 ? 'sm:justify-end' : ''}`}>
+                    {sortByPrefs(s.members, (m) => m.id, roles, prefs).map((m) => (
+                      <span key={m.id} className={`group inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
+                        <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
+                          <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} focus={rosterFocus[s.id] || null} />
+                        </Link>
+                        {/* Message icon on hover (always on touch screens, which have no hover). */}
+                        <span className="inline-flex sm:hidden sm:group-hover:inline-flex">
+                          <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {/* Display settings live in the Match setup header when its lineups are shown; here otherwise. */}
+          {(a?.members.length || b?.members.length) && !(setupShown && lineupsShown) ? (
+            <div className="mt-3 flex justify-end pt-2 border-t border-white/[0.06]">
+              <RosterControls prefs={prefs} onChange={setPrefs} />
+            </div>
+          ) : null}
+          {(a?.members.length || b?.members.length) && setupShown && lineupsShown && rostersOpen ? (
+            <div className="mt-2 text-center">
+              <button type="button" onClick={() => setRostersOpen(false)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Hide rosters ▴</button>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -730,115 +846,6 @@ export default function MatchDetailPage() {
             <div><label className={labelCls}>Title</label><input value={vodTitle} onChange={(e) => setVodTitle(e.target.value)} className={inputCls} /></div>
             <div className="flex gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveVideo} disabled={busy === 'video'} className={btnPrimary}>Save</button></div>
           </div>
-        </section>
-      )}
-
-      {/* Face-off */}
-      {hasTeams && (
-        <section className="rounded-xl bg-[#131A2B] px-5 py-5">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-            {/* Away on the left, home on the right: the order arenas are named ("CTFDL AWAY-HOME"). */}
-            {[{ s: b, id: match.squad_b_id, name: match.squad_b_name, tag: match.squad_b_tag, won: bWon, score: match.squad_b_score, align: 'right', home: false }, { s: a, id: match.squad_a_id, name: match.squad_a_name, tag: match.squad_a_tag, won: aWon, score: match.squad_a_score, align: 'left', home: true }].map((t, i) => (
-              <div key={i} className={`min-w-0 flex items-center gap-3 ${t.align === 'right' ? 'flex-row-reverse text-right' : ''} ${i === 1 ? 'order-3' : ''}`}>
-                <TeamMark tag={t.s?.tag || t.tag} name={t.s?.name || t.name} size="lg" />
-                <div className="min-w-0">
-                  {t.id ? (
-                    <Link href={`/squads/${t.id}`} className={`block font-display text-2xl leading-tight truncate hover:text-[#22D3EE] ${played && !t.won ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'}`}>{t.s?.name || t.name}</Link>
-                  ) : (
-                    <span className="block font-display text-2xl text-[#8B98B0]">TBD</span>
-                  )}
-                  {t.s && (
-                    <span className="block text-xs text-[#8B98B0]">
-                      {match.squad_a_id && match.squad_b_id && (
-                        <span className={`mr-1.5 text-[10px] uppercase tracking-wide ${t.home ? 'text-[#F59E0B]/80' : 'text-[#8B98B0]/70'}`} title={t.home ? 'Home team picks the side' : undefined}>
-                          {t.home ? 'Home' : 'Away'}
-                        </span>
-                      )}
-                      {t.s.members.length} on roster{played && t.won ? ' · Winner' : ''}
-                      {played && scored?.points && (
-                        <span className={`ml-1.5 tabular-nums ${t.won ? 'text-[#34D399]' : 'text-[#E6EDF7]'}`} title="Standings points for this match">
-                          · +{t.home ? scored.points.a : scored.points.b} pts
-                        </span>
-                      )}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div className="order-2 text-center px-2">
-              {played && (aWon || bWon) ? (
-                <>
-                  <div className="font-display text-5xl leading-none" title="CTF has no score: win or loss">
-                    <span className={bWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{bWon ? 'W' : 'L'}</span>
-                    <span className="text-white/20 mx-2">·</span>
-                    <span className={aWon ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{aWon ? 'W' : 'L'}</span>
-                  </div>
-                  {scored?.length_minutes != null && (
-                    <div className="mt-2 text-xs text-[#8B98B0] tabular-nums" title="Game length">
-                      {(() => { const t = Math.round(scored.length_minutes * 60); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; })()}
-                      {scored.win_type ? ` · ${scored.win_type === '2ot' ? 'double overtime' : scored.win_type === 'ot' ? 'overtime' : 'regulation'}` : ''}
-                    </div>
-                  )}
-                </>
-              ) : match.winner_name ? (
-                <div className="text-sm text-[#34D399]">{match.winner_name} won</div>
-              ) : (
-                <div className="font-display text-3xl text-white/20">VS</div>
-              )}
-            </div>
-          </div>
-          {played && scored?.points && (
-            <p className="mt-3 text-center text-xs text-[#8B98B0]">{scored.points.why}</p>
-          )}
-          {(a?.members.length || b?.members.length) && foldRosters ? (
-            <div className="mt-3 text-center">
-              <button type="button" onClick={() => setRostersOpen(true)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">
-                Show full rosters ▾
-              </button>
-            </div>
-          ) : (a?.members.length || b?.members.length) ? (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              {[b, a].map((s, i) => s && (
-                <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
-                  {/* The lineup cards below carry the coverage when they're shown. */}
-                  {!(setupShown && lineupsShown) && <div className={`mb-1 flex ${i === 0 ? 'sm:justify-end' : ''}`}>
-                    <Coverage
-                      ids={s.members.map((m) => m.id)}
-                      roles={roles}
-                      src={prefs.color}
-                      label="Roster"
-                      focus={rosterFocus[s.id] || null}
-                      onFocus={(k) => setRosterFocus((x) => ({ ...x, [s.id]: k }))}
-                    />
-                  </div>}
-                  <div className={`flex flex-wrap gap-0.5 ${i === 0 ? 'sm:justify-end' : ''}`}>
-                    {sortByPrefs(s.members, (m) => m.id, roles, prefs).map((m) => (
-                      <span key={m.id} className={`group inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
-                        <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
-                          <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} focus={rosterFocus[s.id] || null} />
-                        </Link>
-                        {/* Message icon on hover (always on touch screens, which have no hover). */}
-                        <span className="inline-flex sm:hidden sm:group-hover:inline-flex">
-                          <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {/* Display settings live in the Match setup header when its lineups are shown; here otherwise. */}
-          {(a?.members.length || b?.members.length) && !(setupShown && lineupsShown) ? (
-            <div className="mt-3 flex justify-end pt-2 border-t border-white/[0.06]">
-              <RosterControls prefs={prefs} onChange={setPrefs} />
-            </div>
-          ) : null}
-          {(a?.members.length || b?.members.length) && setupShown && lineupsShown && rostersOpen ? (
-            <div className="mt-2 text-center">
-              <button type="button" onClick={() => setRostersOpen(false)} className="text-xs text-[#8B98B0] hover:text-[#E6EDF7]">Hide rosters ▴</button>
-            </div>
-          ) : null}
         </section>
       )}
 
