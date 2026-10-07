@@ -13,7 +13,7 @@ const supabase = createClient(
  * alias-aware view, showed 15 games. The page folds several rows per mode into one, so returning
  * rows for every alias is enough.
  */
-async function namesFor(playerName: string): Promise<string[]> {
+async function namesFor(playerName: string): Promise<{ names: string[]; profileId: string | null }> {
   const names = new Set<string>([playerName]);
   let profileId: string | null = null;
 
@@ -33,7 +33,7 @@ async function namesFor(playerName: string): Promise<string[]> {
   }
   // Case-insensitive de-dupe; keep the first spelling seen.
   const seen = new Set<string>();
-  return [...names].filter((n) => { const k = n.trim().toLowerCase(); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+  return { names: [...names].filter((n) => { const k = n.trim().toLowerCase(); if (!k || seen.has(k)) return false; seen.add(k); return true; }), profileId };
 }
 
 /** PostgREST `or` filter matching player_name against any of the names, case-insensitively. */
@@ -53,7 +53,7 @@ export async function GET(
     const dateFilter = searchParams.get('dateFilter') || 'all';
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
 
-    const names = await namesFor(playerName);
+    const { names, profileId } = await namesFor(playerName);
     const nameFilter = anyNameFilter(names);
 
     // Aggregate stats for every alias (one or more rows per mode; the page folds them)
@@ -166,8 +166,10 @@ export async function GET(
       avgAccuracy: recentStats.accuracyCount > 0 ? recentStats.accuracySum / recentStats.accuracyCount : 0
     } : null;
 
-    // Check if player exists
-    if (!aggregateStats?.length && !recentGames?.length) {
+    // Nobody by this name: no games recorded and no site profile either. A player who has a site
+    // profile but no recorded games yet (new signing, or playing under another alias) gets a normal
+    // answer with zeros, so their page shows the profile and "no games yet" instead of an error.
+    if (!aggregateStats?.length && !recentGames?.length && !profileId) {
       return NextResponse.json(
         { error: 'Player not found', message: `No stats found for player: ${playerName}` },
         { status: 404 }
