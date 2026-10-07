@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, supabaseAdmin, viewerFor,
-  SQL_FOR_COL, type PlanSide, type TenMan,
+  PLAN_LABEL, SQL_FOR_COL, isPlanClass, type PlanClass, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +18,8 @@ export const dynamic = 'force-dynamic';
  *         'out' = steps out when they go 10-man, 'in' = comes in for them (usually the infil).
  *         plan_side?: { [player_id]: 'O' | 'D' } is the captain's offense / defense arrangement:
  *         a planning aid, private like the lineup, never read by the zone.
+ *         plan_class?: { [player_id]: 'INF' | 'HVY' | 'SL' | 'MED' | 'ENG' | 'IFL' | 'JT' } is the class the
+ *         captain plans each player on. Same rules as plan_side.
  *   { action: 'sub', squad_id, out_player_id, in_player_id }   that squad's captain/co-captain, staff or a referee;
  *         from side release until the result is recorded. Swaps the two slots and logs it.
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
@@ -132,9 +134,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const tenMan = (pid: string): TenMan | null => (tenIn[pid] === 'in' || tenIn[pid] === 'out' ? tenIn[pid] as TenMan : null);
     const planIn = body.plan_side && typeof body.plan_side === 'object' ? body.plan_side as Record<string, unknown> : {};
     const planSide = (pid: string): PlanSide | null => (planIn[pid] === 'O' || planIn[pid] === 'D' ? planIn[pid] as PlanSide : null);
+    const classIn = body.plan_class && typeof body.plan_class === 'object' ? body.plan_class as Record<string, unknown> : {};
+    const planClass = (pid: string): PlanClass | null => (isPlanClass(classIn[pid]) ? classIn[pid] : null);
     const rows: Record<string, unknown>[] = [
-      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), set_by: viewer.id, updated_at: now })),
-      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), set_by: viewer.id, updated_at: now })),
+      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), set_by: viewer.id, updated_at: now })),
+      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), plan_class: planClass(player_id), set_by: viewer.id, updated_at: now })),
     ];
     const { error: delErr } = await supabaseAdmin.from('match_lineups').delete().eq('match_id', id).eq('squad_id', sq.id);
     if (delErr) return fail(delErr);
@@ -145,7 +149,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let { error: insErr } = await supabaseAdmin.from('match_lineups').insert(toInsert);
       for (let col = insErr ? missingLineupCol(insErr.message) : null; insErr && col && col in toInsert[0]; col = insErr ? missingLineupCol(insErr.message) : null) {
         const dropped = col;
-        if (toInsert.some((r) => r[dropped])) warning = `${dropped === 'ten_man' ? '10-man plan' : 'Offense / defense plan'} not saved: run ${SQL_FOR_COL[dropped]} in Supabase`;
+        if (toInsert.some((r) => r[dropped])) warning = `${PLAN_LABEL[dropped]} not saved: run ${SQL_FOR_COL[dropped]} in Supabase`;
         toInsert = toInsert.map((r) => { const n = { ...r }; delete n[dropped]; return n; });
         ({ error: insErr } = await supabaseAdmin.from('match_lineups').insert(toInsert));
       }

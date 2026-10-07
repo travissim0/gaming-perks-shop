@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
-import { BucketHeader, Coverage, PlaceMark, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
+import { BucketHeader, Coverage, PlaceMark, PlanClassTag, PlayerName, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
  * Match setup card on the match page: the home team picks Titan or
@@ -31,7 +31,7 @@ interface Member {
   draft_round?: number | null;
 }
 type PlanSide = 'O' | 'D';
-interface Entry { player_id: string; alias: string; ten_man?: TenMan | null; plan_side?: PlanSide | null }
+interface Entry { player_id: string; alias: string; ten_man?: TenMan | null; plan_side?: PlanSide | null; plan_class?: RoleKey | null }
 interface Team {
   squad_id: string; name: string; tag: string;
   side: Side | null; team_starting: string | null; team_bench: string | null;
@@ -86,6 +86,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
   const [tenDraft, setTenDraft] = useState<Record<string, Record<string, TenMan | null>>>({});
   // Local offense / defense plan edits per squad (Field view). Saved with the lineup; private like it.
   const [planDraft, setPlanDraft] = useState<Record<string, Record<string, PlanSide>>>({});
+  // Local class-plan edits per squad (Field view): the class each player is planned on. Saved with the lineup.
+  const [classDraft, setClassDraft] = useState<Record<string, Record<string, RoleKey | null>>>({});
   // Sub picker per squad: who comes out (a starter) and who goes in (bench or roster).
   const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
   // Coverage role highlighted per squad.
@@ -106,7 +108,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       const j = r.ok ? await r.json() : null;
       if (keepEdits && !j) return;
       setSetup(j);
-      if (!keepEdits) { setDraft({}); setTenDraft({}); setPlanDraft({}); }
+      if (!keepEdits) { setDraft({}); setTenDraft({}); setPlanDraft({}); setClassDraft({}); }
     } catch (e) {
       console.error('match setup load failed', e);
     } finally {
@@ -159,6 +161,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       setDraft(clear);
       setTenDraft(clear);
       setPlanDraft(clear);
+      setClassDraft(clear);
       toast.success(label);
       if (j.warning) toast.error(j.warning);
       return true;
@@ -199,6 +202,20 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     [...(team.lineup?.starting || []), ...(team.lineup?.bench || [])].forEach((p) => { if (p.plan_side) out[p.player_id] = p.plan_side; });
     return out;
   };
+  const classFor = (team: Team): Record<string, RoleKey | null> => {
+    if (classDraft[team.squad_id]) return classDraft[team.squad_id];
+    const out: Record<string, RoleKey | null> = {};
+    [...(team.lineup?.starting || []), ...(team.lineup?.bench || [])].forEach((p) => { if (p.plan_class) out[p.player_id] = p.plan_class; });
+    return out;
+  };
+  const setClass = (team: Team, playerId: string, cls: RoleKey | null) => {
+    setClassDraft((d) => ({ ...d, [team.squad_id]: { ...classFor(team), [playerId]: cls } }));
+    if (!draft[team.squad_id]) setDraft((d) => ({ ...d, [team.squad_id]: slotsFor(team) }));
+  };
+  const setTen = (team: Team, playerId: string, v: TenMan | null) => {
+    setTenDraft((d) => ({ ...d, [team.squad_id]: { ...tenFor(team), [playerId]: v } }));
+    if (!draft[team.squad_id]) setDraft((d) => ({ ...d, [team.squad_id]: slotsFor(team) }));
+  };
   const setPlan = (team: Team, playerId: string, side: PlanSide) => {
     setPlanDraft((d) => ({ ...d, [team.squad_id]: { ...planFor(team), [playerId]: side } }));
     if (!draft[team.squad_id]) setDraft((d) => ({ ...d, [team.squad_id]: slotsFor(team) }));
@@ -228,6 +245,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       bench: order.filter((id) => slots[id] === 'bench'),
       ten_man: Object.fromEntries(order.filter((id) => slots[id] !== 'out' && ten[id]).map((id) => [id, ten[id]])),
       plan_side: Object.fromEntries(order.filter((id) => slots[id] === 'starting' && planFor(team)[id]).map((id) => [id, planFor(team)[id]])),
+      plan_class: Object.fromEntries(order.filter((id) => slots[id] !== 'out' && classFor(team)[id]).map((id) => [id, classFor(team)[id]])),
     }, starting.length < need ? `${team.tag} lineup saved · ${need - starting.length} starter${need - starting.length === 1 ? '' : 's'} short` : `${team.tag} lineup saved`);
   };
 
@@ -414,8 +432,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     const roster = sortByPrefs(team.roster, (m) => m.player_id, roles, prefs);
     const starting = roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = roster.filter((m) => slots[m.player_id] === 'bench');
-    const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id];
+    const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id] || !!classDraft[team.squad_id];
     const plan = canSee ? planFor(team) : {};
+    const classes = canSee ? classFor(team) : {};
     const submitted = isHome ? progress.home_lineup_set : progress.away_lineup_set;
     const full = starting.length >= starters;
     const over = starting.length > starters;
@@ -511,6 +530,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             onSlot={(pid, slot) => setSlot(team, pid, slot)}
             plan={plan}
             onPlan={(pid, s) => setPlan(team, pid, s)}
+            classes={classes}
+            onClass={(pid, c) => setClass(team, pid, c)}
+            onTen={(pid, v) => setTen(team, pid, v)}
           />
         ) : canEdit ? (
           <div className={game ? 'py-0.5' : ''}>
@@ -525,7 +547,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                     return (
                       <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
                         <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                          <PlayerName alias={m.alias} roles={r} src={src} focus={f} className="min-w-0 truncate" />
+                          <PlayerName alias={m.alias} roles={r} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
+                          <PlanClassTag k={classes[m.player_id]} />
                           <PlaceMark p={bk.place[m.player_id]} />
                           {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
                           {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
@@ -579,7 +602,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                       <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-1" />
                       {bk.items.map((m) => (
                         <div key={m.player_id} style={sideRail(bk.key)} className={`group flex items-center gap-1.5 whitespace-nowrap ${bk.key === 'all' ? '' : 'pl-2'} ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
-                          <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} focus={f} className="min-w-0 truncate" />
+                          <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
+                          <PlanClassTag k={classes[m.player_id]} />
                           <PlaceMark p={bk.place[m.player_id]} />
                           <TenTag v={ten[m.player_id]} />
                           <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
@@ -648,7 +672,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                 : 'Nothing saved yet · pick your starters, then Save lineup'}
             </span>
             <div className="flex gap-2">
-              {dirty && <button type="button" onClick={() => { setDraft(dropSquad(team.squad_id)); setTenDraft(dropSquad(team.squad_id)); setPlanDraft(dropSquad(team.squad_id)); }} className={btnQuiet}>Discard</button>}
+              {dirty && <button type="button" onClick={() => { setDraft(dropSquad(team.squad_id)); setTenDraft(dropSquad(team.squad_id)); setPlanDraft(dropSquad(team.squad_id)); setClassDraft(dropSquad(team.squad_id)); }} className={btnQuiet}>Discard</button>}
               <button type="button" onClick={() => saveLineup(team)} disabled={!dirty || over || busy !== null} className={btnPrimary}>Save lineup</button>
             </div>
           </div>

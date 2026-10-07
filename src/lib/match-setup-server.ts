@@ -52,9 +52,10 @@ export const missingTable = (msg: string | undefined) => /match_setup|match_line
  * Lineup columns added after the table: ten_man (add-match-ten-man.sql) and plan_side
  * (add-match-plan-side.sql). Reads and writes drop whichever one is not there yet.
  */
-export const OPTIONAL_LINEUP_COLS = ['ten_man', 'plan_side'] as const;
+export const OPTIONAL_LINEUP_COLS = ['ten_man', 'plan_side', 'plan_class'] as const;
 export type OptionalLineupCol = (typeof OPTIONAL_LINEUP_COLS)[number];
-export const SQL_FOR_COL: Record<OptionalLineupCol, string> = { ten_man: 'add-match-ten-man.sql', plan_side: 'add-match-plan-side.sql' };
+export const SQL_FOR_COL: Record<OptionalLineupCol, string> = { ten_man: 'add-match-ten-man.sql', plan_side: 'add-match-plan-side.sql', plan_class: 'add-match-plan-class.sql' };
+export const PLAN_LABEL: Record<OptionalLineupCol, string> = { ten_man: '10-man plan', plan_side: 'Offense / defense plan', plan_class: 'Class plan' };
 /** The optional column an error complains about, if any. */
 export const missingLineupCol = (msg: string | undefined): OptionalLineupCol | null =>
   OPTIONAL_LINEUP_COLS.find((c) => new RegExp(c, 'i').test(String(msg || ''))) || null;
@@ -64,6 +65,10 @@ export const missingLineupCol = (msg: string | undefined): OptionalLineupCol | n
  * squad only: private like the lineup, and the zone never reads it.
  */
 export type PlanSide = 'O' | 'D';
+/** The class the captain plans a player on for this match (ctf-roles RoleKey, 10-man infil = IFL). Planning only. */
+export const PLAN_CLASSES = ['INF', 'HVY', 'SL', 'MED', 'ENG', 'IFL', 'JT'] as const;
+export type PlanClass = (typeof PLAN_CLASSES)[number];
+export const isPlanClass = (v: unknown): v is PlanClass => typeof v === 'string' && (PLAN_CLASSES as readonly string[]).includes(v);
 
 /**
  * 10-man plan: who comes in when the team goes 10-man (usually the infil, from the bench)
@@ -254,7 +259,7 @@ export function buildPayload(
   const homeNames = teamNames(home, side);
   const awayNames = teamNames(away, side ? OTHER[side] : null);
 
-  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null; plan_side: PlanSide | null };
+  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null; plan_side: PlanSide | null; plan_class: PlanClass | null };
   const bySquad: Record<string, { starting: Entry[]; bench: Entry[] }> = {};
   for (const sq of [home, away]) if (sq) bySquad[sq.id] = { starting: [], bench: [] };
   const aliasOf = new Map<string, string>();
@@ -262,7 +267,7 @@ export function buildPayload(
   lineupRows.forEach((l: any) => {
     const b = bySquad[l.squad_id];
     if (!b) return;
-    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null, plan_side: l.plan_side === 'O' || l.plan_side === 'D' ? l.plan_side : null });
+    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null, plan_side: l.plan_side === 'O' || l.plan_side === 'D' ? l.plan_side : null, plan_class: isPlanClass(l.plan_class) ? l.plan_class : null });
   });
   Object.values(bySquad).forEach((b) => { b.starting.sort((x, y) => x.position - y.position); b.bench.sort((x, y) => x.position - y.position); });
 

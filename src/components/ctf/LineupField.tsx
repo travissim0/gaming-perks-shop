@@ -57,8 +57,8 @@ const FLAG_ROW: Record<Side | 'none', number> = { titan: 0, collective: 1, none:
 interface Indexed {
   w: number; cw: number; ch: number; cols: number; frameMs: number;
   idx: Uint8Array; alpha: Uint8Array; palette: number[][];
-  /** Centre of the solid (non-shadow) pixels per facing, measured on the first walk frame. */
-  center: Record<number, { x: number; y: number }>;
+  /** Body bounds per facing (first walk frame), shadow excluded. */
+  body: Record<number, { x0: number; y0: number; x1: number; y1: number }>;
 }
 
 let indexedP: Promise<Indexed | null> | null = null;
@@ -78,17 +78,21 @@ const loadIndexed = () =>
       const idx = new Uint8Array(n);
       const alpha = new Uint8Array(n);
       for (let i = 0; i < n; i++) { idx[i] = px[i * 4]; alpha[i] = px[i * 4 + 3]; }
-      // The baked ox/oy are a draw offset, not the body, so centre on the opaque pixels instead.
+      // The baked ox/oy are a draw offset, not the body. The drop shadow is stored as ordinary
+      // opaque pixels (only its palette entries are translucent), so leave those out or the
+      // "body" drifts onto the shadow and the man gets clipped.
       const cw = meta.cellWidth, ch = meta.cellHeight;
-      const center: Indexed['center'] = {};
+      const isShadow = (i: number) => (meta.palette[i]?.[3] ?? 255) < 255;
+      const body: Indexed['body'] = {};
       for (const row of SHEET_ROWS) {
         let x0 = cw, x1 = -1, y0 = ch, y1 = -1;
         for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
-          if (alpha[(row * ch + y) * c.width + x] === 255) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+          const si = (row * ch + y) * c.width + x;
+          if (alpha[si] && !isShadow(idx[si])) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
         }
-        center[row] = x1 >= 0 ? { x: (x0 + x1) / 2, y: (y0 + y1) / 2 } : { x: cw / 2, y: ch / 2 };
+        body[row] = x1 >= 0 ? { x0, y0, x1, y1 } : { x0: 0, y0: 0, x1: cw - 1, y1: ch - 1 };
       }
-      return { w: c.width, cw, ch, cols: meta.columns, frameMs: meta.animationTime, idx, alpha, palette: meta.palette, center };
+      return { w: c.width, cw, ch, cols: meta.columns, frameMs: meta.animationTime, idx, alpha, palette: meta.palette, body };
     } catch (e) {
       console.error('lineup field: sprite atlas failed', e);
       return null;
@@ -125,6 +129,7 @@ function sheetFor(ix: Indexed, body: string, team: Side | 'none'): string {
         const si = sy * ix.w + x;
         if (!ix.alpha[si]) continue;
         const e = lut[ix.idx[si]];
+        if (e[3] < 255) continue; // drop shadow: smears into the neighbours at this size
         const di = ((j * ix.ch + y) * c.width + x) * 4;
         d[di] = e[0]; d[di + 1] = e[1]; d[di + 2] = e[2]; d[di + 3] = e[3];
       }
@@ -136,26 +141,32 @@ function sheetFor(ix: Indexed, body: string, team: Side | 'none'): string {
   return url;
 }
 
-function Man({ ix, role, team, row, scale, w, h }: { ix: Indexed | null; role: RoleKey | null; team: Side | 'none'; row: number; scale: number; w: number; h: number }) {
-  if (!ix) return <span className="block" style={{ width: w, height: h }} />;
-  const o = ix.center[row] || { x: ix.cw / 2, y: ix.ch / 2 };
+const SCALE = 2;
+const PAD = 2;
+
+function Man({ ix, role, team, row }: { ix: Indexed | null; role: RoleKey | null; team: Side | 'none'; row: number }) {
+  if (!ix) return <span className="block" style={{ width: 44, height: 80 }} />;
+  const b = ix.body[row];
+  const w = (b.x1 - b.x0 + 1) * SCALE + PAD * 2;
+  const h = (b.y1 - b.y0 + 1) * SCALE + PAD * 2;
   const j = SHEET_ROWS.indexOf(row);
   const style: CSSProperties & Record<string, string | number> = {
     position: 'absolute',
-    left: Math.round(w / 2 - o.x * scale),
-    top: Math.round(h / 2 - o.y * scale),
-    width: ix.cw * scale,
-    height: ix.ch * scale,
+    left: PAD - b.x0 * SCALE,
+    top: PAD - b.y0 * SCALE,
+    width: ix.cw * SCALE,
+    height: ix.ch * SCALE,
     backgroundImage: `url(${sheetFor(ix, ROLE_META[role || 'INF'].color, team)})`,
-    backgroundSize: `${ix.cols * ix.cw * scale}px ${SHEET_ROWS.length * ix.ch * scale}px`,
-    backgroundPosition: `0px -${j * ix.ch * scale}px`,
+    backgroundSize: `${ix.cols * ix.cw * SCALE}px ${SHEET_ROWS.length * ix.ch * SCALE}px`,
+    backgroundPosition: `0px -${j * ix.ch * SCALE}px`,
     imageRendering: 'pixelated',
-    '--lf-run': `-${ix.cols * ix.cw * scale}px`,
+    pointerEvents: 'none',
+    '--lf-run': `-${ix.cols * ix.cw * SCALE}px`,
     '--lf-dur': `${ix.cols * ix.frameMs}ms`,
-    '--lf-steps': ix.cols,
   };
+  // Not clipped: walk frames swing a little past the first frame's bounds.
   return (
-    <span className="relative block overflow-hidden" style={{ width: w, height: h }}>
+    <span className="relative block" style={{ width: w, height: h }}>
       <span className="lf-man" style={style} />
     </span>
   );
@@ -167,11 +178,11 @@ function Flag({ side }: { side: Side | null }) {
       className="lf-flag block"
       title={side ? `${side === 'titan' ? 'Titan' : 'Collective'} flag` : 'Flag (side not picked yet)'}
       style={{
-        width: FLAG.cw * 1.5,
-        height: FLAG.ch * 1.5,
+        width: FLAG.cw * 2,
+        height: FLAG.ch * 2,
         backgroundImage: 'url(/sprites/ctf-flags.png)',
-        backgroundSize: `${FLAG.cols * FLAG.cw * 1.5}px ${5 * FLAG.ch * 1.5}px`,
-        backgroundPosition: `0px -${FLAG_ROW[side || 'none'] * FLAG.ch * 1.5}px`,
+        backgroundSize: `${FLAG.cols * FLAG.cw * 2}px ${5 * FLAG.ch * 2}px`,
+        backgroundPosition: `0px -${FLAG_ROW[side || 'none'] * FLAG.ch * 2}px`,
         imageRendering: 'pixelated',
       }}
     />
@@ -180,7 +191,7 @@ function Flag({ side }: { side: Side | null }) {
 
 const ANIM_CSS = `
 @keyframes lf-walk { from { background-position-x: 0px; } to { background-position-x: var(--lf-run); } }
-@keyframes lf-wave { from { background-position-x: 0px; } to { background-position-x: -${FLAG.cols * FLAG.cw * 1.5}px; } }
+@keyframes lf-wave { from { background-position-x: 0px; } to { background-position-x: -${FLAG.cols * FLAG.cw * 2}px; } }
 .lf-tile:hover .lf-man, .lf-tile[data-sel="1"] .lf-man { animation: lf-walk var(--lf-dur) steps(12) infinite; }
 .lf-flag { animation: lf-wave ${FLAG.cols * FLAG.frameMs}ms steps(${FLAG.cols}) infinite; }
 @media (prefers-reduced-motion: reduce) { .lf-flag, .lf-tile .lf-man { animation: none !important; } }
@@ -189,11 +200,12 @@ const ANIM_CSS = `
 // ── Field ───────────────────────────────────────────────────────────────────
 
 const SIDE_TINT: Record<SideLetter, string> = { O: '#FB923C', D: '#60A5FA' };
-const FIELD = { scale: 2, w: 76, h: 84 };
-const BENCH = { scale: 1.5, w: 62, h: 64 };
+const TILE_W = 72;
+/** Classes a captain can plan someone on (10-man infil plays Infiltrator). */
+const PLAN_CLASSES: RoleKey[] = ['INF', 'HVY', 'SL', 'MED', 'ENG', 'IFL', 'JT'];
 
 export default function LineupField({
-  side, players, roles, src, canEdit, starters, focus, plan, onSlot, onPlan,
+  side, players, roles, src, canEdit, starters, focus, plan, onSlot, onPlan, classes, onClass, onTen,
 }: {
   side: Side | null;
   players: FieldPlayer[];
@@ -206,6 +218,10 @@ export default function LineupField({
   plan: Record<string, SideLetter>;
   onSlot: (playerId: string, slot: Slot) => void;
   onPlan: (playerId: string, side: SideLetter) => void;
+  /** Class each player is planned on for this match (unset = what they usually play). */
+  classes: Record<string, RoleKey | null>;
+  onClass: (playerId: string, cls: RoleKey | null) => void;
+  onTen: (playerId: string, v: 'in' | 'out' | null) => void;
 }) {
   const [ix, setIx] = useState<Indexed | null>(null);
   useEffect(() => { loadIndexed().then(setIx); }, []);
@@ -245,16 +261,16 @@ export default function LineupField({
     onClick: () => { if (sel) move(sel, zone); },
   } : {};
 
-  const tile = (p: FieldPlayer, row: number, size: typeof FIELD, onBench = false) => {
+  const tile = (p: FieldPlayer, row: number) => {
     const r = roles[p.player_id];
-    const k = primaryRole(r, src);
+    const k = classes[p.player_id] || primaryRole(r, src);
     const tier = focus ? covers(r, focus, src) : null;
     const faded = !!focus && !tier;
     return (
       <div
         key={p.player_id}
         className={`lf-tile relative flex flex-col items-center rounded transition ${canEdit ? 'cursor-grab active:cursor-grabbing' : ''} ${sel === p.player_id ? 'bg-white/10 ring-1 ring-[#22D3EE]' : canEdit ? 'hover:bg-white/5' : ''}`}
-        style={{ width: size.w, opacity: faded ? 0.25 : onBench ? 0.8 : 1 }}
+        style={{ width: TILE_W, opacity: faded ? 0.25 : 1 }}
         data-sel={sel === p.player_id ? '1' : '0'}
         title={rolesTitle(p.alias, r)}
         draggable={canEdit}
@@ -264,9 +280,9 @@ export default function LineupField({
         {p.ten_man && (
           <span className={`absolute right-0 top-0 z-10 rounded-sm px-0.5 text-[8px] font-semibold leading-3 ${p.ten_man === 'in' ? 'bg-[#d946ef]/30 text-[#f0abfc]' : 'bg-[#FB923C]/25 text-[#FB923C]'}`}>10M {p.ten_man}</span>
         )}
-        <Man ix={ix} role={k} team={team} row={row} scale={size.scale} w={size.w} h={size.h} />
+        <Man ix={ix} role={k} team={team} row={row} />
         <span
-          className="-mt-1 max-w-full truncate px-0.5 text-[10px] leading-3"
+          className="max-w-full truncate px-0.5 text-[11px] leading-[13px]"
           style={{
             color: roleColor(k),
             fontWeight: tier === 'main' ? 600 : undefined,
@@ -276,7 +292,10 @@ export default function LineupField({
         >
           {p.alias}
         </span>
-        {p.role !== 'player' && <span className="text-[8px] uppercase leading-3 text-[#F59E0B]">{p.role === 'captain' ? 'C' : 'Co-C'}</span>}
+        <span className="flex items-center gap-1 text-[8px] uppercase leading-3">
+          {classes[p.player_id] && <span style={{ color: ROLE_META[classes[p.player_id]!].color }} title="Planned class for this match">{ROLE_META[classes[p.player_id]!].short}</span>}
+          {p.role !== 'player' && <span className="text-[#F59E0B]">{p.role === 'captain' ? 'C' : 'Co-C'}</span>}
+        </span>
       </div>
     );
   };
@@ -284,7 +303,7 @@ export default function LineupField({
   const half = (s: SideLetter, list: FieldPlayer[]) => (
     <div
       {...zoneProps(s)}
-      className={`relative min-h-[150px] rounded-md p-1.5 transition-colors ${over === s ? 'ring-1 ring-inset' : ''}`}
+      className={`relative min-h-[170px] rounded-md p-1.5 transition-colors ${over === s ? 'ring-1 ring-inset' : ''}`}
       style={{ backgroundColor: `${SIDE_TINT[s]}${over === s ? '24' : '0f'}`, ['--tw-ring-color' as string]: `${SIDE_TINT[s]}66` }}
     >
       <div className="mb-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: SIDE_TINT[s] }}>
@@ -292,18 +311,57 @@ export default function LineupField({
       </div>
       {s === 'D' && <div className="pointer-events-none absolute left-1 top-5"><Flag side={side} /></div>}
       {/* Defense faces the viewer in front of its flag; offense heads out (east). */}
-      <div className={`flex flex-wrap justify-center ${s === 'D' ? 'pl-12' : ''}`}>
-        {list.map((p) => tile(p, s === 'D' ? FACE.south : FACE.east, FIELD))}
+      <div className={`flex flex-wrap justify-center ${s === 'D' ? 'pl-[84px]' : ''}`}>
+        {list.map((p) => tile(p, s === 'D' ? FACE.south : FACE.east))}
       </div>
       {list.length === 0 && (
-        <p className={`mt-8 text-center text-[11px] text-[#8B98B0]/60 ${s === 'D' ? 'pl-12' : ''}`}>{canEdit ? 'Drag players here' : 'Nobody yet'}</p>
+        <p className={`mt-8 text-center text-[11px] text-[#8B98B0]/60 ${s === 'D' ? 'pl-[84px]' : ''}`}>{canEdit ? 'Drag players here' : 'Nobody yet'}</p>
       )}
+    </div>
+  );
+
+  const picked = canEdit && sel ? players.find((p) => p.player_id === sel) || null : null;
+  const chip = (on: boolean) => `rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${on ? '' : 'opacity-70 hover:opacity-100'}`;
+  const actionBar = picked && (
+    <div className="sticky top-0 z-20 rounded-md bg-[#0B0F1A] px-2 py-1.5 ring-1 ring-[#22D3EE]/40" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-[#8B98B0]">
+        <span className="font-semibold text-[#E6EDF7]">{picked.alias}</span>
+        <span className="flex flex-wrap items-center gap-1">
+          Class
+          {PLAN_CLASSES.map((c) => {
+            const on = classes[picked.player_id] === c;
+            return (
+              <button key={c} type="button" onClick={() => onClass(picked.player_id, on ? null : c)}
+                className={chip(on)}
+                style={{ color: on ? '#0B0F1A' : ROLE_META[c].color, backgroundColor: on ? ROLE_META[c].color : `${ROLE_META[c].color}1f` }}
+                title={on ? 'Clear: back to what they usually play' : `Plan ${picked.alias} as ${ROLE_META[c].label}`}
+              >{ROLE_META[c].short}</button>
+            );
+          })}
+        </span>
+        <span className="flex items-center gap-1">
+          10M
+          {([null, 'in', 'out'] as const).map((v) => (
+            <button key={String(v)} type="button" onClick={() => onTen(picked.player_id, v)}
+              className={`rounded px-1.5 py-0.5 text-[11px] ${picked.ten_man === v ? (v === 'in' ? 'bg-[#d946ef]/30 text-[#f0abfc]' : v === 'out' ? 'bg-[#FB923C]/25 text-[#FB923C]' : 'bg-white/10 text-[#E6EDF7]') : 'bg-white/5 hover:bg-white/10'}`}
+              title={v === 'in' ? 'Subs in on 10-man' : v === 'out' ? 'Subs out on 10-man' : 'Not part of the 10-man swap'}
+            >{v ?? '–'}</button>
+          ))}
+        </span>
+        <span className="flex items-center gap-1">
+          {picked.slot !== 'bench' && <button type="button" onClick={() => move(picked.player_id, 'bench')} className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[11px] text-[#22D3EE] hover:bg-[#22D3EE]/25">Bench</button>}
+          {picked.slot !== 'out' && <button type="button" onClick={() => move(picked.player_id, 'out')} className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-[#E6EDF7] hover:bg-white/10">Out</button>}
+          <button type="button" onClick={() => setSel(null)} className="px-1 text-[#8B98B0] hover:text-[#E6EDF7]" aria-label="Close">✕</button>
+        </span>
+      </div>
+      <p className="mt-0.5 text-[10px] text-[#8B98B0]/70">Tap Defense or Offense to start them there.</p>
     </div>
   );
 
   return (
     <div className="space-y-1.5 px-2 py-2" onClick={() => setSel(null)}>
       <style>{ANIM_CSS}</style>
+      {actionBar}
       <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
         {half('D', defense)}
         {half('O', offense)}
@@ -316,7 +374,7 @@ export default function LineupField({
           Bench <span className="tracking-normal tabular-nums">{bench.length}</span>
         </div>
         <div className="flex flex-wrap justify-center">
-          {bench.map((p) => tile(p, FACE.south, BENCH, true))}
+          {bench.map((p) => tile(p, FACE.south))}
           {bench.length === 0 && <p className="py-2 text-[11px] text-[#8B98B0]/60">Nobody on the bench</p>}
         </div>
       </div>
@@ -338,7 +396,7 @@ export default function LineupField({
       )}
       {canEdit && (
         <p className="text-center text-[10px] text-[#8B98B0]/70">
-          Drag players, or tap one then tap where it goes. Everything saves with Save lineup. Offense / defense is your squad&apos;s own plan: private like the lineup, and the zone ignores it.
+          Drag players, or tap one to set their class, 10-man role, bench or out, then tap where they go. Everything saves with Save lineup. Offense / defense and planned classes are your squad&apos;s own plan: private like the lineup, and the zone ignores them.
         </p>
       )}
     </div>

@@ -107,9 +107,10 @@ export function PlaceMark({ p }: { p?: SidePlacement }) {
  * A name in its class colour. With a coverage role focused, mains of that role get a solid
  * underline in the role colour and secondaries a dashed one, so the two read apart.
  */
-export function PlayerName({ alias, roles, src, focus = null, className = '' }: { alias: string; roles?: PlayerRoles; src: ColorSource; focus?: RoleKey | null; className?: string }) {
+export function PlayerName({ alias, roles, src, focus = null, as = null, className = '' }: { alias: string; roles?: PlayerRoles; src: ColorSource; focus?: RoleKey | null; as?: RoleKey | null; className?: string }) {
   const tier = focus ? covers(roles, focus, src) : null;
-  const style: CSSProperties = { color: roleColor(primaryRole(roles, src)) };
+  // `as` = the class the captain planned them on for this match; it wins over what they usually play.
+  const style: CSSProperties = { color: roleColor(as || primaryRole(roles, src)) };
   if (tier && focus) {
     style.textDecorationLine = 'underline';
     style.textDecorationColor = ROLE_META[focus].color;
@@ -122,6 +123,16 @@ export function PlayerName({ alias, roles, src, focus = null, className = '' }: 
   return (
     <span className={className} style={style} title={`${rolesTitle(alias, roles)}${tier && focus ? `\n${ROLE_META[focus].label}: ${tier === 'main' ? 'main' : 'secondary'}` : ''}`}>
       {alias}
+    </span>
+  );
+}
+
+/** The class a captain planned this player on (Field view), shown solid next to the name. */
+export function PlanClassTag({ k }: { k?: RoleKey | null }) {
+  if (!k) return null;
+  return (
+    <span className="shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[14px]" style={{ color: '#0B0F1A', backgroundColor: ROLE_META[k].color }} title={`Planned as ${ROLE_META[k].label} for this match`}>
+      {ROLE_META[k].short}
     </span>
   );
 }
