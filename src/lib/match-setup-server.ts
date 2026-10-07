@@ -48,8 +48,22 @@ export interface Viewer { id: string | null; alias: string; staff: boolean; refe
 
 export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase();
 export const missingTable = (msg: string | undefined) => /match_setup|match_lineups|match_lineup_subs|does not exist/i.test(String(msg || ''));
-/** match_lineups.ten_man not added yet (add-match-ten-man.sql)? */
-export const missingTenMan = (msg: string | undefined) => /ten_man/i.test(String(msg || ''));
+/**
+ * Lineup columns added after the table: ten_man (add-match-ten-man.sql) and plan_side
+ * (add-match-plan-side.sql). Reads and writes drop whichever one is not there yet.
+ */
+export const OPTIONAL_LINEUP_COLS = ['ten_man', 'plan_side'] as const;
+export type OptionalLineupCol = (typeof OPTIONAL_LINEUP_COLS)[number];
+export const SQL_FOR_COL: Record<OptionalLineupCol, string> = { ten_man: 'add-match-ten-man.sql', plan_side: 'add-match-plan-side.sql' };
+/** The optional column an error complains about, if any. */
+export const missingLineupCol = (msg: string | undefined): OptionalLineupCol | null =>
+  OPTIONAL_LINEUP_COLS.find((c) => new RegExp(c, 'i').test(String(msg || ''))) || null;
+
+/**
+ * The captain's offense / defense arrangement of their starters. A planning aid for the
+ * squad only: private like the lineup, and the zone never reads it.
+ */
+export type PlanSide = 'O' | 'D';
 
 /**
  * 10-man plan: who comes in when the team goes 10-man (usually the infil, from the bench)
@@ -240,7 +254,7 @@ export function buildPayload(
   const homeNames = teamNames(home, side);
   const awayNames = teamNames(away, side ? OTHER[side] : null);
 
-  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null };
+  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null; plan_side: PlanSide | null };
   const bySquad: Record<string, { starting: Entry[]; bench: Entry[] }> = {};
   for (const sq of [home, away]) if (sq) bySquad[sq.id] = { starting: [], bench: [] };
   const aliasOf = new Map<string, string>();
@@ -248,7 +262,7 @@ export function buildPayload(
   lineupRows.forEach((l: any) => {
     const b = bySquad[l.squad_id];
     if (!b) return;
-    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null });
+    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null, plan_side: l.plan_side === 'O' || l.plan_side === 'D' ? l.plan_side : null });
   });
   Object.values(bySquad).forEach((b) => { b.starting.sort((x, y) => x.position - y.position); b.bench.sort((x, y) => x.position - y.position); });
 
@@ -390,13 +404,15 @@ export async function loadAll(id: string, viewer: Viewer) {
   return loadForMatch(match, viewer);
 }
 
-/** The match's lineup rows, with the 10-man plan when the column exists. */
+/** The match's lineup rows, with the 10-man plan and O/D plan for whichever columns exist. */
 async function loadLineupRows(matchId: string) {
-  const res = await supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, ten_man, updated_at').eq('match_id', matchId);
-  if (res.error && missingTenMan(res.error.message)) {
-    return supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, updated_at').eq('match_id', matchId);
+  let cols: string[] = [...OPTIONAL_LINEUP_COLS];
+  for (;;) {
+    const res = await supabaseAdmin.from('match_lineups').select(['squad_id', 'player_id', 'slot', 'position', ...cols, 'updated_at'].join(', ')).eq('match_id', matchId);
+    const missing = res.error ? missingLineupCol(res.error.message) : null;
+    if (!missing || !cols.includes(missing)) return res;
+    cols = cols.filter((c) => c !== missing);
   }
-  return res;
 }
 
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */

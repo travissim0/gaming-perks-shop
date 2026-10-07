@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
-  COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, placeSides, primaryRole, roleColor, roleRank, rolesTitle, sideGaps, sideLean, tagsFor,
+  COVERAGE_ROLES, ROLE_META, ROLE_ORDER, covers, placeSides, primaryRole, roleColor, roleRank, rolesTitle, sideLean, tagsFor,
   type ColorSource, type PlayerRoles, type RoleKey, type SideLetter, type SidePlacement,
 } from '@/lib/ctf-roles';
 
@@ -16,7 +16,7 @@ export type RolesMap = Record<string, PlayerRoles>;
 export interface RosterPrefs {
   /** Colour and tag names from the draft registration or from mix play. */
   color: ColorSource;
-  /** 'side' = suggested offense / defense groups, support roles first within each. */
+  /** role = support first (default); side = optional offense / defense planning groups. */
   sort: 'side' | 'role' | 'alpha';
   /** 'game' = black, tight, small type, closer to the in-game player list. */
   skin: 'site' | 'game';
@@ -24,8 +24,8 @@ export interface RosterPrefs {
   view: 'list' | 'field';
 }
 
-const PREFS_KEY = 'match-roster-prefs-v2';
-const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'side', skin: 'site', view: 'list' };
+const PREFS_KEY = 'match-roster-prefs-v3';
+const DEFAULT_PREFS: RosterPrefs = { color: 'draft', sort: 'role', skin: 'site', view: 'list' };
 
 /** Per-viewer view settings, remembered in this browser when it allows it. */
 export function useRosterPrefs(): [RosterPrefs, (p: Partial<RosterPrefs>) => void] {
@@ -57,39 +57,32 @@ export const SIDE_COLOR: Record<SideLetter, string> = { O: '#FB923C', D: '#60A5F
 export interface Bucket<T> { key: SideLetter | 'all'; label: string; items: T[]; place: Record<string, SidePlacement> }
 
 /**
- * Suggested offense / defense split (placeSides in ctf-roles.ts): their own lean first,
- * then either-side players to cover a missing support role, then to even the numbers.
+ * Optional offense / defense groups (Order: O / D). A planning aid for captains only: the
+ * zone never reads it. The captain's own arrangement (plan, saved with the lineup) wins;
+ * otherwise placeSides in ctf-roles.ts suggests one (medics on defense, their own lean,
+ * then either-side players to cover missing support, then to even the numbers).
  * One bucket holding everyone when the viewer isn't grouping by side.
  */
-export function bucketBySide<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs): Bucket<T>[] {
+export function bucketBySide<T extends { alias: string }>(list: T[], idOf: (x: T) => string, roles: RolesMap, prefs: RosterPrefs, plan: Record<string, SideLetter> = {}): Bucket<T>[] {
   const sorted = sortByPrefs(list, idOf, roles, prefs);
   if (prefs.sort !== 'side') return [{ key: 'all', label: '', items: sorted, place: {} }];
-  const place = placeSides(sorted.map(idOf), roles, prefs.color);
+  const place = placeSides(sorted.map(idOf), roles, prefs.color, plan);
   return (['O', 'D'] as SideLetter[])
     .map((k) => ({ key: k, label: k === 'O' ? 'Offense' : 'Defense', items: sorted.filter((x) => place[idOf(x)]?.side === k), place }))
     .filter((b) => b.items.length > 0);
 }
 
-/** A side's header: name, head count, support mains, and any support it has no main for. */
-export function BucketHeader({ k, label, ids, roles, src, note, className = '' }: { k: SideLetter | 'all'; label: string; ids: string[]; roles: RolesMap; src: ColorSource; note?: string; className?: string }) {
+/** A side's header: just its name and head count, centred. */
+export function BucketHeader({ k, label, count, className = '' }: { k: SideLetter | 'all'; label: string; count: number; className?: string }) {
   if (k === 'all') return null;
   const color = SIDE_COLOR[k];
-  const support = COVERAGE_ROLES.map((r) => ({ r, n: ids.filter((id) => covers(roles[id], r, src) === 'main').length })).filter((x) => x.n > 0);
-  const gaps = sideGaps(k, ids, roles, src);
   return (
     <div
-      className={`grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-l-[3px] px-2 text-[11px] leading-5 ${className}`}
-      style={{ borderColor: color, backgroundColor: `${color}14` }}
-      title={`Suggested ${label.toLowerCase()}: players who lean ${label.toLowerCase()} in mixes (or by draft roles), plus either-side players placed to cover support or even the numbers. Nothing is enforced.`}
+      className={`border-l-[3px] px-2 text-center text-[11px] font-semibold uppercase leading-5 tracking-[0.15em] ${className}`}
+      style={{ borderColor: color, backgroundColor: `${color}14`, color }}
+      title="Planning aid for your squad only. It has no effect on where the zone puts anyone."
     >
-      <span className="text-[10px] text-[#8B98B0]/80 truncate">{note}</span>
-      <span className="text-center font-semibold uppercase tracking-[0.15em]" style={{ color }}>
-        {label} <span className="font-normal tracking-normal text-[#8B98B0] tabular-nums">{ids.length}</span>
-      </span>
-      <span className="flex flex-wrap justify-end gap-x-1.5 text-[10px] leading-4">
-        {support.map((x) => <span key={x.r} style={{ color: ROLE_META[x.r].color }} className="whitespace-nowrap opacity-80">{ROLE_META[x.r].short} {x.n}</span>)}
-        {gaps.map((r) => <span key={r} className="whitespace-nowrap text-[#F87171]/80" title={`No ${ROLE_META[r].label} main suggested for ${label.toLowerCase()}`}>no {ROLE_META[r].short}</span>)}
-      </span>
+      {label} <span className="font-normal tracking-normal text-[#8B98B0] tabular-nums">{count}</span>
     </div>
   );
 }
@@ -97,9 +90,9 @@ export function BucketHeader({ k, label, ids, roles, src, note, className = '' }
 /** Rows under a side header carry its colour down the left edge. */
 export const sideRail = (k: SideLetter | 'all') => (k === 'all' ? undefined : { borderLeft: `3px solid ${SIDE_COLOR[k]}55` });
 
-/** Why an either-side player sits in this group. Nothing for players who lean this way themselves. */
+/** Why an either-side player was suggested for this group. Nothing when it's their lean, their class or the captain's call. */
 export function PlaceMark({ p }: { p?: SidePlacement }) {
-  if (!p || p.why === 'lean') return null;
+  if (!p || p.why === 'lean' || p.why === 'role' || p.why === 'plan') return null;
   if (p.why === 'need' && p.role) {
     return (
       <span className="shrink-0 text-[9px] opacity-75" style={{ color: ROLE_META[p.role].color }} title={`Plays either side. Suggested for ${p.side === 'D' ? 'defense' : 'offense'} to cover ${ROLE_META[p.role].label}.`}>
@@ -107,7 +100,7 @@ export function PlaceMark({ p }: { p?: SidePlacement }) {
       </span>
     );
   }
-  return <span className="shrink-0 text-[10px] text-[#8B98B0]/60" title="Plays either side (or not enough mix games to tell). Placed here to even the numbers.">⇄</span>;
+  return <span className="shrink-0 text-[10px] text-[#8B98B0]/60" title="Plays either side (or not enough mix games to tell). Suggested here to even the numbers.">⇄</span>;
 }
 
 /**
@@ -220,7 +213,7 @@ export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChan
         Colour <Seg value={prefs.color} options={[['draft', 'Draft'], ['mix', 'Mixes']]} onChange={(color) => onChange({ color })} />
       </span>
       <span className="inline-flex items-center gap-1">
-        Group <Seg value={prefs.sort} options={[['side', 'O / D'], ['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
+        Order <Seg value={prefs.sort} options={[['role', 'Role'], ['alpha', 'A–Z'], ['side', 'O / D plan']]} onChange={(sort) => onChange({ sort })} />
       </span>
       <span className="inline-flex items-center gap-1">
         Skin <Seg value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />

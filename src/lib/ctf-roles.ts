@@ -14,6 +14,10 @@ export type SideLetter = 'O' | 'D';
 
 /** Support roles first: that is what a captain scans for. Also the role sort order. */
 export const ROLE_ORDER: RoleKey[] = ['SL', 'MED', 'ENG', '10M', 'IFL', 'HVY', 'INF', 'JT'];
+/** Support classes: a player who mains one is coloured by it, ahead of any fighting class. */
+export const SUPPORT_ROLES: RoleKey[] = ['SL', 'MED', 'ENG'];
+/** Classes that only ever play one side in league play. Medics are always defense. */
+export const ROLE_SIDE: Partial<Record<RoleKey, 'O' | 'D'>> = { MED: 'D' };
 /** The roles worth counting at a glance. */
 export const COVERAGE_ROLES: RoleKey[] = ['SL', 'MED', 'ENG', '10M', 'IFL'];
 
@@ -123,14 +127,15 @@ export function mixTags(p: PlayerRoles | null | undefined): RoleTag[] {
   const g = p.mix.games;
   return p.mix.classes
     .filter((c, i) => i === 0 || c.n / g >= MIX_SEC)
-    .map((c, i) => ({ key: c.key, sides: sidesOf(c.o, c.d), tier: (i === 0 || c.n / g >= MIX_MAIN ? 'main' : 'sec') as 'main' | 'sec', share: c.n / g }));
+    .map((c, i) => ({ key: c.key, sides: ROLE_SIDE[c.key] ? [] : sidesOf(c.o, c.d), tier: (i === 0 || c.n / g >= MIX_MAIN ? 'main' : 'sec') as 'main' | 'sec', share: c.n / g }));
 }
 
 export const tagsFor = (p: PlayerRoles | null | undefined, src: ColorSource) => (src === 'mix' ? mixTags(p) : draftTags(p));
 
 /** The class a name is coloured by: the chosen source's top class, else the other source's. */
 export function primaryRole(p: PlayerRoles | null | undefined, src: ColorSource): RoleKey | null {
-  const a = tagsFor(p, src)[0] || tagsFor(p, src === 'mix' ? 'draft' : 'mix')[0];
+  const pick = (tags: RoleTag[]) => tags.find((t) => t.tier === 'main' && SUPPORT_ROLES.includes(t.key)) || tags[0];
+  const a = pick(tagsFor(p, src)) || pick(tagsFor(p, src === 'mix' ? 'draft' : 'mix'));
   return a ? a.key : null;
 }
 
@@ -164,14 +169,19 @@ export function sideBucket(p: PlayerRoles | null | undefined): SideBucket {
 /**
  * Support each side should have a main for, most important first. Players who play
  * either side are placed to fill these before anything else (ron, the squad's only
- * engineer, goes to defense). Squad leaders are an offense role. Tune here.
+ * engineer, goes to defense). Medics are defense only (ROLE_SIDE); squad leaders are an
+ * offense role. Tune here.
  */
-export const SIDE_NEEDS: [SideLetter, RoleKey][] = [['D', 'ENG'], ['O', 'SL'], ['D', 'MED'], ['O', 'MED']];
+export const SIDE_NEEDS: [SideLetter, RoleKey][] = [['D', 'ENG'], ['D', 'MED'], ['O', 'SL']];
 
 export interface SidePlacement {
   side: SideLetter;
-  /** lean = their own O/D lean; need = an either-side player placed to cover a missing role; balance = evens the numbers. */
-  why: 'lean' | 'need' | 'balance';
+  /**
+   * lean = their own O/D lean; role = their class only plays one side (medics);
+   * need = an either-side player placed to cover a missing role; balance = evens the numbers;
+   * plan = the captain put them there.
+   */
+  why: 'lean' | 'role' | 'need' | 'balance' | 'plan';
   role?: RoleKey;
 }
 
@@ -186,12 +196,15 @@ const offenseShare = (p: PlayerRoles | null | undefined) => {
  * Suggested offense / defense split for a group of players. Never enforced: it only
  * groups the list so a captain can see what each side has.
  */
-export function placeSides(ids: string[], roles: Record<string, PlayerRoles>, src: ColorSource): Record<string, SidePlacement> {
+export function placeSides(ids: string[], roles: Record<string, PlayerRoles>, src: ColorSource, plan: Record<string, SideLetter> = {}): Record<string, SidePlacement> {
   const out: Record<string, SidePlacement> = {};
   const flex: string[] = [];
   ids.forEach((id) => {
+    const fixed = ROLE_SIDE[primaryRole(roles[id], src) as RoleKey];
     const b = sideBucket(roles[id]);
-    if (b === 'F') flex.push(id);
+    if (plan[id]) out[id] = { side: plan[id], why: 'plan' };
+    else if (fixed) out[id] = { side: fixed, why: 'role' };
+    else if (b === 'F') flex.push(id);
     else out[id] = { side: b, why: 'lean' };
   });
   const sideHas = (side: SideLetter, role: RoleKey) => ids.some((id) => out[id]?.side === side && covers(roles[id], role, src) === 'main');
@@ -211,11 +224,6 @@ export function placeSides(ids: string[], roles: Record<string, PlayerRoles>, sr
       out[id] = { side: o < d ? 'O' : d < o ? 'D' : offenseShare(roles[id]) >= 0.5 ? 'O' : 'D', why: 'balance' };
     });
   return out;
-}
-
-/** Needed roles a side has no main for. */
-export function sideGaps(side: SideLetter, ids: string[], roles: Record<string, PlayerRoles>, src: ColorSource): RoleKey[] {
-  return SIDE_NEEDS.filter(([s]) => s === side).map(([, r]) => r).filter((r) => !ids.some((id) => covers(roles[id], r, src) === 'main'));
 }
 
 /**

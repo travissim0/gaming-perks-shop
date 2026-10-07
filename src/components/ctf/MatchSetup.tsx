@@ -30,7 +30,8 @@ interface Member {
   green_ok?: boolean;
   draft_round?: number | null;
 }
-interface Entry { player_id: string; alias: string; ten_man?: TenMan | null }
+type PlanSide = 'O' | 'D';
+interface Entry { player_id: string; alias: string; ten_man?: TenMan | null; plan_side?: PlanSide | null }
 interface Team {
   squad_id: string; name: string; tag: string;
   side: Side | null; team_starting: string | null; team_bench: string | null;
@@ -83,6 +84,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
   const [draft, setDraft] = useState<Record<string, Record<string, Slot>>>({});
   // Local 10-man plan edits per squad: player_id → in/out/none. Saved with the lineup.
   const [tenDraft, setTenDraft] = useState<Record<string, Record<string, TenMan | null>>>({});
+  // Local offense / defense plan edits per squad (Field view). Saved with the lineup; private like it.
+  const [planDraft, setPlanDraft] = useState<Record<string, Record<string, PlanSide>>>({});
   // Sub picker per squad: who comes out (a starter) and who goes in (bench or roster).
   const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
   // Coverage role highlighted per squad.
@@ -103,7 +106,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       const j = r.ok ? await r.json() : null;
       if (keepEdits && !j) return;
       setSetup(j);
-      if (!keepEdits) { setDraft({}); setTenDraft({}); }
+      if (!keepEdits) { setDraft({}); setTenDraft({}); setPlanDraft({}); }
     } catch (e) {
       console.error('match setup load failed', e);
     } finally {
@@ -155,6 +158,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       const clear = <T,>(d: Record<string, T>) => { const n = { ...d }; if (typeof body.squad_id === 'string') delete n[body.squad_id]; return n; };
       setDraft(clear);
       setTenDraft(clear);
+      setPlanDraft(clear);
       toast.success(label);
       if (j.warning) toast.error(j.warning);
       return true;
@@ -189,6 +193,17 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     return out;
   };
 
+  const planFor = (team: Team): Record<string, PlanSide> => {
+    if (planDraft[team.squad_id]) return planDraft[team.squad_id];
+    const out: Record<string, PlanSide> = {};
+    [...(team.lineup?.starting || []), ...(team.lineup?.bench || [])].forEach((p) => { if (p.plan_side) out[p.player_id] = p.plan_side; });
+    return out;
+  };
+  const setPlan = (team: Team, playerId: string, side: PlanSide) => {
+    setPlanDraft((d) => ({ ...d, [team.squad_id]: { ...planFor(team), [playerId]: side } }));
+    if (!draft[team.squad_id]) setDraft((d) => ({ ...d, [team.squad_id]: slotsFor(team) }));
+  };
+
   // Cycle: none → the natural mark for the slot (starter steps out, bench comes in) → the other → none.
   const cycleTen = (team: Team, playerId: string, slot: Slot) => {
     const cur = tenFor(team)[playerId] || null;
@@ -212,6 +227,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
       starting,
       bench: order.filter((id) => slots[id] === 'bench'),
       ten_man: Object.fromEntries(order.filter((id) => slots[id] !== 'out' && ten[id]).map((id) => [id, ten[id]])),
+      plan_side: Object.fromEntries(order.filter((id) => slots[id] === 'starting' && planFor(team)[id]).map((id) => [id, planFor(team)[id]])),
     }, starting.length < need ? `${team.tag} lineup saved · ${need - starting.length} starter${need - starting.length === 1 ? '' : 's'} short` : `${team.tag} lineup saved`);
   };
 
@@ -398,7 +414,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     const roster = sortByPrefs(team.roster, (m) => m.player_id, roles, prefs);
     const starting = roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = roster.filter((m) => slots[m.player_id] === 'bench');
-    const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id];
+    const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id];
+    const plan = canSee ? planFor(team) : {};
     const submitted = isHome ? progress.home_lineup_set : progress.away_lineup_set;
     const full = starting.length >= starters;
     const over = starting.length > starters;
@@ -484,8 +501,6 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
           <p className="px-3 py-2 text-sm text-[#8B98B0]">No players on the roster yet.</p>
         ) : prefs.view === 'field' ? (
           <LineupField
-            matchId={match.id}
-            squadId={team.squad_id}
             side={team.side}
             players={roster.map((m) => ({ player_id: m.player_id, alias: m.alias, role: m.role, slot: slots[m.player_id] || 'out', ten_man: ten[m.player_id] || null, blocked: isGreen && m.green_ok === false }))}
             roles={roles}
@@ -494,20 +509,14 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             starters={starters}
             focus={f}
             onSlot={(pid, slot) => setSlot(team, pid, slot)}
+            plan={plan}
+            onPlan={(pid, s) => setPlan(team, pid, s)}
           />
         ) : canEdit ? (
           <div className={game ? 'py-0.5' : ''}>
-            {bucketBySide(roster, (m) => m.player_id, roles, prefs).map((bk) => (
+            {bucketBySide(roster, (m) => m.player_id, roles, prefs, plan).map((bk) => (
               <div key={bk.key}>
-                <BucketHeader
-                  k={bk.key}
-                  label={bk.label}
-                  ids={bk.items.map((m) => m.player_id)}
-                  roles={roles}
-                  src={src}
-                  note={`${bk.items.filter((m) => slots[m.player_id] === 'starting').length} starting`}
-                  className="mt-1 first:mt-0"
-                />
+                <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-1 first:mt-0" />
                 <ul className={game ? '' : 'divide-y divide-white/[0.04]'} style={sideRail(bk.key)}>
                   {bk.items.map((m) => {
                     const s = slots[m.player_id];
@@ -565,9 +574,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
               <div key={label}>
                 <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] leading-4">{label}{teamName ? ` · ${teamName}` : ''}</div>
                 <div className={game ? 'text-[11px] leading-[15px]' : 'text-[13px] leading-5'}>
-                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, prefs).map((bk) => (
+                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, prefs, plan).map((bk) => (
                     <div key={bk.key}>
-                      <BucketHeader k={bk.key} label={bk.label} ids={bk.items.map((m) => m.player_id)} roles={roles} src={src} className="mt-1" />
+                      <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-1" />
                       {bk.items.map((m) => (
                         <div key={m.player_id} style={sideRail(bk.key)} className={`group flex items-center gap-1.5 whitespace-nowrap ${bk.key === 'all' ? '' : 'pl-2'} ${dimmed(roles[m.player_id], f, src) ? 'opacity-25' : ''}`}>
                           <PlayerName alias={m.alias} roles={roles[m.player_id]} src={src} focus={f} className="min-w-0 truncate" />
@@ -639,7 +648,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
                 : 'Nothing saved yet · pick your starters, then Save lineup'}
             </span>
             <div className="flex gap-2">
-              {dirty && <button type="button" onClick={() => { setDraft(dropSquad(team.squad_id)); setTenDraft(dropSquad(team.squad_id)); }} className={btnQuiet}>Discard</button>}
+              {dirty && <button type="button" onClick={() => { setDraft(dropSquad(team.squad_id)); setTenDraft(dropSquad(team.squad_id)); setPlanDraft(dropSquad(team.squad_id)); }} className={btnQuiet}>Discard</button>}
               <button type="button" onClick={() => saveLineup(team)} disabled={!dirty || over || busy !== null} className={btnPrimary}>Save lineup</button>
             </div>
           </div>

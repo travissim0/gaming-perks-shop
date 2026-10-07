@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingTenMan, supabaseAdmin, viewerFor,
-  type TenMan,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, supabaseAdmin, viewerFor,
+  SQL_FOR_COL, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
  *   { action: 'set_lineup', squad_id, starting: [player_id], bench: [player_id], ten_man?: { [player_id]: 'in' | 'out' } }
  *         that squad's captain/co-captain or staff (max 10 starters). ten_man is the 10-man plan:
  *         'out' = steps out when they go 10-man, 'in' = comes in for them (usually the infil).
+ *         plan_side?: { [player_id]: 'O' | 'D' } is the captain's offense / defense arrangement:
+ *         a planning aid, private like the lineup, never read by the zone.
  *   { action: 'sub', squad_id, out_player_id, in_player_id }   that squad's captain/co-captain, staff or a referee;
  *         from side release until the result is recorded. Swaps the two slots and logs it.
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
@@ -128,20 +130,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // 10-man plan. Not tied to the slot: once they have gone 10-man the 'in' player is a starter.
     const tenIn = body.ten_man && typeof body.ten_man === 'object' ? body.ten_man as Record<string, unknown> : {};
     const tenMan = (pid: string): TenMan | null => (tenIn[pid] === 'in' || tenIn[pid] === 'out' ? tenIn[pid] as TenMan : null);
-    const rows = [
-      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), set_by: viewer.id, updated_at: now })),
-      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), set_by: viewer.id, updated_at: now })),
+    const planIn = body.plan_side && typeof body.plan_side === 'object' ? body.plan_side as Record<string, unknown> : {};
+    const planSide = (pid: string): PlanSide | null => (planIn[pid] === 'O' || planIn[pid] === 'D' ? planIn[pid] as PlanSide : null);
+    const rows: Record<string, unknown>[] = [
+      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), set_by: viewer.id, updated_at: now })),
+      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), plan_side: planSide(player_id), set_by: viewer.id, updated_at: now })),
     ];
     const { error: delErr } = await supabaseAdmin.from('match_lineups').delete().eq('match_id', id).eq('squad_id', sq.id);
     if (delErr) return fail(delErr);
     let warning: string | undefined;
     if (rows.length) {
-      let { error: insErr } = await supabaseAdmin.from('match_lineups').insert(rows);
-      if (insErr && missingTenMan(insErr.message)) {
-        // Column not added yet: save the lineup without the 10-man plan.
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ error: insErr } = await supabaseAdmin.from('match_lineups').insert(rows.map(({ ten_man: _t, ...r }) => r)));
-        if (rows.some((r) => r.ten_man)) warning = '10-man plan not saved: run add-match-ten-man.sql in Supabase';
+      // A column not added yet: save the lineup without it and say what was dropped.
+      let toInsert = rows;
+      let { error: insErr } = await supabaseAdmin.from('match_lineups').insert(toInsert);
+      for (let col = insErr ? missingLineupCol(insErr.message) : null; insErr && col && col in toInsert[0]; col = insErr ? missingLineupCol(insErr.message) : null) {
+        const dropped = col;
+        if (toInsert.some((r) => r[dropped])) warning = `${dropped === 'ten_man' ? '10-man plan' : 'Offense / defense plan'} not saved: run ${SQL_FOR_COL[dropped]} in Supabase`;
+        toInsert = toInsert.map((r) => { const n = { ...r }; delete n[dropped]; return n; });
+        ({ error: insErr } = await supabaseAdmin.from('match_lineups').insert(toInsert));
       }
       if (insErr) return fail(insErr);
     }
