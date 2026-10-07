@@ -12,6 +12,8 @@ import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import MatchSetup from '@/components/ctf/MatchSetup';
+import { Coverage, PlayerName, RosterControls, SideLean, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
+import type { RoleKey } from '@/lib/ctf-roles';
 import { canFillCrewRole } from '@/lib/crewRoles';
 import { localDateTimeToIso, noContestReason, playByIso } from '@/lib/schedule';
 import { leagueDate } from '@/lib/scoring';
@@ -134,6 +136,10 @@ export default function MatchDetailPage() {
   const [loading, setLoading] = useState(true);
   const [squads, setSquads] = useState<Record<string, SquadInfo>>({});
   const [game, setGame] = useState<GameData | null>(null);
+  // What each rostered player plays (draft + mixes), and how the viewer wants rosters shown.
+  const [roles, setRoles] = useState<RolesMap>({});
+  const [prefs, setPrefs] = useRosterPrefs();
+  const [rosterFocus, setRosterFocus] = useState<Record<string, RoleKey | null>>({});
   const [ctfRole, setCtfRole] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -210,6 +216,10 @@ export default function MatchDetailPage() {
         (mem || []).forEach((r: any) => { byId[r.squad_id]?.members.push({ id: r.player_id, alias: r.profiles?.in_game_alias || 'Unknown' }); });
         Object.values(byId).forEach((s) => s.members.sort((a, b) => a.alias.localeCompare(b.alias)));
         setSquads(byId);
+        fetch(`/api/matches/${encodeURIComponent(matchId)}/roles`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((rj) => setRoles(rj?.roles || {}))
+          .catch(() => setRoles({}));
       }
 
       if (m.game_id) {
@@ -770,11 +780,23 @@ export default function MatchDetailPage() {
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {[b, a].map((s, i) => s && (
                 <div key={s.id} className={i === 0 ? 'sm:text-right' : ''}>
-                  <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] mb-1">Roster</div>
-                  <div className={`flex flex-wrap gap-1 ${i === 0 ? 'sm:justify-end' : ''}`}>
-                    {s.members.map((m) => (
-                      <span key={m.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#1B2438] text-[#E6EDF7]">
-                        <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:text-[#22D3EE]">{m.alias}</Link>
+                  <div className={`mb-1 flex ${i === 0 ? 'sm:justify-end' : ''}`}>
+                    <Coverage
+                      ids={s.members.map((m) => m.id)}
+                      roles={roles}
+                      src={prefs.color}
+                      label="Roster"
+                      focus={rosterFocus[s.id] || null}
+                      onFocus={(k) => setRosterFocus((x) => ({ ...x, [s.id]: k }))}
+                    />
+                  </div>
+                  <div className={`flex flex-wrap gap-0.5 ${i === 0 ? 'sm:justify-end' : ''}`}>
+                    {sortByPrefs(s.members, (m) => m.id, roles, prefs).map((m) => (
+                      <span key={m.id} className={`inline-flex items-center gap-0.5 px-1 rounded-sm bg-[#1B2438] leading-[18px] ${dimmed(roles[m.id], rosterFocus[s.id] || null, prefs.color) ? 'opacity-25' : ''}`}>
+                        <Link href={`/stats/player/${encodeURIComponent(m.alias)}`} className="hover:underline">
+                          <PlayerName alias={m.alias} roles={roles[m.id]} src={prefs.color} />
+                        </Link>
+                        <SideLean roles={roles[m.id]} />
                         <MessageButton recipientId={m.id} recipientAlias={m.alias} variant="icon" subject={match.title || 'Match'} />
                       </span>
                     ))}
@@ -783,13 +805,18 @@ export default function MatchDetailPage() {
               ))}
             </div>
           ) : null}
+          {(a?.members.length || b?.members.length) ? (
+            <div className="mt-3 pt-2 border-t border-white/[0.06]">
+              <RosterControls prefs={prefs} onChange={setPrefs} />
+            </div>
+          ) : null}
         </section>
       )}
 
       {/* Side + lineups (both teams set, not yet played) */}
       {match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
         // Re-mount when the time changes so the lock and side-release wording follow it.
-        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} />
+        <MatchSetup key={`${match.scheduled_at}:${match.time_tbd ? 'tbd' : 'set'}`} matchId={match.id} user={user} roles={roles} prefs={prefs} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

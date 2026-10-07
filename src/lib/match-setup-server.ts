@@ -48,6 +48,14 @@ export interface Viewer { id: string | null; alias: string; staff: boolean; refe
 
 export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase();
 export const missingTable = (msg: string | undefined) => /match_setup|match_lineups|match_lineup_subs|does not exist/i.test(String(msg || ''));
+/** match_lineups.ten_man not added yet (add-match-ten-man.sql)? */
+export const missingTenMan = (msg: string | undefined) => /ten_man/i.test(String(msg || ''));
+
+/**
+ * 10-man plan: who comes in when the team goes 10-man (usually the infil, from the bench)
+ * and who steps out for them (a starter). Planning only; the swap itself is a normal sub.
+ */
+export type TenMan = 'in' | 'out';
 
 /**
  * The in-game arena the zone opens for a match: "<LEAGUE> <AWAY>-<HOME>", away first
@@ -232,7 +240,7 @@ export function buildPayload(
   const homeNames = teamNames(home, side);
   const awayNames = teamNames(away, side ? OTHER[side] : null);
 
-  type Entry = { player_id: string; alias: string; position: number };
+  type Entry = { player_id: string; alias: string; position: number; ten_man: TenMan | null };
   const bySquad: Record<string, { starting: Entry[]; bench: Entry[] }> = {};
   for (const sq of [home, away]) if (sq) bySquad[sq.id] = { starting: [], bench: [] };
   const aliasOf = new Map<string, string>();
@@ -240,7 +248,7 @@ export function buildPayload(
   lineupRows.forEach((l: any) => {
     const b = bySquad[l.squad_id];
     if (!b) return;
-    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position });
+    (l.slot === 'starting' ? b.starting : b.bench).push({ player_id: l.player_id, alias: aliasOf.get(l.player_id) || 'Unknown', position: l.position, ten_man: l.ten_man === 'in' || l.ten_man === 'out' ? l.ten_man : null });
   });
   Object.values(bySquad).forEach((b) => { b.starting.sort((x, y) => x.position - y.position); b.bench.sort((x, y) => x.position - y.position); });
 
@@ -382,6 +390,15 @@ export async function loadAll(id: string, viewer: Viewer) {
   return loadForMatch(match, viewer);
 }
 
+/** The match's lineup rows, with the 10-man plan when the column exists. */
+async function loadLineupRows(matchId: string) {
+  const res = await supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, ten_man, updated_at').eq('match_id', matchId);
+  if (res.error && missingTenMan(res.error.message)) {
+    return supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, updated_at').eq('match_id', matchId);
+  }
+  return res;
+}
+
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */
 export async function loadForMatch(match: any, viewer: Viewer) {
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
@@ -394,7 +411,7 @@ export async function loadForMatch(match: any, viewer: Viewer) {
   const [squads, setupRes, lineupRes, subsRes, automation] = await Promise.all([
     loadSquads(ids),
     readSetup(),
-    supabaseAdmin.from('match_lineups').select('squad_id, player_id, slot, position, updated_at').eq('match_id', match.id),
+    loadLineupRows(match.id),
     loadSubs(match.id),
     automationFor(match),
   ]);

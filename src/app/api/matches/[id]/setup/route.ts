@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, supabaseAdmin, viewerFor,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingTenMan, supabaseAdmin, viewerFor,
+  type TenMan,
 } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,9 @@ export const dynamic = 'force-dynamic';
  * GET  /api/matches/[id]/setup
  * POST /api/matches/[id]/setup  (Bearer)
  *   { action: 'set_side', side: 'titan' | 'collective' | null }   home captain/co-captain or staff
- *   { action: 'set_lineup', squad_id, starting: [player_id], bench: [player_id] }   that squad's captain/co-captain or staff (max 10 starters)
+ *   { action: 'set_lineup', squad_id, starting: [player_id], bench: [player_id], ten_man?: { [player_id]: 'in' | 'out' } }
+ *         that squad's captain/co-captain or staff (max 10 starters). ten_man is the 10-man plan:
+ *         'out' = steps out when they go 10-man, 'in' = comes in for them (usually the infil).
  *   { action: 'sub', squad_id, out_player_id, in_player_id }   that squad's captain/co-captain, staff or a referee;
  *         from side release until the result is recorded. Swaps the two slots and logs it.
  *   { action: 'swap_home' }   staff — swaps squad_a/squad_b so the other team is home (clears the side)
@@ -122,17 +125,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (bad.length) return NextResponse.json({ error: `This is an FS Green match: only the captain and round ${green.minRound}+ picks can start. ${bad.join(', ')} ${bad.length === 1 ? 'was' : 'were'} drafted in rounds 1–${green.minRound - 1} and stay${bad.length === 1 ? 's' : ''} on the bench.` }, { status: 400 });
     }
 
+    // 10-man plan. Not tied to the slot: once they have gone 10-man the 'in' player is a starter.
+    const tenIn = body.ten_man && typeof body.ten_man === 'object' ? body.ten_man as Record<string, unknown> : {};
+    const tenMan = (pid: string): TenMan | null => (tenIn[pid] === 'in' || tenIn[pid] === 'out' ? tenIn[pid] as TenMan : null);
     const rows = [
-      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, set_by: viewer.id, updated_at: now })),
-      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, set_by: viewer.id, updated_at: now })),
+      ...starting.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'starting', position: i, ten_man: tenMan(player_id), set_by: viewer.id, updated_at: now })),
+      ...bench.map((player_id, i) => ({ match_id: id, squad_id: sq.id, player_id, slot: 'bench', position: i, ten_man: tenMan(player_id), set_by: viewer.id, updated_at: now })),
     ];
     const { error: delErr } = await supabaseAdmin.from('match_lineups').delete().eq('match_id', id).eq('squad_id', sq.id);
     if (delErr) return fail(delErr);
+    let warning: string | undefined;
     if (rows.length) {
-      const { error: insErr } = await supabaseAdmin.from('match_lineups').insert(rows);
+      let { error: insErr } = await supabaseAdmin.from('match_lineups').insert(rows);
+      if (insErr && missingTenMan(insErr.message)) {
+        // Column not added yet: save the lineup without the 10-man plan.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ error: insErr } = await supabaseAdmin.from('match_lineups').insert(rows.map(({ ten_man: _t, ...r }) => r)));
+        if (rows.some((r) => r.ten_man)) warning = '10-man plan not saved: run add-match-ten-man.sql in Supabase';
+      }
       if (insErr) return fail(insErr);
     }
-    return NextResponse.json(await loadAll(id, viewer));
+    return NextResponse.json({ ...(await loadAll(id, viewer)), ...(warning ? { warning } : {}) });
   }
 
   if (action === 'sub') {
