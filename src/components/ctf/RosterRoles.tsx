@@ -16,7 +16,7 @@ export type RolesMap = Record<string, PlayerRoles>;
 export interface RosterPrefs {
   /** Colour and tag names from the draft registration or from mix play. */
   color: ColorSource;
-  /** role = support first (default); side = optional offense / defense planning groups. */
+  /** role = support first (default). 'side' groups by offense / defense: used internally by the Plan tab. */
   sort: 'side' | 'role' | 'alpha';
   /** 'game' = black, tight, small type, closer to the in-game player list. */
   skin: 'site' | 'game';
@@ -224,7 +224,7 @@ export function RosterControls({ prefs, onChange }: { prefs: RosterPrefs; onChan
         Colour <Seg value={prefs.color} options={[['draft', 'Draft'], ['mix', 'Mixes']]} onChange={(color) => onChange({ color })} />
       </span>
       <span className="inline-flex items-center gap-1">
-        Order <Seg value={prefs.sort} options={[['role', 'Role'], ['alpha', 'A–Z'], ['side', 'O / D plan']]} onChange={(sort) => onChange({ sort })} />
+        Order <Seg value={prefs.sort === 'alpha' ? 'alpha' : 'role'} options={[['role', 'Role'], ['alpha', 'A–Z']]} onChange={(sort) => onChange({ sort })} />
       </span>
       <span className="inline-flex items-center gap-1">
         Skin <Seg value={prefs.skin} options={[['site', 'Site'], ['game', 'In-game']]} onChange={(skin) => onChange({ skin })} />

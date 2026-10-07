@@ -92,6 +92,8 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
   const [subPick, setSubPick] = useState<Record<string, { out: string; in: string }>>({});
   // Coverage role highlighted per squad.
   const [focus, setFocus] = useState<Record<string, RoleKey | null>>({});
+  // Per squad: the Lineup tab (start / bench / out) or the optional Plan tab (class, 10M, O / D).
+  const [modes, setModes] = useState<Record<string, 'lineup' | 'plan'>>({});
   // List view: the player whose class picker is open.
   const [classMenu, setClassMenu] = useState<string | null>(null);
   useEffect(() => {
@@ -434,6 +436,44 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     >10M {v}</span>
   ) : null;
 
+  // Plan tab: the class a player is planned on, as a small button that opens a row of class chips.
+  // (Not a native select: globals.css forces 16px on every select for iOS.)
+  const classButton = (team: Team, m: Member, classes: Record<string, RoleKey | null>) => (
+    <span className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setClassMenu((x) => (x === m.player_id ? null : m.player_id)); }}
+        aria-label={`Planned class for ${m.alias}`}
+        aria-expanded={classMenu === m.player_id}
+        title="Class you plan them on for this match (your squad only; the zone ignores it)"
+        className={`rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${classes[m.player_id] ? '' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
+        style={classes[m.player_id] ? { color: '#0B0F1A', backgroundColor: ROLE_META[classes[m.player_id]!].color } : undefined}
+      >
+        {classes[m.player_id] ? ROLE_META[classes[m.player_id]!].short : 'Class'}
+      </button>
+      {classMenu === m.player_id && (
+        <span className="absolute right-0 top-full z-30 mt-0.5 flex gap-0.5 rounded-md bg-[#0B0F1A] p-1 shadow-lg ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
+          {PLAN_CLASSES.map((c) => {
+            const on = classes[m.player_id] === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { setClass(team, m.player_id, on ? null : c); setClassMenu(null); }}
+                title={on ? 'Clear: back to what they usually play' : ROLE_META[c].label}
+                className="rounded-sm px-1.5 text-[10px] font-semibold leading-[18px]"
+                style={{ color: on ? '#0B0F1A' : ROLE_META[c].color, backgroundColor: on ? ROLE_META[c].color : `${ROLE_META[c].color}1f` }}
+              >{ROLE_META[c].short}</button>
+            );
+          })}
+          {classes[m.player_id] && (
+            <button type="button" onClick={() => { setClass(team, m.player_id, null); setClassMenu(null); }} className="px-1 text-[10px] text-[#8B98B0] hover:text-[#E6EDF7]" title="Clear the planned class">✕</button>
+          )}
+        </span>
+      )}
+    </span>
+  );
+
   const renderTeam = (team: Team, canEdit: boolean) => {
     const isHome = team.squad_id === home.squad_id;
     const canSee = !!team.lineup;
@@ -442,6 +482,9 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
     const roster = sortByPrefs(team.roster, (m) => m.player_id, roles, prefs);
     const starting = roster.filter((m) => slots[m.player_id] === 'starting');
     const bench = roster.filter((m) => slots[m.player_id] === 'bench');
+    const outList = roster.filter((m) => slots[m.player_id] === 'out');
+    const mode = modes[team.squad_id] || 'lineup';
+    const setMode = setModes;
     const dirty = !!draft[team.squad_id] || !!tenDraft[team.squad_id] || !!planDraft[team.squad_id] || !!classDraft[team.squad_id];
     const plan = canSee ? planFor(team) : {};
     const classes = canSee ? classFor(team) : {};
@@ -495,7 +538,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
 
         {/* 10-man: one big button for this squad's captains (and staff / referees) once subs are open.
             Trial feature: it only makes the planned subs, nothing in the game triggers it. */}
-        {canSee && (pairs.go.length > 0 || pairs.back.length > 0) && (canSub || canEdit) && (
+        {canSee && canSub && (pairs.go.length > 0 || pairs.back.length > 0) && (
           <div className={`px-3 py-2 border-b ${rule} bg-[#d946ef]/[0.06]`}>
             {(() => {
               const goingBack = pairs.go.length === 0;
@@ -545,95 +588,120 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
             onTen={(pid, v) => setTen(team, pid, v)}
           />
         ) : canEdit ? (
-          <div className={game ? 'py-0.5' : ''}>
-            {bucketBySide(roster, (m) => m.player_id, roles, prefs, plan).map((bk) => (
-              <div key={bk.key}>
-                <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-1 first:mt-0" />
-                <ul className={game ? '' : 'divide-y divide-white/[0.04]'} style={sideRail(bk.key)}>
-                  {bk.items.map((m) => {
-                    const s = slots[m.player_id];
-                    const r = roles[m.player_id];
-                    const t = ten[m.player_id] || null;
-                    return (
-                      <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : s === 'out' ? 'opacity-60' : ''}`}>
-                        <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                          <PlayerName alias={m.alias} roles={r} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
-                          <PlaceMark p={bk.place[m.player_id]} />
-                          {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
-                          {isGreen && m.green_ok === false && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
-                          {/* Details only on hover: the colour carries the class at a glance. */}
-                          <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
-                            <SideLean roles={r} />
-                            <RoleTags roles={r} src={src} max={4} />
-                          </span>
-                        </span>
-                        {s !== 'out' && (
-                          <span className="relative shrink-0">
+          <div className={game ? 'pb-0.5' : ''}>
+            {/* Lineup (who starts, sits, is out: what the zone uses) vs Plan (optional, squad-only notes). */}
+            <div className="flex items-center justify-between gap-2 px-3 pt-1.5 pb-1">
+              <span className="inline-flex rounded bg-[#0B0F1A] p-px text-[11px]">
+                {(['lineup', 'plan'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setMode((x) => ({ ...x, [team.squad_id]: k }))}
+                    className={`whitespace-nowrap rounded-sm px-2 leading-[20px] transition-colors ${mode === k ? 'bg-white/10 text-[#E6EDF7]' : 'text-[#8B98B0] hover:text-[#E6EDF7]'}`}
+                  >
+                    {k === 'lineup' ? 'Lineup' : 'Plan'}
+                  </button>
+                ))}
+              </span>
+              <span className="text-[10px] text-[#8B98B0]/80 text-right">
+                {mode === 'lineup' ? 'Start / bench / out: what the zone uses' : 'Optional notes for your squad: class, 10-man, O / D. The zone ignores these.'}
+              </span>
+            </div>
+            {([
+              ['starting', 'Starting', `${starting.length}/${starters}`, '#34D399'],
+              ['bench', 'Bench', String(bench.length), '#22D3EE'],
+              ['out', 'Out', String(outList.length), '#8B98B0'],
+            ] as const).map(([slot, label, count, color]) => {
+              const list = slot === 'starting' ? starting : slot === 'bench' ? bench : outList;
+              if (slot === 'out' && list.length === 0) return null;
+              // O / D groups only make sense for starters, and only while planning.
+              const groups = slot === 'starting' && mode === 'plan'
+                ? bucketBySide(list, (m) => m.player_id, roles, { ...prefs, sort: 'side' }, plan)
+                : [{ key: 'all' as const, label: '', items: list, place: {} as Record<string, any> }];
+              return (
+                <div key={slot} className="mt-1 first:mt-0">
+                  <div className="flex items-center gap-2 border-l-2 px-3 text-[10px] uppercase tracking-[0.15em] leading-5" style={{ borderColor: color, color, backgroundColor: `${color}10` }}>
+                    {label} <span className="font-normal tracking-normal tabular-nums text-[#8B98B0]">{count}</span>
+                    {slot === 'starting' && over && <span className="normal-case tracking-normal text-[#F87171]">too many</span>}
+                  </div>
+                  {list.length === 0 ? (
+                    <p className="px-3 py-1 text-[11px] text-[#8B98B0]/60">{slot === 'starting' ? `Nobody yet: press Start on up to ${starters} players below.` : 'Nobody'}</p>
+                  ) : groups.map((bk) => (
+                    <div key={bk.key}>
+                      <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-0.5" />
+                      <ul className={game ? '' : 'divide-y divide-white/[0.04]'} style={sideRail(bk.key)}>
+                        {bk.items.map((m) => {
+                          const r = roles[m.player_id];
+                          const t = ten[m.player_id] || null;
+                          const blocked = isGreen && m.green_ok === false;
+                          const move = (to: Slot, text: string, tone: string) => (
                             <button
+                              key={to}
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); setClassMenu((x) => (x === m.player_id ? null : m.player_id)); }}
-                              aria-label={`Planned class for ${m.alias}`}
-                              aria-expanded={classMenu === m.player_id}
-                              title="Class you plan them on for this match (your squad only; the zone ignores it)"
-                              className={`rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${classes[m.player_id] ? '' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
-                              style={classes[m.player_id] ? { color: '#0B0F1A', backgroundColor: ROLE_META[classes[m.player_id]!].color } : undefined}
-                            >
-                              {classes[m.player_id] ? ROLE_META[classes[m.player_id]!].short : 'Class'}
-                            </button>
-                            {classMenu === m.player_id && (
-                              <span className="absolute right-0 top-full z-30 mt-0.5 flex gap-0.5 rounded-md bg-[#0B0F1A] p-1 shadow-lg ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
-                                {PLAN_CLASSES.map((c) => {
-                                  const on = classes[m.player_id] === c;
-                                  return (
-                                    <button
-                                      key={c}
-                                      type="button"
-                                      onClick={() => { setClass(team, m.player_id, on ? null : c); setClassMenu(null); }}
-                                      title={on ? 'Clear: back to what they usually play' : ROLE_META[c].label}
-                                      className="rounded-sm px-1.5 text-[10px] font-semibold leading-[18px]"
-                                      style={{ color: on ? '#0B0F1A' : ROLE_META[c].color, backgroundColor: on ? ROLE_META[c].color : `${ROLE_META[c].color}1f` }}
-                                    >{ROLE_META[c].short}</button>
-                                  );
-                                })}
-                                {classes[m.player_id] && (
-                                  <button type="button" onClick={() => { setClass(team, m.player_id, null); setClassMenu(null); }} className="px-1 text-[10px] text-[#8B98B0] hover:text-[#E6EDF7]" title="Clear the planned class">✕</button>
-                                )}
+                              onClick={() => setSlot(team, m.player_id, to)}
+                              disabled={to === 'starting' && (full || blocked)}
+                              title={to === 'starting' && blocked ? `FS Green: only the captain and round ${minRound}+ picks can start` : to === 'starting' && full ? `${starters} starters already picked` : undefined}
+                              className={`rounded-sm px-1.5 text-[10px] leading-[18px] transition-colors hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed ${tone}`}
+                            >{text}</button>
+                          );
+                          return (
+                            <li key={m.player_id} className={`group flex items-center gap-1.5 hover:bg-white/[0.03] ${rowCls} ${dimmed(r, f, src) ? 'opacity-25' : slot === 'out' ? 'opacity-60' : ''}`}>
+                              <span className="min-w-0 flex-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                                <PlayerName alias={m.alias} roles={r} src={src} focus={f} as={classes[m.player_id]} className="min-w-0 truncate" />
+                                {m.role !== 'player' && <span className="shrink-0 text-[9px] uppercase tracking-wide text-[#F59E0B]">{m.role === 'captain' ? 'C' : 'Co-C'}</span>}
+                                {blocked && <span className="shrink-0 rounded-sm bg-[#F87171]/15 px-1 text-[9px] uppercase tracking-wide text-[#F87171]" title={`Drafted in round ${m.draft_round ?? '1–' + (minRound - 1)}: can't play an FS Green match`}>R{m.draft_round ?? `1–${minRound - 1}`} · bench only</span>}
+                                {/* Planned notes stay visible but quiet in the Lineup tab; they are edited in Plan. */}
+                                {mode === 'lineup' && <PlanClassTag k={classes[m.player_id]} />}
+                                {mode === 'lineup' && <TenTag v={t} />}
+                                {mode === 'plan' && <PlaceMark p={bk.place[m.player_id]} />}
+                                <span className="hidden sm:group-hover:inline-flex items-center gap-1.5 shrink-0">
+                                  <SideLean roles={r} />
+                                  <RoleTags roles={r} src={src} max={4} />
+                                </span>
                               </span>
-                            )}
-                          </span>
-                        )}
-                        {s !== 'out' && (
-                          <button
-                            type="button"
-                            onClick={() => cycleTen(team, m.player_id, s)}
-                            title={t === 'in' ? 'Subs in on 10-man. Click to switch to sub out.' : t === 'out' ? 'Subs out on 10-man. Click to clear.' : s === 'starting' ? 'Mark to sub out on 10-man' : 'Mark to sub in on 10-man (e.g. your 10-man infil)'}
-                            className={`shrink-0 rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
-                          >
-                            10M{t ? ` ${t}` : ''}
-                          </button>
-                        )}
-                        <span className="flex shrink-0 gap-px">
-                          {(['starting', 'bench', 'out'] as Slot[]).map((k) => (
-                            <button
-                              key={k}
-                              type="button"
-                              onClick={() => setSlot(team, m.player_id, k)}
-                              disabled={k === 'starting' && ((s !== 'starting' && full) || (isGreen && m.green_ok === false))}
-                              title={k === 'starting' && isGreen && m.green_ok === false ? `FS Green: only the captain and round ${minRound}+ picks can start` : k === 'starting' && s !== 'starting' && full ? `${starters} starters already picked` : undefined}
-                              className={`rounded-sm px-1.5 text-[10px] leading-[16px] transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${s === k
-                                ? k === 'starting' ? 'bg-[#34D399]/20 text-[#34D399]' : k === 'bench' ? 'bg-[#22D3EE]/15 text-[#22D3EE]' : 'bg-white/10 text-[#E6EDF7]'
-                                : 'text-[#8B98B0]/70 hover:bg-white/5'}`}
-                            >
-                              {k === 'starting' ? 'Start' : k === 'bench' ? 'Bench' : 'Out'}
-                            </button>
-                          ))}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+                              {mode === 'lineup' ? (
+                                <span className="flex shrink-0 gap-0.5">
+                                  {slot !== 'starting' && move('starting', 'Start', 'text-[#34D399]')}
+                                  {slot !== 'bench' && move('bench', 'Bench', 'text-[#22D3EE]')}
+                                  {slot !== 'out' && move('out', 'Out', 'text-[#8B98B0]')}
+                                </span>
+                              ) : slot === 'out' ? (
+                                <span className="shrink-0 text-[10px] text-[#8B98B0]/60">out</span>
+                              ) : (
+                                <span className="flex shrink-0 items-center gap-1">
+                                  {slot === 'starting' && (
+                                    <span className="inline-flex rounded-sm bg-[#0B0F1A] p-px" title="Offense or defense (your plan only)">
+                                      {(['D', 'O'] as const).map((sd) => {
+                                        const on = (bk.place[m.player_id]?.side ?? plan[m.player_id]) === sd;
+                                        return (
+                                          <button key={sd} type="button" onClick={() => setPlan(team, m.player_id, sd)}
+                                            className="rounded-sm px-1 text-[9px] font-semibold leading-[16px]"
+                                            style={on ? { backgroundColor: sd === 'D' ? '#60A5FA33' : '#FB923C33', color: sd === 'D' ? '#60A5FA' : '#FB923C' } : { color: 'rgba(139,152,176,0.6)' }}
+                                          >{sd}</button>
+                                        );
+                                      })}
+                                    </span>
+                                  )}
+                                  {classButton(team, m, classes)}
+                                  <button
+                                    type="button"
+                                    onClick={() => cycleTen(team, m.player_id, slot)}
+                                    title={t === 'in' ? 'Subs in on 10-man. Click to switch to sub out.' : t === 'out' ? 'Subs out on 10-man. Click to clear.' : slot === 'starting' ? 'Mark to sub out on 10-man' : 'Mark to sub in on 10-man (e.g. your 10-man infil)'}
+                                    className={`rounded-sm px-1 text-[9px] font-semibold leading-[16px] transition-colors ${t === 'in' ? 'bg-[#d946ef]/20 text-[#f0abfc]' : t === 'out' ? 'bg-[#FB923C]/15 text-[#FB923C]' : 'text-[#8B98B0]/60 hover:text-[#E6EDF7]'}`}
+                                  >
+                                    10M{t ? ` ${t}` : ''}
+                                  </button>
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="px-3 py-1.5 space-y-1.5">
@@ -641,7 +709,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
               <div key={label}>
                 <div className="text-[10px] uppercase tracking-wide text-[#8B98B0] leading-4">{label}{teamName ? ` · ${teamName}` : ''}</div>
                 <div className={game ? 'text-[11px] leading-[15px]' : 'text-[13px] leading-5'}>
-                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, prefs, plan).map((bk) => (
+                  {list.length === 0 ? <span className="text-xs text-[#8B98B0]/60">{label === 'Starting' ? 'Not set yet' : 'Nobody'}</span> : bucketBySide(list, (m) => m.player_id, roles, { ...prefs, sort: label === 'Starting' && Object.keys(plan).length ? 'side' : prefs.sort === 'alpha' ? 'alpha' : 'role' }, plan).map((bk) => (
                     <div key={bk.key}>
                       <BucketHeader k={bk.key} label={bk.label} count={bk.items.length} className="mt-1" />
                       {bk.items.map((m) => (
@@ -775,7 +843,7 @@ export default function MatchSetup({ matchId, user, roles, prefs }: { matchId: s
         </div>
 
         <p className="text-[11px] text-[#8B98B0]">
-          Matches are {starters}v{starters}. Everyone starts on the bench: click Start for your {starters} starters, and set Out only for players who won't be at the match. Mark 10M on a bench player to sub them in when you go 10-man (your 10-man infil) and on the starter they replace; Execute 10-man subs then makes those subs in one go (and Revert swaps them back). Save when you're done. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
+          Matches are {starters}v{starters}. Everyone starts on the bench: press Start for your {starters} starters, and Out only for players who won't be at the match, then Save. The Plan tab is optional: classes, 10-man (mark the bench player who comes in and the starter they replace; Execute 10-man subs then makes those subs) and offense / defense, all just for your squad. Lineups are private to your own captains and league staff. The home side is released to everyone five minutes before the match. Captains and co-captains can change things until the scheduled time; staff any time.
           From side release until the result is recorded, captains, staff and referees can make subs instead. The zone opens the arena named above, places starters on their team and keeps the bench in spec on the other team name, and applies subs as they come in.
         </p>
       </div>
