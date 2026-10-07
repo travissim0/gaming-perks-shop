@@ -63,8 +63,10 @@ export const PLAN_LABEL: Record<OptionalLineupCol, string> = {
   plan_ack: 'In-game answer', plan_ack_at: 'In-game answer', plan_suggest_side: 'In-game answer', plan_suggest_class: 'In-game answer',
 };
 /** The optional column an error complains about, if any. */
+// Whole-name match: a plain substring test took 'plan_ack' for 'plan_ack_at', dropped the wrong column,
+// gave up, and the page fell into its "run the setup SQL" state until the new columns existed.
 export const missingLineupCol = (msg: string | undefined): OptionalLineupCol | null =>
-  OPTIONAL_LINEUP_COLS.find((c) => new RegExp(c, 'i').test(String(msg || ''))) || null;
+  OPTIONAL_LINEUP_COLS.find((c) => new RegExp(`(^|[^a-z0-9_])${c}([^a-z0-9_]|$)`, 'i').test(String(msg || ''))) || null;
 
 /**
  * The captain's offense / defense arrangement of their starters. A planning aid for the
