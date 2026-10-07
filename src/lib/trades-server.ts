@@ -26,8 +26,8 @@ export const TRADES_URL = `${SITE_URL}/league/trades`;
 export const TRADES_DISCORD_CHANNEL_ID = '1410803169117605989';
 export const APPEAL_WINDOW_MS = 12 * 3_600_000;
 export const MAX_TRADES_PER_PLAYER = 2;
-/** The regular season's last day (YYYY-MM-DD, league time) when no playoff match is scheduled yet. */
-const REGULAR_SEASON_ENDS = '2026-11-08';
+/** The day the playoffs start (YYYY-MM-DD, league time), used until a playoff match is scheduled. S5: Nov 15. */
+const PLAYOFFS_START = '2026-11-15';
 export const LEAGUE = 'ctfdl';
 
 export type TradeStatus = 'proposed' | 'agreed' | 'escalated' | 'completed' | 'declined' | 'cancelled' | 'denied';
@@ -48,7 +48,7 @@ export interface SeasonSquad { id: string; name: string; tag: string | null; cap
 export interface TradeContext {
   season_number: number | null;
   squads: SeasonSquad[];
-  /** When the playoffs start: the first playoff match, else the day after the regular season ends. Null = unknown. */
+  /** When the playoffs start: the first scheduled playoff match, else midnight league time on PLAYOFFS_START. */
   deadline: string | null;
   /** Why trading is paused right now (Sunday evening, or a match in progress), or null. */
   blackout: string | null;
@@ -82,19 +82,13 @@ async function seasonSquads(): Promise<SeasonSquad[]> {
 
 async function tradeDeadline(season: number | null): Promise<string | null> {
   if (season == null) return null;
-  // The first playoff match once the bracket is scheduled; until then, the morning after the
-  // regular season's last day (the season's FS cut-off, or the date above), league time.
+  // The first playoff match once the bracket is scheduled; until then, the day above.
   const { data } = await supabaseAdmin.from('matches').select('scheduled_at, time_tbd').eq('league_slug', LEAGUE).eq('season_number', season).eq('stage', 'playoff').order('scheduled_at').limit(20);
   const rows = (data || []) as { scheduled_at: string; time_tbd?: boolean }[];
   const firstPlayoff = rows.find((r) => !r.time_tbd) || rows[0];
   if (firstPlayoff) return firstPlayoff.scheduled_at;
-  const { data: lg } = await supabaseAdmin.from('leagues').select('id').eq('slug', LEAGUE).maybeSingle();
-  const { data: ls } = lg ? await supabaseAdmin.from('league_seasons').select('scoring_rules').eq('league_id', (lg as any).id).eq('season_number', season).maybeSingle() : { data: null };
-  const lastDay = (ls as any)?.scoring_rules?.fs?.closes_on || REGULAR_SEASON_ENDS;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastDay)) return null;
-  // Midnight at the start of the next day in New York: 04:00 or 05:00 UTC depending on DST.
-  const next = new Date(`${lastDay}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
-  const ymd = next.toISOString().slice(0, 10);
+  // Midnight league time on the day the playoffs start: 04:00 or 05:00 UTC depending on DST.
+  const ymd = PLAYOFFS_START;
   const offset = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' }).formatToParts(new Date(`${ymd}T12:00:00Z`)).find((p) => p.type === 'timeZoneName')?.value || 'GMT-5';
   const hours = Number((offset.match(/GMT([+-]\d+)/) || [])[1] || -5);
   // Local midnight is (0 - offset) hours UTC: GMT-5 → 05:00 UTC, GMT-4 → 04:00 UTC.
