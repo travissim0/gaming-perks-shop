@@ -7,7 +7,7 @@
  * on its own: at once when fewer than two squads could still appeal, else when the window ends.
  *
  * Rules the site enforces (league post, 2026-10-07): a player is in at most two completed trades a
- * season; nothing is proposed or accepted once the first week 6 RS match has started; no proposing,
+ * season; nothing is proposed or accepted once the playoffs have started; no proposing,
  * accepting or voting between 8 and 11 PM ET on Sundays or while a league match is being played.
  * The swap itself waits only for no match to be in progress. Captains cannot be traded.
  */
@@ -26,7 +26,8 @@ export const TRADES_URL = `${SITE_URL}/league/trades`;
 export const TRADES_DISCORD_CHANNEL_ID = '1410803169117605989';
 export const APPEAL_WINDOW_MS = 12 * 3_600_000;
 export const MAX_TRADES_PER_PLAYER = 2;
-export const TRADE_DEADLINE_WEEK = 6;
+/** The regular season's last day (YYYY-MM-DD, league time) when no playoff match is scheduled yet. */
+const REGULAR_SEASON_ENDS = '2026-11-08';
 export const LEAGUE = 'ctfdl';
 
 export type TradeStatus = 'proposed' | 'agreed' | 'escalated' | 'completed' | 'declined' | 'cancelled' | 'denied';
@@ -47,7 +48,7 @@ export interface SeasonSquad { id: string; name: string; tag: string | null; cap
 export interface TradeContext {
   season_number: number | null;
   squads: SeasonSquad[];
-  /** First week-6 RS match; nothing is proposed or accepted from then on. Null = no deadline known. */
+  /** When the playoffs start: the first playoff match, else the day after the regular season ends. Null = unknown. */
   deadline: string | null;
   /** Why trading is paused right now (Sunday evening, or a match in progress), or null. */
   blackout: string | null;
@@ -81,10 +82,23 @@ async function seasonSquads(): Promise<SeasonSquad[]> {
 
 async function tradeDeadline(season: number | null): Promise<string | null> {
   if (season == null) return null;
-  const { data } = await supabaseAdmin.from('matches').select('scheduled_at, time_tbd').eq('league_slug', LEAGUE).eq('season_number', season).eq('stage', 'regular').eq('week', TRADE_DEADLINE_WEEK).order('scheduled_at').limit(20);
+  // The first playoff match once the bracket is scheduled; until then, the morning after the
+  // regular season's last day (the season's FS cut-off, or the date above), league time.
+  const { data } = await supabaseAdmin.from('matches').select('scheduled_at, time_tbd').eq('league_slug', LEAGUE).eq('season_number', season).eq('stage', 'playoff').order('scheduled_at').limit(20);
   const rows = (data || []) as { scheduled_at: string; time_tbd?: boolean }[];
-  if (rows.length === 0) return null;
-  return (rows.find((r) => !r.time_tbd) || rows[0]).scheduled_at;
+  const firstPlayoff = rows.find((r) => !r.time_tbd) || rows[0];
+  if (firstPlayoff) return firstPlayoff.scheduled_at;
+  const { data: lg } = await supabaseAdmin.from('leagues').select('id').eq('slug', LEAGUE).maybeSingle();
+  const { data: ls } = lg ? await supabaseAdmin.from('league_seasons').select('scoring_rules').eq('league_id', (lg as any).id).eq('season_number', season).maybeSingle() : { data: null };
+  const lastDay = (ls as any)?.scoring_rules?.fs?.closes_on || REGULAR_SEASON_ENDS;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastDay)) return null;
+  // Midnight at the start of the next day in New York: 04:00 or 05:00 UTC depending on DST.
+  const next = new Date(`${lastDay}T12:00:00Z`); next.setUTCDate(next.getUTCDate() + 1);
+  const ymd = next.toISOString().slice(0, 10);
+  const offset = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' }).formatToParts(new Date(`${ymd}T12:00:00Z`)).find((p) => p.type === 'timeZoneName')?.value || 'GMT-5';
+  const hours = Number((offset.match(/GMT([+-]\d+)/) || [])[1] || -5);
+  // Local midnight is (0 - offset) hours UTC: GMT-5 → 05:00 UTC, GMT-4 → 04:00 UTC.
+  return new Date(Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(5, 7)) - 1, Number(ymd.slice(8, 10)), -hours)).toISOString();
 }
 
 /** Sunday 8–11 PM Eastern. */
@@ -189,7 +203,7 @@ type Result = { trade?: Trade; error?: string; status?: number };
 
 export async function proposeTrade(caller: Caller, input: { squad_ids: string[]; players: { player_id: string; to_squad_id: string }[]; note?: string }): Promise<Result> {
   const ctx = await tradeContext();
-  if (pastDeadline(ctx)) return { error: `Trading closed when week ${TRADE_DEADLINE_WEEK} started.`, status: 409 };
+  if (pastDeadline(ctx)) return { error: 'Trading closed when the playoffs started.', status: 409 };
   if (ctx.blackout) return { error: ctx.blackout, status: 409 };
   const mine = await squadLedBy(caller.id, ctx.squads);
   if (!mine) return { error: 'Only a captain or co-captain of a squad in the league can propose a trade', status: 403 };
@@ -253,7 +267,7 @@ export async function respondToTrade(caller: Caller, tradeId: string, accept: bo
   const seat = mine ? trade.squads.find((s) => s.squad_id === mine.id) : null;
   if (!mine || !seat) return { error: 'Only a captain or co-captain of a squad in this trade can answer it', status: 403 };
   if (seat.response !== 'pending') return { error: `${label(mine)} already ${seat.response}`, status: 409 };
-  if (accept && pastDeadline(ctx)) return { error: `Trading closed when week ${TRADE_DEADLINE_WEEK} started.`, status: 409 };
+  if (accept && pastDeadline(ctx)) return { error: 'Trading closed when the playoffs started.', status: 409 };
   if (accept && ctx.blackout) return { error: ctx.blackout, status: 409 };
 
   const now = new Date().toISOString();

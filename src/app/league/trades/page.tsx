@@ -180,7 +180,7 @@ export default function TradesPage() {
           A trade is between 2, 3 or 4 squads, each giving at least one player (captains can’t be traded). Once every squad in it has accepted, the other captains have 12 hours to approve or appeal. Two appeals from two different squads send it to the admins, whose decision is final; otherwise it goes through on its own. A player can be traded at most twice a season.
         </p>
         <p className="mt-2 text-xs text-[#8B98B0]">
-          {ctx?.deadline ? (deadlinePassed ? 'Trading closed when week 6 started.' : `Trades must be agreed before the first week 6 match (${et(ctx.deadline)}).`) : 'Trades close when week 6 starts.'}
+          {ctx?.deadline ? (deadlinePassed ? 'Trading closed when the playoffs started.' : `Trades must be agreed before the playoffs start (${et(ctx.deadline)}).`) : 'Trades close when the playoffs start.'}
           {' '}No proposing, accepting or voting between 8 and 11 PM ET on Sundays or while a league match is being played.
           {ctx?.blackout && <span className="text-[#F59E0B]"> Right now: {ctx.blackout}</span>}
         </p>
