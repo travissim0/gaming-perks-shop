@@ -114,3 +114,6 @@ Thumbs.db
 
 # bot runtime state (which sign-ups were already announced)
 bot/.signups-state.json
+
+# bot runtime state (who the bot made Commentator)
+bot/.production-state.json

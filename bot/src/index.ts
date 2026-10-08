@@ -19,6 +19,7 @@ import { runDueTrades } from './trades.js';
  * - On a row in discord_bot_commands ('sync' | 'teardown'): run it and mark done.
  * - /rolepicker (staff): posts a button message for self-assignable roles.
  * - /squad add|remove (captains): squad role for players who won't link Discord.
+ * - Production Team role → Commentator CTF role on freeinf.org (linked members).
  * - Sign-up hype in #ctf-signup: shout-out per new registration, nudges for
  *   @mentioned players who haven't registered, /signups kickoff|status (staff).
  * - #ctf-referee: crew changes and match-time posts queued by the site, plus a
@@ -93,8 +94,8 @@ client.on('interactionCreate', (i) => {
 client.on('messageCreate', onSignupMessage);
 // Staff handing out (or taking back) CTF Captain / Co-Captain changes who gets the category extras.
 client.on('guildMemberUpdate', (before, after) => {
-  const ids = [config.captainRoleId, config.coCaptainRoleId].filter((x): x is string => !!x);
-  if (ids.some((id) => before.roles.cache.has(id) !== after.roles.cache.has(id))) scheduleSync('captain role change', 5000);
+  const ids = [config.captainRoleId, config.coCaptainRoleId, config.productionRoleId].filter((x): x is string => !!x);
+  if (ids.some((id) => before.roles.cache.has(id) !== after.roles.cache.has(id))) scheduleSync('role change', 5000);
 });
 client.on('error', (e) => console.error('discord client error:', e));
 process.on('unhandledRejection', (e) => console.error('unhandled rejection:', e));

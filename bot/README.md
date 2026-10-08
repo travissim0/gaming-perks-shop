@@ -61,6 +61,10 @@ With `DISCORD_CAPTAIN_ROLE_ID` and `DISCORD_COCAPTAIN_ROLE_ID` set, every sync g
 
 **Captains who won't link:** give them CTF Captain (or Co-Captain) *and* their squad's role by hand. For members with no freeinf.org link, that pair counts as captaincy of that squad: they can use `/squad add|remove` for it, and the next sync (a few seconds after the role change) gives them the captain extras in the squad's channels. Linked accounts always follow the site instead.
 
+## Production Team → Commentator
+
+With `DISCORD_PRODUCTION_ROLE_ID` set, every sync looks at who holds that Discord role. Linked holders with no CTF role on freeinf.org are set to **Commentator**, which lets them sign up as commentator or recorder on any match. Holders who already have another CTF role (referee, admin, …) are left alone and mentioned once in the staff channel so staff can decide by hand; unlinked holders are reported with the other Discord-link changes. The bot only removes Commentator from people it granted it to (tracked in `bot/.production-state.json`) — when they lose the Discord role, their site role goes back to none. A Commentator set by hand on the site is never touched.
+
 ## Captains: `/squad add` and `/squad remove`
 
 Players who won't link Discord on freeinf.org never get their squad role from the sync. A squad's captain or co-captains (linked, so the bot knows who they are) can hand it out themselves: `/squad add user:@player` gives the role, `/squad remove user:@player` takes it back. The bot makes the change, so captains never need Manage Roles. Staff (Manage Roles or the staff role) can act for any squad with `squad:<name or tag>`; a captain who runs more than one squad names it the same way.

@@ -2,6 +2,7 @@ import type { Guild } from 'discord.js';
 import { config } from './config.js';
 import { db, deleteMapping, getLinkedDiscordIds, getMappings, getSeasonContext, getSeasonTeams, saveMapping, writeState, type ChannelMapping, type SeasonContext } from './db.js';
 import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, syncRoleMembers, teardownTeam, vouchedLeads } from './discord.js';
+import { syncProduction } from './production.js';
 
 /**
  * What the staff channel was last told about players who can't get a squad role. null until the
@@ -10,6 +11,8 @@ import { clearLeadRoles, ensureTeam, findOrphans, postStaff, syncLeadRoles, sync
  * the whole list again. The full list lives on the site (CTF management → Discord).
  */
 let lastUnlinked: Set<string> | null = null;
+/** Production Team holders without a freeinf.org link, as last reported (same change-only rule). */
+let lastProdUnlinked: Set<string> | null = null;
 let lastNotInServer: Set<string> | null = null;
 /** Set while a draft is running: the channel stays quiet and gets one summary when it ends. */
 let draftWasLive = false;
@@ -73,6 +76,8 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
     }
 
     lines.push(...(await syncLeadRoles(guild, teams, linked)));
+    const production = await syncProduction(guild);
+    lines.push(...production.lines);
 
     // Teams that were set up earlier this season but are no longer part of it.
     for (const stale of byId.values()) {
@@ -118,11 +123,14 @@ export async function reconcile(guild: Guild, reason: string): Promise<string> {
         if (added.length) parts.push(`• New, not linked to Discord yet: ${shortList(added)}`);
         if (cleared.length) parts.push(`• No longer waiting: ${shortList(cleared)}`);
         if (awayNew.length) parts.push(`• Linked but not in this server: ${shortList(awayNew)}`);
+        const prodNew = production.unlinked.filter((u) => !lastProdUnlinked?.has(u));
+        if (prodNew.length) parts.push(`• Production Team but not linked on freeinf.org (can't be made Commentator): ${shortList(prodNew)}`);
         if (parts.length) await postStaff(guild, `**Discord links** · ${unlinked.length} still can't get a squad role\n${parts.join('\n')}`);
       }
     }
     lastUnlinked = nowUnlinked;
     lastNotInServer = nowNotInServer;
+    lastProdUnlinked = new Set(production.unlinked);
 
     const result = `${teams.length} teams, ${lines.length} changes, ${unlinked.length} unlinked`;
     await writeState({ last_sync_at: new Date().toISOString(), last_result: result, last_error: null, season_id: ctx.season.id, guild_id: guild.id });
