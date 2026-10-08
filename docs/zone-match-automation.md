@@ -106,8 +106,8 @@ At zero the game ends/resets and the script starts the match with the placed pla
 
 A league match is open to watch: nobody playing in it may switch spectating of themself off.
 Apply the equivalent of the mod command `*allowspec` to every match arena the zone opens,
-together with the lock and spec quiet. Requested by league staff on 2026-10-05; not yet confirmed
-as implemented.
+together with the lock and spec quiet. Requested by league staff on 2026-10-05; in the zone since
+2026-10-08.
 
 - **Every league match**, no flag from the site: RS, FS and playoffs alike. If a league ever
   needs it off, the site can add an on/off field to the queue; until then, always on.
@@ -116,8 +116,10 @@ as implemented.
 - **It has to survive restarts** inside the arena (warm-ups, `*restart`, the timer starting the game).
 - **Run by hand** matches are not touched by the zone, so the referee types `*allowspec`
   themself, as with `*lock`, `*specquiet` and `*timer`.
-- The field or call behind `*allowspec` is not written down here yet: fill it in under
-  "Server calls used" once it is in.
+- **Zone side:** it is per player (`Player._bAllowSpectator`, what `*allowspec` sets for everyone in
+  the arena). The zone sets it back to true every poll for everyone in a match arena. A player who
+  switches it off still drops their current spectators at that moment (the server does that before
+  any script sees it); they can spectate again a second later.
 
 `client.players` is the **desired state**: every listed player, the team they
 belong on, and whether they sit in spec. It already reflects subs. Players
@@ -221,6 +223,35 @@ zone change:
 Re-read `announce.opened` from the queue if you repeat the reminder (say at 15 minutes): its
 wording follows what captains have done since.
 
+- `announce.captains` — one entry per squad that still has something to do before anyone can be
+  placed (home: side pick and lineup; away: lineup). Empty once both are ready.
+
+  ```json
+  [{ "squad_tag": "KEVI", "aliases": ["Kev", "Oct"], "missing": ["side", "lineup"],
+     "message": "[KEVI] Your match vs NSS at 7:00 PM PDT: players can't be placed until you pick your side and set your lineup. Do it on freeinf.org/matches/<id> or type ?side titan / ?side collective here." }]
+  ```
+
+  The zone whispers `message` to every alias online (anywhere in the zone) from the 30-minute
+  mark until kick-off: every 5 minutes, every 2 inside 10 minutes, every minute inside 5, with a
+  bong that gets louder (`%1` > 15 min, `%2` > 10, `%3` > 5, `%4` inside 5). When `missing` changes
+  the next whisper goes out at once. Added after the first FS matches, where placement waited on a
+  side nobody had picked.
+
+## Side pick in game (`?side`)
+
+The home captain or co-captain can pick the side in the arena, the same as the side picker on the
+match page (same rules: home squad only, until the scheduled time). The queue's `home.leaders` /
+`away.leaders` list each squad's captain and co-captains, so the zone knows who may.
+
+```
+POST /api/matches/<id>/side        (X-Client-Key)
+{ "alias": "Kev", "side": "titan" | "collective" }
+```
+
+The reply carries `message` ("[KEVI] plays Titan. Side saved on freeinf.org.") to show the captain;
+an error (`403` not the home captain, `409` the match has started) carries `error`. The zone picks this
+arena's match first, else the captain's next upcoming one, and re-reads the queue straight after.
+
 ## Match MVP from the arena (`*mvp`)
 
 After the game, a mod or referee can name the MVP in the arena instead of on the site: on a
@@ -234,7 +265,9 @@ POST /api/matches/<id>/mvp        (X-Client-Key)
 The site checks the name against the players who played in the recorded game and refuses a
 typo or a spectator (`{ "error": "Oct did not play in this match" }`; show that to the ref).
 The result has to be recorded first, which happens about 15 seconds after the game ends;
-before that the site answers 409 "no recorded result yet" and the ref types it again.
+before that the site answers 409 "no recorded result yet"; the zone retries that every 10 seconds
+for a minute. `*mvp` is for mods and referees (the Referee or Staff skill), and works in the arena
+that ran the match after the match has left the queue.
 
 On success the reply carries the line to post as an `*arena` message:
 
@@ -272,7 +305,11 @@ All public in the Infantry server source (`dotnetcore/Server/Game`):
 
 - `ZoneServer.newArena(string name, bool namedArena)` — create; scripts reach it via `_arena._server`.
 - `Arena._bLocked` (spec lock), `Arena._specQuiet` — public fields.
-- Whatever `*allowspec` sets (field name to be confirmed on the zone side; see Spectators).
+- `Player._bAllowSpectator` (what `*allowspec` sets; see Spectators).
+- `Arena._flags[..].carrier` (flag carriers, for held subs), `Arena._tickers[playtimeTickerIdx].timer`
+  (the countdown, for the 1-minute warning; `Environment.TickCount` based).
+- Bongs: a typed `%N` becomes the chat packet's bong in the client, so text from the site that ends
+  in `%30` is split and sent as `sendArenaMessage(text, 30)`.
 - `Player.unspec(Team)`, `Player.spec(string teamName)`, `Arena.getTeamByName(string)`.
 
 The existing OvD automation's poll loop and the dueling connector's HTTP

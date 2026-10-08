@@ -22,8 +22,40 @@ export const dynamic = 'force-dynamic';
 /** What the arena says a minute before the match timer ends (%30 is the in-game bong). */
 const ONE_MINUTE_TEXT = 'Match will start on the second restart. Good luck to both teams and have fun!!! %30';
 
-/** The two announcements for a match, worded here so staff can change them without a zone change. */
-function announceFor(p: any): { opened: string; one_minute: string } {
+/** A squad's captain and co-captains: who the zone whispers when something is still missing. */
+const leadersOf = (block: any): string[] =>
+  ((block?.roster || []) as any[]).filter((m) => m.role === 'captain' || m.role === 'co_captain').map((m) => m.alias).filter(Boolean);
+
+type CaptainReminder = { squad_tag: string; aliases: string[]; missing: string[]; message: string };
+
+/**
+ * One whisper per squad that still has something to do before players can be placed: the home
+ * squad's side pick and lineup, the away squad's lineup. Empty once both are ready. The zone sends
+ * each `message` privately to every alias online, repeating as kick-off nears.
+ */
+function captainRemindersFor(p: any, when: string, url: string): CaptainReminder[] {
+  const out: CaptainReminder[] = [];
+  const homeTag = p.home?.tag || 'home', awayTag = p.away?.tag || 'away';
+  const add = (block: any, tag: string, opp: string, missing: string[]) => {
+    const aliases = leadersOf(block);
+    if (!missing.length || !aliases.length) return;
+    const sidePick = missing.includes('side');
+    const what = missing.map((m) => (m === 'side' ? 'pick your side' : 'set your lineup')).join(' and ');
+    const message =
+      `[${tag}] Your match vs ${opp} at ${when}: players can't be placed until you ${what}. ` +
+      `Do it on ${url}${sidePick ? ' or type ?side titan / ?side collective here' : ''}.`;
+    out.push({ squad_tag: tag, aliases, missing, message });
+  };
+  const homeMissing: string[] = [];
+  if (!p.progress?.side_picked) homeMissing.push('side');
+  if (!p.progress?.home_lineup_set) homeMissing.push('lineup');
+  add(p.home, homeTag, awayTag, homeMissing);
+  add(p.away, awayTag, homeTag, p.progress?.away_lineup_set ? [] : ['lineup']);
+  return out;
+}
+
+/** The announcements for a match, worded here so staff can change them without a zone change. */
+function announceFor(p: any): { opened: string; one_minute: string; captains: CaptainReminder[] } {
   const when = new Date(p.match.scheduled_at);
   const fmt = (tz: string) => when.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const league = String(p.match.league_slug || 'league').toUpperCase();
@@ -38,7 +70,7 @@ function announceFor(p: any): { opened: string; one_minute: string } {
     (missing.length
       ? `Captains/co-captains: still needed on ${url}: ${missing.join(', ')}.`
       : `Side and lineups are set on ${url}; players are placed 5 minutes before the match.`);
-  return { opened, one_minute: ONE_MINUTE_TEXT };
+  return { opened, one_minute: ONE_MINUTE_TEXT, captains: captainRemindersFor(p, fmt('America/Los_Angeles'), url) };
 }
 
 export async function GET(request: NextRequest) {
@@ -87,12 +119,12 @@ export async function GET(request: NextRequest) {
       side_released: p.side_released,
       /** Minutes until the scheduled time (negative once it has started). Also the arena's `*timer` value when it is opened; re-set it if scheduled_at moves. */
       starts_in_min: Math.round((new Date(p.match.scheduled_at).getTime() - now) / 60_000),
-      home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench },
-      away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench },
+      home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench, leaders: leadersOf(p.home) },
+      away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench, leaders: leadersOf(p.away) },
       progress: p.progress,
       client: p.client,
       subs: p.subs,
-      /** Text the zone relays: `opened` as a *zone message when the arena is opened, `one_minute` as an *arena message a minute before the timer ends. */
+      /** Text the zone relays: `opened` as a *zone message when the arena is opened, `one_minute` as an *arena message a minute before the timer ends, `captains` as whispers to captains with something still to do. */
       announce: announceFor(p),
       updated_at: p.updated_at,
       game_id: p.match.game_id,
