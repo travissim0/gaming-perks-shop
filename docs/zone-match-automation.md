@@ -161,7 +161,8 @@ spec quiet, placement, subs and both game reports all worked once these were sor
 
 | When | Do |
 |---|---|
-| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Apply `*allowspec` so nobody in the match can block spectators (see Spectators). Start the countdown: `*timer <starts_in_min>` (see Match timer). Make sure the four `client.teams` exist. |
+| `starts_in_min <= 30` | Open the arena if it isn't open: `_arena._server.newArena(arena, true)` (public named arena; `ZoneServer.newArena` in the server source). Set `arena._specQuiet = true` and `arena._bLocked = true` (the flags behind `*specquiet` / `*lock`). Apply `*allowspec` so nobody in the match can block spectators (see Spectators). Start the countdown: `*timer <starts_in_min>` (see Match timer). Make sure the four `client.teams` exist. Send `announce.opened` as a `*zone` message (see Announcements). |
+| the timer reaches 1:00 | Send `announce.one_minute` as an `*arena` message. |
 | `side_released == true` and `client.ready` | Place everyone: for each `client.players` entry, if `spec` is false → `player.unspec(getTeamByName(team))`; if `spec` is true → `player.spec(team)` (spec'd, sitting on the bench team name). Anyone in the arena who is not in the list → spec. |
 | every poll while `status` is scheduled/in_progress | **Reconcile**: compare each player's actual team/spec against the desired state and move only those that differ. That is what makes subs work: the site swaps the two rows and `updated_at` bumps. `updated_at` also bumps at the side release, so a zone that skips unchanged matches still gets the placement moment. If you cache, key the skip on `updated_at` **and** `side_released`, and never skip a match whose arena you haven't finished setting up (lock / spec quiet / allowspec / teams). |
 | a player enters the arena | Place them per the desired state at once (or on the next poll). Not in the list → spec. |
@@ -190,6 +191,58 @@ handling beyond reconciling the desired state.
 
 Keep the ids you've already announced per match; for each new one, send `message` to the
 arena instead of a generic "Lineup updated from freeinf.org (1 player moved)".
+
+**Flag carriers.** When the player you are about to spec for a sub is carrying a flag, don't
+spec them yet: hold that move and try again on the next poll, so the swap happens the moment the
+flag is dropped or scored. The site keeps the sub recorded either way. While you are holding one,
+tell the site so the match page can say "waiting on the arena" instead of looking broken:
+
+```
+POST /api/matches/<id>/placement        (X-Client-Key)
+{ "held": [{ "alias": "Kev", "reason": "flag" }] }
+```
+
+Send it when a hold starts and `{ "held": [] }` once it clears (or just re-send the current list
+each poll while anything is held). A report older than three minutes is ignored, so a crashed
+zone can't leave a stale "waiting" note. Needs add-match-placement-hold.sql on the site.
+
+## Announcements (`announce`)
+
+Each queue entry carries ready-made text, worded by the site so staff can change it without a
+zone change:
+
+- `announce.opened` — send as a **`*zone` message** (zone-wide) when you open the match arena at
+  the 30-minute mark. It names the match and time and tells captains what is still missing on
+  the site (side pick, lineups), or that everything is set.
+- `announce.one_minute` — send as an **`*arena` message** one minute before the match timer
+  ends ("Match will start on the second restart. Good luck to both teams and have fun!!! %30";
+  `%30` is the in-game bong).
+
+Re-read `announce.opened` from the queue if you repeat the reminder (say at 15 minutes): its
+wording follows what captains have done since.
+
+## Match MVP from the arena (`*mvp`)
+
+After the game, a mod or referee can name the MVP in the arena instead of on the site: on a
+command like `*mvp Oct`, send the name to the site with the client key:
+
+```
+POST /api/matches/<id>/mvp        (X-Client-Key)
+{ "player_name": "Oct" }
+```
+
+The site checks the name against the players who played in the recorded game and refuses a
+typo or a spectator (`{ "error": "Oct did not play in this match" }`; show that to the ref).
+The result has to be recorded first, which happens about 15 seconds after the game ends;
+before that the site answers 409 "no recorded result yet" and the ref types it again.
+
+On success the reply carries the line to post as an `*arena` message:
+
+```json
+{ "ok": true, "mvp": "Oct", "announce": "Congrats to Black Ops on the win in 10:53! Match MVP: Oct %30" }
+```
+
+Naming the MVP in the arena and on the site are the same thing underneath; the later one wins.
 
 ## Captain's plan (`?y` / `?n`)
 

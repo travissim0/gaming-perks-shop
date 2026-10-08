@@ -405,6 +405,11 @@ export function buildPayload(
     /** Substitutions made so far (visible to whoever may see that squad's lineup). */
     subs: subsOut,
     /**
+     * Moves the zone is holding back right now and why (a player about to be spec'd is carrying a
+     * flag). Reported by the zone through POST /api/matches/[id]/placement; stale after 3 minutes.
+     */
+    holds: placementHolds(setupRow),
+    /**
      * Latest change to the desired placement; the zone re-reads when this moves. The side release
      * counts as a change: before it the zone may not place anyone, and a zone that skips unchanged
      * matches would otherwise never notice the release (found in the first live test, 2026-09-27).
@@ -468,14 +473,32 @@ async function loadLineupRows(matchId: string) {
   }
 }
 
+/** A hold the zone reported is shown for this long; after that it is assumed to have cleared. */
+const HOLD_FRESH_MS = 3 * 60_000;
+export interface PlacementHold { alias: string; reason: string; since: string }
+export function placementHolds(setupRow: any): PlacementHold[] {
+  const raw = setupRow?.placement_hold;
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.held) || typeof raw.at !== 'string') return [];
+  if (Date.now() - new Date(raw.at).getTime() > HOLD_FRESH_MS) return [];
+  return raw.held
+    .filter((h: any) => h && typeof h.alias === 'string' && h.alias)
+    .map((h: any) => ({ alias: String(h.alias), reason: typeof h.reason === 'string' ? h.reason : 'flag', since: raw.at }));
+}
+
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */
 export async function loadForMatch(match: any, viewer: Viewer) {
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
-  // ref_chat arrives with add-match-chat.sql; before that, read the row without it.
+  // ref_chat (add-match-chat.sql) and placement_hold (add-match-placement-hold.sql) arrive with
+  // their SQL files; read the row without whichever is missing.
   const readSetup = async () => {
-    const one = (cols: string) => supabaseAdmin.from('match_setup').select(cols).eq('match_id', match.id).maybeSingle();
-    const res = await one('home_side, side_chosen_at, side_chosen_by, updated_at, ref_chat');
-    return res.error && /ref_chat/.test(res.error.message) ? one('home_side, side_chosen_at, side_chosen_by, updated_at') : res;
+    const one = (cols: string[]) => supabaseAdmin.from('match_setup').select(cols.join(', ')).eq('match_id', match.id).maybeSingle();
+    let cols = ['home_side', 'side_chosen_at', 'side_chosen_by', 'updated_at', 'ref_chat', 'placement_hold'];
+    for (;;) {
+      const res = await one(cols);
+      const missing = res.error ? ['ref_chat', 'placement_hold'].find((c) => cols.includes(c) && new RegExp(c).test(res.error!.message)) : null;
+      if (!missing) return res;
+      cols = cols.filter((c) => c !== missing);
+    }
   };
   const [squads, setupRes, lineupRes, subsRes, automation] = await Promise.all([
     loadSquads(ids),

@@ -19,6 +19,28 @@ export const dynamic = 'force-dynamic';
  * team and whether they sit in spec), the subs so far, and `updated_at` so the zone can
  * skip unchanged matches. See docs/zone-match-automation.md.
  */
+/** What the arena says a minute before the match timer ends (%30 is the in-game bong). */
+const ONE_MINUTE_TEXT = 'Match will start on the second restart. Good luck to both teams and have fun!!! %30';
+
+/** The two announcements for a match, worded here so staff can change them without a zone change. */
+function announceFor(p: any): { opened: string; one_minute: string } {
+  const when = new Date(p.match.scheduled_at);
+  const fmt = (tz: string) => when.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  const league = String(p.match.league_slug || 'league').toUpperCase();
+  const kind = p.match.stage === 'fs' ? ` FS ${p.match.fs_color === 'green' ? 'Green' : 'Red'}` : p.match.stage === 'playoff' ? ' playoffs' : '';
+  const home = p.home?.tag || 'home', away = p.away?.tag || 'away';
+  const missing: string[] = [];
+  if (!p.progress?.side_picked) missing.push(`${home}'s side pick`);
+  if (!p.progress?.home_lineup_set) missing.push(`${home}'s lineup`);
+  if (!p.progress?.away_lineup_set) missing.push(`${away}'s lineup`);
+  const url = `freeinf.org/matches/${p.match.id}`;
+  const opened = `${league}${kind}: ${away} vs ${home} at ${fmt('America/Los_Angeles')} (${fmt('America/New_York')}). ` +
+    (missing.length
+      ? `Captains/co-captains: still needed on ${url}: ${missing.join(', ')}.`
+      : `Side and lineups are set on ${url}; players are placed 5 minutes before the match.`);
+  return { opened, one_minute: ONE_MINUTE_TEXT };
+}
+
 export async function GET(request: NextRequest) {
   const viewer = await viewerFor(request);
   if (!viewer.client && !viewer.staff) return NextResponse.json({ error: 'Client key or staff token required' }, { status: 403 });
@@ -70,6 +92,8 @@ export async function GET(request: NextRequest) {
       progress: p.progress,
       client: p.client,
       subs: p.subs,
+      /** Text the zone relays: `opened` as a *zone message when the arena is opened, `one_minute` as an *arena message a minute before the timer ends. */
+      announce: announceFor(p),
       updated_at: p.updated_at,
       game_id: p.match.game_id,
     });

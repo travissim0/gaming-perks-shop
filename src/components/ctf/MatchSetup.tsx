@@ -58,6 +58,8 @@ interface Setup {
   side_reveal_at: string;
   side_released: boolean;
   subs?: Sub[];
+  /** Moves the zone is holding back (a player to be spec'd is carrying a flag), as it last reported. */
+  holds?: { alias: string; reason: string; since: string }[];
   /** Whether the zone runs this match. Off: referees open the arena and place players by hand. */
   automation?: { enabled: boolean; reason: 'site' | 'match' | null };
   /** In-game chat for this match's captains and referees. Null for anyone not allowed to see it. */
@@ -147,6 +149,13 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
     const v = setup?.viewer;
     onLineupsShown(!!setup && !setup.pending_sql && !!v && (v.is_staff || v.leads_home || v.leads_away || !!v.member_home || !!v.member_away || (!!v.is_referee && setup.side_released)));
   }, [setup, onLineupsShown]);
+
+  const subsOpen = !!setup?.viewer?.sub_window && !!(setup?.viewer?.can_sub_home || setup?.viewer?.can_sub_away);
+  useEffect(() => {
+    if (!subsOpen) return;
+    const t = setInterval(() => { if (document.visibilityState !== 'hidden') load(true); }, 5000);
+    return () => clearInterval(t);
+  }, [subsOpen, load]);
 
   // The panel changes by itself at two moments: five minutes before the match (side revealed, subs
   // open) and at the scheduled time (lineups lock). Reload it then so nobody has to refresh the page.
@@ -365,6 +374,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
   // Squad members (not just captains) see their own squad's lineup and plan, read-only.
   const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || !!viewer.member_home || !!viewer.member_away || (!!viewer.is_referee && setup.side_released));
   const subs = setup.subs || [];
+  const holds = setup.holds || [];
   const makeSub = (team: Team) => {
     const pick = subPick[team.squad_id];
     if (!pick?.out || !pick?.in) { toast.error('Pick who comes out and who goes in'); return; }
@@ -802,6 +812,15 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
                 ? <>The zone moves them within a minute: the sub is unspecced onto {team.team_starting || 'the team'}, the player coming out goes to spec on {team.team_bench || 'the bench team'}.</>
                 : <>Zone automation is off: a referee moves them by hand. The sub goes onto {team.team_starting || 'the team'}, the player coming out to spec on {team.team_bench || 'the bench team'}.</>}
             </p>
+          </div>
+        )}
+        {canSee && holds.some((h) => team.roster.some((m) => m.alias.toLowerCase() === h.alias.toLowerCase())) && (
+          <div className={`px-3 py-1.5 border-t text-[11px] ${rule}`}>
+            {holds.filter((h) => team.roster.some((m) => m.alias.toLowerCase() === h.alias.toLowerCase())).map((h) => (
+              <div key={h.alias} className="text-[#F59E0B]">
+                Waiting on the arena: <span className="text-[#E6EDF7]">{h.alias}</span> {h.reason === 'flag' ? 'is carrying a flag' : h.reason}. The swap happens as soon as that clears; nothing is wrong with the sub.
+              </div>
+            ))}
           </div>
         )}
         {canSee && subs.some((s) => s.squad_id === team.squad_id) && (
