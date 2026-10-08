@@ -139,6 +139,8 @@ interface LeagueResult {
   status?: string;
   game_length_minutes?: number | null;
   mvp_player_name?: string | null;
+  match_kind?: string | null;
+  fs_color?: string | null;
   /** The scheduled match this result belongs to, when it has one (links the row to the match page). */
   fixture_id?: string | null;
 }
@@ -979,6 +981,11 @@ export default function LeagueHome() {
                               </div>
                               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-[#8B98B0]">
                                 {r.played_at && <span>{relTime(r.played_at)}{r.status && r.status !== 'Season' ? ` · ${r.status}` : ''}</span>}
+                                {r.match_kind === 'fs' && (
+                                  <span className={r.fs_color === 'green' ? 'text-[#34D399]' : 'text-[#F87171]'} title={r.fs_color === 'green' ? 'Free-scheduled Green: captain and later-round picks only, worth double' : 'Free-scheduled Red: a normal match with full lineups'}>
+                                    {r.fs_color === 'green' ? 'FS Green' : 'FS Red'}
+                                  </span>
+                                )}
                                 {length && <span title="Game length" className="tabular-nums">{length} game</span>}
                                 {r.mvp_player_name && <span className="ml-auto truncate"><span className="text-[#F59E0B]">MVP</span> <span className="text-[#E6EDF7]">{r.mvp_player_name}</span></span>}
                               </div>
