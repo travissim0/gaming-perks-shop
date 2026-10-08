@@ -117,9 +117,8 @@ together with the lock and spec quiet. Requested by league staff on 2026-10-05; 
 - **Run by hand** matches are not touched by the zone, so the referee types `*allowspec`
   themself, as with `*lock`, `*specquiet` and `*timer`.
 - **Zone side:** it is per player (`Player._bAllowSpectator`, what `*allowspec` sets for everyone in
-  the arena). The zone sets it back to true every poll for everyone in a match arena. A player who
-  switches it off still drops their current spectators at that moment (the server does that before
-  any script sees it); they can spectate again a second later.
+  the arena). The zone switches it on once for each player, the first time they are seen in the
+  match arena; someone who then deliberately switches it off is left alone (Travis, 2026-10-08).
 
 `client.players` is the **desired state**: every listed player, the team they
 belong on, and whether they sit in spec. It already reflects subs. Players
@@ -213,22 +212,23 @@ zone can't leave a stale "waiting" note. Needs add-match-placement-hold.sql on t
 Each queue entry carries ready-made text, worded by the site so staff can change it without a
 zone change:
 
-- `announce.opened` — send as a **`*zone` message** (zone-wide) when you open the match arena at
-  the 30-minute mark. It names the match and time and tells captains what is still missing on
-  the site (side pick, lineups), or that everything is set.
+- `announce.reminders` — `[{ "at_min": 30, "message": "..." }, { "at_min": 15, ... }, { "at_min": 5, ... }]`.
+  Send each as a **`*zone` message** (zone-wide) when kick-off is that close, once each. The text
+  names the match and time and says, in one short instruction, what is still holding it up
+  ("KEVI captain: type ?side titan or ?side collective."), or that sides and lineups are set.
+  The zone re-reads it every poll, so each mark reflects what captains have done since. A zone
+  that starts late sends only the latest mark already passed. `announce.opened` = the 30 one.
 - `announce.one_minute` — send as an **`*arena` message** one minute before the match timer
   ends ("Match will start on the second restart. Good luck to both teams and have fun!!! %30";
   `%30` is the in-game bong).
 
-Re-read `announce.opened` from the queue if you repeat the reminder (say at 15 minutes): its
-wording follows what captains have done since.
 
 - `announce.captains` — one entry per squad that still has something to do before anyone can be
   placed (home: side pick and lineup; away: lineup). Empty once both are ready.
 
   ```json
   [{ "squad_tag": "KEVI", "aliases": ["Kev", "Oct"], "missing": ["side", "lineup"],
-     "message": "[KEVI] Your match vs NSS at 7:00 PM PDT: players can't be placed until you pick your side and set your lineup. Do it on freeinf.org/matches/<id> or type ?side titan / ?side collective here." }]
+     "message": "[KEVI] To start your match: type ?side titan or ?side collective, and set your lineup on freeinf.org." }]
   ```
 
   The zone whispers `message` to every alias online (anywhere in the zone) from the 30-minute
@@ -266,7 +266,7 @@ The site checks the name against the players who played in the recorded game and
 typo or a spectator (`{ "error": "Oct did not play in this match" }`; show that to the ref).
 The result has to be recorded first, which happens about 15 seconds after the game ends;
 before that the site answers 409 "no recorded result yet"; the zone retries that every 10 seconds
-for a minute. `*mvp` is for mods and referees (the Referee or Staff skill), and works in the arena
+for a minute. `*mvp` works for any powered alias, in the arena
 that ran the match after the match has left the queue.
 
 On success the reply carries the line to post as an `*arena` message:

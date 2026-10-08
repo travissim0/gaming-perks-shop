@@ -26,6 +26,12 @@ const ONE_MINUTE_TEXT = 'Match will start on the second restart. Good luck to bo
 const leadersOf = (block: any): string[] =>
   ((block?.roster || []) as any[]).filter((m) => m.role === 'captain' || m.role === 'co_captain').map((m) => m.alias).filter(Boolean);
 
+/** How a captain picks the side in game. Kept to one short instruction. */
+const SIDE_HOW = 'type ?side titan or ?side collective';
+
+/** Minutes before kick-off at which the zone repeats the zone-wide reminder. */
+const REMINDER_MINUTES = [30, 15, 5];
+
 type CaptainReminder = { squad_tag: string; aliases: string[]; missing: string[]; message: string };
 
 /**
@@ -33,44 +39,49 @@ type CaptainReminder = { squad_tag: string; aliases: string[]; missing: string[]
  * squad's side pick and lineup, the away squad's lineup. Empty once both are ready. The zone sends
  * each `message` privately to every alias online, repeating as kick-off nears.
  */
-function captainRemindersFor(p: any, when: string, url: string): CaptainReminder[] {
+function captainRemindersFor(p: any): CaptainReminder[] {
   const out: CaptainReminder[] = [];
-  const homeTag = p.home?.tag || 'home', awayTag = p.away?.tag || 'away';
-  const add = (block: any, tag: string, opp: string, missing: string[]) => {
+  const add = (block: any, missing: string[]) => {
     const aliases = leadersOf(block);
+    const tag = block?.tag || '?';
     if (!missing.length || !aliases.length) return;
-    const sidePick = missing.includes('side');
-    const what = missing.map((m) => (m === 'side' ? 'pick your side' : 'set your lineup')).join(' and ');
-    const message =
-      `[${tag}] Your match vs ${opp} at ${when}: players can't be placed until you ${what}. ` +
-      `Do it on ${url}${sidePick ? ' or type ?side titan / ?side collective here' : ''}.`;
+    const side = missing.includes('side'), lineup = missing.includes('lineup');
+    const message = side && lineup
+      ? `[${tag}] To start your match: ${SIDE_HOW}, and set your lineup on freeinf.org.`
+      : side
+        ? `[${tag}] To start your match, pick your side: ${SIDE_HOW}.`
+        : `[${tag}] To start your match, set your lineup on freeinf.org.`;
     out.push({ squad_tag: tag, aliases, missing, message });
   };
   const homeMissing: string[] = [];
   if (!p.progress?.side_picked) homeMissing.push('side');
   if (!p.progress?.home_lineup_set) homeMissing.push('lineup');
-  add(p.home, homeTag, awayTag, homeMissing);
-  add(p.away, awayTag, homeTag, p.progress?.away_lineup_set ? [] : ['lineup']);
+  add(p.home, homeMissing);
+  add(p.away, p.progress?.away_lineup_set ? [] : ['lineup']);
   return out;
 }
 
-/** The announcements for a match, worded here so staff can change them without a zone change. */
-function announceFor(p: any): { opened: string; one_minute: string; captains: CaptainReminder[] } {
+/**
+ * The announcements for a match, worded here so staff can change them without a zone change.
+ * `reminders`: the zone-wide line for each of the 30 / 15 / 5 minute marks (`opened` is the 30 one).
+ * Each says what is still holding the match up, in one short instruction.
+ */
+function announceFor(p: any): {
+  opened: string; reminders: { at_min: number; message: string }[]; one_minute: string; captains: CaptainReminder[];
+} {
   const when = new Date(p.match.scheduled_at);
   const fmt = (tz: string) => when.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const league = String(p.match.league_slug || 'league').toUpperCase();
   const kind = p.match.stage === 'fs' ? ` FS ${p.match.fs_color === 'green' ? 'Green' : 'Red'}` : p.match.stage === 'playoff' ? ' playoffs' : '';
   const home = p.home?.tag || 'home', away = p.away?.tag || 'away';
-  const missing: string[] = [];
-  if (!p.progress?.side_picked) missing.push(`${home}'s side pick`);
-  if (!p.progress?.home_lineup_set) missing.push(`${home}'s lineup`);
-  if (!p.progress?.away_lineup_set) missing.push(`${away}'s lineup`);
-  const url = `freeinf.org/matches/${p.match.id}`;
-  const opened = `${league}${kind}: ${away} vs ${home} at ${fmt('America/Los_Angeles')} (${fmt('America/New_York')}). ` +
-    (missing.length
-      ? `Captains/co-captains: still needed on ${url}: ${missing.join(', ')}.`
-      : `Side and lineups are set on ${url}; players are placed 5 minutes before the match.`);
-  return { opened, one_minute: ONE_MINUTE_TEXT, captains: captainRemindersFor(p, fmt('America/Los_Angeles'), url) };
+  const lineups = [!p.progress?.home_lineup_set && home, !p.progress?.away_lineup_set && away].filter(Boolean) as string[];
+  const todo: string[] = [];
+  if (!p.progress?.side_picked) todo.push(`${home} captain: ${SIDE_HOW}.`);
+  if (lineups.length) todo.push(`Lineup needed from ${lineups.join(' and ')} on freeinf.org.`);
+  const status = todo.length ? todo.join(' ') : 'Sides and lineups are set.';
+  const line = (mins: number) => `${league}${kind}: ${away} vs ${home} in ${mins} min (${fmt('America/Los_Angeles')} / ${fmt('America/New_York')}). ${status}`;
+  const reminders = REMINDER_MINUTES.map((m) => ({ at_min: m, message: line(m) }));
+  return { opened: reminders[0].message, reminders, one_minute: ONE_MINUTE_TEXT, captains: captainRemindersFor(p) };
 }
 
 export async function GET(request: NextRequest) {
@@ -124,7 +135,7 @@ export async function GET(request: NextRequest) {
       progress: p.progress,
       client: p.client,
       subs: p.subs,
-      /** Text the zone relays: `opened` as a *zone message when the arena is opened, `one_minute` as an *arena message a minute before the timer ends, `captains` as whispers to captains with something still to do. */
+      /** Text the zone relays: `reminders` (30 / 15 / 5 min; `opened` = the 30 one) as *zone messages, `one_minute` as an *arena message a minute before the timer ends, `captains` as whispers to captains with something still to do. */
       announce: announceFor(p),
       updated_at: p.updated_at,
       game_id: p.match.game_id,
