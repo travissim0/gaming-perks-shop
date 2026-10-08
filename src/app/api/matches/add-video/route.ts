@@ -9,10 +9,22 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser();
+    // The signed-in user's token comes from the page (Authorization: Bearer). A service-role client has
+    // no session of its own, so getUser() without the token was null for everyone, admins included.
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const { data: { user } } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Sign in first' }, { status: 401 });
+    }
+    // Who may attach a video: site admins, CTF admins, and the match crew roles that would have one
+    // (referees, commentators, recorders).
+    const { data: profile } = await supabase.from('profiles').select('is_admin, ctf_role').eq('id', user.id).maybeSingle();
+    const role = String((profile as any)?.ctf_role || '').toLowerCase();
+    const allowed = (profile as any)?.is_admin === true || role === 'ctf_admin'
+      || role.includes('referee') || role.includes('commentator') || role.includes('recorder');
+    if (!allowed) {
+      return NextResponse.json({ error: 'Only admins, referees, commentators and recorders can add a video' }, { status: 403 });
     }
 
     const { gameId, youtube_url, vod_url } = await request.json();

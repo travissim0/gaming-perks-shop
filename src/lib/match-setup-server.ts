@@ -47,6 +47,10 @@ export type Squad = SquadRow & { members: Member[] };
 export interface Viewer { id: string | null; alias: string; staff: boolean; referee: boolean; client: boolean }
 
 export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase();
+
+/** The arena line for a sub (the zone puts & in front): "KEVI (Kev) OUT: anjro --- IN: Soup". */
+export const subLine = (tag: string | null, byAlias: string | null, outAlias: string, inAlias: string) =>
+  `${tag || 'Sub'}${byAlias ? ` (${byAlias})` : ''} OUT: ${outAlias} --- IN: ${inAlias}`;
 export const missingTable = (msg: string | undefined) => /match_setup|match_lineups|match_lineup_subs|does not exist/i.test(String(msg || ''));
 /**
  * Lineup columns added after the table: ten_man (add-match-ten-man.sql) and plan_side
@@ -367,8 +371,8 @@ export function buildPayload(
       const squad_tag = sq ? tagOf(sq) : null;
       const team = s.squad_id === home?.id ? homeNames.starting : s.squad_id === away?.id ? awayNames.starting : null;
       // Ready-made arena line so the zone can announce each new sub (keyed by id) instead of a
-      // generic "lineup updated": "[TSTA] Sub: anjro out, Soup in".
-      const message = `${squad_tag ? `[${squad_tag}] ` : ''}Sub: ${out_alias} out, ${in_alias} in`;
+      // generic "lineup updated": "TSTA (Kev) OUT: anjro --- IN: Soup".
+      const message = subLine(squad_tag, s.by_alias, out_alias, in_alias);
       return { ...s, out_alias, in_alias, squad_tag, team, message };
     });
 

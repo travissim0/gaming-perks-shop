@@ -3,6 +3,7 @@ import {
   STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor,
   PLAN_LABEL, SQL_FOR_COL, isPlanClass, type PlanClass, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
+import { makeSub } from '@/lib/match-subs-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,34 +194,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!viewer.staff && !isSubWindow(match)) {
       return NextResponse.json({ error: 'Subs open when the side is released, five minutes before the match, and close once the result is in. Before then, edit the lineup.' }, { status: 409 });
     }
-    const roster = new Set(sq.members.map((m) => m.player_id));
-    if (!roster.has(inId)) return NextResponse.json({ error: 'The player coming in must be on the squad roster' }, { status: 400 });
-    // FS Green: a round 1-3 pick can't be subbed in either (the match would score as Red).
-    const green = await greenBlockedFor(match, squads);
-    if (green?.blocked.has(inId)) {
-      return NextResponse.json({ error: `This is an FS Green match: ${sq.members.find((m) => m.player_id === inId)?.alias || 'that player'} was drafted in rounds 1–${green.minRound - 1} and can't be subbed in. Only the captain and round ${green.minRound}+ picks play.` }, { status: 400 });
+    const done = await makeSub(match, squads, sq, outId, inId, viewer.id);
+    if ('error' in done) {
+      if (done.status === 500) return fail({ message: done.error });
+      return NextResponse.json({ error: done.error }, { status: done.status });
     }
-
-    const { data: rows, error: rowsErr } = await supabaseAdmin.from('match_lineups').select('id, player_id, slot, position').eq('match_id', id).eq('squad_id', sq.id);
-    if (rowsErr) return fail(rowsErr);
-    const outRow = (rows || []).find((r: any) => r.player_id === outId);
-    const inRow = (rows || []).find((r: any) => r.player_id === inId);
-    if (!outRow || outRow.slot !== 'starting') return NextResponse.json({ error: 'The player coming out must be in the starting lineup' }, { status: 400 });
-
-    // In: take the outgoing player's starting spot. Out: to the bench (the incoming player's old spot, or the end).
-    const benchPos = inRow ? inRow.position : Math.max(-1, ...(rows || []).filter((r: any) => r.slot === 'bench').map((r: any) => r.position)) + 1;
-    const alias = (pid: string) => sq.members.find((m) => m.player_id === pid)?.alias || 'Unknown';
-    const up1 = inRow
-      ? supabaseAdmin.from('match_lineups').update({ slot: 'starting', position: outRow.position, set_by: viewer.id, updated_at: now }).eq('id', inRow.id)
-      : supabaseAdmin.from('match_lineups').insert({ match_id: id, squad_id: sq.id, player_id: inId, slot: 'starting', position: outRow.position, set_by: viewer.id, updated_at: now });
-    const { error: e1 } = await up1;
-    if (e1) return fail(e1);
-    const { error: e2 } = await supabaseAdmin.from('match_lineups').update({ slot: 'bench', position: benchPos, set_by: viewer.id, updated_at: now }).eq('id', outRow.id);
-    if (e2) return fail(e2);
-    const { error: e3 } = await supabaseAdmin.from('match_lineup_subs').insert({ match_id: id, squad_id: sq.id, out_player_id: outId, in_player_id: inId, by_id: viewer.id });
-    if (e3 && !missingTable(e3.message)) return fail(e3);
-    if (e3) console.warn('match_lineup_subs missing (add-match-subs.sql): sub applied but not logged');
-    return NextResponse.json({ ...(await loadAll(id, viewer)), sub: { out: alias(outId), in: alias(inId) } });
+    return NextResponse.json({ ...(await loadAll(id, viewer)), sub: done });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

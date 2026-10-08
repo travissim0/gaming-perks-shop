@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
+import { supabase } from '@/lib/supabase';
 import { sortRows, useSortState, SortTh, type SortGetters } from '@/components/usl-mix/UslMixShell';
 import {
   T, SIDE, isSide, Card, Tag, SideBadge, ResultBadge, ModeBadge, PlayerName, ClassSplit, ClassBars, WeaponTable, StatTile, Skeleton,
@@ -426,7 +427,9 @@ function AddVideoModal({ gameId, onClose, onSaved }: { gameId: string; onClose: 
     if (!youtube && !vod) { setErr('Enter at least one URL.'); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch('/api/matches/add-video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId, youtube_url: youtube || null, vod_url: vod || null }) });
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+      const r = await fetch('/api/matches/add-video', { method: 'POST', headers: { 'Content-Type': 'application/json', ...auth }, body: JSON.stringify({ gameId, youtube_url: youtube || null, vod_url: vod || null }) });
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || `Could not save (${r.status})`);
       onSaved();
     } catch (e) {
