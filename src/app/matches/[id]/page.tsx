@@ -269,7 +269,7 @@ export default function MatchDetailPage() {
   };
   const join = async (role: Role) => {
     if (!user || !match) return;
-    if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator role required' : 'Referee role required'); return; }
+    if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator or referee role required' : 'Referee role required'); return; }
     setBusy(role);
     try {
       await crewSelf('join', role);

@@ -216,7 +216,7 @@ export default function MatchesPage() {
   };
   const join = async (matchId: string, role: Role) => {
     if (!user) { toast.error('Sign in to join a match'); return; }
-    if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator role required' : 'Referee role required'); return; }
+    if (!canJoinRole(role)) { toast.error(role === 'commentator' ? 'Commentator or referee role required' : 'Referee role required'); return; }
     setBusy(`${matchId}:${role}`);
     try {
       await crewSelf(matchId, 'join', role);
