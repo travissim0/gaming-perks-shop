@@ -1,0 +1,158 @@
+<!--
+  Dev update, Oct 8 2026: match night from inside the game (side pick, subs, reminders), the match
+  page redesign, minerals, refs, fixes. Written for the freeinf.org CTF theme.
+  Paste this whole file into News management → Content → HTML (or "Load .html file").
+  Classes are prefixed .du- so they never collide with other posts on the news list.
+  Theme tokens: page #0B0F1A · card #131A2B · card-2 #1B2438 · accent #22D3EE · highlight #F59E0B
+                text #E6EDF7 · muted #8B98B0 · display Barlow Condensed · body Inter
+-->
+<style>
+.du{font-family:var(--font-body), Inter, system-ui, sans-serif;color:#E6EDF7;box-sizing:border-box;}
+.du *{box-sizing:border-box;}
+:where(.du) p{margin:0 0 14px;line-height:1.6;color:#C9D3E3;}
+:where(.du) strong{color:#E6EDF7;font-weight:600;}
+:where(.du) a{color:#22D3EE;}
+.du-kicker{font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#22D3EE;margin:0 0 6px;}
+.du-kicker.amber{color:#F59E0B;}
+.du-title{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;line-height:1;margin:0;color:#E6EDF7;}
+.du-h{font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-weight:700;text-transform:uppercase;font-size:28px;line-height:1.1;margin:34px 0 4px;color:#E6EDF7;}
+.du-h-sub{font-size:14px;color:#8B98B0;margin:0 0 12px;}
+.du-cmd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:.92em;background:rgba(34,211,238,.1);color:#67E8F9;border-radius:5px;padding:1px 6px;white-space:nowrap;}
+.du-btn{display:inline-block;background:#22D3EE;color:#0B0F1A !important;font-weight:600;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.du-btn:hover{background:#67E8F9;}
+.du-btn-ghost{display:inline-block;background:rgba(255,255,255,.05);color:#E6EDF7 !important;font-weight:500;font-size:14px;text-decoration:none !important;padding:10px 16px;border-radius:6px;line-height:1.2;transition:background .15s;}
+.du-btn-ghost:hover{background:rgba(255,255,255,.1);}
+
+/* hero */
+.du-hero{background:#1B2438;background-image:radial-gradient(circle at 8% 15%, rgba(34,211,238,.16), transparent 45%);border-radius:12px;padding:28px 26px;margin:0 0 16px;}
+.du-hero .du-title{font-size:46px;}
+.du-hero-sub{font-size:17px;color:#C9D3E3;margin:12px 0 20px;max-width:640px;line-height:1.5;}
+.du-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.du-tile{background:rgba(11,15,26,.55);border-radius:10px;padding:12px 14px;min-width:0;box-shadow:inset 0 0 0 1px rgba(34,211,238,.18);}
+.du-tile b{display:block;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:15px;font-weight:600;color:#67E8F9;margin:0 0 4px;overflow-wrap:anywhere;}
+.du-tile span{display:block;font-size:12px;color:#8B98B0;line-height:1.35;}
+
+/* sections: a card of short rows */
+.du-card{background:#131A2B;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:6px 22px;margin:0 0 12px;}
+.du-row{display:flex;gap:14px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(255,255,255,.05);font-size:15px;line-height:1.45;color:#C9D3E3;}
+.du-row:first-child{border-top:0;}
+.du-row .k{flex:0 0 170px;color:#E6EDF7;font-weight:600;}
+.du-row .v{flex:1;min-width:0;}
+
+/* the arena line, shown as it appears in game */
+.du-arena{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:14px;background:#0B0F1A;border-radius:8px;padding:12px 14px;margin:0 0 12px;color:#E6EDF7;overflow-x:auto;white-space:nowrap;box-shadow:inset 3px 0 0 #F59E0B;}
+.du-arena .who{color:#F59E0B;}
+.du-arena .out{color:#F87171;}
+.du-arena .in{color:#4ADE80;}
+
+/* sub flow: three steps */
+.du-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px;}
+.du-step{background:#1B2438;border-radius:10px;padding:14px 16px;min-width:0;}
+.du-step .n{display:block;font-family:var(--font-display), "Barlow Condensed", Inter, sans-serif;font-size:26px;font-weight:700;color:#22D3EE;line-height:1;margin:0 0 6px;}
+.du-step .h{display:block;font-weight:600;color:#E6EDF7;margin:0 0 4px;font-size:15px;}
+.du-step .t{display:block;font-size:13px;color:#C9D3E3;line-height:1.45;}
+
+/* who sees what */
+.du-privacy{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 12px;}
+.du-privacy th,.du-privacy td{text-align:left;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.06);}
+.du-privacy th{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#8B98B0;}
+.du-privacy td{color:#C9D3E3;}
+.du-privacy td:first-child{color:#E6EDF7;font-weight:600;}
+.du-yes{color:#4ADE80;font-weight:600;}
+.du-no{color:#8B98B0;}
+
+/* coming soon */
+.du-soon{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.35);border-radius:10px;padding:14px 18px;margin:24px 0 18px;}
+.du-soon .du-title{font-size:22px;color:#F59E0B;}
+.du-soon span{font-size:14px;color:#C9D3E3;}
+
+@media (max-width:700px){
+  .du-hero{padding:24px 20px;}
+  .du-hero .du-title{font-size:38px;}
+  .du-tiles{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .du-steps{grid-template-columns:minmax(0,1fr);}
+  .du-row{flex-direction:column;gap:2px;}
+  .du-row .k{flex:none;}
+  .du-card{padding:4px 16px;}
+}
+</style>
+
+<div class="du">
+
+  <div class="du-hero">
+    <p class="du-kicker">Dev Update &middot; October 8, 2026</p>
+    <p class="du-title">Run the match<br>from the game.</p>
+    <p class="du-hero-sub">Captains can now pick the side, sub and cancel without leaving the arena. Reminders keep match night on time, and the match page got a full cleanup.</p>
+    <div class="du-tiles">
+      <div class="du-tile"><b>?side titan</b><span>Home captain picks the side</span></div>
+      <div class="du-tile"><b>?sub in:out</b><span>Captains sub in game</span></div>
+      <div class="du-tile"><b>?cancel</b><span>Cancels your queued sub</span></div>
+      <div class="du-tile"><b>30 / 15 / 5</b><span>Minute reminders zone-wide</span></div>
+    </div>
+  </div>
+
+  <h2 class="du-h">Side Pick</h2>
+  <p class="du-h-sub">No side, no placement. These keep it from holding up the match.</p>
+  <div class="du-card">
+    <div class="du-row"><span class="k">Pick in game</span><span class="v"><span class="du-cmd">?side titan</span> or <span class="du-cmd">?side collective</span>. Home captain or co-captain only.</span></div>
+    <div class="du-row"><span class="k">Captain reminders</span><span class="v">PMs until side and lineup are set. Closer to start = more often, louder.</span></div>
+    <div class="du-row"><span class="k">Zone reminders</span><span class="v">30, 15 and 5 minutes before the match.</span></div>
+    <div class="du-row"><span class="k">1-minute warning</span><span class="v">Arena message before the countdown ends.</span></div>
+  </div>
+
+  <h2 class="du-h">Subs</h2>
+  <p class="du-h-sub">Never mid-fight. Never off a flag.</p>
+  <div class="du-steps">
+    <div class="du-step"><span class="n">1</span><span class="h">Captain types <span class="du-cmd">?sub in:out</span></span><span class="t">Your team's roster only. Captain or co-captain.</span></div>
+    <div class="du-step"><span class="n">2</span><span class="h">The sub is queued</span><span class="t">Waits until the player going out is dead or on the dropship.</span></div>
+    <div class="du-step"><span class="n">3</span><span class="h">The swap happens</span><span class="t">Instantly at that moment, announced in the arena.</span></div>
+  </div>
+  <div class="du-arena"><span class="who">KEVI (Kev)</span> OUT: <span class="out">anjro</span> --- IN: <span class="in">Soup</span></div>
+  <div class="du-card">
+    <div class="du-row"><span class="k">Changed your mind?</span><span class="v"><span class="du-cmd">?cancel</span>, or add <span class="du-cmd">cancel</span> to the end of your <span class="du-cmd">?sub</span>.</span></div>
+    <div class="du-row"><span class="k">New request</span><span class="v">A new <span class="du-cmd">?sub</span> replaces the one still queued.</span></div>
+    <div class="du-row"><span class="k">Site and 10-man subs</span><span class="v">Queue the same way. Match page shows &ldquo;waiting on the arena&rdquo;.</span></div>
+    <div class="du-row"><span class="k">Before kick-off</span><span class="v">Subs go through right away.</span></div>
+  </div>
+
+  <h2 class="du-h">Match Page</h2>
+  <p class="du-h-sub">Cleaner, faster, and your plan stays yours.</p>
+  <div class="du-card">
+    <div class="du-row"><span class="k">Header</span><span class="v">One card: away vs home, big date and time.</span></div>
+    <div class="du-row"><span class="k">Decluttered</span><span class="v">One roster list, menus, shorter text.</span></div>
+    <div class="du-row"><span class="k">Lineup tab</span><span class="v">Start / bench / out. What the zone uses.</span></div>
+    <div class="du-row"><span class="k">Plan tab</span><span class="v">Optional: class, offense / defense, 10-man.</span></div>
+    <div class="du-row"><span class="k">Views</span><span class="v">List or field view, plus display settings.</span></div>
+    <div class="du-row"><span class="k">Plan in game</span><span class="v">Players get their plan by PM. <span class="du-cmd">?y</span> accepts, <span class="du-cmd">?n</span> suggests.</span></div>
+    <div class="du-row"><span class="k">10-man</span><span class="v">Stage the swaps, then one button: Execute 10-man subs.</span></div>
+  </div>
+  <table class="du-privacy">
+    <tr><th>Who sees</th><th>Lineup</th><th>Plan</th></tr>
+    <tr><td>Your squad</td><td class="du-yes">Yes</td><td class="du-yes">Yes</td></tr>
+    <tr><td>Staff and referees</td><td class="du-yes">Yes</td><td class="du-no">Never</td></tr>
+    <tr><td>Other squad</td><td class="du-no">Never</td><td class="du-no">Never</td></tr>
+    <tr><td>Everyone</td><td colspan="2" class="du-no">The side only, 5 minutes before the match</td></tr>
+  </table>
+
+  <h2 class="du-h">Minerals</h2>
+  <div class="du-card">
+    <div class="du-row"><span class="k"><span class="du-cmd">?wipe</span> / <span class="du-cmd">?swap</span></span><span class="v">Your tso/tox drop at your feet first. Your team only.</span></div>
+    <div class="du-row"><span class="k"><span class="du-cmd">?bw</span> / <span class="du-cmd">?bwd</span></span><span class="v">Keep them. Anything that doesn't fit drops.</span></div>
+  </div>
+
+  <h2 class="du-h">Refs, Spectators &amp; Fixes</h2>
+  <div class="du-card">
+    <div class="du-row"><span class="k">Match MVP</span><span class="v"><span class="du-cmd">*mvp name</span> after the game posts it in the arena.</span></div>
+    <div class="du-row"><span class="k">Spectating</span><span class="v">On by default in match arenas.</span></div>
+    <div class="du-row"><span class="k">Game page videos</span><span class="v">Add video / VOD works again for match crew.</span></div>
+  </div>
+
+  <div class="du-soon">
+    <span class="du-title">Coming soon</span>
+    <span>Reprogram counts on freeinf.org player stats.</span>
+  </div>
+
+  <p>Questions or something not working on match night? Let a ref know, or post it in Discord.</p>
+  <a class="du-btn-ghost" href="https://www.freeinf.org/matches">Upcoming matches</a>
+
+</div>

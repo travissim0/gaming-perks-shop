@@ -38,6 +38,10 @@ function stripStyleRules(css: string): string {
 /** Point the post's font names at the site's loaded faces (next/font hashes the family names). */
 function siteFonts(s: string): string {
   return s
+    // Collapse what older saves nested (each save wrapped the name once more):
+    // var(--font-display), "var(--font-display), "Barlow Condensed"" -> var(--font-display), "Barlow Condensed"
+    .replace(/var\(--font-display\),\s*(?:["']?var\(--font-display\),\s*)+["']?Barlow Condensed["']*/g, 'var(--font-display), "Barlow Condensed"')
+    .replace(/var\(--font-body\),\s*(?:["']?var\(--font-body\),\s*)+Inter/g, 'var(--font-body), Inter')
     .replace(/(?<!var\(--font-display\),\s*["']?)["']?Barlow Condensed["']?/g, 'var(--font-display), "Barlow Condensed"')
     .replace(/(?<!var\(--font-body\),\s*)(?<![\w-])Inter(?=\s*[,;}"'])/g, 'var(--font-body), Inter');
 }
@@ -77,7 +81,10 @@ export function prepareNewsHtml(raw: string): string {
   // style blocks and style attributes
   html = html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_m, css) => `<style>${siteFonts(stripStyleRules(css))}</style>`);
   html = html.replace(/\sstyle\s*=\s*("([^"]*)"|'([^']*)')/gi, (_m, _q, dq, sq) => {
-    const v = siteFonts(stripStyleRules(dq ?? sq ?? ''));
+    // The value comes back with the &quot; written by the last save: decode it first, or the font
+    // names no longer look already-wrapped and get wrapped again on every save.
+    const raw = (dq ?? sq ?? '').replace(/&quot;/g, '"').replace(/&#0*39;|&apos;/g, "'");
+    const v = siteFonts(stripStyleRules(raw));
     return ` style="${v.replace(/"/g, '&quot;')}"`;
   });
 
