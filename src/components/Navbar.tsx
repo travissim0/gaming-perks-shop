@@ -10,7 +10,7 @@ import {
   Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X,
   House, Trophy, Wrench, Shield, Target, Swords, Sword, ClipboardCheck, ScrollText, Calendar, Newspaper,
   Table2, ListOrdered, Star, ThumbsUp, FileText, ClipboardList, Crown, Globe, Activity, Monitor, Palette, ShoppingBag,
-  Image as ImageIcon, MessageCircle,
+  Image as ImageIcon, MessageCircle, Crosshair,
 } from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
@@ -598,6 +598,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
   const toolsNavItems: NavItem[] = [
     { href: '/tools', label: 'Infantry v2 Client', icon: <Monitor className="w-4 h-4" /> },
     { href: '/editors', label: 'Web Editors', icon: <Palette className="w-4 h-4" /> },
+    { href: '/base-planner', label: 'Turret Planner', icon: <Crosshair className="w-4 h-4" /> },
     { href: '/perks', label: 'Perks Shop', icon: <ShoppingBag className="w-4 h-4" /> },
   ];
 
