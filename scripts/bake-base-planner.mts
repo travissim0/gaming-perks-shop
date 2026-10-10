@@ -14,7 +14,9 @@
  * - flag spots and base owners: the CTF gametype script (bases["D7"] = new Base(...), BaseIsTitanOwned)
  * - turrets: the computer vehicles the engineer builds (MG 400, Rocket 401, Sentry 402, Plasma 700)
  *
- * Output: public/sprites/base-planner/{bases/<id>.webp, turret-<key>.png, flag-<owner>.png, planner.json}
+ * - weapons: each turret's gun from ctfpl.itm (how far its shots fly), and the medic's Medikit
+ *
+ * Output: public/sprites/base-planner/{bases/<id>.webp, turret-<key>.png, piece-medic.png, flag-<owner>.png, planner.json}
  */
 import '../../Infantry-Tools/infantry-cfs-studio/tools/spritegen/lib/imagedata-shim.mts';
 import fs from 'node:fs';
@@ -26,6 +28,7 @@ import { LIOParser, LioTypeId } from '../../Infantry-Tools/infantry-cfs-studio/s
 import { BLOParser } from '../../Infantry-Tools/infantry-cfs-studio/src/lib/formats/blo.ts';
 import { CFSParser } from '../../Infantry-Tools/infantry-cfs-studio/src/lib/formats/cfs.ts';
 import { parseVehFile } from '../../Infantry-Tools/infantry-cfs-studio/src/lib/formats/veh.ts';
+import { parseItmFile } from '../../Infantry-Tools/infantry-cfs-studio/src/lib/formats/itm.ts';
 import { BASE_REGIONS } from '../../Infantry-Tools/infantry-cfs-studio/src/lib/spectator/cameraScenes.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +37,7 @@ const SRV = 'G:\\Users\\Travis\\Desktop\\New folder (2)\\Infantry Online Map Fol
 const ASSETS = path.join(SRV, 'assets');
 const CTF_SCRIPT = path.join(SRV, 'scripts', 'GameTypes', 'CTF', 'CTF.cs');
 const CLIENT = 'F:\\SteamLibrary\\steamapps\\common\\FreeInfantry';
-const LVL = 'ctfDLS4.lvl', LIO = 'ctfdls4.lio', VEH = 'ctfpl.veh';
+const LVL = 'ctfDLS4.lvl', LIO = 'ctfdls4.lio', VEH = 'ctfpl.veh', ITM = 'ctfpl.itm';
 const MAN_VEHICLE = 112; // ctfpl.veh "Infantry": every man class shares its hull
 const T = 16;
 
@@ -49,6 +52,9 @@ const TURRETS = [
 ] as const;
 // The Sentry's job is its "Sentry TD" utility (ctfpl.itm item 26): antiWarpDistance 512.
 const SENTRY_ANTI_WARP = 512;
+const MEDIKIT = 432;
+// The site's Field Medic uniform (scripts/bake-all-classes.sh): man.blo with the grey uniform ramp at hue 50.
+const MEDIC_TINT = { hue: 50, sat: 0.7 };
 
 const ab = (b: Buffer) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 
@@ -160,6 +166,26 @@ if (lvl.offsetX || lvl.offsetY) throw new Error('level has a header offset; base
 const lio = LIOParser.parse(fs.readFileSync(path.join(ASSETS, LIO), 'utf8'));
 const veh: any = parseVehFile(fs.readFileSync(path.join(ASSETS, VEH), 'latin1'), VEH);
 const vehInfo = (id: number) => (veh.vehicles.map((v: any) => v.info ?? v) as any[]).find((v) => v.id === id);
+const itm: any = parseItmFile(fs.readFileSync(path.join(ASSETS, ITM), 'latin1'), ITM);
+const item = (id: number) => (itm.items.map((i: any) => i.info ?? i) as any[]).find((i) => i.id === id);
+
+/** How far one shot flies: muzzleVelocity/1000 px per tick for |aliveTime| ticks, slowed by
+ *  horizontalFriction/10000 per tick (10000 = none), as the studio's projectile sim moves them. */
+function shotRange(p: any): number {
+  let v = p.muzzleVelocity / 1000, d = 0;
+  for (let t = 0; t < Math.abs(p.aliveTime) && v > 0.01; t++) { d += v; if (p.horizontalFriction !== 10000) v = (v * p.horizontalFriction) / 10000; }
+  return Math.round(d);
+}
+
+/** The projectile a turret actually fires: its first gun, or for a multi-use gun the child that does damage. */
+function turretShot(v: any): { name: string; range: number; fireDelay: number } | null {
+  const gun = item(v.inventoryItems?.[0]);
+  if (!gun) return null;
+  const damage = (p: any) => (p?.damageKineticInner ?? 0) + (p?.damageExplosiveInner ?? 0) + (p?.damageEnergyInner ?? 0) + (p?.damageElectronicInner ?? 0);
+  const proj = gun.muzzleVelocity !== undefined ? gun
+    : (gun.children ?? []).map((c: any) => item(c.itemID)).filter((p: any) => p?.muzzleVelocity !== undefined).sort((a: any, b: any) => damage(b) - damage(a))[0];
+  return proj ? { name: gun.name, range: shotRange(proj), fireDelay: gun.fireDelay } : null;
+}
 
 // Flag spots and owners straight from the gametype script.
 const script = fs.readFileSync(CTF_SCRIPT, 'utf8');
@@ -272,10 +298,35 @@ async function bakeTurret(t: (typeof TURRETS)[number]) {
     if (head) c.draw(head, Math.round(cell / 2 - head.cellW / 2) + head.fx, Math.round(cell / 2 - head.cellH / 2) + head.fy);
     frames.push(c);
   }
-  // trim every facing to the union of their opaque pixels so the atlas stays small
+  const { atlas, fw, fh, gridCols, minX, minY } = packFacings(frames, cell);
+  await atlas.png().png({ compressionLevel: 9 }).toFile(path.join(OUT, `turret-${t.key}.png`));
+  const shot = t.key === 'sentry' ? null : turretShot(v); // the sentry's "gun" is only a warning beep
+  console.log(`${t.key}: vehicle ${v.id} "${v.name}", ${dirs} facings, frame ${fw}x${fh}${shot ? `, ${shot.name} shots fly ${shot.range}px` : ''}`);
+  return {
+    key: t.key, label: t.label, vehicle: v.id, name: v.name,
+    image: `turret-${t.key}.png`, frameW: fw, frameH: fh, columns: gridCols, facings: dirs,
+    // where the vehicle position sits inside a frame
+    anchorX: cell / 2 - minX, anchorY: cell / 2 - minY,
+    radius: v.physicalRadius, hitpoints: v.hitpoints,
+    kind: 'turret',
+    // shots fly flat at this height; a wall stops them when its physics band holds it
+    fireHeight: v.fireHeight, barrelLength: v.barrelLength,
+    // a turret only aims inside fireRadius, but its shots keep going this far
+    weapon: shot?.name ?? null, shotRange: shot?.range ?? 0, fireDelay: shot?.fireDelay ?? 0,
+    healRadius: 0,
+    fireRadius: v.fireRadius, trackingRadius: v.trackingRadius, obeyLos: v.obeyLos !== 0,
+    antiWarpRadius: t.key === 'sentry' ? SENTRY_ANTI_WARP : 0,
+    densityRadius: v.densityRadius,
+    maxTypeInArea: v.frequencyDensityMaxType, maxInArea: v.frequencyDensityMaxActive,
+    maxTypeOnTeam: v.frequencyMaxType,
+  };
+}
+
+/** Trim every facing to the union of their opaque pixels and lay them out 8 to a row. */
+function packFacings(frames: Canvas[], cell: number) {
   let minX = cell, minY = cell, maxX = -1, maxY = -1;
   for (const c of frames) for (let y = 0; y < cell; y++) for (let x = 0; x < cell; x++) if (c.data[(y * cell + x) * 4 + 3]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
-  const fw = maxX - minX + 1, fh = maxY - minY + 1, gridCols = 8, gridRows = Math.ceil(dirs / gridCols);
+  const fw = maxX - minX + 1, fh = maxY - minY + 1, gridCols = 8, gridRows = Math.ceil(frames.length / gridCols);
   const atlas = new Canvas(fw * gridCols, fh * gridRows);
   frames.forEach((c, i) => {
     const ox = (i % gridCols) * fw, oy = Math.floor(i / gridCols) * fh;
@@ -284,21 +335,53 @@ async function bakeTurret(t: (typeof TURRETS)[number]) {
       for (let k = 0; k < 4; k++) atlas.data[d + k] = c.data[s + k];
     }
   });
-  await atlas.png().png({ compressionLevel: 9 }).toFile(path.join(OUT, `turret-${t.key}.png`));
-  console.log(`${t.key}: vehicle ${v.id} "${v.name}", ${dirs} facings, frame ${fw}x${fh}`);
+  return { atlas, fw, fh, gridCols, minX, minY };
+}
+
+const rgbToHsv = (r: number, g: number, b: number) => {
+  const max = Math.max(r, g, b) / 255, min = Math.min(r, g, b) / 255, d = max - min;
+  return { s: max === 0 ? 0 : d / max, v: max };
+};
+const hsvToRgb = (h: number, s: number, v: number) => {
+  const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6];
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+};
+
+/** The medic: man.blo's standing frame for each of its 64 facings, uniform tinted like the site's Field Medic. */
+async function bakeMedic() {
+  const man = loadCfs('man', 'gfx00000');
+  if (!man) throw new Error('man.blo/gfx00000 missing');
+  const h = man.header, palette = [...man.palette];
+  for (let i = h.userPaletteStart; i < h.userPaletteStart + h.userPalette; i++) {
+    const argb = palette[i], r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
+    const { s, v } = rgbToHsv(r, g, b);
+    if (s >= 0.35) continue; // the red helmet and blue pack ramps stay
+    const [nr, ng, nb] = hsvToRgb(MEDIC_TINT.hue / 360, MEDIC_TINT.sat, v);
+    palette[i] = ((argb & 0xff000000) | (nr << 16) | (ng << 8) | nb) >>> 0;
+  }
+  const cfs = { ...man, palette };
+  const facings = h.rowCount, cell = Math.max(h.width, h.height);
+  const frames: Canvas[] = [];
+  for (let row = 0; row < facings; row++) {
+    const c = new Canvas(cell, cell), f = renderFrame(cfs, row * h.columnCount);
+    if (f) c.draw(f, Math.round(cell / 2 - f.cellW / 2) + f.fx, Math.round(cell / 2 - f.cellH / 2) + f.fy);
+    frames.push(c);
+  }
+  const { atlas, fw, fh, gridCols, minX, minY } = packFacings(frames, cell);
+  await atlas.png().png({ compressionLevel: 9 }).toFile(path.join(OUT, 'piece-medic.png'));
+  const kit = item(MEDIKIT), m = vehInfo(MAN_VEHICLE);
+  // repairDistance < 0 = an area heal of every teammate within |distance| px, walls or not (ScriptArena)
+  console.log(`medic: ${facings} facings, frame ${fw}x${fh}, ${kit.name} heals ${kit.repairAmount} within ${-kit.repairDistance}px over ${kit.repairTime} ticks`);
   return {
-    key: t.key, label: t.label, vehicle: v.id, name: v.name,
-    image: `turret-${t.key}.png`, frameW: fw, frameH: fh, columns: gridCols, facings: dirs,
-    // where the vehicle position sits inside a frame
+    key: 'medic', label: 'Medic', kind: 'medic', vehicle: MAN_VEHICLE, name: `Field Medic (${kit.name})`,
+    image: 'piece-medic.png', frameW: fw, frameH: fh, columns: gridCols, facings,
     anchorX: cell / 2 - minX, anchorY: cell / 2 - minY,
-    radius: v.physicalRadius, hitpoints: v.hitpoints,
-    // shots fly flat at this height; a wall stops them when its physics band holds it
-    fireHeight: v.fireHeight, barrelLength: v.barrelLength,
-    fireRadius: v.fireRadius, trackingRadius: v.trackingRadius, obeyLos: v.obeyLos !== 0,
-    antiWarpRadius: t.key === 'sentry' ? SENTRY_ANTI_WARP : 0,
-    densityRadius: v.densityRadius,
-    maxTypeInArea: v.frequencyDensityMaxType, maxInArea: v.frequencyDensityMaxActive,
-    maxTypeOnTeam: v.frequencyMaxType,
+    radius: m.physicalRadius, hitpoints: 0, fireHeight: 0, barrelLength: 0,
+    weapon: kit.name, shotRange: 0, fireDelay: kit.fireDelay,
+    fireRadius: 0, trackingRadius: 0, obeyLos: false, antiWarpRadius: 0,
+    healRadius: Math.abs(kit.repairDistance), healAmount: kit.repairAmount, healTicks: kit.repairTime,
+    densityRadius: 0, maxTypeInArea: -1, maxInArea: -1, maxTypeOnTeam: -1,
   };
 }
 
@@ -321,6 +404,7 @@ const bases = [];
 for (const [id, r] of Object.entries(regions)) bases.push(await bakeBase(id, r));
 const turrets = [];
 for (const t of TURRETS) turrets.push(await bakeTurret(t));
+turrets.push(await bakeMedic());
 const man = vehInfo(MAN_VEHICLE);
 const planner = {
   _about: 'Baked by scripts/bake-base-planner.mts from ctfdls4.lvl / ctfdls4.lio / ctfpl.veh and the CTF gametype script. tiles = one byte per 16px tile, row-major cols x rows from (x0,y0): physics = b & 0x1F, vision = b >> 5. doors = tile indices of LIO door collision (baked closed in tiles).',

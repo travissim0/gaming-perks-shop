@@ -11,27 +11,30 @@
  * turret line-of-sight test.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { FLAG_ROOMS, type Rect } from '@/lib/basePlanner/flagRooms';
 import {
-  buildBlocker, coverage, decodeGrid, decodeSetup, encodeSetup, facingToward, nearestFreeSpot, reachableFrom, spotIsFree, walkableSpotNear,
+  buildBlocker, coverage, decodeGrid, decodeSetup, encodeSetup, facingToward, fireZones, nearestFreeSpot, reachableFrom, spotIsFree, walkableSpotNear,
   type Grid, type Placement, type PlannerBase, type PlannerData, type Turret, type TurretKey, type TurretType,
 } from '@/lib/basePlanner/rules';
 
 const ASSETS = '/sprites/base-planner/';
 const STORE_KEY = 'base-planner:v1';
-const ORDER: TurretKey[] = ['rocket', 'mg', 'sentry', 'plasma'];
-const COLOR: Record<TurretKey, string> = { rocket: '#fb923c', mg: '#22d3ee', sentry: '#a3e635', plasma: '#e879f9' };
-const RGB: Record<TurretKey, [number, number, number]> = { rocket: [251, 146, 60], mg: [34, 211, 238], sentry: [163, 230, 53], plasma: [232, 121, 249] };
+const ORDER: TurretKey[] = ['rocket', 'mg', 'sentry', 'plasma', 'medic'];
+const COLOR: Record<TurretKey, string> = { rocket: '#fb923c', mg: '#22d3ee', sentry: '#a3e635', plasma: '#e879f9', medic: '#34d399' };
+const RGB: Record<TurretKey, [number, number, number]> = { rocket: [251, 146, 60], mg: [34, 211, 238], sentry: [163, 230, 53], plasma: [232, 121, 249], medic: [52, 211, 153] };
 const OWNER = { titan: { label: 'Titan', color: '#4ade80' }, collective: { label: 'Collective', color: '#f87171' } } as const;
 const BLURB: Record<TurretKey, string> = {
   rocket: 'Splash damage, longest reach',
   mg: 'Fast hitscan fire',
   sentry: 'No gun: teleport disruption, soaks shots',
   plasma: 'Energy bolts, shorter reach',
+  medic: 'Not a turret: heals everyone on the team around them',
 };
+/** How far out to look for floor that can see a medic (the "safe corner" check). */
+const SEEN_FROM = 1000;
 const ZOOM_MAX = 6;
 
 /** The map editor's physics colours, which are wall heights: green 16, yellow 32, orange 64, purple 128, red/teal solid. */
@@ -43,7 +46,7 @@ const WALL_COLOR: Record<WallGroup, [number, number, number, number]> = {
 };
 
 type View = 'room' | 'base';
-interface Show { sight: boolean; fire: boolean; blind: boolean; antiWarp: boolean; walls: boolean; labels: boolean }
+interface Show { sight: boolean; fire: boolean; stray: boolean; blind: boolean; antiWarp: boolean; heal: boolean; walls: boolean; labels: boolean }
 interface Cam { cx: number; cy: number; z: number }
 interface Ghost { type: TurretKey; x: number; y: number; ok: boolean; reason: string | null }
 type Drag =
@@ -79,7 +82,7 @@ export default function BasePlanner() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [ghost, setGhostState] = useState<Ghost | null>(null);
   const [view, setView] = useState<View>('room');
-  const [show, setShow] = useState<Show>({ sight: true, fire: false, blind: false, antiWarp: false, walls: false, labels: true });
+  const [show, setShow] = useState<Show>({ sight: true, fire: false, stray: false, blind: false, antiWarp: false, heal: true, walls: false, labels: false });
   const [notice, setNotice] = useState<{ text: string; bad?: boolean } | null>(null);
   const [imgTick, setImgTick] = useState(0);
   const [ready, setReady] = useState(false);
@@ -275,6 +278,17 @@ export default function BasePlanner() {
   }, [placement, base]);
 
   // the draw loop runs outside React renders; it reads the latest state from here
+  /** 1 = the turret aims here, 2 = only its stray shots get here (see fireZones) */
+  const zonesFor = useCallback((t: Pick<Turret, 'type' | 'x' | 'y'>) => {
+    if (!placement || !base || !types) return null;
+    const ty = types[t.type], aimed = maskFor(t, ty.fireRadius, true, ty.fireHeight);
+    if (!aimed) return null;
+    const key = `${base.id}|zones|${t.type}|${t.x}|${t.y}`;
+    let m = masks.current.get(key);
+    if (!m) { m = fireZones(placement, { id: '', facing: 0, ...t }, ty.fireHeight, ty.shotRange, aimed); masks.current.set(key, m); }
+    return m;
+  }, [placement, base, types, maskFor]);
+
   const live = useRef({ setup, selected, hovered, ghost, show });
   live.current = { setup, selected, hovered, ghost, show };
 
@@ -299,9 +313,9 @@ export default function BasePlanner() {
     const L = live.current, list = shownTurrets(), focus = L.show.sight ? focusTurret() : null;
     const shooters = list.filter((t) => types[t.type].obeyLos && !t.bad);
     const key = [
-      base.id, L.show.fire, L.show.blind,
+      base.id, L.show.fire, L.show.stray, L.show.blind,
       focus ? `${focus.type}${focus.x},${focus.y}` : '-',
-      L.show.blind || L.show.fire ? shooters.map((t) => `${t.type}${t.x},${t.y}`).join(';') : '',
+      L.show.blind || L.show.fire || L.show.stray ? shooters.map((t) => `${t.type}${t.x},${t.y}`).join(';') : '',
     ].join('|');
     if (overlayCache.current?.key === key) return overlayCache.current.canvas;
     const n = grid.cols * grid.rows;
@@ -318,6 +332,13 @@ export default function BasePlanner() {
         img.data[k + 3] = na * 255;
       }
     };
+    if (L.show.stray && shooters.length) {
+      // floor only stray shots reach: past a turret's targets, before a wall stops the shot
+      const stray = new Uint8Array(n), aimedAny = new Uint8Array(n);
+      for (const t of shooters) { const z = zonesFor(t); if (z) for (let i = 0; i < n; i++) { if (z[i] === 1) aimedAny[i] = 1; else if (z[i] === 2) stray[i] = 1; } }
+      for (let i = 0; i < n; i++) if (aimedAny[i]) stray[i] = 0;
+      paint(stray, [249, 115, 22], 0.2);
+    }
     if ((L.show.blind || L.show.fire) && shooters.length) {
       // how many turrets can shoot each tile
       const seen = new Uint8Array(n);
@@ -331,15 +352,20 @@ export default function BasePlanner() {
     }
     // sentries don't shoot: their anti-warp zone is a plain disc, drawn in paintWorld
     if (focus && types[focus.type].obeyLos) {
-      const ft = types[focus.type];
-      paint(maskFor(focus, ft.fireRadius, true, ft.fireHeight), RGB[focus.type], 0.3);
+      const z = zonesFor(focus);
+      if (z) {
+        paint(z.map((v) => (v === 2 ? 1 : 0)), RGB[focus.type], 0.12);
+        paint(z.map((v) => (v === 1 ? 1 : 0)), RGB[focus.type], 0.32);
+      }
     }
+    // a medic: where enemies could see them from (the heal circle itself is drawn in paintWorld)
+    if (focus && types[focus.type].kind === 'medic') paint(maskFor(focus, SEEN_FROM, true), [239, 68, 68], 0.2);
     const c = overlayCache.current?.canvas ?? document.createElement('canvas');
     c.width = grid.cols; c.height = grid.rows;
     c.getContext('2d')!.putImageData(img, 0, 0);
     overlayCache.current = { key, canvas: c };
     return c;
-  }, [base, types, grid, placement, shownTurrets, focusTurret, maskFor]);
+  }, [base, types, grid, placement, shownTurrets, focusTurret, maskFor, zonesFor]);
 
   const wallsLayer = useCallback((): HTMLCanvasElement | null => {
     if (!base || !grid) return null;
@@ -382,13 +408,30 @@ export default function BasePlanner() {
         ctx.restore();
       }
     }
+    // medikit: every teammate within the radius is healed, walls or not (the server's getObjsInRange circle)
+    for (const t of list) {
+      const hr = types[t.type].healRadius;
+      if (t.bad || !hr || !(L.show.heal || t.id === focus?.id)) continue;
+      ctx.save();
+      ctx.fillStyle = 'rgba(52,211,153,0.1)';
+      ctx.beginPath(); ctx.arc(t.x, t.y, hr, 0, Math.PI * 2); ctx.fill();
+      ctx.setLineDash([4 / z, 5 / z]); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = 'rgba(52,211,153,0.85)';
+      ctx.stroke();
+      ctx.restore();
+    }
     if (focus) {
-      const ft = types[focus.type], r = ft.obeyLos ? ft.fireRadius : ft.antiWarpRadius || ft.fireRadius;
+      const ft = types[focus.type], r = ft.obeyLos ? ft.fireRadius : ft.antiWarpRadius || ft.healRadius || ft.fireRadius;
       ctx.save();
       ctx.setLineDash([10 / z, 6 / z]);
       ctx.lineWidth = 1.5 / z;
       ctx.strokeStyle = COLOR[focus.type];
       ctx.beginPath(); ctx.arc(focus.x, focus.y, r, 0, Math.PI * 2); ctx.stroke();
+      if (ft.obeyLos && ft.shotRange > ft.fireRadius) {
+        // where its shots run out
+        ctx.setLineDash([2 / z, 8 / z]);
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath(); ctx.arc(focus.x, focus.y, ft.shotRange, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -470,7 +513,7 @@ export default function BasePlanner() {
       ctx.textBaseline = 'middle';
       const placed: { x0: number; x1: number; y: number }[] = [];
       for (const t of [...list].sort((a, b) => a.y - b.y)) {
-        const p = toScreen(t.x, t.y), label = `${types[t.type].label} ${types[t.type].hitpoints}hp`, tw = ctx.measureText(label).width + 10;
+        const p = toScreen(t.x, t.y), tt = types[t.type], label = tt.hitpoints ? `${tt.label} ${tt.hitpoints}hp` : tt.label, tw = ctx.measureText(label).width + 10;
         // stack labels of turrets standing close together instead of drawing them over each other
         let y = p.y + Math.max(14, 16 * c.z);
         while (placed.some((q) => Math.abs(q.y - y) < 16 && p.x - tw / 2 < q.x1 && p.x + tw / 2 > q.x0)) y += 17;
@@ -757,7 +800,16 @@ export default function BasePlanner() {
   // ── ui ────────────────────────────────────────────────────────────────────
   const counts = useMemo(() => Object.fromEntries(ORDER.map((k) => [k, setup.filter((t) => t.type === k).length])) as Record<TurretKey, number>, [setup]);
   const selectedTurret = setup.find((t) => t.id === selected) ?? null;
-  const areaCap = types ? Math.max(...ORDER.filter((k) => k !== 'sentry').map((k) => types[k].maxInArea)) : 6;
+  const areaCap = types ? Math.max(...ORDER.filter((k) => types[k].kind === 'turret' && k !== 'sentry').map((k) => types[k].maxInArea)) : 6;
+  const turretCount = types ? setup.filter((t) => types[t.type].kind === 'turret').length : 0;
+  // the "safe corner" number for a selected medic: how much of the base's floor can see them
+  const medicSeenFrom = useMemo(() => {
+    const m = selectedTurret && types?.[selectedTurret.type].kind === 'medic' ? maskFor(selectedTurret, SEEN_FROM, true) : null;
+    if (!m || !placement?.reach) return null;
+    let seen = 0, floor = 0;
+    for (let i = 0; i < m.length; i++) if (placement.reach[i] && !(placement.grid.bytes[i] & 0x1f)) { floor++; seen += m[i]; }
+    return floor ? Math.round((seen / floor) * 100) : null;
+  }, [selectedTurret, types, maskFor, placement]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -837,12 +889,12 @@ export default function BasePlanner() {
               <div className="flex items-baseline justify-between mb-2">
                 <h2 className="text-sm font-semibold text-gray-200">Turrets</h2>
                 <span className="text-xs text-gray-500" title="Rocket, MG and Plasma can't be built once the area has this many turrets (a Sentry still can)">
-                  {setup.length} in area · cap {areaCap}
+                  {turretCount} in area · cap {areaCap}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {types && ORDER.map((k) => {
-                  const t = types[k], full = t.maxTypeInArea !== -1 && counts[k] >= t.maxTypeInArea;
+                  const t = types[k], full = t.maxTypeInArea !== -1 && counts[k] >= t.maxTypeInArea, medic = t.kind === 'medic';
                   return (
                     <button
                       key={k}
@@ -851,14 +903,16 @@ export default function BasePlanner() {
                       onPointerUp={onChipUp}
                       onPointerCancel={() => { drag.current = null; setGhost(null); }}
                       title={`${t.name}: ${BLURB[k]}. Click to drop one by the flag, or drag it onto the map.`}
-                      className={`touch-none select-none text-left rounded-lg border p-2 transition-colors ${full ? 'border-gray-700 bg-gray-900/40 opacity-60' : 'border-gray-600/70 bg-gray-900/60 hover:border-gray-400 cursor-grab'}`}
+                      className={`touch-none select-none text-left rounded-lg border p-2 transition-colors ${medic ? 'col-span-2 flex items-center gap-3' : ''} ${full ? 'border-gray-700 bg-gray-900/40 opacity-60' : 'border-gray-600/70 bg-gray-900/60 hover:border-gray-400 cursor-grab'}`}
                     >
                       <TurretIcon type={t} />
-                      <div className="mt-1 flex items-baseline justify-between">
-                        <span className="text-sm font-semibold" style={{ color: COLOR[k] }}>{t.label}</span>
-                        <span className="text-xs text-gray-400">{counts[k]}/{t.maxTypeInArea}</span>
+                      <div className={medic ? 'flex-1' : ''}>
+                        <div className="mt-1 flex items-baseline justify-between">
+                          <span className="text-sm font-semibold" style={{ color: COLOR[k] }}>{t.label}</span>
+                          <span className="text-xs text-gray-400">{medic ? counts[k] || '' : `${counts[k]}/${t.maxTypeInArea}`}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 leading-tight">{BLURB[k]}</div>
                       </div>
-                      <div className="text-[11px] text-gray-500 leading-tight">{BLURB[k]}</div>
                     </button>
                   );
                 })}
@@ -871,13 +925,7 @@ export default function BasePlanner() {
                   <h2 className="text-sm font-semibold" style={{ color: COLOR[selectedTurret.type] }}>{types[selectedTurret.type].name}</h2>
                   <span className="text-xs text-gray-500">tile {Math.floor(selectedTurret.x / 16)},{Math.floor(selectedTurret.y / 16)}</span>
                 </div>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                  <dt className="text-gray-500">Health</dt><dd className="text-gray-300">{types[selectedTurret.type].hitpoints}</dd>
-                  {types[selectedTurret.type].antiWarpRadius > 0
-                    ? (<><dt className="text-gray-500">Anti-warp</dt><dd className="text-gray-300">{types[selectedTurret.type].antiWarpRadius}px ({Math.round(types[selectedTurret.type].antiWarpRadius / 16)} tiles)</dd></>)
-                    : (<><dt className="text-gray-500">Range</dt><dd className="text-gray-300">{types[selectedTurret.type].fireRadius}px ({Math.round(types[selectedTurret.type].fireRadius / 16)} tiles)</dd></>)}
-                  <dt className="text-gray-500">Needs sight</dt><dd className="text-gray-300">{types[selectedTurret.type].obeyLos ? 'yes' : 'no'}</dd>
-                </dl>
+                <PieceStats type={types[selectedTurret.type]} seenFrom={medicSeenFrom} />
                 <div className="flex gap-1.5">
                   <button onClick={() => updateTurret(selectedTurret.id, { facing: (selectedTurret.facing + types[selectedTurret.type].facings - 4) % types[selectedTurret.type].facings })} className={btn} title="Rotate left ([ or Shift+R)">⟲</button>
                   <button onClick={() => updateTurret(selectedTurret.id, { facing: (selectedTurret.facing + 4) % types[selectedTurret.type].facings })} className={btn} title="Rotate right (] or R)">⟳</button>
@@ -890,11 +938,13 @@ export default function BasePlanner() {
               <h2 className="text-sm font-semibold text-gray-200 mb-1">Overlays</h2>
               <Toggle on={show.sight} set={(v) => setShow((s) => ({ ...s, sight: v }))} label="Sight of the selected turret" hint="What it can see within its range: the server's turret line-of-sight." />
               <Toggle on={show.fire} set={(v) => setShow((s) => ({ ...s, fire: v }))} label="Fields of fire" hint="Brighter yellow = more Rocket, MG and Plasma turrets can shoot that floor (your kill box)." />
+              <Toggle on={show.stray} set={(v) => setShow((s) => ({ ...s, stray: v }))} label="Stray fire" hint="Floor no turret aims at, but shots that miss (or pass a closer target) still reach before a wall stops them." />
               <Toggle on={show.blind} set={(v) => setShow((s) => ({ ...s, blind: v }))} label="Blind spots" hint="Floor in the base that no Rocket, MG or Plasma turret can see." />
               <Toggle on={show.antiWarp} set={(v) => setShow((s) => ({ ...s, antiWarp: v }))} label="Sentry anti-warp zones" hint="Enemies can't warp into these circles while the sentry stands. Walls don't matter." />
+              <Toggle on={show.heal} set={(v) => setShow((s) => ({ ...s, heal: v }))} label="Medic heal range" hint="Medikit heals every teammate inside the circle; walls don't block it." />
               <Toggle on={show.walls} set={(v) => setShow((s) => ({ ...s, walls: v }))} label="Walls by height" hint="What stops what, from the level's physics." />
               {show.walls && data && types && <WallLegend data={data} types={types} />}
-              <Toggle on={show.labels} set={(v) => setShow((s) => ({ ...s, labels: v }))} label="Labels" />
+              <Toggle on={show.labels} set={(v) => setShow((s) => ({ ...s, labels: v }))} label="Names and health" />
             </div>
 
             <div className="bg-gray-800/50 rounded-xl border border-gray-700/60 p-3 space-y-2">
@@ -911,6 +961,7 @@ export default function BasePlanner() {
               <summary className="cursor-pointer text-gray-400 hover:text-gray-200">Controls</summary>
               <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
                 <li>Click a turret card to drop it by the flag, or drag it onto the map.</li>
+                <li>Select a medic to see where enemies could spot them from (red): a safe heal spot has little red near the doors.</li>
                 <li>Drag a turret to move it; it slides off walls and other turrets.</li>
                 <li>Drag the round handle to aim; R / Shift+R or [ ] rotate too.</li>
                 <li>Delete or right-click removes. Arrow keys nudge (Shift = 8px).</li>
@@ -922,6 +973,30 @@ export default function BasePlanner() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The numbers for whatever is selected, all from the zone files. */
+function PieceStats({ type: t, seenFrom }: { type: TurretType; seenFrom: number | null }) {
+  const px = (v: number) => `${v}px (${Math.round(v / 16)} tiles)`;
+  const rows: [string, string][] = t.kind === 'medic'
+    ? [
+        ['Heals', `${t.healAmount ?? '?'} HP over ${((t.healTicks ?? 0) / 100).toFixed(1)}s`],
+        ['Heal range', `${px(t.healRadius)}, through walls`],
+        ...(seenFrom !== null ? [['Seen from', `${seenFrom}% of the base floor within ${SEEN_FROM}px`] as [string, string]] : []),
+      ]
+    : t.antiWarpRadius > 0
+      ? [['Health', String(t.hitpoints)], ['Anti-warp', `${px(t.antiWarpRadius)}, through walls`], ['Shoots', 'no']]
+      : [
+          ['Health', String(t.hitpoints)],
+          ['Aims within', px(t.fireRadius)],
+          ['Shots carry', `${px(t.shotRange)}${t.weapon ? ` (${t.weapon})` : ''}`],
+          ['Fires from', `${t.fireHeight} high`],
+        ];
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+      {rows.map(([k, v]) => (<Fragment key={k}><dt className="text-gray-500">{k}</dt><dd className="text-gray-300">{v}</dd></Fragment>))}
+    </dl>
   );
 }
 

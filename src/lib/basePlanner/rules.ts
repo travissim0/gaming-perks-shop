@@ -9,11 +9,13 @@
  * - line of sight: InfServer Vehicle.Computer.IsPlayerOccluded (Bresenham over vision tiles)
  */
 
-export type TurretKey = 'rocket' | 'mg' | 'sentry' | 'plasma';
+/** Everything you can place: the engineer's turrets, plus medics (not turrets: no build caps, they heal). */
+export type TurretKey = 'rocket' | 'mg' | 'sentry' | 'plasma' | 'medic';
 export type Owner = 'titan' | 'collective';
 
 export interface TurretType {
   key: TurretKey;
+  kind: 'turret' | 'medic';
   label: string;
   vehicle: number;
   name: string;
@@ -28,6 +30,15 @@ export interface TurretType {
   hitpoints: number;
   fireHeight: number;
   barrelLength: number;
+  /** the gun (or the medic's kit) */
+  weapon: string | null;
+  /** how far one shot flies; the turret only AIMS within fireRadius */
+  shotRange: number;
+  fireDelay: number;
+  /** medics: everyone on the team within this many px is healed (walls don't matter) */
+  healRadius: number;
+  healAmount?: number;
+  healTicks?: number;
   fireRadius: number;
   trackingRadius: number;
   obeyLos: boolean;
@@ -246,14 +257,19 @@ export function walkableSpotNear(pl: Placement, type: TurretKey, x: number, y: n
 
 // ── build limits ────────────────────────────────────────────────────────────
 
+/** Not a game rule (medics are players), just keeps a plan readable. */
+export const MAX_MEDICS = 4;
+
 /**
  * The server's checks when an engineer builds `type` at (x, y), with `others` already standing
  * (all on the same team). Counts are of turrets inside the NEW turret's density radius, so the
  * build order matters exactly as in game: a Sentry (area cap 9) can still go down after the
  * other turrets have filled the area cap of 6 for themselves.
  */
-export function buildBlocker(types: Record<TurretKey, TurretType>, type: TurretKey, x: number, y: number, others: Turret[]): string | null {
+export function buildBlocker(types: Record<TurretKey, TurretType>, type: TurretKey, x: number, y: number, all: Turret[]): string | null {
   const t = types[type];
+  if (t.kind === 'medic') return all.filter((o) => o.type === type).length >= MAX_MEDICS ? `${MAX_MEDICS} medics is plenty for one room.` : null;
+  const others = all.filter((o) => types[o.type].kind === 'turret');
   const sameTeamType = others.filter((o) => o.type === type).length;
   if (t.maxTypeOnTeam !== -1 && sameTeamType >= t.maxTypeOnTeam) return `Your team can only have ${t.maxTypeOnTeam} ${t.label} turret${t.maxTypeOnTeam === 1 ? '' : 's'}.`;
   const r2 = t.densityRadius * t.densityRadius;
@@ -310,10 +326,36 @@ export function coverage(pl: Placement, t: Turret, radius: number, useLos: boole
   return out;
 }
 
+/**
+ * Where a turret's shots can land. 1 = it aims here (pass `aimed`, from coverage with LOS and shot height).
+ * 2 = stray fire only: further along a firing line that crosses an aimable tile, still within the shot's
+ * travel range and not yet stopped by a wall at the shot's height. A turret only fires at targets it can
+ * aim at, but a shot that misses (or a target standing behind another) keeps flying.
+ */
+export function fireZones(pl: Placement, t: Turret, shotZ: number, shotRange: number, aimed: Uint8Array): Uint8Array {
+  const g = pl.grid, T = g.tile, out = Uint8Array.from(aimed);
+  const reach = Math.min(shotRange, Math.hypot(g.cols * T, g.rows * T));
+  const rays = Math.ceil((2 * Math.PI * reach) / 6);
+  for (let k = 0; k < rays; k++) {
+    const a = (k / rays) * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+    let armed = false;
+    for (let d = 2; d <= reach; d += 4) {
+      const x = t.x + dx * d, y = t.y + dy * d;
+      const c = Math.floor((x - g.x0) / T), r = Math.floor((y - g.y0) / T);
+      if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) break;
+      if (shotBlockedAt(g, x, y, shotZ)) break;
+      const i = r * g.cols + c;
+      if (aimed[i]) armed = true;
+      else if (armed && !out[i] && !(g.bytes[i] & 0x1f) && (!pl.reach || pl.reach[i])) out[i] = 2;
+    }
+  }
+  return out;
+}
+
 // ── share links ─────────────────────────────────────────────────────────────
 
-const LETTER: Record<TurretKey, string> = { rocket: 'r', mg: 'm', sentry: 's', plasma: 'p' };
-const FROM_LETTER: Record<string, TurretKey> = { r: 'rocket', m: 'mg', s: 'sentry', p: 'plasma' };
+const LETTER: Record<TurretKey, string> = { rocket: 'r', mg: 'm', sentry: 's', plasma: 'p', medic: 'h' };
+const FROM_LETTER: Record<string, TurretKey> = { r: 'rocket', m: 'mg', s: 'sentry', p: 'plasma', h: 'medic' };
 
 /** "r412.390.12_m300.388.40": type letter, base-local x.y, facing. */
 export function encodeSetup(base: Pick<PlannerBase, 'x0' | 'y0'>, turrets: Turret[]): string {
@@ -323,7 +365,7 @@ export function encodeSetup(base: Pick<PlannerBase, 'x0' | 'y0'>, turrets: Turre
 export function decodeSetup(base: Pick<PlannerBase, 'x0' | 'y0' | 'w' | 'h'>, s: string, facings = 64): Turret[] {
   const out: Turret[] = [];
   for (const part of s.split('_')) {
-    const m = /^([rmsp])(\d+)\.(\d+)(?:\.(\d+))?$/.exec(part.trim());
+    const m = /^([rmsph])(\d+)\.(\d+)(?:\.(\d+))?$/.exec(part.trim());
     if (!m) continue;
     const x = +m[2], y = +m[3];
     if (x >= base.w || y >= base.h) continue;
