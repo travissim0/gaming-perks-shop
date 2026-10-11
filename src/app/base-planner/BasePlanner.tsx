@@ -598,22 +598,31 @@ export default function BasePlanner() {
     redraw();
   }, [base, view, frame, redraw]);
 
+  // the observer outlives view changes; it reads the current reframe/redraw from here
+  const reframeRef = useRef(reframe), redrawRef = useRef(redraw);
+  reframeRef.current = reframe;
+  redrawRef.current = redraw;
+
   useEffect(() => {
     const wrap = wrapRef.current, cv = canvasRef.current;
     if (!wrap || !cv) return;
     const fit = () => {
       const r = wrap.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-      const prev = size.current;
-      size.current = { w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height)) };
-      cv.width = Math.round(size.current.w * dpr);
-      cv.height = Math.round(size.current.h * dpr);
-      if (prev.w !== size.current.w || prev.h !== size.current.h) reframe();
+      const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+      const moved = size.current.w !== w || size.current.h !== h;
+      size.current = { w, h };
+      // assigning width/height wipes the canvas even when unchanged, so only touch them on a real resize
+      const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+      const wiped = cv.width !== pw || cv.height !== ph;
+      if (wiped) { cv.width = pw; cv.height = ph; }
+      if (moved) reframeRef.current();
+      else if (wiped) redrawRef.current();
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [reframe, ready]);
+  }, [ready]);
 
   // reframe identity changes with the base and the view, which is exactly when the camera resets
   useEffect(() => { reframe(); }, [reframe]);
