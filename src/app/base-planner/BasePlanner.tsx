@@ -65,6 +65,14 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, rejec
   img.src = src;
 });
 
+/** "#K4" or "#D7/r12.34.5_m...": the base, and its setup when the link carries one. */
+function parseLink(d: PlannerData, hash: string): { base: string; setup: Turret[] | null } | null {
+  const m = /^#([A-Za-z]\d+)(?:\/(.*))?$/.exec(hash);
+  const b = m && d.bases.find((x) => x.id === m[1].toUpperCase());
+  if (!b) return null;
+  return { base: b.id, setup: m![2] !== undefined ? decodeSetup(b, decodeURIComponent(m![2])).map((t) => ({ ...t, id: newId() })) : null };
+}
+
 function readStore(): { base?: string; setups?: Record<string, string> } {
   try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? '{}'); } catch { return {}; }
 }
@@ -117,11 +125,10 @@ export default function BasePlanner() {
         const restored: Record<string, Turret[]> = {};
         for (const b of d.bases) if (stored.setups?.[b.id]) restored[b.id] = decodeSetup(b, stored.setups[b.id]).map((t) => ({ ...t, id: newId() }));
         let first = d.bases.some((b) => b.id === stored.base) ? stored.base! : 'D7';
-        const m = /^#([A-Za-z]\d+)(?:\/(.*))?$/.exec(window.location.hash);
-        const linked = m && d.bases.find((b) => b.id === m[1].toUpperCase());
+        const linked = parseLink(d, window.location.hash);
         if (linked) {
-          first = linked.id;
-          if (m[2] !== undefined) restored[linked.id] = decodeSetup(linked, decodeURIComponent(m[2])).map((t) => ({ ...t, id: newId() }));
+          first = linked.base;
+          if (linked.setup) restored[linked.base] = linked.setup;
         }
         setData(d);
         setSetups(restored);
@@ -136,6 +143,20 @@ export default function BasePlanner() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // a planner link followed inside an already-open tab only changes the hash; load it too.
+  // (Our own replaceState updates don't fire hashchange.)
+  useEffect(() => {
+    if (!data) return;
+    const onHash = () => {
+      const linked = parseLink(data, window.location.hash);
+      if (!linked) return;
+      if (linked.setup) setSetups((s) => ({ ...s, [linked.base]: linked.setup! }));
+      setBaseId(linked.base);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [data]);
 
   const types = useMemo(() => (data ? (Object.fromEntries(data.turrets.map((t) => [t.key, t])) as Record<TurretKey, TurretType>) : null), [data]);
   const base = useMemo(() => data?.bases.find((b) => b.id === baseId) ?? null, [data, baseId]);
