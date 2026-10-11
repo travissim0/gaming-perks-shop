@@ -16,7 +16,7 @@ import Navbar from '@/components/Navbar';
 import { useAuth } from '@/lib/AuthContext';
 import { FLAG_ROOMS, type Rect } from '@/lib/basePlanner/flagRooms';
 import {
-  buildBlocker, coverage, decodeGrid, decodeSetup, encodeSetup, facingToward, fireZones, nearestFreeSpot, reachableFrom, spotIsFree, walkableSpotNear,
+  buildBlocker, cappedMask, coverage, decodeGrid, inArea, decodeSetup, encodeSetup, facingToward, fireZones, nearestFreeSpot, reachableFrom, spotIsFree, walkableSpotNear,
   type Grid, type Placement, type PlannerBase, type PlannerData, type Turret, type TurretKey, type TurretType,
 } from '@/lib/basePlanner/rules';
 
@@ -25,7 +25,7 @@ const STORE_KEY = 'base-planner:v1';
 const ORDER: TurretKey[] = ['rocket', 'mg', 'sentry', 'plasma', 'medic'];
 const COLOR: Record<TurretKey, string> = { rocket: '#fb923c', mg: '#22d3ee', sentry: '#a3e635', plasma: '#e879f9', medic: '#34d399' };
 const RGB: Record<TurretKey, [number, number, number]> = { rocket: [251, 146, 60], mg: [34, 211, 238], sentry: [163, 230, 53], plasma: [232, 121, 249], medic: [52, 211, 153] };
-const OWNER = { titan: { label: 'Titan', color: '#4ade80' }, collective: { label: 'Collective', color: '#f87171' } } as const;
+const OWNER = { titan: { label: 'Titan', color: '#4ade80' }, collective: { label: 'Collective', color: '#f87171' }, neutral: { label: 'No flag', color: '#9ca3af' } } as const;
 const BLURB: Record<TurretKey, string> = {
   rocket: 'Splash damage, longest reach',
   mg: 'Fast hitscan fire',
@@ -143,7 +143,7 @@ export default function BasePlanner() {
   const placement = useMemo<Placement | null>(() => {
     if (!data || !grid || !types || !base) return null;
     // only floor an engineer can walk to from the flag counts; the void around a base is open too
-    const reach = base.flag ? reachableFrom(grid, base.flag.x + 8, base.flag.y + 8, base.doors) : undefined;
+    const reach = reachableFrom(grid, base.seed.x, base.seed.y, base.doors);
     return { grid, man: data.man, types, reach };
   }, [data, grid, types, base]);
   const setup = useMemo(() => setups[baseId] ?? [], [setups, baseId]);
@@ -312,8 +312,12 @@ export default function BasePlanner() {
     if (!base || !types || !grid || !placement) return null;
     const L = live.current, list = shownTurrets(), focus = L.show.sight ? focusTurret() : null;
     const shooters = list.filter((t) => types[t.type].obeyLos && !t.bad);
+    // while placing or moving a turret: where the caps forbid that type (the next area starts past it)
+    const d = drag.current, placing = d?.kind === 'new' ? d.type : d?.kind === 'move' && d.moved ? L.setup.find((t) => t.id === d.id)?.type ?? null : null;
+    const others = d?.kind === 'move' ? L.setup.filter((t) => t.id !== d.id) : L.setup;
     const key = [
       base.id, L.show.fire, L.show.stray, L.show.blind,
+      placing ? `${placing}:${others.map((t) => `${t.type}${t.x},${t.y}`).join(';')}` : '-',
       focus ? `${focus.type}${focus.x},${focus.y}` : '-',
       L.show.blind || L.show.fire || L.show.stray ? shooters.map((t) => `${t.type}${t.x},${t.y}`).join(';') : '',
     ].join('|');
@@ -349,6 +353,12 @@ export default function BasePlanner() {
         paint(band, [250, 204, 21], [0, 0.1, 0.2, 0.3, 0.4][c]);
       }
       if (L.show.blind) paint(seen, [239, 68, 68], 0.38, true);
+    }
+    if (placing && types[placing].kind === 'turret') {
+      const ck = `${base.id}|capped|${placing}|${others.map((t) => `${t.type}${t.x},${t.y}`).join(';')}`;
+      let m = masks.current.get(ck);
+      if (!m) { m = cappedMask(placement, placing, others); masks.current.set(ck, m); }
+      paint(m, [239, 68, 68], 0.24);
     }
     // sentries don't shoot: their anti-warp zone is a plain disc, drawn in paintWorld
     if (focus && types[focus.type].obeyLos) {
@@ -426,6 +436,15 @@ export default function BasePlanner() {
       ctx.lineWidth = 1.5 / z;
       ctx.strokeStyle = COLOR[focus.type];
       ctx.beginPath(); ctx.arc(focus.x, focus.y, r, 0, Math.PI * 2); ctx.stroke();
+      if (ft.kind === 'turret' && ft.densityRadius && (focus.id === L.selected || drag.current)) {
+        // the area the server counts for a build here
+        ctx.save();
+        ctx.setLineDash([16 / z, 10 / z]);
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.beginPath(); ctx.arc(focus.x, focus.y, ft.densityRadius, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       if (ft.obeyLos && ft.shotRange > ft.fireRadius) {
         // where its shots run out
         ctx.setLineDash([2 / z, 8 / z]);
@@ -438,7 +457,7 @@ export default function BasePlanner() {
     // flag + turrets, back to front
     type Item = { y: number; draw: () => void };
     const items: Item[] = [];
-    if (base.flag) {
+    if (base.flag && base.owner !== 'neutral') {
       const fs = data.flags[base.owner], fimg = images.current.get(fs.image), f = base.flag;
       if (fimg) items.push({ y: f.y, draw: () => ctx.drawImage(fimg, (flagFrame.current % fs.frames) * fs.frameW, 0, fs.frameW, fs.frameH, f.x - fs.frameW / 2, f.y - fs.frameH / 2, fs.frameW, fs.frameH) });
     }
@@ -535,7 +554,7 @@ export default function BasePlanner() {
 
   // flag flutter
   useEffect(() => {
-    if (!data || !base?.flag) return;
+    if (!data || !base?.flag || base.owner === 'neutral') return;
     const id = window.setInterval(() => { flagFrame.current++; redraw(); }, data.flags[base.owner].frameMs || 140);
     return () => window.clearInterval(id);
   }, [data, base, redraw]);
@@ -846,7 +865,7 @@ export default function BasePlanner() {
               </button>
             );
           })}
-          {base && <span className="text-xs text-gray-500 ml-1">{OWNER[base.owner].label} defends {base.id} · {data?.map}</span>}
+          {base && <span className="text-xs text-gray-500 ml-1">{base.owner === 'neutral' ? `${base.id} has no CTF flag spot` : `${OWNER[base.owner].label} defends ${base.id}`} · {data?.map}</span>}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
@@ -870,7 +889,7 @@ export default function BasePlanner() {
                   {(['room', 'base'] as View[]).map((v) => (
                     <button key={v} onClick={() => (view === v ? reframe() : setView(v))} title={v === 'room' ? 'Frame the flag room (F)' : 'Show the whole base (F)'}
                       className={`px-2.5 py-1 ${view === v ? 'bg-cyan-500/20 text-cyan-200' : 'text-gray-400 hover:text-gray-200'}`}>
-                      {v === 'room' ? 'Flag room' : 'Whole base'}
+                      {v === 'room' ? (base && FLAG_ROOMS[base.id]?.label) || 'Flag room' : 'Whole base'}
                     </button>
                   ))}
                 </div>
@@ -888,13 +907,14 @@ export default function BasePlanner() {
             <div className="bg-gray-800/50 rounded-xl border border-gray-700/60 p-3">
               <div className="flex items-baseline justify-between mb-2">
                 <h2 className="text-sm font-semibold text-gray-200">Turrets</h2>
-                <span className="text-xs text-gray-500" title="Rocket, MG and Plasma can't be built once the area has this many turrets (a Sentry still can)">
-                  {turretCount} in area · cap {areaCap}
+                <span className="text-xs text-gray-500" title={`Caps are per area: the server counts your team's turrets within ${types?.mg.densityRadius ?? 1500}px of where you build. Rocket, MG and Plasma can't be built once that area has ${areaCap}; a Sentry still can.`}>
+                  {turretCount} placed · {areaCap} per area
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {types && ORDER.map((k) => {
-                  const t = types[k], full = t.maxTypeInArea !== -1 && counts[k] >= t.maxTypeInArea, medic = t.kind === 'medic';
+                  // only the team cap is base-wide; area caps depend on where it goes (dragging shows where)
+                  const t = types[k], full = t.maxTypeOnTeam !== -1 && counts[k] >= t.maxTypeOnTeam, medic = t.kind === 'medic';
                   return (
                     <button
                       key={k}
@@ -909,7 +929,7 @@ export default function BasePlanner() {
                       <div className={medic ? 'flex-1' : ''}>
                         <div className="mt-1 flex items-baseline justify-between">
                           <span className="text-sm font-semibold" style={{ color: COLOR[k] }}>{t.label}</span>
-                          <span className="text-xs text-gray-400">{medic ? counts[k] || '' : `${counts[k]}/${t.maxTypeInArea}`}</span>
+                          <span className="text-xs text-gray-400" title={medic ? undefined : `${t.maxTypeInArea} per area, ${t.maxTypeOnTeam} per team, ${t.maxPerEngineer} per engineer`}>{medic ? counts[k] || '' : `${counts[k]} · ${t.maxTypeInArea}/area`}</span>
                         </div>
                         <div className="text-[11px] text-gray-500 leading-tight">{BLURB[k]}</div>
                       </div>
@@ -925,7 +945,8 @@ export default function BasePlanner() {
                   <h2 className="text-sm font-semibold" style={{ color: COLOR[selectedTurret.type] }}>{types[selectedTurret.type].name}</h2>
                   <span className="text-xs text-gray-500">tile {Math.floor(selectedTurret.x / 16)},{Math.floor(selectedTurret.y / 16)}</span>
                 </div>
-                <PieceStats type={types[selectedTurret.type]} seenFrom={medicSeenFrom} />
+                <PieceStats type={types[selectedTurret.type]} seenFrom={medicSeenFrom}
+                  inArea={types[selectedTurret.type].kind === 'turret' ? inArea(types[selectedTurret.type], selectedTurret.x, selectedTurret.y, setup.filter((o) => o.id !== selectedTurret.id && types[o.type].kind === 'turret')).length + 1 : null} />
                 <div className="flex gap-1.5">
                   <button onClick={() => updateTurret(selectedTurret.id, { facing: (selectedTurret.facing + types[selectedTurret.type].facings - 4) % types[selectedTurret.type].facings })} className={btn} title="Rotate left ([ or Shift+R)">⟲</button>
                   <button onClick={() => updateTurret(selectedTurret.id, { facing: (selectedTurret.facing + 4) % types[selectedTurret.type].facings })} className={btn} title="Rotate right (] or R)">⟳</button>
@@ -961,12 +982,13 @@ export default function BasePlanner() {
               <summary className="cursor-pointer text-gray-400 hover:text-gray-200">Controls</summary>
               <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
                 <li>Click a turret card to drop it by the flag, or drag it onto the map.</li>
+                <li>Turret caps are per area: the server counts your team&apos;s computer vehicles (warp points too) within 1500px of where you build. Dragging a turret shades in red where that type can&apos;t go, so in a big base you can see where a second set fits.</li>
                 <li>Select a medic to see where enemies could spot them from (red): a safe heal spot has little red near the doors.</li>
                 <li>Drag a turret to move it; it slides off walls and other turrets.</li>
                 <li>Drag the round handle to aim; R / Shift+R or [ ] rotate too.</li>
                 <li>Delete or right-click removes. Arrow keys nudge (Shift = 8px).</li>
                 <li>Drag the floor to pan, scroll to zoom, F toggles flag room / whole base.</li>
-                <li>Keys 1–{data?.bases.length ?? 6} switch bases. Ctrl+Z undoes.</li>
+                <li>Keys 1–{data?.bases.length ?? 7} switch bases. Ctrl+Z undoes.</li>
               </ul>
             </details>
           </div>
@@ -977,7 +999,7 @@ export default function BasePlanner() {
 }
 
 /** The numbers for whatever is selected, all from the zone files. */
-function PieceStats({ type: t, seenFrom }: { type: TurretType; seenFrom: number | null }) {
+function PieceStats({ type: t, seenFrom, inArea: area }: { type: TurretType; seenFrom: number | null; inArea: number | null }) {
   const px = (v: number) => `${v}px (${Math.round(v / 16)} tiles)`;
   const rows: [string, string][] = t.kind === 'medic'
     ? [
@@ -986,13 +1008,17 @@ function PieceStats({ type: t, seenFrom }: { type: TurretType; seenFrom: number 
         ...(seenFrom !== null ? [['Seen from', `${seenFrom}% of the base floor within ${SEEN_FROM}px`] as [string, string]] : []),
       ]
     : t.antiWarpRadius > 0
-      ? [['Health', String(t.hitpoints)], ['Anti-warp', `${px(t.antiWarpRadius)}, through walls`], ['Shoots', 'no']]
+      ? [['Health', `${t.hitpoints} (works above ${t.hpToOperate})`], ['Anti-warp', `${px(t.antiWarpRadius)}, through walls`], ['Shoots', 'no']]
       : [
-          ['Health', String(t.hitpoints)],
+          ['Health', `${t.hitpoints} (fires above ${t.hpToOperate})`],
           ['Aims within', px(t.fireRadius)],
           ['Shots carry', `${px(t.shotRange)}${t.weapon ? ` (${t.weapon})` : ''}`],
           ['Fires from', `${t.fireHeight} high`],
         ];
+  if (t.kind === 'turret') {
+    if (area !== null) rows.push(['Its area', `${area} turret${area === 1 ? '' : 's'} within ${t.densityRadius}px`]);
+    rows.push(['Caps', `${t.maxTypeInArea}/area, ${t.maxTypeOnTeam}/team, ${t.maxPerEngineer}/engineer`]);
+  }
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
       {rows.map(([k, v]) => (<Fragment key={k}><dt className="text-gray-500">{k}</dt><dd className="text-gray-300">{v}</dd></Fragment>))}

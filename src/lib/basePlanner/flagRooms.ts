@@ -5,11 +5,13 @@
  */
 export interface Rect { x0: number; y0: number; x1: number; y1: number }
 
-export const FLAG_ROOMS: Record<string, Rect> = {
+/** label: what the view button says when it isn't a flag room */
+export const FLAG_ROOMS: Record<string, Rect & { label?: string }> = {
   A7: { x0: 48, y0: 7152, x1: 672, y1: 7744 },     // top-left room, flag beside the pods
   D7: { x0: 4048, y0: 7600, x1: 4816, y1: 8144 },  // bottom-left room, flag under the Jupiter mural
   A5: { x0: 528, y0: 5760, x1: 1248, y1: 6224 },   // bottom-right room, flag by the east consoles
   F6: { x0: 6768, y0: 7008, x1: 7376, y1: 7536 },  // top-middle room (where the CTF script drops the flag)
   F5: { x0: 6496, y0: 5600, x1: 6960, y1: 6112 },  // east room under the consoles
   B8: { x0: 2048, y0: 8912, x1: 2624, y1: 9456 },  // top-left room
+  K4: { x0: 12336, y0: 3232, x1: 13120, y1: 4368, label: 'Turret side' }, // no CTF flag; turrets go on the left
 };

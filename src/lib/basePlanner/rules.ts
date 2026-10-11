@@ -11,7 +11,8 @@
 
 /** Everything you can place: the engineer's turrets, plus medics (not turrets: no build caps, they heal). */
 export type TurretKey = 'rocket' | 'mg' | 'sentry' | 'plasma' | 'medic';
-export type Owner = 'titan' | 'collective';
+/** neutral: a base the CTF script has no flag spot for (K4) */
+export type Owner = 'titan' | 'collective' | 'neutral';
 
 export interface TurretType {
   key: TurretKey;
@@ -47,6 +48,10 @@ export interface TurretType {
   maxTypeInArea: number;
   maxInArea: number;
   maxTypeOnTeam: number;
+  /** maxTypeByPlayerRegardlessOfTeam: one engineer can't own more than this */
+  maxPerEngineer: number;
+  /** below this much health the turret stops working */
+  hpToOperate: number;
 }
 
 export interface FlagSprite { image: string; frameW: number; frameH: number; frames: number; frameMs: number }
@@ -62,6 +67,8 @@ export interface PlannerBase {
   rows: number;
   image: string;
   flag: { x: number; y: number } | null;
+  /** where "reachable on foot" is measured from: the flag, or the middle of a flagless base */
+  seed: { x: number; y: number };
   /** base64, one PhysicsVision byte per 16px tile: physics = b & 0x1F, vision = b >> 5 */
   tiles: string;
   /** tile indices covered by LIO doors (the level bakes them closed) */
@@ -74,7 +81,7 @@ export interface PlannerData {
   physicsLow: number[];
   physicsHigh: number[];
   man: { radius: number; lowZ: number; highZ: number };
-  flags: Record<Owner, FlagSprite>;
+  flags: Record<'titan' | 'collective', FlagSprite>;
   turrets: TurretType[];
   bases: PlannerBase[];
 }
@@ -180,8 +187,18 @@ export function reachableFrom(g: Grid, x: number, y: number, doors: number[] = [
   const n = g.cols * g.rows, out = new Uint8Array(n), door = new Uint8Array(n);
   for (const i of doors) if (i >= 0 && i < n) door[i] = 1;
   const pass = (i: number) => { const p = g.bytes[i] & 0x1f; return p === 0 || (p >= 26 && p <= 29) || door[i] === 1; };
-  const c0 = Math.floor((x - g.x0) / g.tile), r0 = Math.floor((y - g.y0) / g.tile);
+  let c0 = Math.floor((x - g.x0) / g.tile), r0 = Math.floor((y - g.y0) / g.tile);
   if (c0 < 0 || r0 < 0 || c0 >= g.cols || r0 >= g.rows) return out;
+  // a seed that lands on a wall starts from the nearest open tile instead
+  if (!pass(r0 * g.cols + c0)) {
+    let best = -1, bestD = Infinity;
+    for (let r = Math.max(0, r0 - 24); r <= Math.min(g.rows - 1, r0 + 24); r++) for (let c = Math.max(0, c0 - 24); c <= Math.min(g.cols - 1, c0 + 24); c++) {
+      const d = (c - c0) ** 2 + (r - r0) ** 2;
+      if (d < bestD && pass(r * g.cols + c)) { bestD = d; best = r * g.cols + c; }
+    }
+    if (best < 0) return out;
+    c0 = best % g.cols; r0 = (best / g.cols) | 0;
+  }
   const stack = [r0 * g.cols + c0];
   out[stack[0]] = 1;
   while (stack.length) {
@@ -260,6 +277,26 @@ export function walkableSpotNear(pl: Placement, type: TurretKey, x: number, y: n
 /** Not a game rule (medics are players), just keeps a plan readable. */
 export const MAX_MEDICS = 4;
 
+/** The turrets the server counts for a build at (x, y): inside the builder's density circle (ObjTracker.getObjsInRange: d^2 < r^2). */
+export function inArea(t: Pick<TurretType, 'densityRadius'>, x: number, y: number, turrets: Turret[]): Turret[] {
+  const r2 = t.densityRadius * t.densityRadius;
+  return turrets.filter((o) => (o.x - x) ** 2 + (o.y - y) ** 2 < r2);
+}
+
+/**
+ * Floor where an engineer could stand but the caps forbid building `type` (row-major, grid-sized). With
+ * one area this is the whole base once it's full; in a big base it shows where the next area starts.
+ */
+export function cappedMask(pl: Placement, type: TurretKey, all: Turret[]): Uint8Array {
+  const g = pl.grid, T = g.tile, out = new Uint8Array(g.cols * g.rows);
+  for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) {
+    const i = r * g.cols + c;
+    if (g.bytes[i] & 0x1f || (pl.reach && !pl.reach[i])) continue;
+    if (buildBlocker(pl.types, type, g.x0 + c * T + T / 2, g.y0 + r * T + T / 2, all)) out[i] = 1;
+  }
+  return out;
+}
+
 /**
  * The server's checks when an engineer builds `type` at (x, y), with `others` already standing
  * (all on the same team). Counts are of turrets inside the NEW turret's density radius, so the
@@ -272,8 +309,7 @@ export function buildBlocker(types: Record<TurretKey, TurretType>, type: TurretK
   const others = all.filter((o) => types[o.type].kind === 'turret');
   const sameTeamType = others.filter((o) => o.type === type).length;
   if (t.maxTypeOnTeam !== -1 && sameTeamType >= t.maxTypeOnTeam) return `Your team can only have ${t.maxTypeOnTeam} ${t.label} turret${t.maxTypeOnTeam === 1 ? '' : 's'}.`;
-  const r2 = t.densityRadius * t.densityRadius;
-  const near = others.filter((o) => (o.x - x) ** 2 + (o.y - y) ** 2 <= r2);
+  const near = inArea(t, x, y, others);
   const nearType = near.filter((o) => o.type === type).length;
   if (t.maxInArea !== -1 && near.length >= t.maxInArea) return `The area already has ${near.length} turrets, and ${t.label} turrets can't be built once it has ${t.maxInArea}.`;
   if (t.maxTypeInArea !== -1 && nearType >= t.maxTypeInArea) return `Only ${t.maxTypeInArea} ${t.label} turret${t.maxTypeInArea === 1 ? '' : 's'} allowed in an area.`;

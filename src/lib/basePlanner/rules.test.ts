@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  MAX_MEDICS, buildBlocker, coverage, decodeGrid, fireZones, decodeSetup, encodeSetup, facingToward, hullFits, nearestFreeSpot,
+  MAX_MEDICS, buildBlocker, cappedMask, coverage, decodeGrid, fireZones, inArea, decodeSetup, encodeSetup, facingToward, hullFits, nearestFreeSpot,
   occluded, pointSolid, reachableFrom, shotClear, spotIsFree, walkableSpotNear, type Grid, type PlannerData, type Placement, type TurretKey, type TurretType, type Turret,
 } from './rules';
 
@@ -25,7 +25,7 @@ function grid(rows: string[], vision = 1): Grid {
 const t = (type: TurretKey, x: number, y: number): Turret => ({ id: `${type}${x},${y}`, type, x, y, facing: 0 });
 
 test('the baked data matches the zone', () => {
-  assert.deepEqual(data.bases.map((b) => b.id), ['A7', 'D7', 'A5', 'F6', 'F5', 'B8']);
+  assert.deepEqual(data.bases.map((b) => b.id), ['A7', 'D7', 'A5', 'F6', 'F5', 'B8', 'K4']);
   assert.deepEqual(data.man, { radius: 8, lowZ: 0, highZ: 48 });
   assert.equal(types.rocket.maxTypeInArea, 1);
   assert.equal(types.mg.maxTypeInArea, 2);
@@ -34,7 +34,7 @@ test('the baked data matches the zone', () => {
 });
 
 test('every flag spot is somewhere an engineer can stand', () => {
-  for (const b of data.bases) {
+  for (const b of data.bases.filter((x) => x.flag)) {
     const pl = placement(b.id);
     assert.ok(b.flag, `${b.id} has a flag`);
     // the flag sits on the tile's top-left corner; its tile centre must be standable ground
@@ -171,6 +171,41 @@ test('stray fire carries past the aim radius and stops where a wall stops the sh
   assert.equal(at(mg, 85), 0, 'the yellow wall stops MG shots');
   assert.equal(at(rocket, 70), 2, 'past the rocket aim (1000px = tile 62)');
   assert.equal(at(rocket, 90), 2, 'rockets fly over yellow walls');
+});
+
+test('K4: no flag, but its floor is reachable from the middle', () => {
+  const k4 = base('K4'), pl = placement('K4');
+  assert.equal(k4.flag, null);
+  assert.equal(k4.owner, 'neutral');
+  const reach = reachableFrom(pl.grid, k4.seed.x, k4.seed.y, k4.doors);
+  // the left rooms and the far right corridor are both walkable from the middle
+  const at = (x: number, y: number) => reach[Math.floor((y - k4.y0) / 16) * k4.cols + Math.floor((x - k4.x0) / 16)];
+  assert.equal(at(12500, 3800), 1);
+  assert.equal(at(14150, 3500), 1);
+});
+
+test('density areas: a second set fits once it is a full 1500px from the first', () => {
+  const left = [t('rocket', 12450, 3800), t('mg', 12450, 3850), t('mg', 12500, 3850), t('plasma', 12500, 3900), t('plasma', 12550, 3900), t('sentry', 12550, 3800)];
+  assert.match(buildBlocker(types, 'rocket', 12600, 3800, left)!, /already has 6/);
+  assert.equal(buildBlocker(types, 'rocket', 12450 + 1600, 3800, left), null, 'second area, 1600px away');
+  // exactly on the circle doesn't count (server: d^2 < r^2)
+  assert.equal(inArea(types.rocket, 12450 + 1500, 3800, left.slice(0, 1)).length, 0);
+  assert.equal(inArea(types.rocket, 12450 + 1499, 3800, left.slice(0, 1)).length, 1);
+  // sentries are capped per TEAM (2), so no second pair anywhere
+  const sentries = [t('sentry', 12450, 3700), t('sentry', 12500, 3700)];
+  assert.match(buildBlocker(types, 'sentry', 14200, 3800, sentries)!, /Your team can only have 2 Sentry/);
+  // the capped mask splits K4: full near the left set, free on the far right
+  const pl = { ...placement('K4') };
+  pl.reach = reachableFrom(pl.grid, base('K4').seed.x, base('K4').seed.y, base('K4').doors);
+  const m = cappedMask(pl, 'mg', left), k4 = base('K4');
+  const at = (x: number, y: number) => m[Math.floor((y - k4.y0) / 16) * k4.cols + Math.floor((x - k4.x0) / 16)];
+  assert.equal(at(12600, 3800), 1, 'left: area full');
+  assert.equal(at(14150, 3500), 0, 'far right: a new area');
+});
+
+test('caps per engineer and when turrets stop working come from the veh', () => {
+  assert.deepEqual(['mg', 'rocket', 'sentry', 'plasma'].map((k) => types[k as TurretKey].maxPerEngineer), [4, 2, 2, 2]);
+  assert.deepEqual(['mg', 'rocket', 'sentry', 'plasma'].map((k) => types[k as TurretKey].hpToOperate), [110, 50, 110, 110]);
 });
 
 test('share strings round-trip in base-local coordinates', () => {

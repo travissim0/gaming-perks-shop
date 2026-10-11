@@ -10,7 +10,7 @@
  *   npx tsx scripts/bake-base-planner.mts            (from the repo root)
  *
  * Sources, all from the CTF zone (ctfpl.cfg -> ctfdls4.lvl / ctfdls4.lio / ctfpl.veh):
- * - bases: the studio's spectator scenes (BASE_REGIONS, the Alt+1..9 snaps), in that order
+ * - bases: the studio's spectator scenes (BASE_REGIONS, the Alt+1..9 snaps), in that order, then EXTRA_BASES
  * - flag spots and base owners: the CTF gametype script (bases["D7"] = new Base(...), BaseIsTitanOwned)
  * - turrets: the computer vehicles the engineer builds (MG 400, Rocket 401, Sentry 402, Plasma 700)
  *
@@ -53,6 +53,10 @@ const TURRETS = [
 // The Sentry's job is its "Sentry TD" utility (ctfpl.itm item 26): antiWarpDistance 512.
 const SENTRY_ANTI_WARP = 512;
 const MEDIKIT = 432;
+// Bases the CTF script has no flag spot for, framed by hand from the level (walls with a tile or two of margin).
+const EXTRA_BASES: Record<string, { x0: number; y0: number; x1: number; y1: number }> = {
+  K4: { x0: 12336, y0: 3232, x1: 14288, y1: 4368 }, // the walled compound across K3/K4/L4
+};
 // The site's Field Medic uniform (scripts/bake-all-classes.sh): man.blo with the grey uniform ramp at hue 50.
 const MEDIC_TINT = { hue: 50, sat: 0.7 };
 
@@ -191,8 +195,10 @@ function turretShot(v: any): { name: string; range: number; fireDelay: number } 
 const script = fs.readFileSync(CTF_SCRIPT, 'utf8');
 const flagTiles = new Map<string, { x: number; y: number }>();
 for (const m of script.matchAll(/bases\["(\w+)"\]\s*=\s*new Base\((\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)/g)) flagTiles.set(m[1].toUpperCase(), { x: +m[4], y: +m[5] });
+// BaseIsTitanOwned: `case "D7": ... return true;` / `case "A7": ... return false;`
 const titanList = script.match(/case "D7":[^\n]*return true;/)?.[0] ?? '';
-const owner = (id: string) => (titanList.includes(`"${id}"`) ? 'titan' : 'collective');
+const collectiveList = script.match(/case "A7":[^\n]*return false;/)?.[0] ?? '';
+const owner = (id: string) => (titanList.includes(`"${id}"`) ? 'titan' : collectiveList.includes(`"${id}"`) ? 'collective' : 'neutral');
 
 function entityOrder(e: any) {
   const cfs = loadCfs(lvl.objects[e.objectId]?.fileName ?? '', lvl.objects[e.objectId]?.id ?? '');
@@ -272,6 +278,8 @@ async function bakeBase(id: string, r: { x0: number; y0: number; x1: number; y1:
     id, owner: owner(id), x0: r.x0, y0: r.y0, w: W, h: H, cols, rows,
     image: `bases/${id}.webp`,
     flag: ft ? { x: ft.x * T, y: ft.y * T } : null,
+    // where "reachable on foot" is measured from: the flag, or the middle of a flagless base
+    seed: ft ? { x: ft.x * T + 8, y: ft.y * T + 8 } : { x: Math.round((r.x0 + r.x1) / 2), y: Math.round((r.y0 + r.y1) / 2) },
     tiles: tiles.toString('base64'),
     doors: [...doorTiles].sort((a, b) => a - b),
   };
@@ -318,7 +326,9 @@ async function bakeTurret(t: (typeof TURRETS)[number]) {
     antiWarpRadius: t.key === 'sentry' ? SENTRY_ANTI_WARP : 0,
     densityRadius: v.densityRadius,
     maxTypeInArea: v.frequencyDensityMaxType, maxInArea: v.frequencyDensityMaxActive,
-    maxTypeOnTeam: v.frequencyMaxType,
+    maxTypeOnTeam: v.frequencyMaxType, maxPerEngineer: v.maxTypeByPlayerRegardlessOfTeam,
+    // below this much health the turret stops working
+    hpToOperate: v.hitpointsRequiredToOperate,
   };
 }
 
@@ -381,7 +391,7 @@ async function bakeMedic() {
     weapon: kit.name, shotRange: 0, fireDelay: kit.fireDelay,
     fireRadius: 0, trackingRadius: 0, obeyLos: false, antiWarpRadius: 0,
     healRadius: Math.abs(kit.repairDistance), healAmount: kit.repairAmount, healTicks: kit.repairTime,
-    densityRadius: 0, maxTypeInArea: -1, maxInArea: -1, maxTypeOnTeam: -1,
+    densityRadius: 0, maxTypeInArea: -1, maxInArea: -1, maxTypeOnTeam: -1, maxPerEngineer: -1, hpToOperate: 0,
   };
 }
 
@@ -401,7 +411,7 @@ async function bakeFlag(row: number, name: string) {
 fs.mkdirSync(OUT, { recursive: true });
 const regions = BASE_REGIONS['ctfdls4.lvl'];
 const bases = [];
-for (const [id, r] of Object.entries(regions)) bases.push(await bakeBase(id, r));
+for (const [id, r] of [...Object.entries(regions), ...Object.entries(EXTRA_BASES)]) bases.push(await bakeBase(id, r));
 const turrets = [];
 for (const t of TURRETS) turrets.push(await bakeTurret(t));
 turrets.push(await bakeMedic());
