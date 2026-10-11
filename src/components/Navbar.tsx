@@ -10,7 +10,7 @@ import {
   Search, Bell, Settings, Users, Gamepad2, BarChart3, Menu, X,
   House, Trophy, Wrench, Shield, Target, Swords, Sword, ClipboardCheck, ScrollText, Calendar, Newspaper,
   Table2, ListOrdered, Star, ThumbsUp, FileText, ClipboardList, Crown, Globe, Activity, Monitor, Palette, ShoppingBag,
-  Image as ImageIcon, MessageCircle, Crosshair,
+  Image as ImageIcon, MessageCircle, Crosshair, ArrowLeftRight,
 } from 'lucide-react';
 import { canAddPlayerToSquad, hasAdminOverride } from '@/utils/squadValidation';
 import { useTestZoneAccess } from '@/hooks/useTestZoneAccess';
@@ -579,6 +579,7 @@ export default function Navbar({ user, onMobileMenuChange }: { user: any; onMobi
     { href: '/league/ctfdl/mock-draft', label: 'Mock draft', icon: <ListOrdered className="w-4 h-4" /> },
     { href: '/dueling-tournament/october-2026', label: '2026 Duels', icon: <Sword className="w-4 h-4" /> },
     { href: '/league/schedule', label: 'Schedule', icon: <Calendar className="w-4 h-4" /> },
+    { href: '/league/trades', label: 'Trades', icon: <ArrowLeftRight className="w-4 h-4" /> },
     { href: '/rules', label: 'Rules', icon: <ScrollText className="w-4 h-4" /> },
     { href: '/news', label: 'News', icon: <Newspaper className="w-4 h-4" /> },
     { href: '/league/ratings', label: 'Squad Ratings', icon: <Star className="w-4 h-4" />, divider: true },
