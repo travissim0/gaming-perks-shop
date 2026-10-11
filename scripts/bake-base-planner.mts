@@ -182,13 +182,13 @@ function shotRange(p: any): number {
 }
 
 /** The projectile a turret actually fires: its first gun, or for a multi-use gun the child that does damage. */
-function turretShot(v: any): { name: string; range: number; fireDelay: number } | null {
+function turretShot(v: any): { name: string; range: number; fireDelay: number; speed: number; inactiveTicks: number } | null {
   const gun = item(v.inventoryItems?.[0]);
   if (!gun) return null;
   const damage = (p: any) => (p?.damageKineticInner ?? 0) + (p?.damageExplosiveInner ?? 0) + (p?.damageEnergyInner ?? 0) + (p?.damageElectronicInner ?? 0);
   const proj = gun.muzzleVelocity !== undefined ? gun
     : (gun.children ?? []).map((c: any) => item(c.itemID)).filter((p: any) => p?.muzzleVelocity !== undefined).sort((a: any, b: any) => damage(b) - damage(a))[0];
-  return proj ? { name: gun.name, range: shotRange(proj), fireDelay: gun.fireDelay } : null;
+  return proj ? { name: gun.name, range: shotRange(proj), fireDelay: gun.fireDelay, speed: proj.muzzleVelocity / 1000, inactiveTicks: proj.inactiveTime } : null;
 }
 
 // Flag spots and owners straight from the gametype script.
@@ -309,7 +309,7 @@ async function bakeTurret(t: (typeof TURRETS)[number]) {
   const { atlas, fw, fh, gridCols, minX, minY } = packFacings(frames, cell);
   await atlas.png().png({ compressionLevel: 9 }).toFile(path.join(OUT, `turret-${t.key}.png`));
   const shot = t.key === 'sentry' ? null : turretShot(v); // the sentry's "gun" is only a warning beep
-  console.log(`${t.key}: vehicle ${v.id} "${v.name}", ${dirs} facings, frame ${fw}x${fh}${shot ? `, ${shot.name} shots fly ${shot.range}px` : ''}`);
+  console.log(`${t.key}: vehicle ${v.id} "${v.name}", ${dirs} facings, frame ${fw}x${fh}${shot ? `, ${shot.name} shots fly ${shot.range}px, harmless for the first ${Math.round(v.barrelLength + shot.speed * Math.max(0, shot.inactiveTicks))}px` : ''}`);
   return {
     key: t.key, label: t.label, vehicle: v.id, name: v.name,
     image: `turret-${t.key}.png`, frameW: fw, frameH: fh, columns: gridCols, facings: dirs,
@@ -321,6 +321,9 @@ async function bakeTurret(t: (typeof TURRETS)[number]) {
     fireHeight: v.fireHeight, barrelLength: v.barrelLength,
     // a turret only aims inside fireRadius, but its shots keep going this far
     weapon: shot?.name ?? null, shotRange: shot?.range ?? 0, fireDelay: shot?.fireDelay ?? 0,
+    // min range: a shot spawns at the barrel tip and can't hit anyone for inactiveTime ticks
+    deadRange: shot ? Math.round(v.barrelLength + shot.speed * Math.max(0, shot.inactiveTicks)) : 0,
+    inactiveTicks: shot?.inactiveTicks ?? 0,
     healRadius: 0,
     fireRadius: v.fireRadius, trackingRadius: v.trackingRadius, obeyLos: v.obeyLos !== 0,
     antiWarpRadius: t.key === 'sentry' ? SENTRY_ANTI_WARP : 0,
@@ -388,7 +391,7 @@ async function bakeMedic() {
     image: 'piece-medic.png', frameW: fw, frameH: fh, columns: gridCols, facings,
     anchorX: cell / 2 - minX, anchorY: cell / 2 - minY,
     radius: m.physicalRadius, hitpoints: 0, fireHeight: 0, barrelLength: 0,
-    weapon: kit.name, shotRange: 0, fireDelay: kit.fireDelay,
+    weapon: kit.name, shotRange: 0, fireDelay: kit.fireDelay, deadRange: 0, inactiveTicks: 0,
     fireRadius: 0, trackingRadius: 0, obeyLos: false, antiWarpRadius: 0,
     healRadius: Math.abs(kit.repairDistance), healAmount: kit.repairAmount, healTicks: kit.repairTime,
     densityRadius: 0, maxTypeInArea: -1, maxInArea: -1, maxTypeOnTeam: -1, maxPerEngineer: -1, hpToOperate: 0,

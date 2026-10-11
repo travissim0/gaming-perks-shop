@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  MAX_MEDICS, buildBlocker, cappedMask, coverage, decodeGrid, fireZones, inArea, decodeSetup, encodeSetup, facingToward, hullFits, nearestFreeSpot,
+  ISO_Y, MAX_MEDICS, ZONE, buildBlocker, cappedMask, coverage, decodeGrid, fireZones, inArea, decodeSetup, encodeSetup, facingToward, hullFits, nearestFreeSpot,
   occluded, pointSolid, reachableFrom, shotClear, spotIsFree, walkableSpotNear, type Grid, type PlannerData, type Placement, type TurretKey, type TurretType, type Turret,
 } from './rules';
 
@@ -206,6 +206,25 @@ test('density areas: a second set fits once it is a full 1500px from the first',
 test('caps per engineer and when turrets stop working come from the veh', () => {
   assert.deepEqual(['mg', 'rocket', 'sentry', 'plasma'].map((k) => types[k as TurretKey].maxPerEngineer), [4, 2, 2, 2]);
   assert.deepEqual(['mg', 'rocket', 'sentry', 'plasma'].map((k) => types[k as TurretKey].hpToOperate), [110, 50, 110, 110]);
+});
+
+test('min range: shots spawn at the barrel and stay harmless while inactive', () => {
+  // barrel + muzzle px/tick x inactive ticks: MG 36 + 5x15, Rocket 27 + 5x45, Plasma 25 + 4x0
+  assert.deepEqual([types.mg.deadRange, types.rocket.deadRange, types.plasma.deadRange], [111, 252, 25]);
+});
+
+test('shot reach is squished vertically: a dead zone and stray fire are ellipses', () => {
+  const g: Grid = { x0: 0, y0: 0, cols: 160, rows: 160, tile: 16, bytes: new Uint8Array(160 * 160), physicsLow: data.physicsLow, physicsHigh: data.physicsHigh };
+  const pl: Placement = { grid: g, man: data.man, types };
+  const tur = t('rocket', 80 * 16 + 8, 80 * 16 + 8), ty = types.rocket;
+  const z = fireZones(pl, tur, ty.fireHeight, ty.shotRange, coverage(pl, tur, ty.fireRadius, true, ty.fireHeight), ty.deadRange);
+  const at = (dx: number, dy: number) => z[(80 + dy) * 160 + 80 + dx];
+  // 252px dead zone: 15 tiles sideways, but only 176px (11 tiles) up and down
+  assert.equal(at(14, 0), ZONE.DEAD);
+  assert.equal(at(17, 0), ZONE.AIMED);
+  assert.equal(at(0, 10), ZONE.DEAD);
+  assert.equal(at(0, 12), ZONE.AIMED);
+  assert.equal(ISO_Y, 0.7);
 });
 
 test('share strings round-trip in base-local coordinates', () => {

@@ -10,6 +10,17 @@
  */
 
 /** Everything you can place: the engineer's turrets, plus medics (not turrets: no build caps, they heal). */
+/**
+ * Projectiles move with their y velocity squished by 0.7 (infantry.exe, verified in the studio's engine;
+ * the server's turret lead-aim divides y by 0.7 for the same reason). So how far a shot reaches is an
+ * ellipse: full distance sideways, 70% up and down. Aim radius, density, anti-warp and heal ranges are
+ * the server's plain distances and stay circles.
+ */
+export const ISO_Y = 0.7;
+
+/** World offset (dx, dy) is within `range` of shot travel. */
+export const inShotReach = (dx: number, dy: number, range: number) => dx * dx + (dy / ISO_Y) ** 2 <= range * range;
+
 export type TurretKey = 'rocket' | 'mg' | 'sentry' | 'plasma' | 'medic';
 /** neutral: a base the CTF script has no flag spot for (K4) */
 export type Owner = 'titan' | 'collective' | 'neutral';
@@ -36,6 +47,9 @@ export interface TurretType {
   /** how far one shot flies; the turret only AIMS within fireRadius */
   shotRange: number;
   fireDelay: number;
+  /** min range: shots can't hit anyone this close (barrel + muzzle speed x inactive ticks), along the shot */
+  deadRange: number;
+  inactiveTicks: number;
   /** medics: everyone on the team within this many px is healed (walls don't matter) */
   healRadius: number;
   healAmount?: number;
@@ -362,18 +376,27 @@ export function coverage(pl: Placement, t: Turret, radius: number, useLos: boole
   return out;
 }
 
+/** Zone values from fireZones. */
+export const ZONE = { AIMED: 1, STRAY: 2, DEAD: 3 } as const;
+
 /**
- * Where a turret's shots can land. 1 = it aims here (pass `aimed`, from coverage with LOS and shot height).
- * 2 = stray fire only: further along a firing line that crosses an aimable tile, still within the shot's
- * travel range and not yet stopped by a wall at the shot's height. A turret only fires at targets it can
- * aim at, but a shot that misses (or a target standing behind another) keeps flying.
+ * Where a turret's shots can hurt you. AIMED = it targets you here and its shots are live (pass `aimed`,
+ * from coverage with LOS and shot height). DEAD = it targets you, but you're inside its min range, so
+ * the shot is still inactive when it passes you. STRAY = it never targets you here, but shots fired at
+ * someone in front (or that miss) keep flying this far before running out or hitting a wall at their
+ * height. Ranges along the shot are ellipses (ISO_Y).
  */
-export function fireZones(pl: Placement, t: Turret, shotZ: number, shotRange: number, aimed: Uint8Array): Uint8Array {
+export function fireZones(pl: Placement, t: Turret, shotZ: number, shotRange: number, aimed: Uint8Array, deadRange = 0): Uint8Array {
   const g = pl.grid, T = g.tile, out = Uint8Array.from(aimed);
-  const reach = Math.min(shotRange, Math.hypot(g.cols * T, g.rows * T));
-  const rays = Math.ceil((2 * Math.PI * reach) / 6);
+  const isDead = (x: number, y: number) => deadRange > 0 && inShotReach(x - t.x, y - t.y, deadRange);
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] && isDead(g.x0 + (i % g.cols) * T + T / 2, g.y0 + ((i / g.cols) | 0) * T + T / 2)) out[i] = ZONE.DEAD;
+  }
+  const rays = Math.ceil((2 * Math.PI * Math.min(shotRange, Math.hypot(g.cols * T, g.rows * T))) / 6);
   for (let k = 0; k < rays; k++) {
     const a = (k / rays) * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+    // world distance this shot covers along this heading: the squished ellipse
+    const reach = Math.min(shotRange / Math.sqrt(dx * dx + (dy / ISO_Y) ** 2), Math.hypot(g.cols * T, g.rows * T));
     let armed = false;
     for (let d = 2; d <= reach; d += 4) {
       const x = t.x + dx * d, y = t.y + dy * d;
@@ -382,7 +405,7 @@ export function fireZones(pl: Placement, t: Turret, shotZ: number, shotRange: nu
       if (shotBlockedAt(g, x, y, shotZ)) break;
       const i = r * g.cols + c;
       if (aimed[i]) armed = true;
-      else if (armed && !out[i] && !(g.bytes[i] & 0x1f) && (!pl.reach || pl.reach[i])) out[i] = 2;
+      else if (armed && !out[i] && !(g.bytes[i] & 0x1f) && (!pl.reach || pl.reach[i]) && !isDead(x, y)) out[i] = ZONE.STRAY;
     }
   }
   return out;
