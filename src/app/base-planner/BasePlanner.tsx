@@ -109,6 +109,7 @@ export default function BasePlanner() {
   const flagFrame = useRef(0);
   // pointer-up handlers read the ghost from here: the state copy can be a move behind
   const ghostRef = useRef<Ghost | null>(null);
+  const loadedHash = useRef('');
   const setGhost = useCallback((g: Ghost | null) => { ghostRef.current = g; setGhostState(g); }, []);
 
   // ── data ──────────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export default function BasePlanner() {
         const restored: Record<string, Turret[]> = {};
         for (const b of d.bases) if (stored.setups?.[b.id]) restored[b.id] = decodeSetup(b, stored.setups[b.id]).map((t) => ({ ...t, id: newId() }));
         let first = d.bases.some((b) => b.id === stored.base) ? stored.base! : 'D7';
+        loadedHash.current = window.location.hash;
         const linked = parseLink(d, window.location.hash);
         if (linked) {
           first = linked.base;
@@ -149,12 +151,15 @@ export default function BasePlanner() {
   useEffect(() => {
     if (!data) return;
     const onHash = () => {
+      loadedHash.current = window.location.hash;
       const linked = parseLink(data, window.location.hash);
       if (!linked) return;
       if (linked.setup) setSetups((s) => ({ ...s, [linked.base]: linked.setup! }));
       setBaseId(linked.base);
     };
     window.addEventListener('hashchange', onHash);
+    // a link followed between reading the hash at load and getting here
+    if (window.location.hash !== loadedHash.current) onHash();
     return () => window.removeEventListener('hashchange', onHash);
   }, [data]);
 
