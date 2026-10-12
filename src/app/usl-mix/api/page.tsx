@@ -177,7 +177,7 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
         <div className="space-y-6">
           <Panel title="How the rating works">
             <ol className="text-sm text-gray-300 space-y-2 list-decimal list-inside">
-              <li>Everyone starts at <b>1200</b>. <b>Every mix counts</b> - the old per-game captain opt-in is retired, because letting captains choose made the record self-selected rather than merely thin. Casual (pub) games and test snapshots are stored for stats but never move ratings, and a ref can still exclude a one-off with <code>*mix scrim</code>.</li>
+              <li>Everyone starts at <b>1200</b>. <b>Every mix counts</b> - the old per-game captain opt-in is retired, because letting captains choose made the record self-selected rather than merely thin. Casual (pub) games and test snapshots are stored for stats but never move ratings, and a ref can still exclude a one-off with <code>*mix rated off</code>. Draft-league games (<code>kind=draft</code>) are recorded but never rated either.</li>
               <li>Team strength = mean rating of its players. Expected score E = 1 / (1 + 10^((R<sub>opp</sub> − R<sub>team</sub>) / 400)).</li>
               <li>Base change = K × (S − E) × margin, K = 48 for a player&apos;s first 10 games, 32 after. The margin multiplier reaches 1.5× at a 40-kill blowout <b>between evenly matched teams</b>, and fades to nothing as the winner&apos;s expected score rises - a favourite stomping an underdog earns no bonus, so stacking a team gains you nothing and nobody ever profits by killing less.</li>
               <li>Each captain gets a flat <b>+1</b> on a rated mix, win or lose. Deliberately negligible - a thank-you for stepping up, not a reason to captain.</li>
@@ -202,7 +202,7 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
 
           <Panel title="Field notes">
             <ul className="text-sm text-gray-300 space-y-2">
-              <li><b>rated</b> is now true for every mix. It survives as a per-game escape hatch for scrims (<code>*mix scrim</code> in the zone), and zone admins can still flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings. Filter on <code>kind=mix</code> rather than <code>rated</code>.</li>
+              <li><b>rated</b> is now true for every mix. It survives as a per-game escape hatch for scrims (<code>*mix rated off</code> in the zone), and zone admins can still flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings. Filter on <code>kind=mix</code> rather than <code>rated</code>.</li>
               <li><b>game_kind</b> is <code>mix</code> (a *mix pickup game), <code>pub</code> (casual), <code>draft</code> (a draft-league match between established teams - the host typed <code>*startdraft</code> in the zone) or <code>test</code>. Only <code>mix</code> games ever move ratings; draft games are recorded in full but never rated.</li>
               <li><b>first_pick_team</b> is the team that won the coin flip and drafted first, recorded so first-vs-second-pick win rate is finally measurable. Null on games played before 2026-09-09.</li>
               <li><b>Side</b> is read from the team name: &quot;- T&quot; / Titan vs &quot;- C&quot; / Collective.</li>
