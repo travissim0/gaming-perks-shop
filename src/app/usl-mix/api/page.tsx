@@ -49,7 +49,7 @@ export default function UslMixApiDocsPage() {
               params={[
                 ['limit', 'default 25, max 100'],
                 ['offset', 'pagination offset'],
-                ['kind', 'mix | pub | test | all (default mix + pub)'],
+                ['kind', 'mix | pub | draft | test | all (default mix + pub + draft)'],
                 ['map', 'map key, e.g. els, kp, apollo'],
                 ['alias', 'only games this player was in'],
                 ['since', 'ISO date lower bound'],
@@ -99,7 +99,7 @@ export default function UslMixApiDocsPage() {
               desc="Top players over a rolling window: per-player totals (kills, K/D, hits, accuracy, heals, opening kills, rating change), category leaders, the best player in every class, and single-game records (most kills / opening kills / hits, best accuracy, most healing in one game)."
               params={[
                 ['period', 'week | month | year | all (rolling 7 / 30 / 365 days; default week)'],
-                ['kind', 'mix | pub | all'],
+                ['kind', 'mix | pub | draft | all (all = mix + pub; draft games are never rated, so kind=draft ignores the rated filter)'],
                 ['map', 'restrict to one map'],
                 ['minGames', 'games needed for the K/D, win-rate and per-class rankings; default depends on period: week 5, month 12, year 22, all 22'],
                 ['board', 'flat mode, one ranked list: kills | kd | kills_per_game | win_rate | heal | hits | accuracy | opening_kills | rating_gain | class:<name> | record:<kills|opening_kills|hits|accuracy|heal>'],
@@ -203,6 +203,7 @@ curl "${BASE}/api/usl-mix/leaders?board=class:medic&period=all"`}
           <Panel title="Field notes">
             <ul className="text-sm text-gray-300 space-y-2">
               <li><b>rated</b> is now true for every mix. It survives as a per-game escape hatch for scrims (<code>*mix scrim</code> in the zone), and zone admins can still flip it afterwards with <code>POST /api/usl-mix/admin/set-rated</code> {'{'} game_id, rated {'}'}, which replays all ratings. Filter on <code>kind=mix</code> rather than <code>rated</code>.</li>
+              <li><b>game_kind</b> is <code>mix</code> (a *mix pickup game), <code>pub</code> (casual), <code>draft</code> (a draft-league match between established teams - the host typed <code>*startdraft</code> in the zone) or <code>test</code>. Only <code>mix</code> games ever move ratings; draft games are recorded in full but never rated.</li>
               <li><b>first_pick_team</b> is the team that won the coin flip and drafted first, recorded so first-vs-second-pick win rate is finally measurable. Null on games played before 2026-09-09.</li>
               <li><b>Side</b> is read from the team name: &quot;- T&quot; / Titan vs &quot;- C&quot; / Collective.</li>
               <li><b>map_key</b> is the megamap sub-map the zone had active (<code>*setmap</code>), else the level file name.</li>

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS usl_mix_games (
     arena_name          TEXT,
     level_file          TEXT,                              -- e.g. uslMegamap2.lvl
     map_key             TEXT,                              -- e.g. els / kp / apollo (megamap sub-map) or the lvl name
-    game_kind           TEXT NOT NULL CHECK (game_kind IN ('mix', 'pub', 'test')),
+    game_kind           TEXT NOT NULL CHECK (game_kind IN ('mix', 'pub', 'test', 'draft')),
     team_size           INT,                               -- *mix team size (0 for pubs)
     started_at          TIMESTAMPTZ,
     ended_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),

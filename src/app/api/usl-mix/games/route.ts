@@ -6,7 +6,7 @@ import { aliasKey, withHealTotals } from '@/lib/uslMix/types';
 /**
  * GET /api/usl-mix/games - recent games, newest first.
  *   ?limit=25 (max 100) &offset=0
- *   ?kind=mix|pub|test|all   (default: mix + pub)
+ *   ?kind=mix|pub|draft|test|all   (default: mix + pub + draft)
  *   ?map=els                 (map_key)
  *   ?alias=Name              only games this player was in
  *   ?since=2026-09-01        ISO date lower bound on ended_at
@@ -16,6 +16,8 @@ import { aliasKey, withHealTotals } from '@/lib/uslMix/types';
  * build league-wide aggregates without a detail fetch per game. weapon_kills is the same
  * {"1004": {"name": "LAW", "count": 3}} map served by /games/{id}, so a rated-only weapon
  * breakdown is one ?rated=true page rather than a fetch per game (Chris, 2026-09-10).
+ * kind=draft is a draft-league match (*startdraft in the zone, 2026-10-12): established teams,
+ * never rated, so it shows up here but never moves a Mix rating.
  */
 export const runtime = 'nodejs';
 
@@ -53,8 +55,8 @@ export async function GET(request: NextRequest) {
     }
 
     let q = supabase.from('usl_mix_games').select(GAME_COLUMNS, { count: 'exact' });
-    if (kind === 'mix' || kind === 'pub' || kind === 'test') q = q.eq('game_kind', kind);
-    else if (kind !== 'all') q = q.in('game_kind', ['mix', 'pub']);
+    if (kind === 'mix' || kind === 'pub' || kind === 'draft' || kind === 'test') q = q.eq('game_kind', kind);
+    else if (kind !== 'all') q = q.in('game_kind', ['mix', 'pub', 'draft']);
     if (map) q = q.eq('map_key', map);
     if (since) q = q.gte('ended_at', since);
     if (rated === 'true' || rated === 'false') q = q.eq('rated', rated === 'true');

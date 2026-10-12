@@ -55,7 +55,7 @@ export function validatePayload(body: any): GameResultPayload {
   if (!body || typeof body !== 'object') throw new IngestError('Body must be a JSON object');
   if (body.action !== 'game_result') problems.push("action must be 'game_result'");
   if (!isStr(body.match_id) || body.match_id.length < 8 || body.match_id.length > 64) problems.push('match_id (8-64 chars) required');
-  if (!['mix', 'pub', 'test'].includes(body.game_kind)) problems.push("game_kind must be mix|pub|test");
+  if (!['mix', 'pub', 'test', 'draft'].includes(body.game_kind)) problems.push("game_kind must be mix|pub|test|draft");
   if (!Array.isArray(body.teams) || body.teams.length !== 2) problems.push('teams must be an array of exactly 2');
   if (!Array.isArray(body.players) || body.players.length === 0) problems.push('players must be a non-empty array');
   if (Array.isArray(body.players) && body.players.length > LIMITS.MAX_PLAYERS) problems.push(`too many players (>${LIMITS.MAX_PLAYERS})`);

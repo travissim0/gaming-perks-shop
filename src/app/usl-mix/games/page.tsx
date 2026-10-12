@@ -13,7 +13,7 @@ interface GameRow {
 const PAGE = 25;
 
 export default function UslMixGamesPage() {
-  const [kind, setKind] = useState<'all' | 'mix' | 'pub' | 'test'>('all');
+  const [kind, setKind] = useState<'all' | 'mix' | 'pub' | 'draft' | 'test'>('all');
   const [alias, setAlias] = useState('');
   const [aliasQuery, setAliasQuery] = useState(''); // debounced copy - one request per pause in typing, not per keystroke
   const [offset, setOffset] = useState(0);
@@ -55,6 +55,7 @@ export default function UslMixGamesPage() {
             { value: 'all', label: 'All' },
             { value: 'mix', label: 'Mix' },
             { value: 'pub', label: 'Pub' },
+            { value: 'draft', label: 'Draft' },
             { value: 'test', label: 'Test' },
           ]}
         />

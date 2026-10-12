@@ -465,7 +465,7 @@ export default function UslMixGamePage() {
               <div className="flex justify-between"><dt className="text-gray-400">Weapon unknown</dt><dd className="text-white tabular-nums">{attribution.unknown}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-400">Deaths with no killer (terrain etc.)</dt><dd className="text-white tabular-nums">{attribution.none}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-400">Players whose K/D differs from the in-game scoreboard</dt><dd className={`tabular-nums ${mismatches ? 'text-amber-300' : 'text-emerald-300'}`}>{mismatches}</dd></div>
-              <div className="flex justify-between"><dt className="text-gray-400">ELO rated</dt><dd className={g.rated ? 'text-emerald-300' : 'text-gray-300'}>{g.game_kind !== 'mix' ? 'never (not a mix)' : g.rated ? 'yes (both captains agreed)' : 'no (captains did not both ?rated)'}</dd></div>
+              <div className="flex justify-between"><dt className="text-gray-400">ELO rated</dt><dd className={g.rated ? 'text-emerald-300' : 'text-gray-300'}>{g.game_kind === 'draft' ? 'never (draft league match)' : g.game_kind !== 'mix' ? 'never (not a mix)' : g.rated ? 'yes (both captains agreed)' : 'no (captains did not both ?rated)'}</dd></div>
               <div className="flex justify-between"><dt className="text-gray-400">Rating pass ran</dt><dd className="text-white">{g.elo_applied && g.rated ? 'yes' : 'no'}</dd></div>
             </dl>
             <p className="text-xs text-gray-500 mt-3">Kills and deaths come from the death events the zone saw; the scoreboard comparison is a sanity check that they add up to what the game itself counted.</p>

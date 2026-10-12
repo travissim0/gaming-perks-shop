@@ -6,7 +6,8 @@
  * with BuildPayload() in that file and with the docs page at /usl-mix/api.
  */
 
-export type GameKind = 'mix' | 'pub' | 'test';
+/** draft = a draft-league match (host typed *startdraft in the zone): recorded like any game, never rated. */
+export type GameKind = 'mix' | 'pub' | 'test' | 'draft';
 export type Side = 'T' | 'C';
 export type Result = 'win' | 'loss' | 'draw';
 
