@@ -11,6 +11,8 @@ import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { getClassColor } from '@/utils/classColors';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import { easternSuffix } from '@/lib/eastern';
+import MatchTime from '@/components/ctf/MatchTime';
 import MatchSetup from '@/components/ctf/MatchSetup';
 import MenuButton, { type MenuItem } from '@/components/ctf/MenuButton';
 import { Coverage, PlayerName, RosterControls, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
@@ -490,7 +492,7 @@ export default function MatchDetailPage() {
   const aWon = !!match && (match.winner_squad_id ? match.winner_squad_id === match.squad_a_id : hasScore && match.squad_a_score! > match.squad_b_score!);
   const bWon = !!match && (match.winner_squad_id ? match.winner_squad_id === match.squad_b_id : hasScore && match.squad_b_score! > match.squad_a_score!);
   const when = useMemo(() => {
-    if (!match || !mounted) return { day: '', time: '', tz: '' };
+    if (!match || !mounted) return { day: '', time: '', tz: '', eastern: '' };
     const d = new Date(match.scheduled_at);
     let tz = '';
     try { tz = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value || ''; } catch { /* ignore */ }
@@ -498,6 +500,7 @@ export default function MatchDetailPage() {
       day: d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
       time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
       tz,
+      eastern: easternSuffix(d, ''),
     };
   }, [match, mounted]);
   const yt = youTubeId(match?.vod_url) || youTubeId(game?.videoInfo?.youtube_url);
@@ -670,6 +673,7 @@ export default function MatchDetailPage() {
                     <div className="font-display text-4xl leading-none text-[#22D3EE] tabular-nums">
                       {when.time}{when.tz && <span className="ml-1.5 text-base text-[#8B98B0]">{when.tz}</span>}
                     </div>
+                    {when.eastern && <div className="mt-1 text-sm tabular-nums text-[#8B98B0]">{when.eastern}</div>}
                     <div className="mt-1 text-sm font-medium text-[#E6EDF7]">{when.day}</div>
                   </>
                 )}
@@ -847,6 +851,11 @@ export default function MatchDetailPage() {
             <div className="flex gap-2"><button type="button" onClick={() => setPanel('none')} className={btnQuiet}>Cancel</button><button type="button" onClick={saveVideo} disabled={busy === 'video'} className={btnPrimary}>Save</button></div>
           </div>
         </section>
+      )}
+
+      {/* Kick-off time: the captains agree it on the site (league fixtures, not yet played) */}
+      {match.league_slug && match.squad_a_id && match.squad_b_id && !played && !notPlayed && (
+        <MatchTime key={`time:${match.scheduled_at}`} matchId={match.id} onChanged={load} />
       )}
 
       {/* Side + lineups (both teams set, not yet played) */}

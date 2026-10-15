@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { localDateTimeToIso, playByLabel, TBD_LABEL } from '@/lib/schedule';
 import { canFillCrewRole } from '@/lib/crewRoles';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import { easternSuffix } from '@/lib/eastern';
 import { getClassColor } from '@/utils/classColors';
 
 /*
@@ -73,7 +74,7 @@ const ROLES: { key: Role; label: string; plural: string }[] = [
 const TYPE_LABEL: Record<MatchType, string> = { squad_vs_squad: 'Squad match', pickup: 'Pickup', tournament: 'League' };
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const timeLabel = (iso: string) => `${new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(iso)}`;
 // Calendar days in the viewer's zone, not 24-hour blocks: a 9:48 PM game is "Yesterday" the next morning.
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const relTime = (iso: string) => {

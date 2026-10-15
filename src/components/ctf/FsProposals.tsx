@@ -1,4 +1,5 @@
 'use client';
+import { easternSuffix } from '@/lib/eastern';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -179,7 +180,7 @@ export default function FsProposals({
                 {split && <ColorTag c={colorOf(f)} />}
                 <span className="min-w-0 flex-1 text-[#E6EDF7]">
                   {f.squad_b_name} <span className="text-[#8B98B0]">vs</span> {f.squad_a_name} <span className="text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>
-                  <span className="ml-2 text-xs text-[#8B98B0]">{when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{f.fs_week_start ? ` · week of ${weekLabel(f.fs_week_start)}` : ''}</span>
+                  <span className="ml-2 text-xs text-[#8B98B0]">{when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · {when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}{easternSuffix(when)}{f.fs_week_start ? ` · week of ${weekLabel(f.fs_week_start)}` : ''}</span>
                 </span>
                 {forMe || isStaff ? (
                   <span className="flex gap-2">

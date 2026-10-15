@@ -28,6 +28,7 @@ import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
+import { easternSuffix } from '@/lib/eastern';
 
 type Filter = 'upcoming' | 'results' | 'all';
 
@@ -46,7 +47,7 @@ const tz = () => {
 };
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const timeLabel = (iso: string) => `${new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(iso)}`;
 
 function TeamMark({ tag, name }: { tag: string | null; name: string | null }) {
   return (
@@ -229,7 +230,7 @@ function SchedulePage() {
                     </span>
                     {phase && <span className="text-[#F59E0B] font-medium">{phase.label}</span>}
                     {season.start_date && <span className="text-[#8B98B0]">Starts {formatDateOnly(season.start_date)}</span>}
-                    <span className="text-[#8B98B0]">Times shown in your zone{tzLabel ? ` (${tzLabel})` : ''}</span>
+                    <span className="text-[#8B98B0]">Times shown in your zone{tzLabel ? ` (${tzLabel})` : ''}{tzLabel && !/^E[SD]T$/.test(tzLabel) ? ' and Eastern (ET)' : ''}</span>
                   </>
                 ) : (
                   <span className="text-[#8B98B0]">No season yet</span>

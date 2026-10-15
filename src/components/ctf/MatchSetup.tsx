@@ -1,4 +1,5 @@
 'use client';
+import { easternSuffix } from '@/lib/eastern';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
@@ -401,7 +402,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
       if (!ok) break;
     }
   };
-  const revealTime = new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const revealTime = `${new Date(setup.side_reveal_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(setup.side_reveal_at, ' / ')}`;
   // While the match time is TBD there is no reveal time to quote yet.
   const revealAt = match.time_tbd ? 'five minutes before the match, once its time is set' : `at ${revealTime}, five minutes before the match`;
   const sidesLine = home.side ? `${away.tag} · ${SIDE_LABEL[away.side!]}  ·  ${home.tag} · ${SIDE_LABEL[home.side]}` : null;
