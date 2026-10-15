@@ -16,6 +16,8 @@ import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpe
 import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
 import { CLASS_COLORS } from '@/lib/constants';
 import type { LeaveRequest } from '@/lib/leave-requests-server';
+import { easternSuffix } from '@/lib/eastern';
+import { playByLabel, TBD_LABEL } from '@/lib/schedule';
 
 interface SquadMember {
   id: string;
@@ -78,6 +80,38 @@ interface SentInvite {
   message?: string | null;
 }
 
+/** One of this squad's fixtures this season, as /api/league/schedule reports it. */
+interface SquadFixture {
+  id: string;
+  stage: 'regular' | 'playoff' | 'fs';
+  week: number | null;
+  playoff_round: number | null;
+  fs_status: string | null;
+  fs_color: 'red' | 'green' | null;
+  scheduled_at: string;
+  time_tbd: boolean;
+  status: string;
+  squad_a_id: string | null;
+  squad_b_id: string | null;
+  squad_a_name: string | null;
+  squad_a_tag: string | null;
+  squad_b_name: string | null;
+  squad_b_tag: string | null;
+  result: {
+    a_result: string | null;
+    b_result: string | null;
+    played_at: string;
+    no_contest: boolean;
+    scored_color: 'red' | 'green' | null;
+    mvp: string | null;
+    length_minutes: number | null;
+    points: { a: number; b: number; why: string } | null;
+  } | null;
+}
+type RosterSort = 'pick' | 'rating' | 'kills' | 'name';
+/** Free-scheduling rules and this squad's use of them, from /api/league/fs. */
+interface FsInfo { enabled: boolean; colors: boolean; per_week: number; this_week: number | null }
+
 export default function SquadDetailPage() {
   const { user, loading } = useAuth();
   const params = useParams();
@@ -135,6 +169,12 @@ export default function SquadDetailPage() {
   const [draftPicks, setDraftPicks] = useState<Record<string, { round: number; overall: number }>>({});
   const [memberClasses, setMemberClasses] = useState<Record<string, string[]>>({});
   const [showInviteHistory, setShowInviteHistory] = useState(false);
+  // This season's fixtures and results for the squad (schedule API), and its FS usage.
+  const [fixtures, setFixtures] = useState<SquadFixture[]>([]);
+  const [fsInfo, setFsInfo] = useState<FsInfo | null>(null);
+  // Roster view: staff/captain controls stay hidden until asked for; sort defaults to draft order.
+  const [manageMode, setManageMode] = useState(false);
+  const [rosterSort, setRosterSort] = useState<RosterSort | null>(null);
   const isDraftLeague = !!leagueInfo && !!leagueInfo.format && leagueInfo.format !== 'squad';
 
   // Draft-league squads: a member asks to leave and league staff decide. `leaveReq` is null until
@@ -411,6 +451,23 @@ export default function SquadDetailPage() {
 
       const season = await getLatestSeason(league);
       setSeasonInfo(season);
+      if (season) {
+        // The squad's fixtures and results this season, and its free-scheduling use; neither blocks the page.
+        fetch(`/api/league/schedule?league=${encodeURIComponent(league.slug)}&season=${season.season_number}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => {
+            const all: SquadFixture[] = Array.isArray(j?.fixtures) ? j.fixtures : [];
+            setFixtures(all.filter((f) => f.squad_a_id === s.id || f.squad_b_id === s.id));
+          })
+          .catch(() => setFixtures([]));
+        fetch(`/api/league/fs?league=${encodeURIComponent(league.slug)}&season=${season.season_number}&squad=${s.id}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => setFsInfo(j && j.caps ? { enabled: !!j.enabled, colors: !!j.caps.colors, per_week: Number(j.caps.per_week) || 0, this_week: j.usage ? Number(j.usage.this_week) || 0 : null } : null))
+          .catch(() => setFsInfo(null));
+      } else {
+        setFixtures([]);
+        setFsInfo(null);
+      }
       const memberIds = s.members.map((m) => m.player_id);
 
       if (season) {
@@ -1422,99 +1479,181 @@ export default function SquadDetailPage() {
     );
   }
 
+  // ---- Derived season view (fixtures come from /api/league/schedule) ---------------------------
+  const mySide = (f: SquadFixture): 'a' | 'b' | null => (f.squad_a_id === squad.id ? 'a' : f.squad_b_id === squad.id ? 'b' : null);
+  const opponentOf = (f: SquadFixture) => (mySide(f) === 'a' ? { name: f.squad_b_name, tag: f.squad_b_tag, id: f.squad_b_id } : { name: f.squad_a_name, tag: f.squad_a_tag, id: f.squad_a_id });
+  const outcomeOf = (f: SquadFixture): 'W' | 'L' | null => {
+    if (!f.result) return null;
+    const side = mySide(f);
+    const r = (side === 'a' ? f.result.a_result : f.result.b_result) || '';
+    return r.toLowerCase() === 'win' ? 'W' : 'L';
+  };
+  const pointsOf = (f: SquadFixture): number | null => (f.result?.points ? (mySide(f) === 'a' ? f.result.points.a : f.result.points.b) : null);
+  const stageLabel = (f: SquadFixture) =>
+    f.stage === 'fs' ? (f.fs_color === 'green' ? 'FS Green' : 'FS Red') : f.stage === 'playoff' ? `Playoffs${f.playoff_round ? ` R${f.playoff_round}` : ''}` : f.week ? `Week ${f.week}` : 'Regular';
+  const stageCls = (f: SquadFixture) =>
+    f.stage === 'fs' ? (f.fs_color === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]') : f.stage === 'playoff' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-white/5 text-[#8B98B0]';
+  const whenLabel = (f: SquadFixture) =>
+    f.time_tbd ? `${TBD_LABEL} · ${playByLabel(f.scheduled_at)}` : `${new Date(f.scheduled_at).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${easternSuffix(f.scheduled_at)}`;
+  const gameLength = (min: number | null | undefined) => (min && min > 0 ? `${Math.floor(min)}:${String(Math.round((min % 1) * 60)).padStart(2, '0')}` : null);
+
+  const played = fixtures.filter((f) => f.result).sort((x, y) => new Date(y.result!.played_at).getTime() - new Date(x.result!.played_at).getTime());
+  const upcoming = fixtures
+    .filter((f) => !f.result && f.status === 'scheduled' && f.fs_status !== 'pending' && (f.time_tbd || new Date(f.scheduled_at).getTime() > Date.now() - 3 * 3_600_000))
+    .sort((x, y) => new Date(x.scheduled_at).getTime() - new Date(y.scheduled_at).getTime());
+  const nextMatch = upcoming[0] || null;
+  const lastResult = played[0] || null;
+  const fsPlayed = { red: played.filter((f) => f.stage === 'fs' && (f.result!.scored_color || f.fs_color || 'red') === 'red' && !f.result!.no_contest).length, green: played.filter((f) => f.stage === 'fs' && f.result!.scored_color === 'green' && !f.result!.no_contest).length };
+  const rsRecord = played.filter((f) => f.stage !== 'fs').reduce((acc, f) => { const o = outcomeOf(f); if (o === 'W') acc.w++; else if (o === 'L') acc.l++; return acc; }, { w: 0, l: 0 });
+
+  const captain = squad.members.find((m) => m.role === 'captain');
+  const coCaptains = squad.members.filter((m) => m.role === 'co_captain');
+  const picksList = Object.values(draftPicks);
+  const firstPick = picksList.length ? squad.members.find((m) => draftPicks[m.player_id]?.overall === Math.min(...picksList.map((p) => p.overall))) : null;
+  const sortKey = rosterSort ?? (picksList.length ? 'pick' : 'name');
+  const roleRank = (r: SquadMember['role']) => (r === 'captain' ? 0 : r === 'co_captain' ? 1 : 2);
+  const sortedMembers = [...squad.members].sort((a, b) => {
+    const byRole = roleRank(a.role) - roleRank(b.role);
+    if (byRole !== 0) return byRole;
+    if (sortKey === 'pick') {
+      const pa = draftPicks[a.player_id]?.overall ?? 9999, pb = draftPicks[b.player_id]?.overall ?? 9999;
+      if (pa !== pb) return pa - pb;
+    } else if (sortKey === 'rating') {
+      const ra = memberStats[a.player_id]?.elo ?? -1, rb = memberStats[b.player_id]?.elo ?? -1;
+      if (ra !== rb) return rb - ra;
+    } else if (sortKey === 'kills') {
+      const ka = memberStats[a.player_id]?.kills ?? -1, kb = memberStats[b.player_id]?.kills ?? -1;
+      if (ka !== kb) return kb - ka;
+    }
+    return a.in_game_alias.localeCompare(b.in_game_alias);
+  });
+  const showManage = canManageSquad() && manageMode;
+  const hasClasses = Object.keys(memberClasses).length > 0;
+  const hasPicks = picksList.length > 0;
+  const ordinal = (n: number) => `${n}${['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th'}`;
+  const chip = 'inline-flex items-center gap-1.5 rounded-md bg-[#0B0F1A]/80 px-2.5 py-1 text-xs text-[#8B98B0]';
+  const th = 'py-1.5 pr-2 font-medium';
+  const canManageAnything = canEditSquadPhotos() || canLeaveSquad() || isCaptain();
+
   return (
     <div className="ctf-theme min-h-screen">
       <Navbar user={user} />
-      
+
       <main className="mx-auto max-w-6xl px-4 py-6">
-        {/* ---- Header strip -------------------------------------------------- */}
-        <div className="mb-4 rounded-xl bg-[#131A2B] p-4 md:p-5">
-          <div className="flex flex-wrap items-center gap-4">
-            {squad.banner_url ? (
-              <img
-                src={squad.banner_url}
-                alt={`${squad.name} picture`}
-                className="h-16 w-16 flex-none rounded-lg object-cover bg-[#0B0F1A]"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : (
-              <div className="flex h-16 w-16 flex-none items-center justify-center rounded-lg bg-[#1B2438] font-display text-lg text-[#22D3EE]">
-                {squad.tag?.slice(0, 4) || squad.name.slice(0, 2)}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-display text-2xl leading-none text-[#E6EDF7] md:text-3xl">[{squad.tag}] {squad.name}</h1>
+        {/* ---- Header band -------------------------------------------------- */}
+        <div className="relative mb-4 overflow-hidden rounded-xl bg-[#131A2B]">
+          {squad.banner_url && (
+            <div className="absolute inset-0 bg-cover bg-center opacity-25 blur-[2px] scale-105" style={{ backgroundImage: `url(${squad.banner_url})` }} aria-hidden />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#131A2B] via-[#131A2B]/90 to-[#131A2B]/60" aria-hidden />
+          <div className="relative p-4 md:p-5">
+            <div className="flex flex-wrap items-start gap-4">
+              {squad.banner_url ? (
+                <img
+                  src={squad.banner_url}
+                  alt={`${squad.name} picture`}
+                  className="h-20 w-20 flex-none rounded-lg border border-white/10 object-cover bg-[#0B0F1A]"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              ) : (
+                <div className="flex h-20 w-20 flex-none items-center justify-center rounded-lg border border-white/10 bg-[#1B2438] font-display text-xl text-[#22D3EE]">
+                  {squad.tag?.slice(0, 4) || squad.name.slice(0, 2)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-display text-2xl leading-none text-[#E6EDF7] md:text-3xl">[{squad.tag}] {squad.name}</h1>
+                  {leagueInfo && (
+                    <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">
+                      {leagueInfo.name}{seasonInfo ? ` · Season ${seasonInfo.season_number}` : ''}
+                    </span>
+                  )}
+                  {squad.is_legacy ? (
+                    <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Legacy</span>
+                  ) : !squad.is_active ? (
+                    <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F87171]">Inactive</span>
+                  ) : (
+                    <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#34D399]">Active</span>
+                  )}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-[#8B98B0]">
+                  <span>Captain <span className="text-[#E6EDF7]">{captain?.in_game_alias || '—'}</span></span>
+                  {coCaptains.length > 0 && <span>Co-captain{coCaptains.length > 1 ? 's' : ''} <span className="text-[#E6EDF7]">{coCaptains.map((m) => m.in_game_alias).join(', ')}</span></span>}
+                  <span>{getMemberCounts(squad.members).regularCount} player{getMemberCounts(squad.members).regularCount === 1 ? '' : 's'}{getMemberCounts(squad.members).transitionalCount > 0 ? ` +${getMemberCounts(squad.members).transitionalCount} transitional` : ''}</span>
+                  <span>Est. {new Date(squad.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
+                </div>
                 {leagueInfo && (
-                  <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">
-                    {leagueInfo.name}{seasonInfo ? ` · Season ${seasonInfo.season_number}` : ''}
-                  </span>
-                )}
-                {squad.is_legacy ? (
-                  <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Legacy</span>
-                ) : !squad.is_active ? (
-                  <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F87171]">Inactive</span>
-                ) : (
-                  <span className="rounded bg-[#34D399]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#34D399]">Active</span>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {standing && (
+                      <Link href={`/league/standings?league=${leagueInfo.slug}`} className={`${chip} hover:bg-white/10`}>
+                        <span className="font-display text-sm text-[#E6EDF7]">{ordinal(standing.rank)}</span>
+                        <span className="text-[#E6EDF7]">{standing.wins}–{standing.losses}</span>
+                        <span>{standing.points} pts</span>
+                      </Link>
+                    )}
+                    {nextMatch && (
+                      <Link href={`/matches/${nextMatch.id}`} className={`${chip} hover:bg-white/10`}>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">Next</span>
+                        <span className="text-[#E6EDF7]">vs {opponentOf(nextMatch).tag || opponentOf(nextMatch).name}</span>
+                        <span>{whenLabel(nextMatch)}</span>
+                      </Link>
+                    )}
+                    {lastResult && (
+                      <Link href={`/matches/${lastResult.id}`} className={`${chip} hover:bg-white/10`}>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8B98B0]">Last</span>
+                        <span className={`font-semibold ${outcomeOf(lastResult) === 'W' ? 'text-[#34D399]' : 'text-[#F87171]'}`}>{outcomeOf(lastResult)}</span>
+                        <span className="text-[#E6EDF7]">vs {opponentOf(lastResult).tag || opponentOf(lastResult).name}</span>
+                        <span className={`rounded px-1 text-[10px] ${stageCls(lastResult)}`}>{stageLabel(lastResult)}</span>
+                      </Link>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-[#8B98B0]">
-                <span>Captain <span className="text-[#E6EDF7]">{squad.members.find((m) => m.role === 'captain')?.in_game_alias || '—'}</span></span>
-                <span>{getMemberCounts(squad.members).regularCount} player{getMemberCounts(squad.members).regularCount === 1 ? '' : 's'}{getMemberCounts(squad.members).transitionalCount > 0 ? ` +${getMemberCounts(squad.members).transitionalCount} transitional` : ''}</span>
-                {standing && <span><span className="text-[#E6EDF7]">{standing.wins}–{standing.losses}</span> this season</span>}
-                <span>Created {new Date(squad.created_at).toLocaleDateString()}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {captain && <MessageButton recipientId={captain.player_id} recipientAlias={captain.in_game_alias} label="Message captain" subject={`[${squad.tag}] ${squad.name}`} />}
+                {canManageAnything && (
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10 [&::-webkit-details-marker]:hidden">Manage ▾</summary>
+                    <div className="absolute right-0 z-20 mt-1 flex min-w-[12rem] flex-col rounded-md border border-white/10 bg-[#0B0F1A] p-1 text-sm shadow-xl" onClick={(e) => { const d = e.currentTarget.closest('details'); if (d) d.open = false; }}>
+                      {canEditSquadPhotos() && (
+                        <button onClick={() => setShowBannerForm(true)} className="rounded px-2.5 py-1.5 text-left text-[#E6EDF7] hover:bg-white/10">{squad.banner_url ? 'Update picture' : 'Add picture'}</button>
+                      )}
+                      {canLeaveSquad() && (leaveReq ? !leaveReq.needs_request : !isDraftLeague) && (
+                        <button onClick={initiateLeaveSquad} disabled={isRequesting} className="rounded px-2.5 py-1.5 text-left text-[#F87171] hover:bg-white/10 disabled:opacity-50">{isRequesting ? 'Leaving…' : 'Leave squad'}</button>
+                      )}
+                      {canLeaveSquad() && leaveReq?.needs_request && (
+                        leaveReq.mine?.status === 'pending' ? (
+                          <button onClick={withdrawLeaveRequest} disabled={isRequesting} className="rounded px-2.5 py-1.5 text-left text-[#8B98B0] hover:bg-white/10 disabled:opacity-50">Withdraw leave request</button>
+                        ) : (
+                          <button onClick={() => setShowLeaveRequestForm(true)} disabled={isRequesting} className="rounded px-2.5 py-1.5 text-left text-[#F87171] hover:bg-white/10 disabled:opacity-50">Request to leave</button>
+                        )
+                      )}
+                      {isCaptain() && (
+                        <button onClick={disbandSquad} className="rounded px-2.5 py-1.5 text-left text-[#8B98B0] hover:bg-[#F87171]/10 hover:text-[#F87171]">Disband squad</button>
+                      )}
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {(() => {
-                const cap = squad.members.find((m) => m.role === 'captain');
-                return cap ? <MessageButton recipientId={cap.player_id} recipientAlias={cap.in_game_alias} label="Message captain" subject={`[${squad.tag}] ${squad.name}`} /> : null;
-              })()}
-              {canEditSquadPhotos() && (
-                <button onClick={() => setShowBannerForm(true)} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">
-                  {squad.banner_url ? 'Update picture' : 'Add picture'}
-                </button>
-              )}
-              {canLeaveSquad() && (leaveReq ? !leaveReq.needs_request : !isDraftLeague) && (
-                <button onClick={initiateLeaveSquad} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#F87171] hover:bg-white/10 disabled:opacity-50">
-                  {isRequesting ? 'Leaving…' : 'Leave squad'}
-                </button>
-              )}
-              {canLeaveSquad() && leaveReq?.needs_request && (
-                leaveReq.mine?.status === 'pending' ? (
-                  <button onClick={withdrawLeaveRequest} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#8B98B0] hover:bg-white/10 disabled:opacity-50">
-                    Withdraw leave request
-                  </button>
-                ) : (
-                  <button onClick={() => setShowLeaveRequestForm(true)} disabled={isRequesting} className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#F87171] hover:bg-white/10 disabled:opacity-50">
-                    Request to leave
-                  </button>
-                )
-              )}
-              {isCaptain() && (
-                <button onClick={disbandSquad} className="rounded-md px-3 py-1.5 text-sm text-[#8B98B0] hover:bg-[#F87171]/10 hover:text-[#F87171]">
-                  Disband
-                </button>
-              )}
-            </div>
+            {isCurrentMember() && !canLeaveSquad() && (
+              <p className="mt-2 text-xs text-[#F59E0B]">You're the captain. Transfer ownership to another member before leaving.</p>
+            )}
+            {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'pending' && (
+              <p className="mt-2 text-xs text-[#F59E0B]">
+                Your request to leave was sent to league staff on {new Date(leaveReq.mine.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. You stay on the roster until they decide.
+              </p>
+            )}
+            {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'denied' && (
+              <p className="mt-2 text-xs text-[#8B98B0]">
+                Your last request to leave was denied{leaveReq.mine.decided_by_alias ? ` by ${leaveReq.mine.decided_by_alias}` : ''}
+                {leaveReq.mine.decided_at ? ` on ${new Date(leaveReq.mine.decided_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}.
+              </p>
+            )}
+            {userSquad && userSquad.id !== squad.id && (
+              <p className="mt-2 text-xs text-[#8B98B0]">You're a member of [{userSquad.tag}] {userSquad.name}.</p>
+            )}
           </div>
-          {isCurrentMember() && !canLeaveSquad() && (
-            <p className="mt-2 text-xs text-[#F59E0B]">You're the captain. Transfer ownership to another member before leaving.</p>
-          )}
-          {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'pending' && (
-            <p className="mt-2 text-xs text-[#F59E0B]">
-              Your request to leave was sent to league staff on {new Date(leaveReq.mine.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. You stay on the roster until they decide.
-            </p>
-          )}
-          {isCurrentMember() && leaveReq?.needs_request && leaveReq.mine?.status === 'denied' && (
-            <p className="mt-2 text-xs text-[#8B98B0]">
-              Your last request to leave was denied{leaveReq.mine.decided_by_alias ? ` by ${leaveReq.mine.decided_by_alias}` : ''}
-              {leaveReq.mine.decided_at ? ` on ${new Date(leaveReq.mine.decided_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}.
-            </p>
-          )}
-          {userSquad && userSquad.id !== squad.id && (
-            <p className="mt-2 text-xs text-[#8B98B0]">You're a member of [{userSquad.tag}] {userSquad.name}.</p>
-          )}
         </div>
 
         {/* ---- Join / apply (squad leagues only) ------------------------------ */}
@@ -1563,98 +1702,102 @@ export default function SquadDetailPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,0.9fr)]">
-          {/* ---- Roster ------------------------------------------------------ */}
-          <div className="rounded-xl bg-[#131A2B] p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-lg text-[#E6EDF7]">Roster</h2>
-              {renderMemberCountBadges(squad.members, squad)}
-              <span className="ml-auto text-xs text-[#8B98B0]">
+          <div className="space-y-4">
+            {/* ---- Roster ------------------------------------------------------ */}
+            <div className="rounded-xl bg-[#131A2B] p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <h2 className="font-display text-lg text-[#E6EDF7]">Roster</h2>
+                {renderMemberCountBadges(squad.members, squad)}
+                <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-[#8B98B0]">
+                  <label className="flex items-center gap-1">
+                    Sort
+                    <select value={sortKey} onChange={(e) => setRosterSort(e.target.value as RosterSort)} className="rounded border border-white/10 bg-[#0B0F1A] px-1.5 py-0.5 text-xs text-[#E6EDF7]">
+                      {hasPicks && <option value="pick">Draft pick</option>}
+                      <option value="rating">Rating</option>
+                      <option value="kills">Kills</option>
+                      <option value="name">Name</option>
+                    </select>
+                  </label>
+                  {canManageSquad() && (
+                    <button type="button" onClick={() => setManageMode((v) => !v)} className={`rounded-md px-2.5 py-1 ${manageMode ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-white/5 text-[#E6EDF7] hover:bg-white/10'}`}>
+                      {manageMode ? 'Done' : 'Manage roster'}
+                    </button>
+                  )}
+                </span>
+              </div>
+              <p className="mb-2 text-xs text-[#8B98B0]">
                 {isDraftLeague ? (
                   <>
                     Set by the {leagueInfo?.name} draft
-                    {leagueInfo?.slug === 'ctfdl' && <> · <Link href="/league/ctfdl/draft/recap" className="text-[#22D3EE] hover:underline">Recap</Link> · <Link href="/league/trades" className="text-[#22D3EE] hover:underline" title="Trades between squads: captains propose, the league approves">Trades</Link></>}
+                    {leagueInfo?.slug === 'ctfdl' && <> · <Link href="/league/ctfdl/draft/recap" className="text-[#22D3EE] hover:underline">Draft recap</Link> · <Link href="/league/trades" className="text-[#22D3EE] hover:underline" title="Trades between squads: captains propose, the league approves">Trades</Link></>}
                   </>
                 ) : (
                   <>R regular · T transitional (exempt from limit)</>
                 )}
-              </span>
-            </div>
+                {' · '}Stats are career totals across all games.
+              </p>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-[#8B98B0]">
-                    <th className="py-1.5 pr-2 font-medium">Player</th>
-                    <th className="py-1.5 pr-2 font-medium">Role</th>
-                    {Object.keys(memberClasses).length > 0 && <th className="py-1.5 pr-2 font-medium">Classes</th>}
-                    <th className="py-1.5 pr-2 text-right font-medium">Season</th>
-                    {Object.keys(draftPicks).length > 0 && <th className="py-1.5 pr-2 text-right font-medium">Picked</th>}
-                    <th className="py-1.5 pr-2 text-right font-medium">Joined</th>
-                    {canManageSquad() && <th className="py-1.5 text-right font-medium">Manage</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...squad.members]
-                    .sort((a, b) => {
-                      if (a.role === 'captain' && b.role !== 'captain') return -1;
-                      if (a.role !== 'captain' && b.role === 'captain') return 1;
-                      if (a.role === 'co_captain' && b.role === 'player') return -1;
-                      if (a.role === 'player' && b.role === 'co_captain') return 1;
-                      return a.in_game_alias.localeCompare(b.in_game_alias);
-                    })
-                    .map((member) => {
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] uppercase tracking-wide text-[#8B98B0]">
+                      <th className={th}>Player</th>
+                      {hasClasses && <th className={th}>Classes</th>}
+                      <th className={`${th} text-right`}>Kills</th>
+                      <th className={`${th} text-right`}>K/D</th>
+                      <th className={`${th} text-right`}>Caps</th>
+                      <th className={`${th} text-right`} title="Weighted rating">Rtg</th>
+                      {hasPicks && <th className={`${th} text-right`}>Pick</th>}
+                      <th className={`${th} text-right`}>Joined</th>
+                      {showManage && <th className="py-1.5 text-right font-medium">Manage</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedMembers.map((member) => {
                       const st = memberStats[member.player_id];
                       const pick = draftPicks[member.player_id];
                       const classes = memberClasses[member.player_id] || [];
                       return (
-                        <tr key={member.id} className="border-t border-white/[0.06] align-middle">
-                          <td className="py-2 pr-2">
-                            <div className="flex items-center gap-1.5">
+                        <tr key={member.id} className="h-10 border-t border-white/[0.06] align-middle">
+                          <td className="py-1.5 pr-2">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <Link href={`/stats/player/${encodeURIComponent(member.in_game_alias)}`} className="font-medium text-[#E6EDF7] hover:text-[#22D3EE]">
                                 {member.in_game_alias}
                               </Link>
+                              {member.role === 'captain' && <span className="rounded bg-[#F59E0B]/15 px-1 text-[9px] font-semibold uppercase text-[#F59E0B]" title="Captain">C</span>}
+                              {member.role === 'co_captain' && <span className="rounded bg-[#22D3EE]/15 px-1 text-[9px] font-semibold uppercase text-[#22D3EE]" title="Co-captain">CC</span>}
                               {member.player_id === user?.id && <span className="rounded bg-[#22D3EE]/15 px-1 text-[9px] font-semibold uppercase text-[#22D3EE]">You</span>}
-                              <MessageButton recipientId={member.player_id} recipientAlias={member.in_game_alias} variant="icon" />
                               {member.transitional_player && (
                                 <span className="rounded bg-[#F59E0B]/15 px-1 text-[9px] font-semibold uppercase text-[#F59E0B]" title="Transitional player — exempt from squad size limits">T</span>
                               )}
+                              <MessageButton recipientId={member.player_id} recipientAlias={member.in_game_alias} variant="icon" />
                             </div>
                           </td>
-                          <td className="py-2 pr-2">
-                            {member.role === 'captain' ? (
-                              <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F59E0B]">Captain</span>
-                            ) : member.role === 'co_captain' ? (
-                              <span className="rounded bg-[#22D3EE]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#22D3EE]">Co-captain</span>
-                            ) : (
-                              <span className="text-xs text-[#8B98B0]">Player</span>
-                            )}
-                          </td>
-                          {Object.keys(memberClasses).length > 0 && (
-                            <td className="py-2 pr-2">
-                              <div className="flex flex-wrap gap-1">
-                                {classes.slice(0, 4).map((c) => (
-                                  <span key={c} className={`rounded border px-1.5 py-0.5 text-[10px] font-medium leading-none ${CLASS_COLORS[c] || 'border-white/10 text-[#8B98B0]'}`}>{c}</span>
+                          {hasClasses && (
+                            <td className="py-1.5 pr-2">
+                              <div className="flex flex-nowrap items-center gap-1">
+                                {classes.slice(0, 3).map((c) => (
+                                  <span key={c} className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-medium leading-none ${CLASS_COLORS[c] || 'border-white/10 text-[#8B98B0]'}`}>{c}</span>
                                 ))}
+                                {classes.length > 3 && <span className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] leading-none text-[#8B98B0]" title={classes.slice(3).join(', ')}>+{classes.length - 3}</span>}
                                 {classes.length === 0 && <span className="text-xs text-[#8B98B0]/60">—</span>}
                               </div>
                             </td>
                           )}
-                          <td className="py-2 pr-2 text-right text-xs tabular-nums text-[#8B98B0] whitespace-nowrap">
-                            {st ? (
-                              <span title={`${st.kills.toLocaleString()} kills · ${st.kd != null ? st.kd.toFixed(2) : '—'} K/D · ${st.captures} caps${st.eloTier ? ` · ${st.eloTier}` : ''}`}>
-                                {st.kills.toLocaleString()}K · {st.kd != null ? st.kd.toFixed(2) : '—'} · {st.captures} caps
-                                {st.elo != null && <span className="ml-1.5 rounded bg-[#22D3EE]/10 px-1 text-[#22D3EE]">{Math.round(st.elo)}</span>}
-                              </span>
-                            ) : '—'}
+                          <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-[#C9D3E3]">{st ? st.kills.toLocaleString() : '—'}</td>
+                          <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-[#C9D3E3]">{st?.kd != null ? st.kd.toFixed(2) : '—'}</td>
+                          <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-[#C9D3E3]">{st ? st.captures : '—'}</td>
+                          <td className="py-1.5 pr-2 text-right text-xs tabular-nums">
+                            {st?.elo != null ? <span className="rounded bg-[#22D3EE]/10 px-1 text-[#22D3EE]" title={st.eloTier || undefined}>{Math.round(st.elo)}</span> : <span className="text-[#8B98B0]">—</span>}
                           </td>
-                          {Object.keys(draftPicks).length > 0 && (
-                            <td className="py-2 pr-2 text-right text-xs tabular-nums text-[#8B98B0] whitespace-nowrap">
-                              {pick ? `R${pick.round} · #${pick.overall}` : member.role === 'captain' ? 'Captain' : '—'}
+                          {hasPicks && (
+                            <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-[#8B98B0] whitespace-nowrap">
+                              {pick ? <><span className="text-[#C9D3E3]">R{pick.round}</span> · #{pick.overall}</> : member.role === 'captain' ? 'Captain' : '—'}
                             </td>
                           )}
-                          <td className="py-2 pr-2 text-right text-xs text-[#8B98B0] whitespace-nowrap">{new Date(member.joined_at).toLocaleDateString()}</td>
-                          {canManageSquad() && (
-                            <td className="py-2 text-right whitespace-nowrap">
+                          <td className="py-1.5 pr-2 text-right text-xs text-[#8B98B0] whitespace-nowrap">{new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</td>
+                          {showManage && (
+                            <td className="py-1.5 text-right whitespace-nowrap">
                               {member.player_id !== user?.id && (
                                 <div className="flex justify-end gap-1">
                                   {isCaptain() && member.role === 'player' && (
@@ -1686,24 +1829,54 @@ export default function SquadDetailPage() {
                         </tr>
                       );
                     })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* ---- Season matches ------------------------------------------- */}
+            {leagueInfo && seasonInfo && fixtures.length > 0 && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">Season {seasonInfo.season_number} matches</h2>
+                  <Link href="/league/schedule" className="text-xs text-[#22D3EE] hover:underline">Full schedule</Link>
+                </div>
+                <ul className="divide-y divide-white/[0.06]">
+                  {[...played, ...upcoming].map((f) => {
+                    const o = outcomeOf(f);
+                    const opp = opponentOf(f);
+                    const pts = pointsOf(f);
+                    const len = gameLength(f.result?.length_minutes);
+                    return (
+                      <li key={f.id}>
+                        <Link href={`/matches/${f.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm hover:bg-white/[0.03] -mx-2 px-2 rounded">
+                          <span className={`w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide ${stageCls(f)}`}>{stageLabel(f)}</span>
+                          <span className={`w-5 shrink-0 text-center font-display ${o === 'W' ? 'text-[#34D399]' : o === 'L' ? 'text-[#F87171]' : 'text-[#8B98B0]'}`}>{o || '·'}</span>
+                          <span className="min-w-0 flex-1 truncate text-[#E6EDF7]">
+                            vs {opp.tag ? <span className="text-[#8B98B0]">[{opp.tag}]</span> : null} {opp.name || 'TBD'}
+                            {f.result?.no_contest && <span className="ml-2 text-[10px] uppercase tracking-wide text-[#F59E0B]">No contest</span>}
+                          </span>
+                          <span className="text-xs text-[#8B98B0]">
+                            {f.result ? (
+                              <>
+                                {new Date(f.result.played_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                {len ? ` · ${len}` : ''}
+                                {f.result.mvp ? <> · <span className="text-[#F59E0B]">MVP</span> {f.result.mvp}</> : ''}
+                                {pts != null ? <> · <span className="text-[#E6EDF7]">{pts > 0 ? '+' : ''}{pts} pts</span></> : ''}
+                              </>
+                            ) : whenLabel(f)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* ---- Side column ------------------------------------------------- */}
           <div className="space-y-4">
-            <div className="rounded-xl bg-[#131A2B] p-4">
-              <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">About</h2>
-              {squad.description ? <p className="text-sm text-[#E6EDF7]/85">{squad.description}</p> : <p className="text-sm text-[#8B98B0]">No description yet.</p>}
-              {(squad.discord_link || squad.website_link) && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {squad.discord_link && <a href={squad.discord_link} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Discord</a>}
-                  {squad.website_link && <a href={squad.website_link} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Website</a>}
-                </div>
-              )}
-            </div>
-
             {leagueInfo && (
               <div className="rounded-xl bg-[#131A2B] p-4">
                 <div className="mb-2 flex items-baseline justify-between">
@@ -1712,13 +1885,92 @@ export default function SquadDetailPage() {
                 </div>
                 {standing ? (
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-[#0B0F1A] px-2 py-2"><div className="font-display text-xl text-[#E6EDF7]">{standing.rank}{['st','nd','rd'][((standing.rank + 90) % 100 - 10) % 10 - 1] || 'th'}</div><div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Rank</div></div>
+                    <div className="rounded-lg bg-[#0B0F1A] px-2 py-2"><div className="font-display text-xl text-[#E6EDF7]">{ordinal(standing.rank)}</div><div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Rank</div></div>
                     <div className="rounded-lg bg-[#0B0F1A] px-2 py-2"><div className="font-display text-xl text-[#E6EDF7]">{standing.wins}–{standing.losses}</div><div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Record</div></div>
                     <div className="rounded-lg bg-[#0B0F1A] px-2 py-2"><div className="font-display text-xl text-[#E6EDF7]">{standing.points}</div><div className="text-[10px] uppercase tracking-wide text-[#8B98B0]">Points</div></div>
                   </div>
                 ) : (
                   <p className="text-sm text-[#8B98B0]">No results this season yet.</p>
                 )}
+              </div>
+            )}
+
+            {leagueInfo && (nextMatch || upcoming.length > 0) && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Next match</h2>
+                {nextMatch && (
+                  <Link href={`/matches/${nextMatch.id}`} className="block rounded-lg bg-[#0B0F1A] px-3 py-2.5 hover:bg-white/[0.06]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display text-lg text-[#E6EDF7]">vs {opponentOf(nextMatch).tag || opponentOf(nextMatch).name}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${stageCls(nextMatch)}`}>{stageLabel(nextMatch)}</span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-[#8B98B0]">{opponentOf(nextMatch).name}</div>
+                    <div className="mt-1.5 text-sm text-[#22D3EE]">{whenLabel(nextMatch)}</div>
+                  </Link>
+                )}
+                {upcoming.length > 1 && (
+                  <ul className="mt-2 space-y-1 text-xs text-[#8B98B0]">
+                    {upcoming.slice(1, 4).map((f) => (
+                      <li key={f.id} className="flex items-center justify-between gap-2">
+                        <Link href={`/matches/${f.id}`} className="truncate hover:text-[#E6EDF7]">vs {opponentOf(f).tag || opponentOf(f).name} <span className={`ml-1 rounded px-1 text-[9px] uppercase ${stageCls(f)}`}>{stageLabel(f)}</span></Link>
+                        <span className="shrink-0">{f.time_tbd ? playByLabel(f.scheduled_at) : new Date(f.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {leagueInfo && played.length > 0 && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Recent results</h2>
+                <div className="flex flex-wrap gap-1.5">
+                  {played.slice(0, 8).map((f) => {
+                    const o = outcomeOf(f);
+                    const opp = opponentOf(f);
+                    return (
+                      <Link key={f.id} href={`/matches/${f.id}`} title={`${stageLabel(f)} vs ${opp.name || '?'} · ${new Date(f.result!.played_at).toLocaleDateString()}${f.result!.mvp ? ` · MVP ${f.result!.mvp}` : ''}`}
+                        className={`flex h-12 w-12 flex-col items-center justify-center rounded-lg border text-[10px] ${o === 'W' ? 'border-[#34D399]/30 bg-[#34D399]/10 text-[#34D399]' : 'border-[#F87171]/30 bg-[#F87171]/10 text-[#F87171]'} hover:brightness-125`}>
+                        <span className="font-display text-base leading-none">{o}</span>
+                        <span className="mt-0.5 text-[#E6EDF7]/80">{opp.tag || (opp.name || '?').slice(0, 4)}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-[#8B98B0]">Newest first. Hover for the match; click to open it.</p>
+              </div>
+            )}
+
+            {leagueInfo && seasonInfo && (played.length > 0 || fsInfo) && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">Season at a glance</h2>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                  <dt className="text-[#8B98B0]">Regular season</dt><dd className="text-right text-[#E6EDF7]">{rsRecord.w}–{rsRecord.l}</dd>
+                  {fsInfo?.enabled && (
+                    <>
+                      <dt className="text-[#8B98B0]">FS Red played</dt><dd className="text-right text-[#E6EDF7]">{fsPlayed.red}</dd>
+                      {fsInfo.colors && <><dt className="text-[#8B98B0]">FS Green played</dt><dd className="text-right text-[#E6EDF7]">{fsPlayed.green}</dd></>}
+                      {fsInfo.this_week != null && fsInfo.per_week > 0 && (
+                        <><dt className="text-[#8B98B0]">FS this week</dt><dd className="text-right text-[#E6EDF7]">{fsInfo.this_week} of {fsInfo.per_week}{fsInfo.colors ? ' per colour' : ''}</dd></>
+                      )}
+                    </>
+                  )}
+                  {lastResult?.result?.mvp && <><dt className="text-[#8B98B0]">Last MVP</dt><dd className="text-right text-[#F59E0B]">{lastResult.result.mvp}</dd></>}
+                </dl>
+              </div>
+            )}
+
+            {hasPicks && leagueInfo?.slug === 'ctfdl' && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <h2 className="font-display text-lg text-[#E6EDF7]">Draft</h2>
+                  <Link href="/league/ctfdl/draft/recap" className="text-xs text-[#22D3EE] hover:underline">Recap</Link>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
+                  <dt className="text-[#8B98B0]">Picks</dt><dd className="text-right text-[#E6EDF7]">{picksList.length}</dd>
+                  {firstPick && <><dt className="text-[#8B98B0]">First pick</dt><dd className="text-right text-[#E6EDF7]">{firstPick.in_game_alias} <span className="text-[#8B98B0]">#{draftPicks[firstPick.player_id].overall}</span></dd></>}
+                  <dt className="text-[#8B98B0]">Rounds</dt><dd className="text-right text-[#E6EDF7]">{Math.min(...picksList.map((p) => p.round))}–{Math.max(...picksList.map((p) => p.round))}</dd>
+                </dl>
               </div>
             )}
 
@@ -1777,6 +2029,19 @@ export default function SquadDetailPage() {
                       ))}
                     </ul>
                   )
+                )}
+              </div>
+            )}
+
+            {(squad.description || squad.discord_link || squad.website_link) && (
+              <div className="rounded-xl bg-[#131A2B] p-4">
+                <h2 className="mb-2 font-display text-lg text-[#E6EDF7]">About</h2>
+                {squad.description && <p className="text-sm text-[#E6EDF7]/85">{squad.description}</p>}
+                {(squad.discord_link || squad.website_link) && (
+                  <div className={`${squad.description ? 'mt-3 ' : ''}flex flex-wrap gap-2`}>
+                    {squad.discord_link && <a href={squad.discord_link} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Discord</a>}
+                    {squad.website_link && <a href={squad.website_link} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/5 px-3 py-1.5 text-sm text-[#E6EDF7] hover:bg-white/10">Website</a>}
+                  </div>
                 )}
               </div>
             )}
