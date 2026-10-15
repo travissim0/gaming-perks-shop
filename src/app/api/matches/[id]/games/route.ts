@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { arenaNameFor, loadMatch, loadSquads, supabaseAdmin, tagOf, viewerFor } from '@/lib/match-setup-server';
 import { autoRecordFromGame, removeLeagueResult, squadTagOfTeam } from '@/lib/match-result-server';
+import { meetingNumber } from '@/lib/late-start-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const squads = await loadSquads([match.squad_a_id, match.squad_b_id]);
   const home = squads[match.squad_a_id], away = squads[match.squad_b_id];
   if (!home || !away) return NextResponse.json({ error: 'Squads not found' }, { status: 404 });
+  match.arena_seq = await meetingNumber(match);
   const arena = arenaNameFor(match, home, away);
 
   // Around the scheduled time; a TBD match has no time, so look at the last day and a half.

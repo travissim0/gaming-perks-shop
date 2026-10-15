@@ -69,7 +69,7 @@ function captainRemindersFor(p: any): CaptainReminder[] {
 function announceFor(p: any): {
   opened: string; reminders: { at_min: number; message: string }[]; one_minute: string; captains: CaptainReminder[];
 } {
-  const when = new Date(p.match.scheduled_at);
+  const when = new Date(p.match.kickoff_at || p.match.scheduled_at);
   const fmt = (tz: string) => when.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   const league = String(p.match.league_slug || 'league').toUpperCase();
   const kind = p.match.stage === 'fs' ? ` FS ${p.match.fs_color === 'green' ? 'Green' : 'Red'}` : p.match.stage === 'playoff' ? ' playoffs' : '';
@@ -78,7 +78,11 @@ function announceFor(p: any): {
   const todo: string[] = [];
   if (!p.progress?.side_picked) todo.push(`${home} captain: ${SIDE_HOW}.`);
   if (lineups.length) todo.push(`Lineup needed from ${lineups.join(' and ')} on freeinf.org.`);
-  const status = todo.length ? todo.join(' ') : 'Sides and lineups are set.';
+  const late = p.match.late;
+  const lateLine = late?.waiting_on
+    ? ` Waiting on ${late.waiting_on.title} to finish: this match starts ${late.setup_min} min after it ends.`
+    : late?.released_at ? ` Late start: kick-off moved to ${fmt('America/New_York')}.` : '';
+  const status = (todo.length ? todo.join(' ') : 'Sides and lineups are set.') + lateLine;
   const line = (mins: number) => `${league}${kind}: ${away} vs ${home} in ${mins} min (${fmt('America/Los_Angeles')} / ${fmt('America/New_York')}). ${status}`;
   const reminders = REMINDER_MINUTES.map((m) => ({ at_min: m, message: line(m) }));
   return { opened: reminders[0].message, reminders, one_minute: ONE_MINUTE_TEXT, captains: captainRemindersFor(p) };
@@ -125,11 +129,16 @@ export async function GET(request: NextRequest) {
       /** FS only: 'red' | 'green'. Green: `client.players` already leaves out everyone who may not play. */
       fs_color: p.match.fs_color,
       status: p.match.status,
-      scheduled_at: p.match.scheduled_at,
+      /** The kick-off to run the arena timer to. Moves when the match starts late (see `late`); re-set the timer when it does. */
+      scheduled_at: p.match.kickoff_at || p.match.scheduled_at,
+      /** The agreed time, which never moves. */
+      scheduled_at_original: p.match.scheduled_at,
+      /** Late start: `waiting_on` an earlier match (the timer holds near 10:00), or `released_at` with a real countdown. Null normally. */
+      late: p.match.late ?? null,
       side_reveal_at: p.side_reveal_at,
       side_released: p.side_released,
       /** Minutes until the scheduled time (negative once it has started). Also the arena's `*timer` value when it is opened; re-set it if scheduled_at moves. */
-      starts_in_min: Math.round((new Date(p.match.scheduled_at).getTime() - now) / 60_000),
+      starts_in_min: Math.round((new Date(p.match.kickoff_at || p.match.scheduled_at).getTime() - now) / 60_000),
       home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench, leaders: leadersOf(p.home) },
       away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench, leaders: leadersOf(p.away) },
       progress: p.progress,

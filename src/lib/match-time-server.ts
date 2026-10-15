@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/match-setup-server';
 import { messageUsers, squadLeaderIds, staffUserIds } from '@/lib/site-messages';
 import { announceMatchTime, SITE_URL } from '@/lib/notices-server';
 import { easternDay, EASTERN_TZ } from '@/lib/eastern';
+import { spacingConflicts, SPACING_REFUSE_MIN, SPACING_WARN_MIN, etClock } from '@/lib/late-start-server';
 
 /**
  * Captains agree a league match's kick-off time on the site (create-match-time-proposals.sql).
@@ -36,6 +37,8 @@ export interface TimeProposal {
 
 export interface TimeState {
   installed: boolean;
+  /** Set on a proposal that is allowed but close to another match of one of the squads. */
+  warning?: string;
   match: {
     id: string;
     scheduled_at: string;
@@ -177,6 +180,10 @@ export async function proposeTime(matchId: string, viewer: Viewer, atIso: string
   if (easternDay(at) !== day) throw new TimeError(`The league set this match for ${dayLabel(day)} (Eastern time). Captains pick the time that day; staff can move the day.`);
   if (at.getTime() <= Date.now() + ARENA_LEAD_MS) throw new TimeError('Pick a time at least 30 minutes from now');
   if (m.time_tbd !== true && at.getTime() === new Date(m.scheduled_at).getTime()) throw new TimeError('That is already the match time');
+  // Spacing: a match and its setup take more than half an hour (Oct 14: two matches 30 minutes apart overlapped).
+  const near = await spacingConflicts([a.id, b.id], at.toISOString(), matchId);
+  if (near.length && near[0].minutes < SPACING_REFUSE_MIN) throw new TimeError(`${near[0].title} is at ${etClock(near[0].scheduled_at)}, only ${near[0].minutes} minutes from that. Leave at least ${SPACING_REFUSE_MIN} minutes between a squad's matches.`);
+  const warning = near.length && near[0].minutes < SPACING_WARN_MIN ? `Close call: ${near[0].title} is at ${etClock(near[0].scheduled_at)}, ${near[0].minutes} minutes from this. If it runs long, this match waits for it.` : undefined;
 
   const { rows, installed } = await loadProposals(matchId);
   if (!installed) throw new TimeError('Run create-match-time-proposals.sql in Supabase first', 503);
@@ -197,7 +204,8 @@ export async function proposeTime(matchId: string, viewer: Viewer, atIso: string
   await tell([other.id], viewer.id,
     `Match time proposed: ${label(my)} vs ${label(other)}`,
     `${viewer.alias} (${label(my)}) proposes ${when} for ${label(my)} vs ${label(other)}${countered ? `, instead of the ${fmtEt(countered.proposed_at)} ${label(other)} proposed` : ''}.${note ? `\n\n"${note}"` : ''}\n\nAccept or decline it on the match page: ${url}`);
-  return loadTimeState(matchId, viewer);
+  const state = await loadTimeState(matchId, viewer);
+  return warning ? { ...state, warning } : state;
 }
 
 export async function decideTime(matchId: string, viewer: Viewer, action: 'accept' | 'decline' | 'withdraw', note: string | null): Promise<TimeState> {

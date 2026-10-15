@@ -48,9 +48,19 @@ interface Team {
   strategy?: boolean;
 }
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
+/** Late start: waiting on an earlier match of either squad, or released with the kick-off moved. */
+interface LateInfo {
+  waiting_on: { id: string; title: string } | null;
+  since: string | null;
+  released_at: string | null;
+  released_by: string | null;
+  setup_min: number;
+  moved_min: number | null;
+}
+
 interface Setup {
   pending_sql?: boolean;
-  match: { id: string; scheduled_at: string; time_tbd?: boolean; status: string; locked: boolean; arena?: string | null; game_id?: string | null; fs_color?: 'red' | 'green' | null; green_min_round?: number | null };
+  match: { id: string; scheduled_at: string; kickoff_at?: string; late?: LateInfo | null; time_tbd?: boolean; status: string; locked: boolean; arena?: string | null; game_id?: string | null; fs_color?: 'red' | 'green' | null; green_min_round?: number | null };
   home: Team | null;
   away: Team | null;
   progress: { side_picked: boolean; home_lineup_set: boolean; away_lineup_set: boolean; ready: boolean };
@@ -372,6 +382,44 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
       The arena is not opened and nobody is placed automatically. Referees: open <span className="font-mono">{match.arena || 'the match arena'}</span>, lock it, and move players onto their teams by hand from the lineups below.
     </div>
   );
+  // Late start: the earlier match of one of the squads is still going (or just finished).
+  const late = match.late;
+  const startNow = async () => {
+    setBusy('late');
+    try {
+      const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/late`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await headers()) }, body: JSON.stringify({ action: 'release' }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Request failed');
+      setSetup(j);
+      toast.success(`Starting in ${late?.setup_min ?? 10} minutes`);
+    } catch (e: any) {
+      toast.error(e.message || 'Could not start the match');
+    } finally {
+      setBusy(null);
+    }
+  };
+  const kickoffLabel = match.kickoff_at ? `${new Date(match.kickoff_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(match.kickoff_at, ' / ')}` : '';
+  const lateNote = late && (late.waiting_on || late.released_at) ? (
+    <div className="rounded-md bg-[#F59E0B]/10 ring-1 ring-[#F59E0B]/30 px-3 py-2 text-xs text-[#E6EDF7]">
+      {late.waiting_on ? (
+        <>
+          <span className="font-medium text-[#F59E0B]">Running late.</span>{' '}
+          Waiting on <a href={`/matches/${late.waiting_on.id}`} className="text-[#22D3EE] hover:underline">{late.waiting_on.title}</a> to finish. This match starts {late.setup_min} minutes after that result comes in; the arena timer holds near {late.setup_min}:00 until then.
+          {(viewer?.is_staff || viewer?.is_referee) && (
+            <button type="button" onClick={startNow} disabled={busy === 'late'} className="ml-2 rounded bg-[#F59E0B]/20 px-2 py-0.5 text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/30 disabled:opacity-50" title="Lift the hold: the 10-minute setup countdown starts now">
+              {busy === 'late' ? 'Starting…' : 'Start now'}
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <span className="font-medium text-[#F59E0B]">Started late.</span>{' '}
+          Kick-off moved to <span className="text-[#E6EDF7]">{kickoffLabel}</span>{late.moved_min != null ? ` (${late.moved_min} min after the scheduled time)` : ''}
+          {late.released_by === 'result' ? ', once the earlier match finished.' : late.released_by === 'ceiling' ? ', after waiting the maximum 90 minutes.' : late.released_by ? `, started by ${late.released_by}.` : '.'}
+        </>
+      )}
+    </div>
+  ) : null;
   // Squad members (not just captains) see their own squad's lineup and plan, read-only.
   const involved = !!viewer && (viewer.is_staff || viewer.leads_home || viewer.leads_away || !!viewer.member_home || !!viewer.member_away || (!!viewer.is_referee && setup.side_released));
   const subs = setup.subs || [];
@@ -422,6 +470,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
           </div>
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
+        {lateNote && <div className="px-4 pb-2">{lateNote}</div>}
         {manualNote && <div className="px-4 pb-2">{manualNote}</div>}
         {greenNote && <div className="px-4 pb-2">{greenNote}</div>}
         {/* A referee sees this view until the sides are released; they set the chat here. */}
@@ -863,6 +912,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
       </div>
 
       <div className="px-4 pb-4 space-y-3">
+        {lateNote}
         {manualNote}
         {greenNote}
         {chatRow}

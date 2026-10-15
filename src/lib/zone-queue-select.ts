@@ -13,7 +13,7 @@ export async function selectZoneQueueMatches(opts: { hours: number; past: number
   const { hours, past, league, now } = opts;
 
   const run = (skip: string[]) => {
-    const extra = ['fs_color', 'fs_status'].filter((c) => !skip.includes(c));
+    const extra = ['fs_color', 'fs_status', 'effective_at', 'late_waiting_on', 'late_since', 'late_released_at', 'late_released_by'].filter((c) => !skip.includes(c));
     let query = supabaseAdmin
       .from('matches')
       .select(['id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id', ...extra].join(', '))
@@ -37,8 +37,8 @@ export async function selectZoneQueueMatches(opts: { hours: number; past: number
   // Each optional column arrives with its own SQL file; drop a filter whose column is missing.
   const skip: string[] = [];
   let { data, error } = await run(skip);
-  for (let i = 0; i < 4 && error; i++) {
-    const col = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status'].find((c) => !skip.includes(c) && error!.message.includes(c));
+  for (let i = 0; i < 9 && error; i++) {
+    const col = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status', 'effective_at', 'late_waiting_on', 'late_since', 'late_released_at', 'late_released_by'].find((c) => !skip.includes(c) && error!.message.includes(c));
     if (!col) break;
     skip.push(col);
     ({ data, error } = await run(skip));

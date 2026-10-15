@@ -1,0 +1,199 @@
+import { supabaseAdmin, isTimeTbd } from '@/lib/match-setup-server';
+export { kickoffOf } from '@/lib/match-setup-server';
+import { messageUsers, staffUserIds } from '@/lib/site-messages';
+import { easternDay } from '@/lib/eastern';
+
+/**
+ * Late starts (add-match-late-start.sql): a league match waits for the earlier match of either
+ * of its squads to finish, instead of kicking off on top of it.
+ *
+ * Two matches on one night can overlap: on 2026-10-14 the 7:30 FS Green ran 28 minutes and the
+ * 8:00 FS Red's timer ran out while it was still going. The schedule is never rewritten for
+ * that. Instead:
+ *
+ *   - From LOOKAHEAD before its scheduled time, a match whose squad has an earlier match still
+ *     running (or due and not yet over) is HELD: `effective_at` is kept SETUP ahead of now, so
+ *     the zone, which sets its arena timer from the queue's kick-off and re-sets it whenever
+ *     that moves, keeps the timer sitting at about 10:00. Nothing on the zone side changes.
+ *   - When the earlier match's result lands (or it is cancelled), the hold lifts: `effective_at`
+ *     becomes now + SETUP, a real 10-minute countdown for everyone to move over, set sides and
+ *     lineups, and the ref to open the match chat.
+ *   - Staff or the match's referee can lift it by hand (Start now), and a hold lifts on its own
+ *     CEILING after the scheduled time, with a note to staff, so a match whose earlier game never
+ *     reported in can't wait forever.
+ *
+ * `scheduled_at` stays what was agreed; `effective_at` is what the automation runs to. Sides are
+ * still released 5 minutes before the SCHEDULED time (a hold begins after that), so placement is
+ * unchanged; lineups lock at the effective kick-off.
+ */
+
+export const LATE_SETUP_MS = 10 * 60_000;
+export const LATE_CEILING_MS = 90 * 60_000;
+export const LATE_LOOKAHEAD_MS = 3 * 60_000;
+/** An earlier match of the same squad counts only if it was due within this long before. */
+const SAME_NIGHT_MS = 6 * 3_600_000;
+
+export const LATE_COLS = ['effective_at', 'late_waiting_on', 'late_since', 'late_released_at', 'late_released_by'];
+
+export interface LateState {
+  /** Still waiting on this match. */
+  waiting_on: { id: string; title: string } | null;
+  since: string | null;
+  released_at: string | null;
+  /** 'result' (the earlier match finished), 'ceiling' (waited the maximum), or the alias who pressed Start now. */
+  released_by: string | null;
+  setup_min: number;
+  /** Minutes the kick-off moved by, once released. */
+  moved_min: number | null;
+}
+
+const lateInstalled = (m: any) => m && 'effective_at' in m;
+
+/** Public shape of a match's late-start state, or null when it never started late. */
+export async function lateStateOf(m: any): Promise<LateState | null> {
+  if (!lateInstalled(m) || (!m.late_since && !m.effective_at)) return null;
+  let waiting: { id: string; title: string } | null = null;
+  if (m.late_waiting_on) {
+    const { data } = await supabaseAdmin.from('matches').select('id, title').eq('id', m.late_waiting_on).maybeSingle();
+    waiting = data ? { id: (data as any).id, title: (data as any).title } : { id: m.late_waiting_on, title: 'an earlier match' };
+  }
+  const moved = m.late_released_at && m.effective_at ? Math.round((new Date(m.effective_at).getTime() - new Date(m.scheduled_at).getTime()) / 60_000) : null;
+  return { waiting_on: waiting, since: m.late_since || null, released_at: m.late_released_at || null, released_by: m.late_released_by || null, setup_min: LATE_SETUP_MS / 60_000, moved_min: moved };
+}
+
+/**
+ * The earlier match of either squad that this one must wait for: due within SAME_NIGHT before
+ * it, still scheduled (and past its own kick-off) or in progress. Null when nothing blocks.
+ */
+async function blockerFor(m: any, now: number): Promise<{ id: string; title: string } | null> {
+  const squads = [m.squad_a_id, m.squad_b_id].filter(Boolean);
+  if (squads.length < 2) return null;
+  const sched = new Date(m.scheduled_at).getTime();
+  const { data } = await supabaseAdmin
+    .from('matches')
+    .select('id, title, status, scheduled_at, time_tbd, fs_status, stage')
+    .neq('id', m.id)
+    .in('status', ['scheduled', 'in_progress'])
+    .not('league_slug', 'is', null)
+    .or(`squad_a_id.in.(${squads.join(',')}),squad_b_id.in.(${squads.join(',')})`)
+    .gte('scheduled_at', new Date(sched - SAME_NIGHT_MS).toISOString())
+    .lt('scheduled_at', m.scheduled_at)
+    .order('scheduled_at', { ascending: true });
+  for (const r of (data || []) as any[]) {
+    if (r.time_tbd === true) continue;
+    if (r.stage === 'fs' && r.fs_status && r.fs_status !== 'accepted') continue;
+    if (r.status === 'in_progress') return { id: r.id, title: r.title };
+    if (new Date(r.scheduled_at).getTime() <= now) return { id: r.id, title: r.title }; // due but not reported over
+  }
+  return null;
+}
+
+/**
+ * Work out and persist the match's late-start state for this moment. Called wherever the match
+ * is loaded for the zone or the setup panel, so every poll re-evaluates it. Returns the match
+ * row with the late columns as they now stand.
+ */
+export async function applyLateStart(m: any): Promise<any> {
+  if (!lateInstalled(m) || !m?.id) return m; // before add-match-late-start.sql
+  if (m.status !== 'scheduled' || isTimeTbd(m) || m.manual_zone === true || !m.league_slug) return m;
+  if (m.late_released_at) return m; // the hold is over; effective_at is final
+  const now = Date.now();
+  const sched = new Date(m.scheduled_at).getTime();
+  if (now < sched - LATE_LOOKAHEAD_MS) return m;
+
+  const blocker = await blockerFor(m, now);
+  const write = async (patch: Record<string, any>) => {
+    const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', m.id);
+    if (error) { console.error('late start write failed', error.message); return m; }
+    return { ...m, ...patch };
+  };
+
+  if (blocker) {
+    if (now - sched >= LATE_CEILING_MS) {
+      const out = await write({ effective_at: new Date(now + LATE_SETUP_MS).toISOString(), late_waiting_on: null, late_since: m.late_since || new Date(now).toISOString(), late_released_at: new Date(now).toISOString(), late_released_by: 'ceiling' });
+      await tellStaff(m, `Late start released after ${LATE_CEILING_MS / 60_000} min: ${m.title}`,
+        `${m.title} waited ${LATE_CEILING_MS / 60_000} minutes on ${blocker.title}, which never reported a result, so the site released it: it starts in ${LATE_SETUP_MS / 60_000} minutes. If the earlier match is really still going, a referee can hold things in the arena by hand.`);
+      return out;
+    }
+    const want = now + LATE_SETUP_MS;
+    const have = m.effective_at ? new Date(m.effective_at).getTime() : 0;
+    // Keep the kick-off about SETUP ahead; re-write only when it has drifted a minute, so the
+    // zone's timer is re-set about once a minute and sits near 10:00.
+    if (m.late_waiting_on !== blocker.id || Math.abs(want - have) >= 60_000) {
+      return write({ effective_at: new Date(want).toISOString(), late_waiting_on: blocker.id, late_since: m.late_since || new Date(now).toISOString() });
+    }
+    return m;
+  }
+
+  if (m.late_waiting_on) {
+    // The earlier match is over: a real countdown from here.
+    return write({ effective_at: new Date(now + LATE_SETUP_MS).toISOString(), late_waiting_on: null, late_released_at: new Date(now).toISOString(), late_released_by: 'result' });
+  }
+  return m;
+}
+
+/** Start now: staff or the referee lift the hold by hand. The 10-minute setup window still runs. */
+export async function releaseLateStart(m: any, byAlias: string): Promise<{ ok: true; effective_at: string } | { ok: false; error: string }> {
+  if (!lateInstalled(m)) return { ok: false, error: 'Run add-match-late-start.sql in Supabase first' };
+  if (!m.late_waiting_on) return { ok: false, error: 'This match is not being held' };
+  const now = Date.now();
+  const effective = new Date(now + LATE_SETUP_MS).toISOString();
+  const { error } = await supabaseAdmin.from('matches').update({ effective_at: effective, late_waiting_on: null, late_released_at: new Date(now).toISOString(), late_released_by: byAlias || 'staff' }).eq('id', m.id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, effective_at: effective };
+}
+
+async function tellStaff(m: any, subject: string, content: string) {
+  try {
+    await messageUsers(await staffUserIds(), subject, `${content}\n\nhttps://www.freeinf.org/matches/${m.id}`);
+  } catch (e) {
+    console.error('late start staff message failed', e);
+  }
+}
+
+/**
+ * Other league matches of these squads near a proposed kick-off, for the spacing check when a
+ * time is set: anything under 30 minutes apart is refused, under 45 warned about. A match and
+ * its setup take more than 30 minutes, as Oct 14 showed.
+ */
+export const SPACING_REFUSE_MIN = 30;
+export const SPACING_WARN_MIN = 45;
+export async function spacingConflicts(squadIds: string[], atIso: string, excludeId: string | null): Promise<{ id: string; title: string; scheduled_at: string; minutes: number }[]> {
+  const ids = squadIds.filter(Boolean);
+  if (ids.length === 0) return [];
+  const at = new Date(atIso).getTime();
+  if (!Number.isFinite(at)) return [];
+  let q = supabaseAdmin
+    .from('matches')
+    .select('id, title, scheduled_at, time_tbd, fs_status, stage, status')
+    .in('status', ['scheduled', 'in_progress'])
+    .not('league_slug', 'is', null)
+    .or(`squad_a_id.in.(${ids.join(',')}),squad_b_id.in.(${ids.join(',')})`)
+    .gte('scheduled_at', new Date(at - SPACING_WARN_MIN * 60_000).toISOString())
+    .lte('scheduled_at', new Date(at + SPACING_WARN_MIN * 60_000).toISOString());
+  if (excludeId) q = q.neq('id', excludeId);
+  const { data } = await q;
+  return ((data || []) as any[])
+    .filter((r) => r.time_tbd !== true && !(r.stage === 'fs' && r.fs_status && r.fs_status !== 'accepted'))
+    .map((r) => ({ id: r.id, title: r.title, scheduled_at: r.scheduled_at, minutes: Math.round(Math.abs(new Date(r.scheduled_at).getTime() - at) / 60_000) }))
+    .sort((x, y) => x.minutes - y.minutes);
+}
+
+/** "8:00 PM ET" for a spacing message. */
+export const etClock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) + ' ET';
+
+/** The nth meeting of the same two squads on one league day (1 = first), for the arena name. */
+export async function meetingNumber(m: any): Promise<number> {
+  if (!m?.squad_a_id || !m?.squad_b_id || !m?.scheduled_at) return 1;
+  const day = easternDay(m.scheduled_at);
+  const { data } = await supabaseAdmin
+    .from('matches')
+    .select('id, scheduled_at, status, fs_status, stage, time_tbd')
+    .neq('id', m.id)
+    .in('status', ['scheduled', 'in_progress', 'completed'])
+    .or(`and(squad_a_id.eq.${m.squad_a_id},squad_b_id.eq.${m.squad_b_id}),and(squad_a_id.eq.${m.squad_b_id},squad_b_id.eq.${m.squad_a_id})`)
+    .gte('scheduled_at', new Date(new Date(m.scheduled_at).getTime() - 24 * 3_600_000).toISOString())
+    .lt('scheduled_at', m.scheduled_at);
+  const earlier = ((data || []) as any[]).filter((r) => r.time_tbd !== true && !(r.stage === 'fs' && r.fs_status && r.fs_status !== 'accepted') && easternDay(r.scheduled_at) === day);
+  return 1 + earlier.length;
+}

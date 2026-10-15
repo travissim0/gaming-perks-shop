@@ -314,3 +314,34 @@ All public in the Infantry server source (`dotnetcore/Server/Game`):
 
 The existing OvD automation's poll loop and the dueling connector's HTTP
 client are the patterns to copy.
+
+## Late starts (one match waiting on another)
+
+Two matches on one night can overlap: on 2026-10-14 the 7:30 FS Green ran 28 minutes and the
+8:00 FS Red's timer ran out while it was still going. The site now handles this **with no change
+on the zone side**, through the timer rule above (set `*timer` from `starts_in_min`; re-set it
+whenever `scheduled_at` moves):
+
+- From 3 minutes before a match's time, if either squad's earlier match that night is still
+  `in_progress` (or past its kick-off and not reported over), the match is **held**: the queue's
+  `scheduled_at` is kept about 10 minutes ahead of now, re-written about once a minute, so the
+  arena timer sits near 10:00. `late.waiting_on` names the match being waited on, and the
+  reminder texts say so ("Waiting on … to finish: this match starts 10 min after it ends").
+- When the earlier match's result lands (its `played` report), the hold lifts: `scheduled_at`
+  becomes now + 10 minutes, a real countdown for everyone to move over, pick sides and set
+  lineups. `late.released_at` / `late.released_by` ('result') say so. The one-minute message and
+  placement work as always.
+- Staff or the referee can press **Start now** on the match page (`late.released_by` = their
+  alias). A hold lifts on its own 90 minutes after the scheduled time (`'ceiling'`), with a note
+  to staff.
+- `scheduled_at_original` is the agreed time and never moves. Sides are still released 5 minutes
+  before the ORIGINAL time (the hold begins after that), so placement happens as before and the
+  placed players simply wait in the locked arena.
+- `late` is null for a match that never waited.
+
+**Arena names when the same squads meet twice in a day:** the second match's arena gets a
+sequence number, "CTFDL BO-PTI2" (tags trimmed as usual to stay within 15 characters), so the
+zone can open it while the first one's arena is still up.
+
+**Spacing:** the site refuses a time within 30 minutes of either squad's other match that day,
+and warns under 45, wherever a time is set (captains' proposals and staff edits).

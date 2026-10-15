@@ -107,20 +107,26 @@ export const arenaNameFor = (match: any, home: SquadRow | null, away: SquadRow |
   let h = home ? tagOf(home) : 'TBD';
   const clean = (t: string) => t.replace(/\s+/g, '');
   a = clean(a); h = clean(h);
-  const room = ARENA_NAME_MAX - league.length - 2; // space + hyphen
-  if (room < 2) return `${a}-${h}`.slice(0, ARENA_NAME_MAX); // absurdly long league slug: drop it
+  // The same two squads twice in one day get "…2" (match.arena_seq from meetingNumber): the zone
+  // can't open a second arena under a running one's name (Oct 14, two BO v PTI matches).
+  const seq = Number(match.arena_seq) > 1 ? String(match.arena_seq) : '';
+  const room = ARENA_NAME_MAX - league.length - 2 - seq.length; // space + hyphen + sequence
+  if (room < 2) return `${a}-${h}${seq}`.slice(0, ARENA_NAME_MAX); // absurdly long league slug: drop it
   while (a.length + h.length > room) {
     if (a.length >= h.length && a.length > 1) a = a.slice(0, -1);
     else if (h.length > 1) h = h.slice(0, -1);
     else break;
   }
-  return `${league} ${a}-${h}`;
+  return `${league} ${a}-${h}${seq}`;
 };
 
 export const MATCH_COLS = 'id, title, scheduled_at, status, match_type, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, game_id, actual_end_time';
 
 /** Optional columns that arrive with later SQL files; a select falls back without any that is missing. */
-export const MATCH_OPTIONAL_COLS = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status'];
+export const MATCH_OPTIONAL_COLS = ['time_tbd', 'manual_zone', 'fs_color', 'fs_status', 'effective_at', 'late_waiting_on', 'late_since', 'late_released_at', 'late_released_by'];
+
+/** The kick-off the automation runs to: the scheduled time unless the match started late (add-match-late-start.sql). */
+export const kickoffOf = (m: any): string => m?.effective_at || m?.scheduled_at;
 
 /**
  * FS Green: only the squad's captain and players drafted in round `minRound` or later may play
@@ -246,7 +252,7 @@ export const leads = (sq: Squad | null | undefined, userId: string | null) =>
 
 export const isLocked = (match: any) =>
   match.status === 'completed' || match.status === 'cancelled' || match.status === 'expired' ||
-  (!isTimeTbd(match) && Date.now() >= new Date(match.scheduled_at).getTime());
+  (!isTimeTbd(match) && Date.now() >= new Date(kickoffOf(match)).getTime()); // a late start keeps lineups open until the real kick-off
 
 /** Subs are allowed from side release until the match is recorded. */
 export const isSubWindow = (match: any) =>
@@ -386,6 +392,10 @@ export function buildPayload(
       locked,
       game_id: match.game_id || null,
       arena: arenaNameFor(match, home, away),
+      /** The kick-off the automation runs to: scheduled_at, or later when the match started late. */
+      kickoff_at: kickoffOf(match),
+      /** Late-start state (waiting on an earlier match / released), or null. */
+      late: match.late_state ?? null,
     },
     /** Whether the zone runs this match (arena, placement, subs). Off: by hand. */
     automation,
@@ -491,6 +501,12 @@ export function placementHolds(setupRow: any): PlacementHold[] {
 
 /** Same as loadAll, for a match row already in hand (the zone queue loads many). */
 export async function loadForMatch(match: any, viewer: Viewer) {
+  // Late start and arena numbering live in src/lib/late-start-server.ts, which imports this
+  // module, so it is loaded here at call time rather than at the top.
+  const late = await import('@/lib/late-start-server');
+  match = await late.applyLateStart(match);
+  match.late_state = await late.lateStateOf(match);
+  match.arena_seq = await late.meetingNumber(match);
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
   // ref_chat (add-match-chat.sql) and placement_hold (add-match-placement-hold.sql) arrive with
   // their SQL files; read the row without whichever is missing.

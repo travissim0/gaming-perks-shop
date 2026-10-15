@@ -63,6 +63,7 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
       if (!res.ok) { toast.error(j.error || 'Something went wrong'); return; }
       setState(j);
       toast.success(done);
+      if (j.warning) toast(j.warning, { icon: '⚠️', duration: 9000 });
       setProposing(false); setDeclining(false); setNote('');
       if (body.action === 'accept') onChanged?.();
     } finally {

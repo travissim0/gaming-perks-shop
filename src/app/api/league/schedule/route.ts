@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { announceMatchTime } from '@/lib/notices-server';
+import { spacingConflicts, SPACING_REFUSE_MIN, SPACING_WARN_MIN, etClock } from '@/lib/late-start-server';
 import { normalizeRules, scoreMatch, type ScoredMatch, type ScoringRules } from '@/lib/scoring';
 
 /**
@@ -341,6 +342,15 @@ export async function PATCH(request: NextRequest) {
     patch.title = `${stageTitle(current.league_slug, current.season_number, { week, stage: current.stage || 'regular', playoff_round: current.playoff_round })} · ${names.get(bId)?.name || '?'} vs ${names.get(aId)?.name || '?'}`;
   }
 
+  // Spacing: a squad's matches must be at least 30 minutes apart (a match plus setup runs longer; Oct 14 overlapped).
+  let warning: string | undefined;
+  const willBeTbd = 'time_tbd' in patch ? patch.time_tbd === true : current.time_tbd === true;
+  if ('scheduled_at' in patch && !willBeTbd) {
+    const near = await spacingConflicts([aId, bId], patch.scheduled_at as string, id);
+    if (near.length && near[0].minutes < SPACING_REFUSE_MIN) return NextResponse.json({ error: `${near[0].title} is at ${etClock(near[0].scheduled_at)}, only ${near[0].minutes} minutes from that. Leave at least ${SPACING_REFUSE_MIN} minutes between a squad's matches.` }, { status: 409 });
+    if (near.length && near[0].minutes < SPACING_WARN_MIN) warning = `Close call: ${near[0].title} is at ${etClock(near[0].scheduled_at)}, ${near[0].minutes} minutes from this. If it runs long, this match waits for it.`;
+  }
+
   const { error } = await supabaseAdmin.from('matches').update(patch).eq('id', id);
   if (error) {
     console.error('schedule PATCH failed', error);
@@ -354,7 +364,7 @@ export async function PATCH(request: NextRequest) {
   const timeChanged = 'scheduled_at' in patch && new Date(patch.scheduled_at as string).getTime() !== new Date(current.scheduled_at).getTime();
   if (!nowTbd && current.status === 'scheduled' && (wasTbd || timeChanged)) await announceMatchTime(id, !wasTbd);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(warning ? { ok: true, warning } : { ok: true });
 }
 
 export async function DELETE(request: NextRequest) {
