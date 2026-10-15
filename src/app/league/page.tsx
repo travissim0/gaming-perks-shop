@@ -965,8 +965,11 @@ export default function LeagueHome() {
                     ) : (
                       <ul className="space-y-1">
                         {league!.results.slice(0, 5).map((r) => {
-                          const aWin = (r.team_a_result || '').toLowerCase() === 'win' || (r.squad_a_score ?? 0) > (r.squad_b_score ?? 0);
-                          const bWin = (r.team_b_result || '').toLowerCase() === 'win' || (r.squad_b_score ?? 0) > (r.squad_a_score ?? 0);
+                          // The recorded result decides; the scores are kill counts, and the loser can have more
+                          // of those. They only break the tie on old rows that carry no result.
+                          const hasResult = !!(r.team_a_result || r.team_b_result);
+                          const aWin = hasResult ? (r.team_a_result || '').toLowerCase() === 'win' : (r.squad_a_score ?? 0) > (r.squad_b_score ?? 0);
+                          const bWin = hasResult ? (r.team_b_result || '').toLowerCase() === 'win' : (r.squad_b_score ?? 0) > (r.squad_a_score ?? 0);
                           const length = gameLength(r.game_length_minutes);
                           const row = (
                             <>
