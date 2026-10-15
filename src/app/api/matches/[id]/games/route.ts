@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
  * safety net when that pick is wrong.
  *
  * GET  /api/matches/[id]/games            staff → { arena, picked_game_id, recorded, games: [...] }
+ *        (the arena's games, plus any game in the window where both squads played: a hand-made arena)
  * POST /api/matches/[id]/games { game_id } staff → re-records the match from that game: the
  *        current result (if any) is removed, then winner, length, win type, points and standings
  *        are taken from the chosen game. Refused, with nothing changed, when that game can't
@@ -42,19 +43,38 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const from = new Date(anchor - WINDOW_BEFORE_MS).toISOString();
   const to = new Date((match.time_tbd === true ? Date.now() : anchor) + WINDOW_AFTER_MS).toISOString();
 
+  const homeTag = tagOf(home), awayTag = tagOf(away);
   const cols = 'game_id, player_name, team, result, kills, game_length_minutes, game_date, arena_name, game_mode';
   const base = () => supabaseAdmin.from('player_stats').select(cols).gte('game_date', from).lte('game_date', to).limit(3000);
   // The arena's games: by arena name, and by game id (the zone prefixes ids with the arena name).
-  const [byArena, byId, byPicked] = await Promise.all([
+  // Plus any other arena in the window where these two squads met: when the automation arena is
+  // abandoned (a match running late, a redo), the referee makes one by hand under another name.
+  const teamsOf = (tag: string) => [`${tag} T`, `${tag} C`, tag];
+  const [byArena, byId, byTeams, byPicked] = await Promise.all([
     base().ilike('arena_name', arena),
     base().ilike('game_id', `${arena}%`),
+    base().in('team', [...teamsOf(homeTag), ...teamsOf(awayTag)]),
     match.game_id ? supabaseAdmin.from('player_stats').select(cols).eq('game_id', match.game_id).limit(500) : Promise.resolve({ data: [] as any[], error: null }),
   ]);
   if (byArena.error && byId.error) return NextResponse.json({ error: byArena.error.message }, { status: 500 });
 
+  // A game found only through its team names counts when both squads were in it, and then all of
+  // its rows are wanted (the squads' rows are enough to judge it; the rest is for the counts).
+  const bothIn = new Set<string>();
+  {
+    const tagsIn = new Map<string, Set<string>>();
+    for (const r of (byTeams.data || []) as GameRow[]) {
+      if (!r.game_id) continue;
+      if (!tagsIn.has(r.game_id)) tagsIn.set(r.game_id, new Set());
+      tagsIn.get(r.game_id)!.add(squadTagOfTeam(r.team || ''));
+    }
+    tagsIn.forEach((tags, gameId) => { if (tags.has(homeTag) && tags.has(awayTag)) bothIn.add(gameId); });
+  }
+  const elsewhere = bothIn.size ? await supabaseAdmin.from('player_stats').select(cols).in('game_id', Array.from(bothIn)).limit(3000) : { data: [] as any[] };
+
   const seen = new Set<string>();
   const games = new Map<string, GameRow[]>();
-  for (const r of [...(byArena.data || []), ...(byId.data || []), ...(byPicked.data || [])] as GameRow[]) {
+  for (const r of [...(byArena.data || []), ...(byId.data || []), ...(elsewhere.data || []), ...(byPicked.data || [])] as GameRow[]) {
     if (!r.game_id) continue;
     const key = `${r.game_id}|${r.player_name}|${r.team}`;
     if (seen.has(key)) continue;
@@ -66,7 +86,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: results } = await supabaseAdmin.from('league_matches').select('id, game_id').eq('fixture_id', match.id).limit(1);
   const recordedGameId = results?.[0]?.game_id || null;
 
-  const homeTag = tagOf(home), awayTag = tagOf(away);
   const list = Array.from(games.entries()).map(([gameId, rows]) => {
     const side = (tag: string) => {
       const mine = rows.filter((r) => squadTagOfTeam(r.team || '') === tag);
