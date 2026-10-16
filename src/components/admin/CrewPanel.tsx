@@ -16,8 +16,9 @@ import type { CrewPerson, CrewMatch } from '@/app/api/admin/crew/route';
  */
 
 type Role = 'referee' | 'commentator' | 'recording';
-const ROLE_LABEL: Record<Role, string> = { referee: 'Ref', commentator: 'Cast', recording: 'Rec' };
-const ROLE_LONG: Record<Role, string> = { referee: 'Referee', commentator: 'Commentator', recording: 'Recorder' };
+const ROLE_LABEL: Record<Role | 'present', string> = { referee: 'Ref', commentator: 'Cast', recording: 'Rec', present: 'Walk-on' };
+const ROLE_LONG: Record<Role | 'present', string> = { referee: 'Referee', commentator: 'Commentator', recording: 'Recorder', present: 'Walk-on' };
+const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const stageOf = (m: CrewMatch) => (m.stage === 'fs' ? (m.fs_color === 'green' ? 'FS Green' : 'FS Red') : m.stage === 'playoff' ? 'Playoffs' : m.week ? `Week ${m.week}` : 'RS');
 const roleTag = (ctfRole: string | null) => (ctfRole || '').replace(/^ctf_/, '').replace(/_/g, ' ') || 'player';
@@ -30,6 +31,7 @@ interface CrewData {
   idle: { player_id: string; alias: string; ctf_role: string | null }[];
   no_show_installed: boolean;
   matches_played: number;
+  matches_sampled?: number;
 }
 
 export default function CrewPanel({ league = 'ctfdl', season }: { league?: string; season?: number | null }) {
@@ -112,6 +114,7 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
                   <th className={`${th} text-right`} title="Matches cast">Cast</th>
                   <th className={`${th} text-right`} title="Matches recorded">Rec</th>
                   <th className={`${th} text-right`} title="VODs posted on matches they recorded">VODs</th>
+                  <th className={`${th} text-right`} title="Turned up under a CTF[Ref] / CTF[Admin] alias without signing up">Walk-ons</th>
                   <th className={`${th} text-right`} title="Signed up for matches not played yet">Upcoming</th>
                   <th className={`${th} text-right`} title="Marked by an admin">No-shows</th>
                   <th className={`${th} text-right`}>Last worked</th>
@@ -137,13 +140,14 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
                         <td className={`${td} text-right tabular-nums`}>{cell('commentator')}</td>
                         <td className={`${td} text-right tabular-nums`}>{cell('recording')}</td>
                         <td className={`${td} text-right tabular-nums text-[#E6EDF7]`}>{p.vods || <span className="text-[#8B98B0]/50">—</span>}</td>
+                        <td className={`${td} text-right tabular-nums`}>{p.walk_ons ? <span className="text-[#34D399]">{p.walk_ons}</span> : <span className="text-[#8B98B0]/50">—</span>}</td>
                         <td className={`${td} text-right tabular-nums`}>{total(p, 'upcoming') ? <span className="text-[#22D3EE]" title={upcomingTitle}>{total(p, 'upcoming')}</span> : <span className="text-[#8B98B0]/50">—</span>}</td>
                         <td className={`${td} text-right tabular-nums`}>{total(p, 'no_shows') ? <span className="text-[#F87171]">{total(p, 'no_shows')}</span> : <span className="text-[#8B98B0]/50">—</span>}</td>
                         <td className={`${td} text-right text-[#8B98B0]`}>{p.last_at ? when(p.last_at) : '—'}</td>
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-white/[0.06]">
-                          <td colSpan={8} className="bg-[#0B0F1A]/60 px-4 py-2">
+                          <td colSpan={9} className="bg-[#0B0F1A]/60 px-4 py-2">
                             <ul className="divide-y divide-white/[0.04]">
                               {p.matches.map((m) => (
                                 <li key={`${m.match_id}-${m.role}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-xs">
@@ -153,7 +157,15 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
                                   <Link href={`/matches/${m.match_id}`} className="min-w-0 flex-1 truncate text-[#E6EDF7] hover:text-[#22D3EE]">{m.title}</Link>
                                   <span className={m.played ? 'text-[#34D399]' : 'text-[#8B98B0]'}>{m.played ? 'played' : m.status}</span>
                                   {m.role === 'recording' && m.played && <span className={m.vod ? 'text-[#34D399]' : 'text-[#F59E0B]'}>{m.vod ? 'VOD up' : 'no VOD'}</span>}
-                                  {m.no_show ? (
+                                  {m.seen ? (
+                                    <span className="text-[#8B98B0]" title={`Seen in the arena as ${m.seen.alias}`}>
+                                      seen {clock(m.seen.first)}–{clock(m.seen.last)}{m.seen.spec ? ' in spec' : ''}
+                                      {m.role !== 'present' && !m.seen.staff_alias && <span className="text-[#F59E0B]"> as {m.seen.alias} (player alias)</span>}
+                                    </span>
+                                  ) : m.sampled && m.played ? (
+                                    <span className="text-[#F59E0B]" title="The arena was sampled during this match and this alias never appeared">not seen in arena</span>
+                                  ) : null}
+                                  {m.role === 'present' ? null : m.no_show ? (
                                     <span className="flex items-center gap-2">
                                       <span className="rounded bg-[#F87171]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F87171]" title={`${m.no_show_by_alias || 'staff'}${m.no_show_at ? ` · ${new Date(m.no_show_at).toLocaleDateString()}` : ''}${m.no_show_note ? ` · ${m.no_show_note}` : ''}`}>No-show</span>
                                       {m.no_show_note && <span className="text-[#8B98B0]">“{m.no_show_note}”</span>}
@@ -174,7 +186,7 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
               </tbody>
             </table>
             <p className="mt-2 px-4 text-[11px] text-[#8B98B0]">
-              Ref, Cast and Rec count matches that were played with the person on crew and not marked as a no-show. Upcoming is what they have signed up for that hasn't been played yet. {data.matches_played} match{data.matches_played === 1 ? '' : 'es'} played this season. Click a row for the matches.
+              Ref, Cast and Rec count matches that were played with the person on crew and not marked as a no-show. Walk-ons: turned up under a CTF[Ref] or CTF[Admin] alias without signing up. Upcoming is what they have signed up for that hasn't been played yet.{data.matches_sampled ? ` Arena presence sampled for ${data.matches_sampled} match${data.matches_sampled === 1 ? '' : 'es'}.` : ' Arena presence is recorded from the next match on.'} {data.matches_played} match{data.matches_played === 1 ? '' : 'es'} played this season. Click a row for the matches.
             </p>
           </div>
         )}

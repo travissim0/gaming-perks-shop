@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadForMatch, viewerFor, zoneAutomationEnabled } from '@/lib/match-setup-server';
 import { selectZoneQueueMatches } from '@/lib/zone-queue-select';
+import { samplePresence } from '@/lib/match-presence-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const matches = [];
+  const forPresence: { id: string; arena: string | null; status: string; kickoff_at: string; people: { player_id: string; alias: string }[] }[] = [];
   for (const m of (data || []) as any[]) {
     // An FS proposal the other captain hasn't accepted yet is not a match: no arena for it.
     if (m.stage === 'fs' && m.fs_status && m.fs_status !== 'accepted') continue;
@@ -149,7 +151,10 @@ export async function GET(request: NextRequest) {
       updated_at: p.updated_at,
       game_id: p.match.game_id,
     });
+    forPresence.push({ id: p.match.id, arena: p.match.arena, status: p.match.status, kickoff_at: p.match.kickoff_at || p.match.scheduled_at, people: [...(p.home?.roster || []), ...(p.away?.roster || [])].map((r: any) => ({ player_id: r.player_id, alias: r.alias })) });
   }
+  // Who is in each live arena right now (match_presence): evidence for the Crew tab. Never blocks the queue.
+  await samplePresence(forPresence);
 
   return NextResponse.json(
     { generated_at: new Date(now).toISOString(), window_hours: hours, automation: 'on', matches },

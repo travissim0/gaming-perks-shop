@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/match-setup-server';
 import { callerFrom } from '@/lib/leave-requests-server';
+import { presenceFor, aliasKey } from '@/lib/match-presence-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,16 +18,23 @@ export const dynamic = 'force-dynamic';
 type Role = 'referee' | 'commentator' | 'recording';
 const ROLES: Role[] = ['referee', 'commentator', 'recording'];
 
+export interface CrewSeen { alias: string; staff_alias: boolean; first: string; last: string; spec: boolean }
 export interface CrewMatch {
   match_id: string; title: string; scheduled_at: string; status: string; stage: string | null; fs_color: string | null; week: number | null;
-  role: Role; played: boolean; vod: boolean;
+  /** 'present': turned up under a CTF[Ref] / CTF[Admin] alias without signing up (a walk-on). */
+  role: Role | 'present'; played: boolean; vod: boolean;
+  /** Arena presence: null when the match was never sampled; `seen` null when sampled but this person never appeared. */
+  sampled: boolean; seen: CrewSeen | null;
   no_show: boolean; no_show_by_alias: string | null; no_show_at: string | null; no_show_note: string | null;
 }
 export interface CrewPerson {
   player_id: string; alias: string; ctf_role: string | null;
   /** Per role: worked (played with them on crew, not a no-show), upcoming (signed up, not played yet), no-shows. */
   by_role: Record<Role, { signed: number; played: number; upcoming: number; no_shows: number }>;
-  vods: number; last_at: string | null; matches: CrewMatch[];
+  vods: number; last_at: string | null;
+  /** Matches worked under a staff alias without a sign-up. */
+  walk_ons: number;
+  matches: CrewMatch[];
 }
 
 const roleOf = (r: string): Role | null => (r === 'referee' ? 'referee' : r === 'commentator' ? 'commentator' : r === 'recording' || r === 'recorder' ? 'recording' : null);
@@ -75,6 +83,13 @@ export async function GET(request: NextRequest) {
     supabaseAdmin.from('profiles').select('id, in_game_alias, ctf_role').or('ctf_role.ilike.*referee*,ctf_role.ilike.*commentator*,ctf_role.ilike.*recorder*'),
   ]);
   const prof = new Map(((profiles || []) as any[]).map((p) => [p.id, p]));
+  const presence = await presenceFor(ids);
+  const seenFor = (matchId: string, playerId: string, alias: string | null): CrewSeen | null => {
+    const rows = presence.get(matchId) || [];
+    const key = alias ? aliasKey(alias).key : '';
+    const r = rows.find((x) => x.player_id === playerId) || (key ? rows.find((x) => x.alias_key === key) : undefined);
+    return r ? { alias: r.alias, staff_alias: !!r.staff_tag, first: r.first_seen, last: r.last_seen, spec: r.spec_seen && !r.play_seen } : null;
+  };
 
   const people = new Map<string, CrewPerson>();
   for (const r of rows) {
@@ -84,7 +99,7 @@ export async function GET(request: NextRequest) {
     const p = prof.get(r.player_id);
     let person = people.get(r.player_id);
     if (!person) {
-      person = { player_id: r.player_id, alias: p?.in_game_alias || 'Unknown', ctf_role: p?.ctf_role || null, by_role: { referee: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, commentator: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, recording: { signed: 0, played: 0, upcoming: 0, no_shows: 0 } }, vods: 0, last_at: null, matches: [] };
+      person = { player_id: r.player_id, alias: p?.in_game_alias || 'Unknown', ctf_role: p?.ctf_role || null, by_role: { referee: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, commentator: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, recording: { signed: 0, played: 0, upcoming: 0, no_shows: 0 } }, vods: 0, last_at: null, walk_ons: 0, matches: [] };
       people.set(r.player_id, person);
     }
     const played = m.status === 'completed';
@@ -99,10 +114,37 @@ export async function GET(request: NextRequest) {
     person.matches.push({
       match_id: m.id, title: m.title, scheduled_at: m.scheduled_at, status: m.status, stage: m.stage, fs_color: m.fs_color, week: m.week,
       role, played, vod, no_show: noShow, no_show_by_alias: r.no_show_by ? prof.get(r.no_show_by)?.in_game_alias || 'staff' : null, no_show_at: r.no_show_at || null, no_show_note: r.no_show_note || null,
+      sampled: presence.has(m.id), seen: seenFor(m.id, r.player_id, p?.in_game_alias || null),
     });
   }
+
+  // Walk-ons: someone with a crew role seen in the arena under a CTF[Ref] / CTF[Admin] alias with
+  // no sign-up for that match. Under a normal alias they were there to play, so that never counts.
+  const poolById = new Map(((crewPool || []) as any[]).map((p) => [p.id, p]));
+  for (const [matchId, rows] of presence) {
+    const m = byId.get(matchId);
+    if (!m) continue;
+    for (const r of rows) {
+      if (!r.staff_tag || !r.player_id) continue;
+      const p = poolById.get(r.player_id) || prof.get(r.player_id);
+      if (!p || !eligible(p.ctf_role)) continue;
+      let person = people.get(r.player_id);
+      if (person && person.matches.some((x) => x.match_id === matchId)) continue; // signed up: already counted
+      if (!person) {
+        person = { player_id: r.player_id, alias: p.in_game_alias || 'Unknown', ctf_role: p.ctf_role || null, by_role: { referee: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, commentator: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, recording: { signed: 0, played: 0, upcoming: 0, no_shows: 0 } }, vods: 0, last_at: null, walk_ons: 0, matches: [] };
+        people.set(r.player_id, person);
+      }
+      person.walk_ons++;
+      if (m.status === 'completed' && (!person.last_at || m.scheduled_at > person.last_at)) person.last_at = m.scheduled_at;
+      person.matches.push({
+        match_id: m.id, title: m.title, scheduled_at: m.scheduled_at, status: m.status, stage: m.stage, fs_color: m.fs_color, week: m.week,
+        role: 'present', played: m.status === 'completed', vod: false, no_show: false, no_show_by_alias: null, no_show_at: null, no_show_note: null,
+        sampled: true, seen: { alias: r.alias, staff_alias: true, first: r.first_seen, last: r.last_seen, spec: r.spec_seen && !r.play_seen },
+      });
+    }
+  }
   const list = [...people.values()].map((p) => ({ ...p, matches: p.matches.sort((x, y) => y.scheduled_at.localeCompare(x.scheduled_at)) }))
-    .sort((x, y) => (ROLES.reduce((n, r) => n + y.by_role[r].played, 0) - ROLES.reduce((n, r) => n + x.by_role[r].played, 0)) || x.alias.localeCompare(y.alias));
+    .sort((x, y) => (ROLES.reduce((n, r) => n + y.by_role[r].played, 0) + y.walk_ons - ROLES.reduce((n, r) => n + x.by_role[r].played, 0) - x.walk_ons) || x.alias.localeCompare(y.alias));
 
   // Eligible by role but signed up for nothing this season: who to nudge.
   const idle = ((crewPool || []) as any[])
@@ -110,7 +152,7 @@ export async function GET(request: NextRequest) {
     .map((p) => ({ player_id: p.id, alias: p.in_game_alias || 'Unknown', ctf_role: p.ctf_role }))
     .sort((x, y) => x.alias.localeCompare(y.alias));
 
-  return NextResponse.json({ league, seasons: seasonList, season, people: list, idle, no_show_installed: installed, matches_played: fixtures.filter((m) => m.status === 'completed').length }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ league, seasons: seasonList, season, people: list, idle, no_show_installed: installed, matches_played: fixtures.filter((m) => m.status === 'completed').length, matches_sampled: presence.size }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(request: NextRequest) {
