@@ -16,7 +16,7 @@ import { checkIfUserInFreeAgentPool, getFreeAgents } from '@/utils/supabaseHelpe
 import { getLeagues, pickFeatured, getLatestSeason, getStandings, type LeagueInfo, type LeagueSeason, type StandingRow } from '@/lib/leagues';
 import { CLASS_COLORS } from '@/lib/constants';
 import type { LeaveRequest } from '@/lib/leave-requests-server';
-import { easternSuffix } from '@/lib/eastern';
+import { bothTimes } from '@/lib/eastern';
 import { playByLabel, TBD_LABEL } from '@/lib/schedule';
 
 interface SquadMember {
@@ -1494,7 +1494,7 @@ export default function SquadDetailPage() {
   const stageCls = (f: SquadFixture) =>
     f.stage === 'fs' ? (f.fs_color === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]') : f.stage === 'playoff' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-white/5 text-[#8B98B0]';
   const whenLabel = (f: SquadFixture) =>
-    f.time_tbd ? `${TBD_LABEL} · ${playByLabel(f.scheduled_at)}` : `${new Date(f.scheduled_at).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${easternSuffix(f.scheduled_at)}`;
+    f.time_tbd ? `${TBD_LABEL} · ${playByLabel(f.scheduled_at)}` : `${new Date(f.scheduled_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}, ${bothTimes(f.scheduled_at)}`;
   const gameLength = (min: number | null | undefined) => (min && min > 0 ? `${Math.floor(min)}:${String(Math.round((min % 1) * 60)).padStart(2, '0')}` : null);
 
   const played = fixtures.filter((f) => f.result).sort((x, y) => new Date(y.result!.played_at).getTime() - new Date(x.result!.played_at).getTime());
