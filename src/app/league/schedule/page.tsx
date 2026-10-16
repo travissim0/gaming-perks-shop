@@ -28,7 +28,7 @@ import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
-import { easternSuffix } from '@/lib/eastern';
+import { easternSuffix, localTime, bothTimes } from '@/lib/eastern';
 
 type Filter = 'upcoming' | 'results' | 'all';
 
@@ -47,7 +47,9 @@ const tz = () => {
 };
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const timeLabel = (iso: string) => `${new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(iso)}`;
+const timeLabel = (iso: string) => bothTimes(iso);
+/** "10:30 PM ET" for the second line of a time cell, or '' for a viewer already on Eastern time. */
+const etLine = (iso: string) => easternSuffix(iso, '');
 
 function TeamMark({ tag, name }: { tag: string | null; name: string | null }) {
   return (
@@ -352,7 +354,8 @@ function SchedulePage() {
                             <>
                               {/* Played without a time ever being set: show the day it was played, no kick-off time. */}
                               <div>{dayLabel(f.time_tbd && f.result ? f.result.played_at : f.scheduled_at)}</div>
-                              <div className="text-[#E6EDF7]">{f.time_tbd ? '' : timeLabel(f.scheduled_at)}</div>
+                              <div className="text-[#E6EDF7]">{f.time_tbd ? '' : localTime(f.scheduled_at)}</div>
+                              {!f.time_tbd && etLine(f.scheduled_at) && <div className="text-[10px] text-[#8B98B0]">{etLine(f.scheduled_at)}</div>}
                             </>
                           )}
                           {f.stage === 'fs' && (

@@ -10,7 +10,7 @@ import { toast } from 'react-hot-toast';
 import { localDateTimeToIso, playByLabel, TBD_LABEL } from '@/lib/schedule';
 import { canFillCrewRole } from '@/lib/crewRoles';
 import { displayFont, bodyFont } from '@/lib/fonts';
-import { easternSuffix } from '@/lib/eastern';
+import { easternSuffix, localTime, bothTimes } from '@/lib/eastern';
 import { getClassColor } from '@/utils/classColors';
 
 /*
@@ -74,7 +74,9 @@ const ROLES: { key: Role; label: string; plural: string }[] = [
 const TYPE_LABEL: Record<MatchType, string> = { squad_vs_squad: 'Squad match', pickup: 'Pickup', tournament: 'League' };
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const timeLabel = (iso: string) => `${new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${easternSuffix(iso)}`;
+const timeLabel = (iso: string) => bothTimes(iso);
+/** "10:30 PM ET" for the second line of a time cell, or '' for a viewer already on Eastern time. */
+const etLine = (iso: string) => easternSuffix(iso, '');
 // Calendar days in the viewer's zone, not 24-hour blocks: a 9:48 PM game is "Yesterday" the next morning.
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 const relTime = (iso: string) => {
@@ -452,7 +454,8 @@ export default function MatchesPage() {
                           ) : (
                             <>
                               <div>{dayLabel(m.scheduled_at)}</div>
-                              <div className="text-[#E6EDF7]">{m.time_tbd ? '' : timeLabel(m.scheduled_at)}</div>
+                              <div className="text-[#E6EDF7]">{m.time_tbd ? '' : localTime(m.scheduled_at)}</div>
+                              {!m.time_tbd && etLine(m.scheduled_at) && <div className="text-[10px] text-[#8B98B0]">{etLine(m.scheduled_at)}</div>}
                             </>
                           )}
                         </div>

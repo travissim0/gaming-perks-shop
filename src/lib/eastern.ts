@@ -28,14 +28,25 @@ export function easternTime(d: Date): string {
   return `${time}${dayHere !== dayThere ? ` ${dayThere}` : ''} ET`;
 }
 
-/** What to append after a local time: " · 10:30 PM ET", or '' for a viewer already on Eastern time. */
-export function easternSuffix(d: Date | string, sep = ' · '): string {
+/** What to append after a local time: " / 10:30 PM ET", or '' for a viewer already on Eastern time. */
+export function easternSuffix(d: Date | string, sep = ' / '): string {
   const at = typeof d === 'string' ? new Date(d) : d;
   if (Number.isNaN(at.getTime()) || viewerIsEastern(at)) return '';
   return `${sep}${easternTime(at)}`;
 }
 
 const toDate = (d: Date | string) => (typeof d === 'string' ? new Date(d) : d);
+
+/** The viewer's own clock with its zone label, "7:30 PM PDT", so it can never be read as Eastern. */
+export function localTime(d: Date | string): string {
+  const at = toDate(d);
+  let tz = '';
+  try { tz = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(at).find((p) => p.type === 'timeZoneName')?.value || ''; } catch { /* ignore */ }
+  return `${at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}${tz ? ` ${tz}` : ''}`;
+}
+
+/** Both clocks on one line: "7:30 PM PDT / 10:30 PM ET" (just the local one for a viewer on Eastern time). */
+export const bothTimes = (d: Date | string) => `${localTime(d)}${easternSuffix(d)}`;
 
 /** The league-calendar day an instant falls on: "2026-10-14" in Eastern time. */
 export function easternDay(d: Date | string): string {
