@@ -47,12 +47,13 @@ type Tool = { href: string; icon: React.ComponentType<{ className?: string }>; t
 
 const TOOLS: Tool[] = [
   {
-    href: '/admin/ctf-management', icon: Shield, title: 'CTF management', blurb: 'Squads, player pool, season dates, Discord, bans and tournament flags.',
+    href: '/admin/ctf-management', icon: Shield, title: 'CTF management', blurb: 'Squads, player pool, season dates, Discord, crew, bans and tournament flags.',
     sub: [
       { href: '/admin/ctf-management?tab=squads', label: 'Squads' },
       { href: '/admin/ctf-management?tab=pool', label: 'Player pool' },
       { href: '/admin/ctf-management?tab=season', label: 'Season' },
       { href: '/admin/ctf-management?tab=discord', label: 'Discord' },
+      { href: '/admin/ctf-management?tab=crew', label: 'Crew' },
       { href: '/admin/ctf-management?tab=bans', label: 'Bans' },
     ],
   },
