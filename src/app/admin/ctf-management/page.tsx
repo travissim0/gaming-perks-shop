@@ -28,6 +28,7 @@ import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 import GameClientPanel from '@/components/admin/GameClientPanel';
 import ZoneAutomationPanel from '@/components/admin/ZoneAutomationPanel';
 import LeaveRequestsPanel from '@/components/admin/LeaveRequestsPanel';
+import CrewPanel from '@/components/admin/CrewPanel';
 import ScoringRulesPanel from '@/components/admin/ScoringRulesPanel';
 
 interface Squad {
@@ -87,7 +88,7 @@ interface BannedPlayer {
   banned_by_alias?: string | null;
 }
 
-type Tab = 'squads' | 'pool' | 'season' | 'discord' | 'tournament' | 'bans';
+type Tab = 'squads' | 'pool' | 'season' | 'discord' | 'tournament' | 'crew' | 'bans';
 const TAB_ALIASES: Record<string, Tab> = { squads: 'squads', pool: 'pool', 'free-agents': 'pool', season: 'season', discord: 'discord', tournament: 'tournament', tournaments: 'tournament', bans: 'bans' };
 
 // ---- Page ---------------------------------------------------------------------
@@ -720,6 +721,7 @@ export default function CTFManagementPage() {
     { key: 'season', label: 'Season' },
     { key: 'discord', label: 'Discord' },
     { key: 'tournament', label: 'Tournament', count: eligibleSquads.length },
+    { key: 'crew', label: 'Crew' },
     { key: 'bans', label: 'Bans', count: bannedPlayers.length },
   ];
 
@@ -1030,6 +1032,9 @@ export default function CTFManagementPage() {
           </Panel>
         </div>
       )}
+
+      {/* Crew: who is working matches (referees, commentators, recorders); admin-only */}
+      {activeTab === 'crew' && <CrewPanel league={ctx?.league.slug || 'ctfdl'} season={ctx?.season?.season_number ?? null} />}
 
       {/* Bans */}
       {activeTab === 'bans' && (
