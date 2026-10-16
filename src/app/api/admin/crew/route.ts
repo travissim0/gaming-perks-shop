@@ -24,7 +24,8 @@ export interface CrewMatch {
 }
 export interface CrewPerson {
   player_id: string; alias: string; ctf_role: string | null;
-  by_role: Record<Role, { signed: number; played: number; no_shows: number }>;
+  /** Per role: worked (played with them on crew, not a no-show), upcoming (signed up, not played yet), no-shows. */
+  by_role: Record<Role, { signed: number; played: number; upcoming: number; no_shows: number }>;
   vods: number; last_at: string | null; matches: CrewMatch[];
 }
 
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     const p = prof.get(r.player_id);
     let person = people.get(r.player_id);
     if (!person) {
-      person = { player_id: r.player_id, alias: p?.in_game_alias || 'Unknown', ctf_role: p?.ctf_role || null, by_role: { referee: { signed: 0, played: 0, no_shows: 0 }, commentator: { signed: 0, played: 0, no_shows: 0 }, recording: { signed: 0, played: 0, no_shows: 0 } }, vods: 0, last_at: null, matches: [] };
+      person = { player_id: r.player_id, alias: p?.in_game_alias || 'Unknown', ctf_role: p?.ctf_role || null, by_role: { referee: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, commentator: { signed: 0, played: 0, upcoming: 0, no_shows: 0 }, recording: { signed: 0, played: 0, upcoming: 0, no_shows: 0 } }, vods: 0, last_at: null, matches: [] };
       people.set(r.player_id, person);
     }
     const played = m.status === 'completed';
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
     const noShow = r.no_show === true;
     person.by_role[role].signed++;
     if (played && !noShow) person.by_role[role].played++;
+    if (!played && !noShow) person.by_role[role].upcoming++;
     if (noShow) person.by_role[role].no_shows++;
     if (role === 'recording' && vod && !noShow) person.vods++;
     if (played && (!person.last_at || m.scheduled_at > person.last_at)) person.last_at = m.scheduled_at;

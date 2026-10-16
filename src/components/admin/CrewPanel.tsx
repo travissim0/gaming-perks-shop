@@ -81,7 +81,7 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
     }
   };
 
-  const total = (p: CrewPerson, k: 'signed' | 'played' | 'no_shows') => (['referee', 'commentator', 'recording'] as Role[]).reduce((n, r) => n + p.by_role[r][k], 0);
+  const total = (p: CrewPerson, k: 'signed' | 'played' | 'upcoming' | 'no_shows') => (['referee', 'commentator', 'recording'] as Role[]).reduce((n, r) => n + p.by_role[r][k], 0);
 
   const seasonPicker = data && data.seasons.length > 1 ? (
     <select value={seasonNumber ?? ''} onChange={(e) => setSeasonNumber(Number(e.target.value))} className={`${inputCls} w-auto py-1 text-xs`}>
@@ -108,11 +108,12 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
               <thead>
                 <tr className="border-b border-white/[0.06]">
                   <th className={th}>Person</th>
-                  <th className={`${th} text-right`} title="Referee: signed up · worked">Ref</th>
-                  <th className={`${th} text-right`} title="Commentator: signed up · worked">Cast</th>
-                  <th className={`${th} text-right`} title="Recorder: signed up · worked">Rec</th>
+                  <th className={`${th} text-right`} title="Matches reffed">Ref</th>
+                  <th className={`${th} text-right`} title="Matches cast">Cast</th>
+                  <th className={`${th} text-right`} title="Matches recorded">Rec</th>
                   <th className={`${th} text-right`} title="VODs posted on matches they recorded">VODs</th>
-                  <th className={`${th} text-right`}>No-shows</th>
+                  <th className={`${th} text-right`} title="Signed up for matches not played yet">Upcoming</th>
+                  <th className={`${th} text-right`} title="Marked by an admin">No-shows</th>
                   <th className={`${th} text-right`}>Last worked</th>
                 </tr>
               </thead>
@@ -121,9 +122,10 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
                   const isOpen = open === p.player_id;
                   const cell = (r: Role) => {
                     const v = p.by_role[r];
-                    if (!v.signed) return <span className="text-[#8B98B0]/50">—</span>;
-                    return <span title={`${v.signed} signed up, ${v.played} worked${v.no_shows ? `, ${v.no_shows} no-show` : ''}`}><span className="text-[#E6EDF7]">{v.played}</span><span className="text-[#8B98B0]"> / {v.signed}</span></span>;
+                    if (!v.played) return <span className="text-[#8B98B0]/50">—</span>;
+                    return <span className="text-[#E6EDF7]" title={`${v.played} worked${v.upcoming ? `, ${v.upcoming} upcoming` : ''}${v.no_shows ? `, ${v.no_shows} no-show` : ''}`}>{v.played}</span>;
                   };
+                  const upcomingTitle = (['referee', 'commentator', 'recording'] as Role[]).filter((r) => p.by_role[r].upcoming).map((r) => `${p.by_role[r].upcoming} as ${ROLE_LONG[r].toLowerCase()}`).join(', ');
                   return (
                     <FragmentRow key={p.player_id}>
                       <tr onClick={() => setOpen(isOpen ? null : p.player_id)} className={`cursor-pointer border-b border-white/[0.04] hover:bg-white/[0.03] ${isOpen ? 'bg-white/[0.03]' : ''}`}>
@@ -135,12 +137,13 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
                         <td className={`${td} text-right tabular-nums`}>{cell('commentator')}</td>
                         <td className={`${td} text-right tabular-nums`}>{cell('recording')}</td>
                         <td className={`${td} text-right tabular-nums text-[#E6EDF7]`}>{p.vods || <span className="text-[#8B98B0]/50">—</span>}</td>
+                        <td className={`${td} text-right tabular-nums`}>{total(p, 'upcoming') ? <span className="text-[#22D3EE]" title={upcomingTitle}>{total(p, 'upcoming')}</span> : <span className="text-[#8B98B0]/50">—</span>}</td>
                         <td className={`${td} text-right tabular-nums`}>{total(p, 'no_shows') ? <span className="text-[#F87171]">{total(p, 'no_shows')}</span> : <span className="text-[#8B98B0]/50">—</span>}</td>
                         <td className={`${td} text-right text-[#8B98B0]`}>{p.last_at ? when(p.last_at) : '—'}</td>
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-white/[0.06]">
-                          <td colSpan={7} className="bg-[#0B0F1A]/60 px-4 py-2">
+                          <td colSpan={8} className="bg-[#0B0F1A]/60 px-4 py-2">
                             <ul className="divide-y divide-white/[0.04]">
                               {p.matches.map((m) => (
                                 <li key={`${m.match_id}-${m.role}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-xs">
@@ -171,7 +174,7 @@ export default function CrewPanel({ league = 'ctfdl', season }: { league?: strin
               </tbody>
             </table>
             <p className="mt-2 px-4 text-[11px] text-[#8B98B0]">
-              Worked / signed up. "Worked" counts matches that were played with the person on crew and not marked as a no-show. {data.matches_played} match{data.matches_played === 1 ? '' : 'es'} played this season. Click a row for the matches.
+              Ref, Cast and Rec count matches that were played with the person on crew and not marked as a no-show. Upcoming is what they have signed up for that hasn't been played yet. {data.matches_played} match{data.matches_played === 1 ? '' : 'es'} played this season. Click a row for the matches.
             </p>
           </div>
         )}
