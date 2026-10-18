@@ -103,9 +103,16 @@ export default function CTFAdminPanel() {
     }
     setSaving(userId);
     try {
-      const { data, error } = await supabase.from('profiles').update({ ctf_role: roleName }).eq('id', userId).select('id');
-      if (error) throw error;
-      if (!data || data.length === 0) throw new Error('No change saved — you may not have permission to edit this profile');
+      // Saved server-side: RLS on profiles blocks CTF admins from updating other rows directly.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not signed in');
+      const res = await fetch('/api/ctf/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ userId, role: roleName }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || 'Failed to update role');
       const label = CTF_ROLES.find((r) => r.value === roleName)?.label;
       toast.success(label ? `${target.in_game_alias} is now ${label}` : `${target.in_game_alias} has no CTF role`);
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ctf_role: roleName } : u)));
