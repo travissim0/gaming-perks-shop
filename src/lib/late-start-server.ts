@@ -36,8 +36,8 @@ const SAME_NIGHT_MS = 6 * 3_600_000;
 export const LATE_COLS = ['effective_at', 'late_waiting_on', 'late_since', 'late_released_at', 'late_released_by'];
 
 export interface LateState {
-  /** Still waiting on this match. */
-  waiting_on: { id: string; title: string } | null;
+  /** Still waiting on this match, and why ("a squad in both" or who is needed in both). */
+  waiting_on: { id: string; title: string; because: string | null } | null;
   since: string | null;
   released_at: string | null;
   /** 'result' (the earlier match finished), 'ceiling' (waited the maximum), or the alias who pressed Start now. */
@@ -52,10 +52,10 @@ const lateInstalled = (m: any) => m && 'effective_at' in m;
 /** Public shape of a match's late-start state, or null when it never started late. */
 export async function lateStateOf(m: any): Promise<LateState | null> {
   if (!lateInstalled(m) || (!m.late_since && !m.effective_at)) return null;
-  let waiting: { id: string; title: string } | null = null;
+  let waiting: { id: string; title: string; because: string | null } | null = null;
   if (m.late_waiting_on) {
-    const { data } = await supabaseAdmin.from('matches').select('id, title').eq('id', m.late_waiting_on).maybeSingle();
-    waiting = data ? { id: (data as any).id, title: (data as any).title } : { id: m.late_waiting_on, title: 'an earlier match' };
+    const { data } = await supabaseAdmin.from('matches').select('id, title, squad_a_id, squad_b_id').eq('id', m.late_waiting_on).maybeSingle();
+    waiting = data ? { id: (data as any).id, title: (data as any).title, because: await overlapReason(data, m) } : { id: m.late_waiting_on, title: 'an earlier match', because: null };
   }
   const moved = m.late_released_at && m.effective_at ? Math.round((new Date(m.effective_at).getTime() - new Date(m.scheduled_at).getTime()) / 60_000) : null;
   return { waiting_on: waiting, since: m.late_since || null, released_at: m.late_released_at || null, released_by: m.late_released_by || null, setup_min: LATE_SETUP_MS / 60_000, moved_min: moved };
@@ -65,25 +65,59 @@ export async function lateStateOf(m: any): Promise<LateState | null> {
  * The earlier match of either squad that this one must wait for: due within SAME_NIGHT before
  * it, still scheduled (and past its own kick-off) or in progress. Null when nothing blocks.
  */
-async function blockerFor(m: any, now: number): Promise<{ id: string; title: string } | null> {
+/** Everyone a match needs: its two rosters and its crew (referees, commentators, recorders). */
+async function peopleOf(m: any): Promise<{ roster: Map<string, string>; crew: Map<string, string> }> {
   const squads = [m.squad_a_id, m.squad_b_id].filter(Boolean);
-  if (squads.length < 2) return null;
+  const [{ data: members }, { data: crew }] = await Promise.all([
+    squads.length ? supabaseAdmin.from('squad_members').select('player_id').in('squad_id', squads).eq('status', 'active') : Promise.resolve({ data: [] as any[] }),
+    supabaseAdmin.from('match_participants').select('player_id, role').eq('match_id', m.id),
+  ]);
+  const rosterIds = ((members || []) as any[]).map((r) => r.player_id).filter(Boolean) as string[];
+  const crewIds = ((crew || []) as any[]).filter((r) => r.player_id && r.role !== 'player').map((r) => r.player_id) as string[];
+  const ids = [...new Set([...rosterIds, ...crewIds])];
+  const { data: profiles } = ids.length ? await supabaseAdmin.from('profiles').select('id, in_game_alias').in('id', ids) : { data: [] as any[] };
+  const alias = new Map(((profiles || []) as any[]).map((p) => [p.id, p.in_game_alias || 'someone']));
+  const roster = new Map<string, string>(rosterIds.map((id) => [id, alias.get(id) || 'a player']));
+  const crewMap = new Map<string, string>(crewIds.map((id) => [id, alias.get(id) || 'a crew member']));
+  return { roster, crew: crewMap };
+}
+
+/**
+ * Why the earlier match `a` holds `b`: the squads overlap, or a person in `a` (on a roster or on
+ * crew) is needed in `b` (on a roster or on crew). A squad wants its whole roster, and a match
+ * wants its referee, so a referee stuck in the earlier match holds the next match they play in,
+ * and a player stuck in it holds the next match they referee (John, 2026-10-18). Null = no overlap.
+ */
+export async function overlapReason(a: any, b: any): Promise<string | null> {
+  const squadsA = new Set([a.squad_a_id, a.squad_b_id].filter(Boolean));
+  if ([b.squad_a_id, b.squad_b_id].some((s) => s && squadsA.has(s))) return 'a squad in both';
+  const [pa, pb] = await Promise.all([peopleOf(a), peopleOf(b)]);
+  const names: string[] = [];
+  for (const [id, alias] of pa.crew) if (pb.roster.has(id) || pb.crew.has(id)) names.push(`${alias} (${pb.crew.has(id) ? 'on crew' : 'playing'} here, on crew there)`);
+  for (const [id, alias] of pa.roster) if (pb.crew.has(id) && !pa.crew.has(id)) names.push(`${alias} (on crew here, playing there)`);
+  return names.length ? names.join(', ') : null;
+}
+
+async function blockerFor(m: any, now: number): Promise<{ id: string; title: string; because: string } | null> {
+  if (!m.squad_a_id || !m.squad_b_id) return null;
   const sched = new Date(m.scheduled_at).getTime();
+  // Every earlier league match of the night still running or due: the overlap test decides.
   const { data } = await supabaseAdmin
     .from('matches')
-    .select('id, title, status, scheduled_at, time_tbd, fs_status, stage')
+    .select('id, title, status, scheduled_at, time_tbd, fs_status, stage, squad_a_id, squad_b_id')
     .neq('id', m.id)
     .in('status', ['scheduled', 'in_progress'])
     .not('league_slug', 'is', null)
-    .or(`squad_a_id.in.(${squads.join(',')}),squad_b_id.in.(${squads.join(',')})`)
     .gte('scheduled_at', new Date(sched - SAME_NIGHT_MS).toISOString())
     .lt('scheduled_at', m.scheduled_at)
     .order('scheduled_at', { ascending: true });
   for (const r of (data || []) as any[]) {
     if (r.time_tbd === true) continue;
     if (r.stage === 'fs' && r.fs_status && r.fs_status !== 'accepted') continue;
-    if (r.status === 'in_progress') return { id: r.id, title: r.title };
-    if (new Date(r.scheduled_at).getTime() <= now) return { id: r.id, title: r.title }; // due but not reported over
+    const running = r.status === 'in_progress' || new Date(r.scheduled_at).getTime() <= now; // due but not reported over
+    if (!running) continue;
+    const because = await overlapReason(r, m);
+    if (because) return { id: r.id, title: r.title, because };
   }
   return null;
 }
