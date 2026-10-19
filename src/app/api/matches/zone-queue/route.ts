@@ -23,6 +23,19 @@ export const dynamic = 'force-dynamic';
 /** What the arena says a minute before the match timer ends (%30 is the in-game bong). */
 const ONE_MINUTE_TEXT = 'Match will start on the second restart. Good luck to both teams and have fun!!! %30';
 
+/**
+ * Longest text the queue hands the zone for a chat line. A normal reminder is 90-150 characters;
+ * the client's chat packet is 496 bytes, and a line that has to be split across packets silenced
+ * and dropped every connected client (2026-10-18: a 540-610 character "waiting on …" reminder,
+ * re-sent every 30 s). Nothing here may exceed this, whatever it is built from.
+ */
+const MAX_ZONE_TEXT = 180;
+const clip = (s: string) => (s.length <= MAX_ZONE_TEXT ? s : s.slice(0, MAX_ZONE_TEXT - 1).trimEnd() + '…');
+/** "187 BOYZ vs Pure Tilt" from "CTFDL S5 · Week 2 · 187 BOYZ vs Pure Tilt". */
+const shortTitle = (title: string) => String(title || '').split('·').pop()!.trim() || 'the earlier match';
+/** One format for every time in the queue, so the zone never sees one moment as two strings. */
+const iso = (t: string | null | undefined) => (t ? new Date(t).toISOString() : null);
+
 /** A squad's captain and co-captains: who the zone whispers when something is still missing. */
 const leadersOf = (block: any): string[] =>
   ((block?.roster || []) as any[]).filter((m) => m.role === 'captain' || m.role === 'co_captain').map((m) => m.alias).filter(Boolean);
@@ -52,7 +65,7 @@ function captainRemindersFor(p: any): CaptainReminder[] {
       : side
         ? `[${tag}] To start your match, pick your side: ${SIDE_HOW}.`
         : `[${tag}] To start your match, set your lineup on freeinf.org.`;
-    out.push({ squad_tag: tag, aliases, missing, message });
+    out.push({ squad_tag: tag, aliases, missing, message: clip(message) });
   };
   const homeMissing: string[] = [];
   if (!p.progress?.side_picked) homeMissing.push('side');
@@ -79,14 +92,13 @@ function announceFor(p: any): {
   const todo: string[] = [];
   if (!p.progress?.side_picked) todo.push(`${home} captain: ${SIDE_HOW}.`);
   if (lineups.length) todo.push(`Lineup needed from ${lineups.join(' and ')} on freeinf.org.`);
+  // Held: one short clause, never the names of who is in both matches (that is on the match page).
   const late = p.match.late;
-  const lateLine = late?.waiting_on
-    ? ` Waiting on ${late.waiting_on.title} to finish: this match starts ${late.setup_min} min after it ends.`
-    : late?.released_at ? ` Late start: kick-off moved to ${fmt('America/New_York')}.` : '';
+  const lateLine = late?.waiting_on ? ` Waiting on ${shortTitle(late.waiting_on.title)} to finish.` : '';
   const status = (todo.length ? todo.join(' ') : 'Sides and lineups are set.') + lateLine;
   const line = (mins: number) => `${league}${kind}: ${away} vs ${home} in ${mins} min (${fmt('America/Los_Angeles')} / ${fmt('America/New_York')}). ${status}`;
-  const reminders = REMINDER_MINUTES.map((m) => ({ at_min: m, message: line(m) }));
-  return { opened: reminders[0].message, reminders, one_minute: ONE_MINUTE_TEXT, captains: captainRemindersFor(p) };
+  const reminders = REMINDER_MINUTES.map((m) => ({ at_min: m, message: clip(line(m)) }));
+  return { opened: reminders[0].message, reminders, one_minute: clip(ONE_MINUTE_TEXT), captains: captainRemindersFor(p) };
 }
 
 export async function GET(request: NextRequest) {
@@ -131,24 +143,28 @@ export async function GET(request: NextRequest) {
       /** FS only: 'red' | 'green'. Green: `client.players` already leaves out everyone who may not play. */
       fs_color: p.match.fs_color,
       status: p.match.status,
-      /** The kick-off to run the arena timer to. Moves when the match starts late (see `late`); re-set the timer when it does. */
-      scheduled_at: p.match.kickoff_at || p.match.scheduled_at,
-      /** The agreed time, which never moves. */
-      scheduled_at_original: p.match.scheduled_at,
-      /** Late start: `waiting_on` an earlier match (the timer holds near 10:00), or `released_at` with a real countdown. Null normally. */
-      late: p.match.late ?? null,
-      side_reveal_at: p.side_reveal_at,
+      /** The agreed kick-off. It never moves on its own: a late start is signalled by `hold`, not by this. */
+      scheduled_at: iso(p.match.scheduled_at),
+      /**
+       * Late start. While set, the match is waiting on an earlier match: keep the arena timer from
+       * running out (extend it, as `*timer` does) and send nothing extra. When it goes back to null
+       * after being set, run a fresh `hold.setup_min`-minute timer. Null for a match that is not waiting.
+       */
+      hold: p.match.late?.waiting_on ? { waiting_on: { id: p.match.late.waiting_on.id, title: shortTitle(p.match.late.waiting_on.title) }, since: iso(p.match.late.since), setup_min: p.match.late.setup_min } : null,
+      /** How a late start ended: `released_at` / `released_by` ('result', 'ceiling', or who pressed Start now). Null for a match that never waited. */
+      late: p.match.late ? { released_at: iso(p.match.late.released_at), released_by: p.match.late.released_by, setup_min: p.match.late.setup_min } : null,
+      side_reveal_at: iso(p.side_reveal_at),
       side_released: p.side_released,
-      /** Minutes until the scheduled time (negative once it has started). Also the arena's `*timer` value when it is opened; re-set it if scheduled_at moves. */
-      starts_in_min: Math.round((new Date(p.match.kickoff_at || p.match.scheduled_at).getTime() - now) / 60_000),
+      /** Minutes until the scheduled time (negative once it has started). The arena's `*timer` value when it is opened. */
+      starts_in_min: Math.round((new Date(p.match.scheduled_at).getTime() - now) / 60_000),
       home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench, leaders: leadersOf(p.home) },
       away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench, leaders: leadersOf(p.away) },
       progress: p.progress,
       client: p.client,
-      subs: p.subs,
+      subs: (p.subs || []).map((s: any) => ({ ...s, message: typeof s.message === 'string' ? clip(s.message) : s.message })),
       /** Text the zone relays: `reminders` (30 / 15 / 5 min; `opened` = the 30 one) as *zone messages, `one_minute` as an *arena message a minute before the timer ends, `captains` as whispers to captains with something still to do. */
       announce: announceFor(p),
-      updated_at: p.updated_at,
+      updated_at: iso(p.updated_at),
       game_id: p.match.game_id,
     });
     forPresence.push({ id: p.match.id, arena: p.match.arena, status: p.match.status, kickoff_at: p.match.kickoff_at || p.match.scheduled_at, people: [...(p.home?.roster || []), ...(p.away?.roster || [])].map((r: any) => ({ player_id: r.player_id, alias: r.alias })) });
