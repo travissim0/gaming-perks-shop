@@ -17,6 +17,8 @@ const ALLOWED: Record<string, { secret: boolean }> = {
   MATCH_CLIENT_KEY: { secret: true },
   // 'off' empties the zone queue: no arenas opened, nobody placed, no subs applied, site-wide.
   ZONE_AUTOMATION: { secret: false },
+  // 'on' holds a match whose squad or people are still in an earlier match (late starts). Default off.
+  LATE_STARTS: { secret: false },
 };
 
 const supabaseAdmin = createClient(

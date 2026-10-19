@@ -2,6 +2,7 @@ import { supabaseAdmin, isTimeTbd } from '@/lib/match-setup-server';
 export { kickoffOf } from '@/lib/match-setup-server';
 import { messageUsers, staffUserIds } from '@/lib/site-messages';
 import { easternDay } from '@/lib/eastern';
+import { getSetting } from '@/lib/site-settings';
 
 /**
  * Late starts (add-match-late-start.sql): a league match waits for the earlier match of either
@@ -128,15 +129,18 @@ async function blockerFor(m: any, now: number): Promise<{ id: string; title: str
  * row with the late columns as they now stand.
  */
 /**
- * OFF since 2026-10-18: the first live hold (Black Ops v D. Fanged, 10:27 PM ET) crashed the zone
- * server, twice, as players entered the arena while the queue's kick-off was moving. Until the
- * zone's handling of a moving kick-off is checked, no match is held: the queue's time never moves
- * on its own. Flip this back on only after a test with the zone.
+ * Off by default since 2026-10-18 (see the incident note above): staff turn it on in CTF
+ * management → Season → Late starts, after the zone handles the queue's hold flag and a throwaway
+ * match has been run through it. The setting is read once a minute, so a flip takes up to that
+ * long to reach every poll.
  */
-export const LATE_START_ENABLED = false;
+/** site_settings LATE_STARTS = 'on' (CTF management → Season → Late starts). Anything else, or unset, is off. */
+export async function lateStartsEnabled(): Promise<boolean> {
+  return (await getSetting('LATE_STARTS')).trim().toLowerCase() === 'on';
+}
 
 export async function applyLateStart(m: any): Promise<any> {
-  if (!LATE_START_ENABLED) return m;
+  if (!(await lateStartsEnabled())) return m;
   if (!lateInstalled(m) || !m?.id) return m; // before add-match-late-start.sql
   if (m.status !== 'scheduled' || isTimeTbd(m) || m.manual_zone === true || !m.league_slug) return m;
   if (m.late_released_at) return m; // the hold is over; effective_at is final

@@ -27,6 +27,7 @@ import DiscordBotPanel from '@/components/admin/DiscordBotPanel';
 import DiscordAppPanel from '@/components/admin/DiscordAppPanel';
 import GameClientPanel from '@/components/admin/GameClientPanel';
 import ZoneAutomationPanel from '@/components/admin/ZoneAutomationPanel';
+import LateStartsPanel from '@/components/admin/LateStartsPanel';
 import LeaveRequestsPanel from '@/components/admin/LeaveRequestsPanel';
 import CrewPanel from '@/components/admin/CrewPanel';
 import ScoringRulesPanel from '@/components/admin/ScoringRulesPanel';
@@ -966,6 +967,7 @@ export default function CTFManagementPage() {
           <ScoringRulesPanel />
           <GameClientPanel />
           <ZoneAutomationPanel />
+          <LateStartsPanel />
           {rollover && (
             <Panel
               title={`Season rollover · ${rollover.league.name} Season ${rollover.season.season_number}`}

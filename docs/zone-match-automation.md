@@ -319,8 +319,9 @@ client are the patterns to copy.
 
 Two matches on one night can overlap: on 2026-10-14 the 7:30 FS Green ran 28 minutes and the
 8:00 FS Red's timer ran out while it was still going. The site can hold the later match; the
-zone extends its own timer. **Switched off on the site (`LATE_START_ENABLED`) until the zone
-handles `hold` and both sides have tested it on a throwaway match.**
+zone extends its own timer. **Off by default: staff turn it on in CTF management → Season → Late
+starts (site_settings LATE_STARTS), only once the zone handles `hold` and a throwaway match has
+been run through it. The setting is read once a minute.**
 
 What went wrong the first time (2026-10-18, Travis's trace): the site expressed the hold by moving
 the queue's `scheduled_at` about once a minute; the zone re-sent its [Zone] reminder to every
