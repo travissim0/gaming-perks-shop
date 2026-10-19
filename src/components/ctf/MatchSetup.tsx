@@ -50,7 +50,7 @@ interface Team {
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
 /** Late start: waiting on an earlier match of either squad, or released with the kick-off moved. */
 interface LateInfo {
-  waiting_on: { id: string; title: string; because?: string | null } | null;
+  waiting_on: { id: string; title: string } | null;
   since: string | null;
   released_at: string | null;
   released_by: string | null;
@@ -404,7 +404,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
       {late.waiting_on ? (
         <>
           <span className="font-medium text-[#F59E0B]">Running late.</span>{' '}
-          Waiting on <a href={`/matches/${late.waiting_on.id}`} className="text-[#22D3EE] hover:underline">{late.waiting_on.title}</a> to finish{late.waiting_on.because && late.waiting_on.because !== 'a squad in both' ? <>: <span className="text-[#E6EDF7]">{late.waiting_on.because}</span></> : ''}. This match starts {late.setup_min} minutes after that result comes in; the arena timer holds near {late.setup_min}:00 until then.
+          Waiting on <a href={`/matches/${late.waiting_on.id}`} className="text-[#22D3EE] hover:underline">{late.waiting_on.title}</a> to finish. This match starts {late.setup_min} minutes after that result comes in; the arena timer holds near {late.setup_min}:00 until then.
           {(viewer?.is_staff || viewer?.is_referee) && (
             <button type="button" onClick={startNow} disabled={busy === 'late'} className="ml-2 rounded bg-[#F59E0B]/20 px-2 py-0.5 text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/30 disabled:opacity-50" title="Lift the hold: the 10-minute setup countdown starts now">
               {busy === 'late' ? 'Starting…' : 'Start now'}

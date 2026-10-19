@@ -81,7 +81,7 @@ function announceFor(p: any): {
   if (lineups.length) todo.push(`Lineup needed from ${lineups.join(' and ')} on freeinf.org.`);
   const late = p.match.late;
   const lateLine = late?.waiting_on
-    ? ` Waiting on ${late.waiting_on.title} to finish${late.waiting_on.because && late.waiting_on.because !== 'a squad in both' ? ` (${late.waiting_on.because})` : ''}: this match starts ${late.setup_min} min after it ends.`
+    ? ` Waiting on ${late.waiting_on.title} to finish: this match starts ${late.setup_min} min after it ends.`
     : late?.released_at ? ` Late start: kick-off moved to ${fmt('America/New_York')}.` : '';
   const status = (todo.length ? todo.join(' ') : 'Sides and lineups are set.') + lateLine;
   const line = (mins: number) => `${league}${kind}: ${away} vs ${home} in ${mins} min (${fmt('America/Los_Angeles')} / ${fmt('America/New_York')}). ${status}`;

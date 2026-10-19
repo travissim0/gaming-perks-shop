@@ -334,10 +334,6 @@ whenever `scheduled_at` moves):
 - Staff or the referee can press **Start now** on the match page (`late.released_by` = their
   alias). A hold lifts on its own 90 minutes after the scheduled time (`'ceiling'`), with a note
   to staff.
-- A match is also held for PEOPLE, not just squads: anyone on the earlier match's crew who is on
-  a roster or on crew for the later one, or playing in the earlier one and on crew for the later
-  one (a referee stuck playing). The reminder text says who ("Designer (playing here, on crew
-  there)").
 - `scheduled_at_original` is the agreed time and never moves. Sides are still released 5 minutes
   before the ORIGINAL time (the hold begins after that), so placement happens as before and the
   placed players simply wait in the locked arena.
