@@ -93,7 +93,16 @@ async function blockerFor(m: any, now: number): Promise<{ id: string; title: str
  * is loaded for the zone or the setup panel, so every poll re-evaluates it. Returns the match
  * row with the late columns as they now stand.
  */
+/**
+ * OFF since 2026-10-18: the first live hold (Black Ops v D. Fanged, 10:27 PM ET) crashed the zone
+ * server, twice, as players entered the arena while the queue's kick-off was moving. Until the
+ * zone's handling of a moving kick-off is checked, no match is held: the queue's time never moves
+ * on its own. Flip this back on only after a test with the zone.
+ */
+export const LATE_START_ENABLED = false;
+
 export async function applyLateStart(m: any): Promise<any> {
+  if (!LATE_START_ENABLED) return m;
   if (!lateInstalled(m) || !m?.id) return m; // before add-match-late-start.sql
   if (m.status !== 'scheduled' || isTimeTbd(m) || m.manual_zone === true || !m.league_slug) return m;
   if (m.late_released_at) return m; // the hold is over; effective_at is final
