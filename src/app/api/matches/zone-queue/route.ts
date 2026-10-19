@@ -30,7 +30,9 @@ const ONE_MINUTE_TEXT = 'Match will start on the second restart. Good luck to bo
  * re-sent every 30 s). Nothing here may exceed this, whatever it is built from.
  */
 const MAX_ZONE_TEXT = 180;
-const clip = (s: string) => (s.length <= MAX_ZONE_TEXT ? s : s.slice(0, MAX_ZONE_TEXT - 1).trimEnd() + '…');
+/** Plain ASCII only (the client is single-byte; a multi-byte character in a chat line is as bad as a long one), then the cap. */
+const ascii = (s: string) => String(s || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...').replace(/[^ -~]/g, '');
+const clip = (raw: string) => { const s = ascii(raw); return s.length <= MAX_ZONE_TEXT ? s : s.slice(0, MAX_ZONE_TEXT - 3).trimEnd() + '...'; };
 /** "187 BOYZ vs Pure Tilt" from "CTFDL S5 · Week 2 · 187 BOYZ vs Pure Tilt". */
 const shortTitle = (title: string) => String(title || '').split('·').pop()!.trim() || 'the earlier match';
 /** One format for every time in the queue, so the zone never sees one moment as two strings. */
