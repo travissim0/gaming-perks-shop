@@ -306,7 +306,7 @@ export async function PATCH(request: NextRequest) {
   const id = body?.id;
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-  const curCols = 'id, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, scheduled_at, status';
+  const curCols = 'id, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, scheduled_at, status, game_id';
   const cur = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
   // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
   let curRes = await cur(`${curCols}, time_tbd`);
@@ -322,6 +322,10 @@ export async function PATCH(request: NextRequest) {
   if ('scheduled_at' in body) {
     if (!validIso(body.scheduled_at)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     patch.scheduled_at = body.scheduled_at;
+    // A fixture that went unplayed is marked 'expired' once its time passes; a new time brings it
+    // back (the vacated week 2 match, 2026-10-25, stayed expired and so out of the queue and the
+    // league page). A match with a result is never revived this way.
+    if (current.status === 'expired' && !current.game_id && new Date(body.scheduled_at).getTime() > Date.now()) patch.status = 'scheduled';
   }
   if ('time_tbd' in body) {
     if (typeof body.time_tbd !== 'boolean') return NextResponse.json({ error: 'time_tbd must be true or false' }, { status: 400 });
@@ -362,7 +366,7 @@ export async function PATCH(request: NextRequest) {
   const wasTbd = current.time_tbd === true;
   const nowTbd = 'time_tbd' in patch ? patch.time_tbd === true : wasTbd;
   const timeChanged = 'scheduled_at' in patch && new Date(patch.scheduled_at as string).getTime() !== new Date(current.scheduled_at).getTime();
-  if (!nowTbd && current.status === 'scheduled' && (wasTbd || timeChanged)) await announceMatchTime(id, !wasTbd);
+  if (!nowTbd && (current.status === 'scheduled' || patch.status === 'scheduled') && (wasTbd || timeChanged)) await announceMatchTime(id, !wasTbd);
 
   return NextResponse.json(warning ? { ok: true, warning } : { ok: true });
 }
