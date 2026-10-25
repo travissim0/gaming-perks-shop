@@ -267,7 +267,7 @@ export function seasonPhase(
   league: LeagueInfo,
   season: LeagueSeason | null,
   status: SeasonStatus,
-  opts: { draftDone?: boolean; now?: Date } = {},
+  opts: { draftDone?: boolean; now?: Date; /** The week the fixtures say it is (see currentWeekOf in lib/schedule); calendar count when absent. */ week?: number | null } = {},
 ): SeasonPhase {
   const now = opts.now ?? new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -315,6 +315,9 @@ export function seasonPhase(
   if (season.playoffs_start_on && days(season.playoffs_start_on) >= 0) {
     return { label: 'Playoffs', milestones };
   }
+  // The fixtures' own week numbers win: a skipped week (Thanksgiving) or a make-up match would
+  // otherwise put the header a week off the schedule.
+  if (opts.week) return { label: `Week ${opts.week}`, milestones };
   if (season.start_date) {
     const week = Math.floor(days(season.start_date) / 7) + 1;
     return { label: `Week ${week}`, milestones };

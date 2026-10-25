@@ -3,7 +3,7 @@
  * playoffs. Pure functions — the page turns the output into fixtures.
  */
 
-import { LEAGUE_TZ } from '@/lib/scoring';
+import { LEAGUE_TZ, weekStart } from '@/lib/scoring';
 
 export interface TeamRef {
   id: string;
@@ -115,6 +115,21 @@ export function localDateTimeToIso(date: string, time: string): string {
   const [y, m, d] = date.split('-').map(Number);
   const [hh, mm] = time.split(':').map(Number);
   return new Date(y, m - 1, d, hh || 0, mm || 0).toISOString();
+}
+
+/**
+ * Which week it is, by the fixtures: the highest week number among regular-season fixtures that
+ * fall in the current Mon–Sun league week (a make-up match from an earlier week does not pull it
+ * back), else the week of the next regular-season fixture, else null (caller falls back to a
+ * calendar count). Playoff fixtures are ignored: the phase reads "Playoffs" from the season dates.
+ */
+export function currentWeekOf(fixtures: { week: number | null; stage?: string | null; scheduled_at: string; status?: string }[], now: Date = new Date()): number | null {
+  const thisWeek = weekStart(now);
+  const regular = fixtures.filter((f) => f.week && (!f.stage || f.stage === 'regular') && f.status !== 'cancelled');
+  const inWeek = regular.filter((f) => weekStart(new Date(f.scheduled_at)) === thisWeek).map((f) => f.week as number);
+  if (inWeek.length) return Math.max(...inWeek);
+  const next = regular.filter((f) => new Date(f.scheduled_at).getTime() > now.getTime()).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
+  return next ? (next.week as number) : null;
 }
 
 /**

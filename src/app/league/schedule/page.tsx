@@ -26,6 +26,7 @@ import { playoffRoundLabel, playByLabel, noContestReason, TBD_LABEL, type TeamRe
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
+import { currentWeekOf } from '@/lib/schedule';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { easternSuffix, localTime, bothTimes } from '@/lib/eastern';
@@ -152,7 +153,7 @@ function SchedulePage() {
   const refresh = useCallback(() => { if (league && season) loadFixtures(league, season); }, [league, season, loadFixtures]);
 
   // ── Derived ─────────────────────────────────────────────────────────
-  const phase = league ? seasonPhase(league, season, status, { draftDone }) : null;
+  const phase = league ? seasonPhase(league, season, status, { draftDone, week: currentWeekOf(fixtures) }) : null;
   const now = Date.now();
   // Points-scoring seasons label RS/FS and show the Mon–Sun week each match counts against.
   const pointsMode = !!season && !!league && league.data_source !== 'ctfpl' && normalizeRules(season.scoring_rules).preset === 'points';

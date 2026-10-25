@@ -29,6 +29,7 @@ import {
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { easternSuffix } from '@/lib/eastern';
 import { weekStart } from '@/lib/scoring';
+import { currentWeekOf } from '@/lib/schedule';
 import { playByLabel } from '@/lib/schedule';
 import './ctf-theme.css';
 
@@ -377,7 +378,14 @@ export default function LeagueHome() {
       ]);
 
       const draft = seasonDraft ? { id: seasonDraft.id, status: seasonDraft.status } : null;
-      const phase = seasonPhase(L, S, featured.status, { draftDone: draft?.status === 'complete' });
+      // The week by the fixtures, so the header agrees with the schedule (a skipped holiday week
+      // or a make-up match would otherwise put a calendar count a week off).
+      let week: number | null = null;
+      if (S) {
+        const { data: fx } = await supabase.from('matches').select('week, stage, scheduled_at, status').eq('league_slug', L.slug).eq('season_number', S.season_number).not('week', 'is', null).neq('status', 'cancelled').limit(200);
+        week = currentWeekOf((fx || []) as any[]);
+      }
+      const phase = seasonPhase(L, S, featured.status, { draftDone: draft?.status === 'complete', week });
 
       setLeague({
         status: { entries, featured, standings: standings.slice(0, 3) },
