@@ -80,6 +80,21 @@ function cleanWeapons(v: unknown): Record<string, { fired: number; landed: numbe
   return Object.keys(out).length ? out : null;
 }
 
+// Was it played? Fewer than 4 players, under 2 minutes, or fewer kills than players. A real game here runs ~20 kills a player;
+// the 41 junk games recorded 09-11..10-24 (false starts, warm-ups, lone players, 20-minute OvDs nobody fought in) were all under 1.
+const MIN_PLAYERS = 4;
+const MIN_MINUTES = 2;
+
+function falseStartReason(rows: { kills: number; game_length_minutes: number }[]): string | null {
+  const players = rows.length;
+  const kills = rows.reduce((sum, r) => sum + r.kills, 0);
+  const minutes = rows.reduce((max, r) => Math.max(max, r.game_length_minutes), 0);
+  if (players < MIN_PLAYERS) return `only ${players} player(s)`;
+  if (minutes < MIN_MINUTES) return `${minutes.toFixed(1)} minutes long`;
+  if (kills < players) return `${kills} kills among ${players} players (a false start, or nobody fought)`;
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Parse the incoming JSON data
@@ -135,6 +150,16 @@ export async function POST(request: NextRequest) {
       schema_version: nonNegInt(data.schemaVersion) || 1,
       script_version: typeof data.scriptVersion === 'string' ? data.scriptVersion.slice(0, 64) : null,
     }));
+
+    // A game nobody played is not recorded (Travis 10-25; Albert: OvD_20261023_043452, a 20-player Mix that started on its own
+    // between two real games - 2 kills in 8.6 minutes - moved everyone's ELO). The TP zone script gets the same check
+    // (CTFMatchRules.NotPlayed, staged); this keeps an older script or another zone from inserting one, because the ELO trigger fires
+    // on INSERT and a game once in cannot be taken back without a replay.
+    const notPlayed = falseStartReason(playersToInsert);
+    if (notPlayed) {
+      console.warn(`player_stats: game ${data.gameId ?? '?'} not recorded - ${notPlayed}`);
+      return NextResponse.json({ success: true, recorded: false, reason: notPlayed });
+    }
 
     // Insert all player stats in a single batch
     let { data: insertResult, error: insertError } = await supabase
