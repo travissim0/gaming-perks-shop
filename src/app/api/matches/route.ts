@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
         game_id,
         winner_squad_id,
         vod_url,
+        vod_title,
         video_title,
         actual_start_time,
         actual_end_time,
