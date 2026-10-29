@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
-import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, playByIso, type TeamRef } from '@/lib/schedule';
+import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, playByIso, winnerOf as resultWinner, type TeamRef } from '@/lib/schedule';
 import { leagueDate } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
 
@@ -203,7 +203,7 @@ export default function ScheduleStaffTools({
   const roundDone = roundFixtures.length > 0 && roundFixtures.every((f) => f.result);
   const winners: TeamRef[] = roundDone
     ? roundFixtures.map((f) => {
-        const aWon = /win/i.test(f.result!.a_result || '') || f.result!.a_score > f.result!.b_score;
+        const aWon = resultWinner(f.result) === 'a';
         return aWon
           ? { id: f.squad_a_id!, name: f.squad_a_name || '?', tag: f.squad_a_tag }
           : { id: f.squad_b_id!, name: f.squad_b_name || '?', tag: f.squad_b_tag };
@@ -274,7 +274,7 @@ export default function ScheduleStaffTools({
   const gameLabel = (f: Fixture) => f.title.split(' · ')[1] || '';
   const teamRef = (f: Fixture, side: 'a' | 'b'): TeamRef =>
     side === 'a' ? { id: f.squad_a_id!, name: f.squad_a_name || '?', tag: f.squad_a_tag } : { id: f.squad_b_id!, name: f.squad_b_name || '?', tag: f.squad_b_tag };
-  const aWonIt = (f: Fixture) => !!f.result && (/win/i.test(f.result.a_result || '') || f.result.a_score > f.result.b_score);
+  const aWonIt = (f: Fixture) => resultWinner(f.result) === 'a';
   const winnerOf = (f: Fixture) => teamRef(f, aWonIt(f) ? 'a' : 'b');
   const loserOf = (f: Fixture) => teamRef(f, aWonIt(f) ? 'b' : 'a');
   const bySeed = (x: TeamRef, y: TeamRef): [TeamRef, TeamRef] => (seedOf(x.id) <= seedOf(y.id) ? [x, y] : [y, x]);

@@ -110,6 +110,24 @@ export function addDays(iso: string, days: number): string {
   return d.toISOString();
 }
 
+/**
+ * Which side won a recorded result: the recorded Win/Loss decides; the scores (kills) only break
+ * the tie when neither side has one. A loser can out-kill the winner (the flag wins the game), and
+ * "recorded win OR more kills" showed W for both squads on the schedule (John, 2026-10-14 and
+ * 2026-10-29).
+ */
+export function winnerOf(result: { a_score: number; b_score: number; a_result: string | null; b_result: string | null } | null | undefined): 'a' | 'b' | null {
+  if (!result) return null;
+  if (result.a_result || result.b_result) {
+    if (/win/i.test(result.a_result || '')) return 'a';
+    if (/win/i.test(result.b_result || '')) return 'b';
+    return null;
+  }
+  if (result.a_score > result.b_score) return 'a';
+  if (result.b_score > result.a_score) return 'b';
+  return null;
+}
+
 /** Combine a "YYYY-MM-DD" date and "HH:MM" time in the viewer's zone into ISO. */
 export function localDateTimeToIso(date: string, time: string): string {
   const [y, m, d] = date.split('-').map(Number);

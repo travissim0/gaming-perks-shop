@@ -26,7 +26,7 @@ import { playoffRoundLabel, playByLabel, noContestReason, TBD_LABEL, type TeamRe
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
-import { currentWeekOf } from '@/lib/schedule';
+import { currentWeekOf, winnerOf } from '@/lib/schedule';
 import type { Fixture } from '@/app/api/league/schedule/route';
 import { displayFont, bodyFont } from '@/lib/fonts';
 import { easternSuffix, localTime, bothTimes } from '@/lib/eastern';
@@ -338,8 +338,9 @@ function SchedulePage() {
                   const live = !done && f.status === 'in_progress';
                   const tbd = f.time_tbd && !done && !live;
                   const soon = !done && !live && !tbd && new Date(f.scheduled_at).getTime() - now < 3 * 3600 * 1000 && new Date(f.scheduled_at).getTime() > now - 2 * 3600 * 1000;
-                  const aWon = f.result ? /win/i.test(f.result.a_result || '') || f.result.a_score > f.result.b_score : false;
-                  const bWon = f.result ? /win/i.test(f.result.b_result || '') || f.result.b_score > f.result.a_score : false;
+                  const won = winnerOf(f.result);
+                  const aWon = won === 'a';
+                  const bWon = won === 'b';
                   const mine = (f.squad_a_id && mySquads.has(f.squad_a_id)) || (f.squad_b_id && mySquads.has(f.squad_b_id));
                   const crew = f.participants.filter((p) => p.role !== 'player');
                   return (
