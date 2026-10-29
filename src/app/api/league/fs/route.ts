@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { weekStart, weekEnd } from '@/lib/scoring';
 import { loadSeasonRules } from '@/lib/standings-server';
-import { fsCapCheck, fsCountsFor } from '@/lib/fs-server';
+import { fsCapCheck, fsCountsFor, fsHomeFor } from '@/lib/fs-server';
 import { announceMatchTime } from '@/lib/notices-server';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +14,13 @@ export const dynamic = 'force-dynamic';
  *
  * GET  ?league=&season=&squad=   → this squad's FS usage this week + season, and the caps
  * POST { action: 'propose', league, season, my_squad_id, opponent_squad_id, scheduled_at, color? }
- *        captain/co-captain of my_squad_id (or staff). Proposer is home. Caps checked here.
+ *        captain/co-captain of my_squad_id (or staff). Caps checked here.
  *        color 'red' | 'green' is required when the season splits FS (rules.fs.colors) and is fixed once booked.
- * POST { action: 'accept' | 'decline', id }   captain/co-captain of the opponent squad (or staff)
+ *        Home (squad_a, picks the side): the proposer for a first meeting in that colour; on a rematch
+ *        home flips to whoever was away last time (fsHomeFor). matches.fs_proposer_squad_id records
+ *        the proposer so accept/cancel rights don't depend on which side is home (add-fs-proposer.sql;
+ *        before it runs the proposer stays home and squad_a is the proposer).
+ * POST { action: 'accept' | 'decline', id }   captain/co-captain of the other squad (or staff)
  * POST { action: 'cancel', id }               proposer's squad leads (or staff); pending only
  */
 
@@ -95,30 +99,46 @@ export async function POST(request: NextRequest) {
 
     const ws = weekStart(new Date(at));
     const kindLabel = rules.fs.colors ? `FS ${color === 'green' ? 'Green' : 'Red'}` : 'FS';
-    const { data, error } = await supabaseAdmin
-      .from('matches')
-      .insert({
-        title: `${slug.toUpperCase()} S${seasonNumber} · ${kindLabel} · ${b.name} vs ${a.name}`, // away vs home
-        description: `${ctx.league.name} Season ${seasonNumber}, free-scheduled match proposed by ${a.name}.${rules.fs.colors && color === 'green' ? ` Green: only the captain and round ${rules.fs.green_min_round}+ picks play.` : ''}`,
-        ...(rules.fs.colors ? { fs_color: color } : {}),
-        match_type: 'tournament',
-        status: 'scheduled',
-        scheduled_at: at,
-        squad_a_id: mine,
-        squad_b_id: opp,
-        created_by: v.id,
-        league_slug: slug,
-        season_number: Number(seasonNumber),
-        week: null,
-        stage: 'fs',
-        fs_status: 'pending',
-        proposed_by: v.id,
-        fs_week_start: ws,
-      })
-      .select('id')
-      .single();
+
+    // Home alternates on a rematch in the same colour (see the header comment).
+    const pick = await fsHomeFor(slug, Number(seasonNumber), mine, opp, rules.fs.colors ? color : null);
+    const nameOf = (id: string) => (id === mine ? a : b);
+    const row = (homeId: string, withProposer: boolean) => ({
+      title: `${slug.toUpperCase()} S${seasonNumber} · ${kindLabel} · ${nameOf(homeId === mine ? opp : mine).name} vs ${nameOf(homeId).name}`, // away vs home
+      description: `${ctx.league.name} Season ${seasonNumber}, free-scheduled match proposed by ${a.name}.${rules.fs.colors && color === 'green' ? ` Green: only the captain and round ${rules.fs.green_min_round}+ picks play.` : ''}`,
+      ...(rules.fs.colors ? { fs_color: color } : {}),
+      ...(withProposer ? { fs_proposer_squad_id: mine } : {}),
+      match_type: 'tournament',
+      status: 'scheduled',
+      scheduled_at: at,
+      squad_a_id: homeId,
+      squad_b_id: homeId === mine ? opp : mine,
+      created_by: v.id,
+      league_slug: slug,
+      season_number: Number(seasonNumber),
+      week: null,
+      stage: 'fs',
+      fs_status: 'pending',
+      proposed_by: v.id,
+      fs_week_start: ws,
+    });
+    let ins = await supabaseAdmin.from('matches').insert(row(pick.home, true)).select('id').single();
+    let homeId = pick.home;
+    let homeNote: string;
+    if (ins.error && /fs_proposer_squad_id/.test(ins.error.message)) {
+      // Before add-fs-proposer.sql: squad_a must stay the proposer (accept/cancel rights key on it), so no flip.
+      homeId = mine;
+      ins = await supabaseAdmin.from('matches').insert(row(mine, false)).select('id').single();
+      homeNote = `${a.name} is home. (Run add-fs-proposer.sql to alternate home on rematches.)`;
+    } else if (pick.last) {
+      const when = new Date(pick.last.scheduled_at).toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
+      homeNote = `${nameOf(homeId).name} is home and picks the side: ${nameOf(pick.last.home).name} was home for the ${when} ${kindLabel}.`;
+    } else {
+      homeNote = `${a.name} is home and picks the side (first ${kindLabel} between these squads this season).`;
+    }
+    const { data, error } = ins;
     if (error) return NextResponse.json({ error: /fs_color/.test(error.message) ? 'Run add-fs-colors.sql in Supabase first' : /fs_status|stage/.test(error.message) ? 'Run add-season-scoring.sql in Supabase first' : error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, id: data.id });
+    return NextResponse.json({ ok: true, id: data.id, home_squad_id: homeId, home_note: homeNote });
   }
 
   if (action === 'accept' || action === 'decline' || action === 'cancel') {
@@ -126,20 +146,25 @@ export async function POST(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const fsCols = 'id, stage, fs_status, squad_a_id, squad_b_id, league_slug, season_number, scheduled_at';
     const one = (c: string) => supabaseAdmin.from('matches').select(c).eq('id', id).maybeSingle();
-    let got = await one(`${fsCols}, fs_color`);
-    if (got.error && /fs_color/.test(got.error.message)) got = await one(fsCols); // before add-fs-colors.sql
+    // Optional columns: fs_color (add-fs-colors.sql), fs_proposer_squad_id (add-fs-proposer.sql).
+    let got = await one(`${fsCols}, fs_color, fs_proposer_squad_id`);
+    if (got.error && /fs_proposer_squad_id/.test(got.error.message)) got = await one(`${fsCols}, fs_color`);
+    if (got.error && /fs_color/.test(got.error.message)) got = await one(fsCols);
     const m = got.data as any;
     if (!m || m.stage !== 'fs') return NextResponse.json({ error: 'Not an FS match' }, { status: 404 });
     if (m.fs_status !== 'pending') return NextResponse.json({ error: `This proposal is already ${m.fs_status}` }, { status: 409 });
+    // The proposer isn't always home (rematches flip home), so rights key on who proposed.
+    const proposerSquad: string = m.fs_proposer_squad_id || m.squad_a_id;
+    const answerSquad: string = proposerSquad === m.squad_a_id ? m.squad_b_id : m.squad_a_id;
 
     if (action === 'cancel') {
-      if (!v.staff && !(await leads(m.squad_a_id, v.id))) return NextResponse.json({ error: 'Only the proposing squad’s captains can cancel' }, { status: 403 });
+      if (!v.staff && !(await leads(proposerSquad, v.id))) return NextResponse.json({ error: 'Only the proposing squad’s captains can cancel' }, { status: 403 });
       const { error } = await supabaseAdmin.from('matches').update({ fs_status: 'cancelled', status: 'cancelled' }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ ok: true });
     }
 
-    if (!v.staff && !(await leads(m.squad_b_id, v.id))) return NextResponse.json({ error: 'Only the opponent squad’s captain or co-captain can answer this' }, { status: 403 });
+    if (!v.staff && !(await leads(answerSquad, v.id))) return NextResponse.json({ error: 'Only the opponent squad’s captain or co-captain can answer this' }, { status: 403 });
     if (action === 'accept') {
       // Caps can have changed since the proposal (another FS accepted in between).
       const ctx = await seasonFor(m.league_slug, m.season_number);

@@ -61,8 +61,13 @@ export default function FsProposals({
 
   const mySquad = teams.find((t) => leadOf.has(t.id)) || null;
   const fs = fixtures.filter((f) => f.stage === 'fs');
-  const pendingForMe = fs.filter((f) => f.fs_status === 'pending' && f.squad_b_id && leadOf.has(f.squad_b_id));
-  const myPending = fs.filter((f) => f.fs_status === 'pending' && f.squad_a_id && leadOf.has(f.squad_a_id));
+  // Who proposed and who answers. Home (squad_a) is the proposer for a first meeting and flips on a
+  // rematch in the same colour, so neither side is "the proposer" by position.
+  const proposerOf = (f: Fixture) => f.fs_proposer_squad_id || f.squad_a_id;
+  const answererOf = (f: Fixture) => (proposerOf(f) === f.squad_a_id ? f.squad_b_id : f.squad_a_id);
+  const answererName = (f: Fixture) => (proposerOf(f) === f.squad_a_id ? f.squad_b_name : f.squad_a_name);
+  const pendingForMe = fs.filter((f) => f.fs_status === 'pending' && answererOf(f) && leadOf.has(answererOf(f)!));
+  const myPending = fs.filter((f) => f.fs_status === 'pending' && proposerOf(f) && leadOf.has(proposerOf(f)!));
   const thisWeek = weekStart(new Date());
   const weekLabel = (ws: string) => {
     const [y, m, d] = ws.split('-').map(Number);
@@ -90,6 +95,7 @@ export default function FsProposals({
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Request failed');
       toast.success(label);
+      if (typeof json.home_note === 'string' && json.home_note) toast(json.home_note, { duration: 8000 });
       onChanged();
       return true;
     } catch (e: any) {
@@ -160,7 +166,7 @@ export default function FsProposals({
           )}
           <button type="button" onClick={propose} disabled={!opponent || !date || !time || (split && !color) || busy !== null} className={btnPrimary}>{busy === 'propose' ? 'Sending…' : 'Send proposal'}</button>
           <span className="text-[11px] text-[#8B98B0]">
-            You are home and pick the side. Their captain gets an Accept button here.
+            Home picks the side: you, for a first meeting{split ? ' in that colour' : ''}; on a rematch, whoever was away last time. Their captain gets an Accept button here.
             {split && ' Red or Green is fixed once you send it.'}
             {split && color === 'green' && ` Green: rounds 1–${rules.fs.green_min_round - 1} stay in spec; if one of them plays, the match scores as Red for both squads.`}
           </span>
@@ -170,8 +176,8 @@ export default function FsProposals({
       {(pendingForMe.length > 0 || myPending.length > 0 || (isStaff && fs.some((f) => f.fs_status === 'pending'))) && (
         <ul className="divide-y divide-white/[0.06]">
           {fs.filter((f) => f.fs_status === 'pending').map((f) => {
-            const forMe = !!f.squad_b_id && leadOf.has(f.squad_b_id);
-            const mine = !!f.squad_a_id && leadOf.has(f.squad_a_id);
+            const forMe = !!answererOf(f) && leadOf.has(answererOf(f)!);
+            const mine = !!proposerOf(f) && leadOf.has(proposerOf(f)!);
             if (!forMe && !mine && !isStaff) return null;
             const when = new Date(f.scheduled_at);
             return (
@@ -189,7 +195,7 @@ export default function FsProposals({
                   </span>
                 ) : mine ? (
                   <span className="flex items-center gap-2">
-                    <span className="text-xs text-[#8B98B0]">Waiting on {f.squad_b_name}</span>
+                    <span className="text-xs text-[#8B98B0]">Waiting on {answererName(f)}</span>
                     <button type="button" onClick={() => call({ action: 'cancel', id: f.id }, 'Proposal cancelled', f.id)} disabled={busy !== null} className={btnQuiet}>Cancel</button>
                   </span>
                 ) : null}

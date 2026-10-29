@@ -114,3 +114,43 @@ export async function fsCapCheck(
   }
   return null;
 }
+
+export interface FsHome {
+  /** squad_a (picks the side) and squad_b for the new fixture. */
+  home: string;
+  away: string;
+  /** The most recent counted meeting in this colour, as it stands on the site now; null for a first meeting. */
+  last: { id: string; scheduled_at: string; home: string } | null;
+}
+
+/**
+ * Who is home for a new FS between `proposer` and `opponent`: the proposer for the first meeting
+ * in that colour, and whoever was AWAY last time for a rematch (John, 2026-10-28), so two squads
+ * that meet twice in a colour get the side pick once each. Red and Green alternate separately.
+ * "Last time" is the latest pending or accepted fixture between them in that colour as the site
+ * shows it now, so a manual swap by staff is what the next one flips from. Declined and cancelled
+ * proposals don't count. A played match counts as the colour it scored as, like the caps.
+ */
+export async function fsHomeFor(leagueSlug: string, seasonNumber: number, proposer: string, opponent: string, color: FsColor | null): Promise<FsHome> {
+  const q = (cols: string) =>
+    supabaseAdmin
+      .from('matches')
+      .select(cols)
+      .eq('league_slug', leagueSlug)
+      .eq('season_number', seasonNumber)
+      .eq('stage', 'fs')
+      .in('fs_status', ['pending', 'accepted'])
+      .or(`and(squad_a_id.eq.${proposer},squad_b_id.eq.${opponent}),and(squad_a_id.eq.${opponent},squad_b_id.eq.${proposer})`)
+      .order('scheduled_at', { ascending: false });
+  let got = await q('id, squad_a_id, squad_b_id, scheduled_at, fs_color');
+  if (got.error && /fs_color/.test(got.error.message)) got = await q('id, squad_a_id, squad_b_id, scheduled_at');
+  const rows = (got.data || []) as any[];
+  const scored = new Map<string, string>();
+  if (color && rows.length) {
+    const { data: res } = await supabaseAdmin.from('league_matches').select('fixture_id, fs_color').in('fixture_id', rows.map((r) => r.id)).eq('match_kind', 'fs');
+    ((res || []) as any[]).forEach((r) => { if (r.fixture_id && r.fs_color) scored.set(r.fixture_id, r.fs_color); });
+  }
+  const last = rows.find((r) => !color || ((scored.get(r.id) || r.fs_color) === 'green' ? 'green' : 'red') === color) || null;
+  if (!last) return { home: proposer, away: opponent, last: null };
+  return { home: last.squad_b_id, away: last.squad_a_id, last: { id: last.id, scheduled_at: last.scheduled_at, home: last.squad_a_id } };
+}

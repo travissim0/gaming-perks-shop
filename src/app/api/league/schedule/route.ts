@@ -38,6 +38,9 @@ export interface Fixture {
   /** Free-scheduled only: the colour the captains declared when booking (null on older rows = red). */
   fs_color: 'red' | 'green' | null;
   proposed_by: string | null;
+  /** Free-scheduled only: the squad that proposed it. Home (squad_a) is the proposer for a first
+   *  meeting in that colour and flips on a rematch, so the two can differ (add-fs-proposer.sql). */
+  fs_proposer_squad_id: string | null;
   fs_week_start: string | null;
   scheduled_at: string;
   /** Captains haven't agreed a time yet: scheduled_at is only the end of the play-by day (see lib/schedule). */
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
     supabaseAdmin.from('matches').select(cols).eq('league_slug', league).eq('season_number', season).order('scheduled_at', { ascending: true });
   // Optional columns arrive with later SQL files (add-season-scoring, add-match-time-tbd,
   // add-fs-colors); drop whichever is missing and try again.
-  let optional = ['fs_status', 'proposed_by', 'fs_week_start', 'time_tbd', 'fs_color'];
+  let optional = ['fs_status', 'proposed_by', 'fs_week_start', 'time_tbd', 'fs_color', 'fs_proposer_squad_id'];
   let { data: rows, error } = await query([base, ...optional].join(', '));
   while (error && optional.length) {
     const missing = optional.find((c) => error!.message.includes(c));
@@ -202,6 +205,7 @@ export async function GET(request: NextRequest) {
     fs_status: m.stage === 'fs' ? (m.fs_status ?? 'accepted') : null,
     fs_color: m.stage === 'fs' ? (m.fs_color === 'green' ? 'green' : m.fs_color === 'red' ? 'red' : null) : null,
     proposed_by: m.proposed_by ?? null,
+    fs_proposer_squad_id: m.stage === 'fs' ? (m.fs_proposer_squad_id ?? m.squad_a_id ?? null) : null,
     fs_week_start: m.fs_week_start ?? null,
     scheduled_at: m.scheduled_at,
     time_tbd: m.time_tbd === true,
