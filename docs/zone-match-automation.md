@@ -328,14 +328,21 @@ the queue's `scheduled_at` about once a minute; the zone re-sent its [Zone] remi
 arena on each move, and the held reminder was 540-610 characters, over the 496-byte chat packet,
 which silenced and dropped every connected client, six waves in a row. So, now:
 
-- **`scheduled_at` never moves on its own.** It is the agreed time, in one format
-  (`toISOString()`), as is every other time in the queue. Staff can still change it on the site.
+- **`scheduled_at` moves at most once per late start, never on a schedule.** While the match waits
+  it is the agreed time. The moment the hold lifts it becomes the new kick-off (release + 10
+  minutes) and stays there. That is the same thing the zone already handles when staff edit a time
+  by hand ("Match timer" above: reset `*timer` from the new `starts_in_min` when `scheduled_at`
+  changed since you last set it), and it is what moved the timer correctly on 2026-10-25 and
+  10-27 when staff did it manually. One format (`toISOString()`), as every time in the queue.
+  (Added 2026-10-29: the first version of this contract kept `scheduled_at` fixed and asked the
+  zone to start a fresh timer when `hold` cleared; the zone never did, so held matches ended up
+  with no timer at all.)
 - **`hold`** is set while the match waits: `{ waiting_on: { id, title }, since, setup_min }`.
   While it is set, keep the arena timer from running out (extend it, as `*timer` does) and send
-  nothing extra. When it goes back to null after having been set, run a fresh `setup_min`-minute
-  timer (10): everyone moves over, sides and lineups get set, the one-minute message and placement
-  work as always. `late.released_at` / `late.released_by` ('result', 'ceiling', or the alias who
-  pressed Start now) say how it ended.
+  nothing extra. When it goes back to null, `scheduled_at` has moved: the fresh 10-minute timer
+  comes from that, and everyone moves over, sides and lineups get set, the one-minute message and
+  placement work as always. `late.released_at` / `late.released_by` ('result', 'ceiling', the
+  alias who pressed Start now, or 'staff time change') say how it ended.
 - **Every text the queue hands the zone is capped** (180 characters, ellipsis): reminders,
   `one_minute`, captains' whispers, sub lines. The held reminder is one short clause ("Waiting on
   187 BOYZ vs Pure Tilt to finish."); who is in both matches is shown on the match page only.

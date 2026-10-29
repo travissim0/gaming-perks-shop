@@ -43,6 +43,8 @@ export interface Fixture {
   fs_proposer_squad_id: string | null;
   fs_week_start: string | null;
   scheduled_at: string;
+  /** Late start: when the match actually kicked off after waiting on an earlier one; null when it started on time (or hasn't). */
+  kickoff_at: string | null;
   /** Captains haven't agreed a time yet: scheduled_at is only the end of the play-by day (see lib/schedule). */
   time_tbd: boolean;
   status: string;
@@ -114,7 +116,7 @@ export async function GET(request: NextRequest) {
     supabaseAdmin.from('matches').select(cols).eq('league_slug', league).eq('season_number', season).order('scheduled_at', { ascending: true });
   // Optional columns arrive with later SQL files (add-season-scoring, add-match-time-tbd,
   // add-fs-colors); drop whichever is missing and try again.
-  let optional = ['fs_status', 'proposed_by', 'fs_week_start', 'time_tbd', 'fs_color', 'fs_proposer_squad_id'];
+  let optional = ['fs_status', 'proposed_by', 'fs_week_start', 'time_tbd', 'fs_color', 'fs_proposer_squad_id', 'effective_at', 'late_released_at'];
   let { data: rows, error } = await query([base, ...optional].join(', '));
   while (error && optional.length) {
     const missing = optional.find((c) => error!.message.includes(c));
@@ -208,6 +210,7 @@ export async function GET(request: NextRequest) {
     fs_proposer_squad_id: m.stage === 'fs' ? (m.fs_proposer_squad_id ?? m.squad_a_id ?? null) : null,
     fs_week_start: m.fs_week_start ?? null,
     scheduled_at: m.scheduled_at,
+    kickoff_at: m.late_released_at && m.effective_at && Math.abs(new Date(m.effective_at).getTime() - new Date(m.scheduled_at).getTime()) >= 60_000 ? m.effective_at : null,
     time_tbd: m.time_tbd === true,
     status: m.status,
     title: m.title,
@@ -312,8 +315,9 @@ export async function PATCH(request: NextRequest) {
 
   const curCols = 'id, league_slug, season_number, week, stage, playoff_round, squad_a_id, squad_b_id, scheduled_at, status, game_id';
   const cur = (cols: string) => supabaseAdmin.from('matches').select(cols).eq('id', id).maybeSingle();
-  // time_tbd arrives with add-match-time-tbd.sql; without it no match is TBD.
-  let curRes = await cur(`${curCols}, time_tbd`);
+  // time_tbd (add-match-time-tbd.sql) and the late-start columns (add-match-late-start.sql) are optional.
+  let curRes = await cur(`${curCols}, time_tbd, effective_at, late_waiting_on, late_since, late_released_at`);
+  if (curRes.error && /effective_at|late_/.test(curRes.error.message)) curRes = await cur(`${curCols}, time_tbd`);
   if (curRes.error && /time_tbd/.test(curRes.error.message)) curRes = await cur(curCols);
   const current = curRes.data as any;
   if (!current || !current.league_slug) return NextResponse.json({ error: 'Fixture not found' }, { status: 404 });
@@ -330,6 +334,14 @@ export async function PATCH(request: NextRequest) {
     // back (the vacated week 2 match, 2026-10-25, stayed expired and so out of the queue and the
     // league page). A match with a result is never revived this way.
     if (current.status === 'expired' && !current.game_id && new Date(body.scheduled_at).getTime() > Date.now()) patch.status = 'scheduled';
+    // A staff time edit on a match that is in, or came out of, a late start wins over the
+    // automation: the new time is the kick-off the zone runs to, nothing is on hold any more, and
+    // the hold does not re-engage. A match that never waited is left alone.
+    if ('effective_at' in current && (current.effective_at || current.late_since || current.late_waiting_on)) {
+      patch.effective_at = null;
+      patch.late_waiting_on = null;
+      if (!current.late_released_at) { patch.late_released_at = new Date().toISOString(); patch.late_released_by = 'staff time change'; }
+    }
   }
   if ('time_tbd' in body) {
     if (typeof body.time_tbd !== 'boolean') return NextResponse.json({ error: 'time_tbd must be true or false' }, { status: 400 });

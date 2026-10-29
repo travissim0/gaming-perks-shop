@@ -145,20 +145,28 @@ export async function GET(request: NextRequest) {
       /** FS only: 'red' | 'green'. Green: `client.players` already leaves out everyone who may not play. */
       fs_color: p.match.fs_color,
       status: p.match.status,
-      /** The agreed kick-off. It never moves on its own: a late start is signalled by `hold`, not by this. */
-      scheduled_at: iso(p.match.scheduled_at),
+      /**
+       * The kick-off the zone runs to. While a match waits on an earlier one (`hold`) this stays the
+       * agreed time; the moment the hold lifts it becomes the new kick-off (release + setup_min) and
+       * stays there, so it changes ONCE per late start, exactly as when staff edit the time by hand,
+       * and the zone resets `*timer` from the new `starts_in_min` (see "Match timer" in the docs).
+       * The Oct 18 crash came from moving this every ~30 s in two formats, not from moving it.
+       */
+      scheduled_at: iso(p.match.kickoff_at || p.match.scheduled_at),
       /**
        * Late start. While set, the match is waiting on an earlier match: keep the arena timer from
-       * running out (extend it, as `*timer` does) and send nothing extra. When it goes back to null
-       * after being set, run a fresh `hold.setup_min`-minute timer. Null for a match that is not waiting.
+       * running out (extend it, as `*timer` does) and send nothing extra. When the hold lifts this
+       * goes back to null AND `scheduled_at` above moves to the new kick-off, so resetting the timer
+       * from the new `starts_in_min` (the normal "time changed" path) is all the zone has to do.
+       * Null for a match that is not waiting.
        */
       hold: p.match.late?.waiting_on ? { waiting_on: { id: p.match.late.waiting_on.id, title: shortTitle(p.match.late.waiting_on.title) }, since: iso(p.match.late.since), setup_min: p.match.late.setup_min } : null,
       /** How a late start ended: `released_at` / `released_by` ('result', 'ceiling', or who pressed Start now). Null for a match that never waited. */
       late: p.match.late ? { released_at: iso(p.match.late.released_at), released_by: p.match.late.released_by, setup_min: p.match.late.setup_min } : null,
       side_reveal_at: iso(p.side_reveal_at),
       side_released: p.side_released,
-      /** Minutes until the scheduled time (negative once it has started). The arena's `*timer` value when it is opened. */
-      starts_in_min: Math.round((new Date(p.match.scheduled_at).getTime() - now) / 60_000),
+      /** Minutes until `scheduled_at` above (negative once it has started). The arena's `*timer` value when it is opened, and again whenever `scheduled_at` changes. */
+      starts_in_min: Math.round((new Date(p.match.kickoff_at || p.match.scheduled_at).getTime() - now) / 60_000),
       home: p.home && { squad_id: p.home.squad_id, tag: p.home.tag, name: p.home.name, side: p.home.side, team_starting: p.home.team_starting, team_bench: p.home.team_bench, leaders: leadersOf(p.home) },
       away: p.away && { squad_id: p.away.squad_id, tag: p.away.tag, name: p.away.name, side: p.away.side, team_starting: p.away.team_starting, team_bench: p.away.team_bench, leaders: leadersOf(p.away) },
       progress: p.progress,

@@ -358,6 +358,7 @@ function SchedulePage() {
                               <div>{dayLabel(f.time_tbd && f.result ? f.result.played_at : f.scheduled_at)}</div>
                               <div className="text-[#E6EDF7]">{f.time_tbd ? '' : localTime(f.scheduled_at)}</div>
                               {!f.time_tbd && etLine(f.scheduled_at) && <div className="text-[10px] text-[#8B98B0]">{etLine(f.scheduled_at)}</div>}
+                              {f.kickoff_at && <div className="text-[10px] text-[#F59E0B]/90" title="Waited on an earlier match">started late · {timeLabel(f.kickoff_at)}</div>}
                             </>
                           )}
                           {f.stage === 'fs' && (
