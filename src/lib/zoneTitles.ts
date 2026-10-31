@@ -16,6 +16,7 @@ export const ZONE_TITLE_TO_TAG: Readonly<Record<string, string>> = {
   'Cosmic Rift - Rogue Trader': 'cr-rt',
   'CTF - Mini': 'ctfmini',
   'CTF - Twin Peaks 2.0': 'ctf',
+  'CTF:X Halloween Edition w/ Bots': 'ctfx',
   'CA - Quarantine (Bots)': 'qca',
 };
 
