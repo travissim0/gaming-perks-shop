@@ -77,7 +77,7 @@ interface Setup {
   match_chat?: string | null;
   can_see_match_chat?: boolean;
   viewer: {
-    is_staff: boolean; is_referee?: boolean; leads_home: boolean; leads_away: boolean;
+    is_staff: boolean; is_referee?: boolean; runs_match?: boolean; leads_home: boolean; leads_away: boolean;
     member_home?: boolean; member_away?: boolean;
     can_pick_side: boolean; can_edit_home: boolean; can_edit_away: boolean;
     can_sub_home?: boolean; can_sub_away?: boolean; sub_window?: boolean;
@@ -309,6 +309,10 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
 
   const { home, away, viewer, match, progress } = setup;
   const starters = setup.starters ?? 10;
+  // The referee on this match's crew runs it: staff view and controls on it from 30 min before.
+  const refNote = viewer?.runs_match ? (
+    <div className="rounded-lg bg-[#22D3EE]/10 px-3 py-2 text-sm text-[#E6EDF7]"><span className="font-medium text-[#22D3EE]">You are the referee on this match.</span> You can see both lineups, pick the side if {home.tag} hasn't, and set or fix either lineup until the result is in.</div>
+  ) : null;
   const locked = match.locked;
   const auto = setup.automation ?? { enabled: true, reason: null };
   // Per-match automation switch: league staff and referees (the people in the arena on match
@@ -471,6 +475,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
         </div>
         {sidesLine && <div className="px-4 pb-2 text-sm text-[#E6EDF7]">{sidesLine}</div>}
         {lateNote && <div className="px-4 pb-2">{lateNote}</div>}
+        {refNote && <div className="px-4 pb-2">{refNote}</div>}
         {manualNote && <div className="px-4 pb-2">{manualNote}</div>}
         {greenNote && <div className="px-4 pb-2">{greenNote}</div>}
         {/* A referee sees this view until the sides are released; they set the chat here. */}
@@ -502,7 +507,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
 
   // Staff / referee controls, out of the captains' way.
   const staffItems: MenuItem[] = [];
-  if (viewer?.is_staff) staffItems.push({ label: 'Swap home / away', onClick: () => post({ action: 'swap_home' }, 'Home and away swapped'), disabled: busy !== null });
+  if (viewer?.is_staff && !viewer.runs_match) staffItems.push({ label: 'Swap home / away', onClick: () => post({ action: 'swap_home' }, 'Home and away swapped'), disabled: busy !== null });
   if ((viewer?.is_staff || viewer?.is_referee) && auto.reason !== 'site') {
     staffItems.push(auto.enabled
       ? { label: 'Run by hand (no zone automation)', danger: true, disabled: busy !== null, title: 'Take this match out of the zone queue',
@@ -913,6 +918,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
 
       <div className="px-4 pb-4 space-y-3">
         {lateNote}
+        {refNote}
         {manualNote}
         {greenNote}
         {chatRow}

@@ -14,7 +14,8 @@ import { normalizeRules } from '@/lib/scoring';
  *   - staff, or the game client (header `X-Client-Key: <MATCH_CLIENT_KEY>`): everything, incl. the `client` block
  *   - home captain/co-captain: the side + the home lineup
  *   - away captain/co-captain: the away lineup; the side once it is released
- *   - referees: both lineups once the side is released (they run the match), never before
+ *   - referees: both lineups once the side is released, never before. The referee on the match's
+ *     crew gets the full staff view and controls on it from 30 min before (refRunsMatch)
  *   - everyone else: whether the side and each lineup have been submitted; the side once released
  *   The side is released to everyone 5 minutes before the scheduled time. Lineups stay private.
  *
@@ -44,7 +45,11 @@ export interface Member {
 }
 export interface SquadRow { id: string; name: string; tag: string | null; captain_id: string | null }
 export type Squad = SquadRow & { members: Member[] };
-export interface Viewer { id: string | null; alias: string; staff: boolean; referee: boolean; client: boolean }
+export interface Viewer {
+  id: string | null; alias: string; staff: boolean; referee: boolean; client: boolean;
+  /** A referee on this match's crew, inside the window where they run it: `staff` is true for this match only (withRefPowers). */
+  runs_match?: boolean;
+}
 
 export const tagOf = (s: SquadRow) => (s.tag || s.name).slice(0, 8).toUpperCase();
 
@@ -236,8 +241,29 @@ export async function viewerFor(request: NextRequest): Promise<Viewer> {
   };
 }
 
+/**
+ * A referee on this match's crew runs it: from the time the arena opens (30 minutes before the
+ * scheduled time) until the result is in, they get the staff view and controls on THIS match: both
+ * lineups, pick the side if the home captain hasn't, set or fix either lineup, subs. Not before
+ * (lineups stay private to each squad) and not on matches they aren't working. John, 2026-11-01:
+ * Worth, alone on BO v 187, could not see 187's lineup or set it, pick a side, or see one team.
+ * Strategy stays the squad's own (seesStrategy keys on the roster, not on staff).
+ */
+export const REF_RUNS_FROM_MS = 30 * 60 * 1000;
+export async function refRunsMatch(match: any, viewer: Viewer): Promise<boolean> {
+  if (!viewer.referee || viewer.staff || !viewer.id || !match?.id) return false;
+  if (isTimeTbd(match) || ['completed', 'cancelled', 'expired'].includes(match.status)) return false;
+  if (Date.now() < new Date(match.scheduled_at).getTime() - REF_RUNS_FROM_MS) return false;
+  const { data } = await supabaseAdmin.from('match_participants').select('id').eq('match_id', match.id).eq('player_id', viewer.id).eq('role', 'referee').limit(1);
+  return !!data?.length;
+}
+/** The viewer with staff powers on this match if they are the referee running it (see refRunsMatch). */
+export async function withRefPowers(match: any, viewer: Viewer): Promise<Viewer> {
+  return (await refRunsMatch(match, viewer)) ? { ...viewer, staff: true, runs_match: true } : viewer;
+}
+
 /** On this squad's roster (captain, co-captain or player)? */
-export const memberOf = (sq: Squad | null | undefined, userId: string | null) =>
+export const memberOf =(sq: Squad | null | undefined, userId: string | null) =>
   !!sq && !!userId && sq.members.some((m) => m.player_id === userId);
 
 /**
@@ -442,6 +468,8 @@ export function buildPayload(
       ? {
           is_staff: viewer.staff,
           is_referee: viewer.referee,
+          /** The referee running this match (staff view and controls on it, from 30 min before until the result is in). */
+          runs_match: !!viewer.runs_match,
           leads_home: leadsHome,
           leads_away: leadsAway,
           member_home: memberHome,
@@ -507,6 +535,7 @@ export async function loadForMatch(match: any, viewer: Viewer) {
   match = await late.applyLateStart(match);
   match.late_state = await late.lateStateOf(match);
   match.arena_seq = await late.meetingNumber(match);
+  viewer = await withRefPowers(match, viewer);
   const ids = [match.squad_a_id, match.squad_b_id].filter(Boolean) as string[];
   // ref_chat (add-match-chat.sql) and placement_hold (add-match-placement-hold.sql) arrive with
   // their SQL files; read the row without whichever is missing.

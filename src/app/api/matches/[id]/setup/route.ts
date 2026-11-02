@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor, withRefPowers,
   PLAN_LABEL, SQL_FOR_COL, isPlanClass, type PlanClass, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
 import { makeSub } from '@/lib/match-subs-server';
@@ -28,7 +28,9 @@ export const dynamic = 'force-dynamic';
  *         and referees; readable only by staff, referees and the two squads' captains / co-captains
  *   { action: 'set_manual_zone', manual: boolean }   staff or a referee — take this match out of (or put it back in) the zone queue
  *
- * Home team = squad_a. Captains can edit until the scheduled time; staff always.
+ * Home team = squad_a. Captains can edit until the scheduled time; staff always. The referee on the
+ * match's crew counts as staff on it from 30 min before until the result is in (withRefPowers),
+ * except for swap_home.
  */
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,8 +48,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const viewer = await viewerFor(request);
-  if (!viewer.id) return NextResponse.json({ error: 'Sign in first' }, { status: 401 });
+  const asker = await viewerFor(request);
+  if (!asker.id) return NextResponse.json({ error: 'Sign in first' }, { status: 401 });
 
   const body = await request.json().catch(() => null);
   const action = body?.action;
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const match = await loadMatch(id);
   if (!match) return NextResponse.json({ error: 'Match not found' }, { status: 404 });
   if (!match.squad_a_id || !match.squad_b_id) return NextResponse.json({ error: 'Both teams must be set on the match first' }, { status: 409 });
+  const viewer = await withRefPowers(match, asker);
 
   const squads = await loadSquads([match.squad_a_id, match.squad_b_id]);
   const home = squads[match.squad_a_id];
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   if (action === 'swap_home') {
-    if (!viewer.staff) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
+    if (!asker.staff) return NextResponse.json({ error: 'Staff only' }, { status: 403 });
     const { error } = await supabaseAdmin.from('matches').update({ squad_a_id: match.squad_b_id, squad_b_id: match.squad_a_id }).eq('id', id);
     if (error) return fail(error);
     const { error: e2 } = await supabaseAdmin.from('match_setup').upsert({ match_id: id, home_side: null, side_chosen_at: null, side_chosen_by: null, updated_at: now });
