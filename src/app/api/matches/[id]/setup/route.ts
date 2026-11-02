@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor, withRefPowers,
+  STARTERS, greenBlockedFor, isLocked, isSubWindow, leads, loadAll, loadMatch, loadSquads, logSetupChange, missingTable, missingLineupCol, seesStrategy, supabaseAdmin, viewerFor, withRefPowers,
   PLAN_LABEL, SQL_FOR_COL, isPlanClass, type PlanClass, type PlanSide, type TenMan,
 } from '@/lib/match-setup-server';
 import { makeSub } from '@/lib/match-subs-server';
@@ -96,6 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (error) return fail(error);
     const { error: e2 } = await supabaseAdmin.from('match_setup').upsert({ match_id: id, home_side: null, side_chosen_at: null, side_chosen_by: null, updated_at: now });
     if (e2) return fail(e2);
+    await logSetupChange(id, viewer, 'home_swapped', { home_now: away.tag || away.name, was: home.tag || home.name });
     return NextResponse.json(await loadAll(id, viewer));
   }
 
@@ -106,10 +107,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (locked) return NextResponse.json({ error: 'The side is locked now the match has started' }, { status: 409 });
       if (!leads(home, viewer.id)) return NextResponse.json({ error: `Only ${home.name}'s captain or co-captain picks the side (home team)` }, { status: 403 });
     }
+    const { data: before } = await supabaseAdmin.from('match_setup').select('home_side').eq('match_id', id).maybeSingle();
     const { error } = await supabaseAdmin
       .from('match_setup')
       .upsert({ match_id: id, home_side: side, side_chosen_at: side ? now : null, side_chosen_by: side ? viewer.id : null, updated_at: now });
     if (error) return fail(error);
+    await logSetupChange(id, viewer, side ? 'side_set' : 'side_cleared', { side, was: (before as any)?.home_side ?? null, home: home.tag || home.name }, home.id);
     return NextResponse.json(await loadAll(id, viewer));
   }
 
@@ -181,6 +184,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       if (insErr) return fail(insErr);
     }
+    // History: starters before and after (bench as counts), so a re-save over a captain's lineup can be traced.
+    const aliasOf = (pid: string) => sq.members.find((m) => m.player_id === pid)?.alias || 'Unknown';
+    const was = (oldRows || []) as any[];
+    await logSetupChange(id, viewer, 'lineup_saved', {
+      squad: sq.tag || sq.name,
+      before: was.length ? { starting: was.filter((r) => r.slot === 'starting').sort((a, b) => a.position - b.position).map((r) => aliasOf(r.player_id)), bench: was.filter((r) => r.slot === 'bench').length } : null,
+      after: { starting: starting.map(aliasOf), bench: bench.length },
+    }, sq.id);
     return NextResponse.json({ ...(await loadAll(id, viewer)), ...(warning ? { warning } : {}) });
   }
 

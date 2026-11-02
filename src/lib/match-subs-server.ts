@@ -1,4 +1,4 @@
-import { greenBlockedFor, missingTable, supabaseAdmin, type Squad } from '@/lib/match-setup-server';
+import { greenBlockedFor, logSetupChange, missingTable, supabaseAdmin, type Squad } from '@/lib/match-setup-server';
 
 /**
  * Subs during a match, shared by the match page (/api/matches/[id]/setup, action 'sub') and the zone
@@ -43,6 +43,7 @@ export async function makeSub(
   const { error: e3 } = await supabaseAdmin.from('match_lineup_subs').insert({ match_id: match.id, squad_id: sq.id, out_player_id: outId, in_player_id: inId, by_id: byId });
   if (e3 && !missingTable(e3.message)) return { error: e3.message, status: 500 };
   if (e3) console.warn('match_lineup_subs missing (add-match-subs.sql): sub applied but not logged');
+  await logSetupChange(match.id, byId, 'sub', { out: aliasIn(sq, outId), in: aliasIn(sq, inId) }, sq.id);
   return { out: aliasIn(sq, outId), in: aliasIn(sq, inId) };
 }
 
@@ -73,5 +74,6 @@ export async function revertSub(matchId: string, squads: Record<string, Squad>, 
   if (e2) return { error: e2.message, status: 500 };
   const { error: e3 } = await supabaseAdmin.from('match_lineup_subs').delete().eq('id', sub.id);
   if (e3) return { error: e3.message, status: 500 };
+  await logSetupChange(matchId, null, 'sub_undone', { out: aliasIn(sq, sub.out_player_id), in: aliasIn(sq, sub.in_player_id), why: 'the arena could not make it' }, sq.id);
   return { out: aliasIn(sq, sub.out_player_id), in: aliasIn(sq, sub.in_player_id) };
 }

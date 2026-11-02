@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hasClientKey, isLocked, leads, loadMatch, loadSquads, missingTable, supabaseAdmin, tagOf } from '@/lib/match-setup-server';
+import { hasClientKey, isLocked, leads, loadMatch, loadSquads, logSetupChange, missingTable, supabaseAdmin, tagOf } from '@/lib/match-setup-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const now = new Date().toISOString();
+  const { data: before } = await supabaseAdmin.from('match_setup').select('home_side').eq('match_id', id).maybeSingle();
   const { error } = await supabaseAdmin
     .from('match_setup')
     .upsert({ match_id: id, home_side: side, side_chosen_at: now, side_chosen_by: member.player_id, updated_at: now });
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const missing = missingTable(error.message);
     return NextResponse.json({ error: missing ? 'Run add-match-setup.sql in Supabase first' : error.message }, { status: missing ? 503 : 500 });
   }
+  await logSetupChange(id, member.player_id, 'side_set', { side, was: (before as any)?.home_side ?? null, home: tagOf(home), via: 'arena ?side' }, home.id);
   const sideName = side === 'titan' ? 'Titan' : 'Collective';
   return NextResponse.json({ ok: true, side, squad_tag: tagOf(home), message: `[${tagOf(home)}] plays ${sideName}. Side saved on freeinf.org.` });
 }

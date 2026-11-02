@@ -250,6 +250,30 @@ export async function viewerFor(request: NextRequest): Promise<Viewer> {
  * Strategy stays the squad's own (seesStrategy keys on the roster, not on staff).
  */
 export const REF_RUNS_FROM_MS = 30 * 60 * 1000;
+
+/**
+ * Match setup history (match_setup_log, add-match-setup-log.sql): who changed what, so a disputed
+ * side pick or lineup can be traced. Never throws and never blocks the change; before the SQL runs
+ * it is a no-op. `by` is a viewer, or a profile id (the alias is looked up), or null for the zone.
+ */
+export type SetupLogAction = 'side_set' | 'side_cleared' | 'lineup_saved' | 'sub' | 'sub_undone' | 'home_swapped';
+export async function logSetupChange(matchId: string, by: Viewer | string | null, action: SetupLogAction, detail: Record<string, unknown>, squadId: string | null = null): Promise<void> {
+  try {
+    let byId: string | null = null, byAlias: string | null = null;
+    if (typeof by === 'string') {
+      byId = by;
+      const { data } = await supabaseAdmin.from('profiles').select('in_game_alias').eq('id', by).maybeSingle();
+      byAlias = (data as any)?.in_game_alias || null;
+    } else if (by) {
+      byId = by.id; byAlias = by.client ? 'Game client' : by.alias || null;
+      if (by.runs_match && byAlias) byAlias = `${byAlias} (referee)`;
+    }
+    const { error } = await supabaseAdmin.from('match_setup_log').insert({ match_id: matchId, by_id: byId, by_alias: byAlias, action, squad_id: squadId, detail });
+    if (error && !missingTable(error.message)) console.warn('match_setup_log insert failed', error.message);
+  } catch (e) {
+    console.warn('match_setup_log failed', e);
+  }
+}
 export async function refRunsMatch(match: any, viewer: Viewer): Promise<boolean> {
   if (!viewer.referee || viewer.staff || !viewer.id || !match?.id) return false;
   if (isTimeTbd(match) || ['completed', 'cancelled', 'expired'].includes(match.status)) return false;
