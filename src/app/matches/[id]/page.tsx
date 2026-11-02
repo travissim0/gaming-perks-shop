@@ -14,6 +14,7 @@ import { displayFont, bodyFont } from '@/lib/fonts';
 import { easternSuffix } from '@/lib/eastern';
 import MatchTime from '@/components/ctf/MatchTime';
 import MatchSetup from '@/components/ctf/MatchSetup';
+import MatchHistory from '@/components/ctf/MatchHistory';
 import MenuButton, { type MenuItem } from '@/components/ctf/MenuButton';
 import { Coverage, PlayerName, RosterControls, dimmed, sortByPrefs, useRosterPrefs, type RolesMap } from '@/components/ctf/RosterRoles';
 import type { RoleKey } from '@/lib/ctf-roles';
@@ -149,7 +150,7 @@ export default function MatchDetailPage() {
   const [mounted, setMounted] = useState(false);
 
   // Manage panel
-  const [panel, setPanel] = useState<'none' | 'link' | 'video' | 'result' | 'time'>('none');
+  const [panel, setPanel] = useState<'none' | 'link' | 'video' | 'result' | 'time' | 'history'>('none');
   // Staff "Set time" on a league fixture (same PATCH the schedule page's fixture editor uses).
   const [timeDate, setTimeDate] = useState('');
   const [timeTime, setTimeTime] = useState('20:00');
@@ -551,6 +552,9 @@ export default function MatchDetailPage() {
     { label: match.game_id ? 'Change game' : 'Link game', onClick: () => (panel === 'link' ? setPanel('none') : openLink()) },
     { label: match.vod_url ? 'Edit video' : 'Add video', onClick: () => setPanel(panel === 'video' ? 'none' : 'video') },
   );
+  // Setup history (who picked the side, saved a lineup, made a sub): here as well as on the setup
+  // card, so staff can settle a dispute after the result is in and the setup card is gone.
+  if (isStaff && match.league_slug && hasTeams) manageItems.push({ label: panel === 'history' ? 'Hide history' : 'History (who changed what)', onClick: () => setPanel(panel === 'history' ? 'none' : 'history') });
   if (!match.league_slug) manageItems.push({ label: 'Delete match', danger: true, onClick: remove, disabled: busy === 'delete' });
   // FS matches carry "…free-scheduled match proposed by <squad>." as their description: show a Proposed
   // tag on that squad instead of the sentence. Any other description still shows.
@@ -779,6 +783,11 @@ export default function MatchDetailPage() {
       )}
 
       {/* Manage panels */}
+      {isStaff && panel === 'history' && (
+        <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#22D3EE]/20 px-4 py-3">
+          <MatchHistory matchId={match.id} onClose={() => setPanel('none')} />
+        </section>
+      )}
       {isStaff && panel === 'time' && (
         <section className="rounded-xl bg-[#131A2B] ring-1 ring-[#F59E0B]/30 px-4 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">

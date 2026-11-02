@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { PLAN_CLASSES, ROLE_META, type RoleKey } from '@/lib/ctf-roles';
 import LineupField from '@/components/ctf/LineupField';
 import MenuButton, { type MenuItem } from '@/components/ctf/MenuButton';
+import MatchHistory from '@/components/ctf/MatchHistory';
 import { BucketHeader, Coverage, PlaceMark, PlanAckTag, PlanClassTag, PlayerName, RosterControls, RoleTags, SideLean, bucketBySide, dimmed, sideRail, sortByPrefs, type RolesMap, type RosterPrefs } from '@/components/ctf/RosterRoles';
 
 /**
@@ -48,9 +49,6 @@ interface Team {
   strategy?: boolean;
 }
 interface Sub { id: string; squad_id: string; out_alias?: string; in_alias?: string; by_alias: string | null; created_at: string }
-/** A match setup history row (/api/matches/[id]/history, staff). */
-interface HistoryRow { id: string; at: string; by: string; action: string; squad: string | null; detail: Record<string, any> }
-type HistoryState = null | 'loading' | { pending: boolean; rows: HistoryRow[] };
 /** Late start: waiting on an earlier match of either squad, or released with the kick-off moved. */
 interface LateInfo {
   waiting_on: { id: string; title: string; because?: string | null } | null;
@@ -109,7 +107,7 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   // Staff: the match's setup history (who changed what), opened from the Manage menu.
-  const [history, setHistory] = useState<HistoryState>(null);
+  const [history, setHistory] = useState(false);
   // Local edits per squad: player_id → slot. Absent until the user touches a lineup.
   const [draft, setDraft] = useState<Record<string, Record<string, Slot>>>({});
   // Local 10-man plan edits per squad: player_id → in/out/none. Saved with the lineup.
@@ -200,19 +198,6 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
     return () => clearTimeout(t);
     // `setup` is here so a refresh that came back too early schedules the next try.
   }, [phase, revealIso, kickoffIso, load, setup]);
-
-  const loadHistory = async () => {
-    setHistory('loading');
-    try {
-      const r = await fetch(`/api/matches/${encodeURIComponent(matchId)}/history`, { headers: await headers(), cache: 'no-store' });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'Could not load the history');
-      setHistory({ pending: !!j.pending_sql, rows: j.rows || [] });
-    } catch (e: any) {
-      toast.error(e.message);
-      setHistory(null);
-    }
-  };
 
   const post = async (body: Record<string, unknown>, label: string): Promise<boolean> => {
     setBusy(label);
@@ -526,45 +511,8 @@ export default function MatchSetup({ matchId, user, roles, prefs, onPrefs, onLin
   // Staff / referee controls, out of the captains' way.
   const staffItems: MenuItem[] = [];
   if (viewer?.is_staff && !viewer.runs_match) staffItems.push({ label: 'Swap home / away', onClick: () => post({ action: 'swap_home' }, 'Home and away swapped'), disabled: busy !== null });
-  if (viewer?.is_staff && !viewer.runs_match) staffItems.push(history ? { label: 'Hide history', onClick: () => setHistory(null) } : { label: 'History (who changed what)', onClick: loadHistory, title: 'Side picks, lineup saves, subs and home swaps on this match, with who did them' });
-
-  // The history panel, for staff: one line per change, oldest first.
-  const describe = (r: HistoryRow): string => {
-    const d = r.detail || {};
-    const sideName = (s: string | null) => (s === 'titan' ? 'Titan' : s === 'collective' ? 'Collective' : s || '');
-    switch (r.action) {
-      case 'side_set': return `${d.home || r.squad || 'Home'} side: ${sideName(d.side)}${d.was && d.was !== d.side ? ` (was ${sideName(d.was)})` : ''}${d.via ? ` · via ${d.via}` : ''}`;
-      case 'side_cleared': return `Side cleared${d.was ? ` (was ${sideName(d.was)})` : ''}`;
-      case 'lineup_saved': {
-        const after: string[] = d.after?.starting || [];
-        const before: string[] | null = d.before?.starting || null;
-        if (!before) return `${d.squad || r.squad} lineup saved: ${after.join(', ') || 'nobody'} (${after.length} starting, ${d.after?.bench ?? 0} bench)`;
-        const added = after.filter((a) => !before.includes(a)), removed = before.filter((b) => !after.includes(b));
-        const change = added.length || removed.length ? `${added.length ? `in: ${added.join(', ')}` : ''}${added.length && removed.length ? ' · ' : ''}${removed.length ? `out: ${removed.join(', ')}` : ''}` : 'same starters';
-        return `${d.squad || r.squad} lineup re-saved: ${change} (${after.length} starting, ${d.after?.bench ?? 0} bench)`;
-      }
-      case 'sub': return `${r.squad || ''} sub: ${d.in} in for ${d.out}`;
-      case 'sub_undone': return `${r.squad || ''} sub undone: ${d.in} back out, ${d.out} back in${d.why ? ` (${d.why})` : ''}`;
-      case 'home_swapped': return `Home and away swapped: ${d.home_now} is now home (was ${d.was})`;
-      default: return `${r.action} ${JSON.stringify(d)}`;
-    }
-  };
-  const historyPanel = history ? (
-    <div className="rounded-lg bg-white/[0.03] px-3 py-2 text-xs">
-      <div className="mb-1 flex items-center justify-between"><span className="font-medium text-[#E6EDF7]">History</span><button type="button" onClick={() => setHistory(null)} className="text-[#8B98B0] hover:text-[#E6EDF7]">Close</button></div>
-      {history === 'loading' ? <div className="text-[#8B98B0]">Loading…</div>
-        : history.pending ? <div className="text-[#F59E0B]">Run add-match-setup-log.sql in Supabase to start recording changes.</div>
-        : history.rows.length === 0 ? <div className="text-[#8B98B0]">No changes recorded yet. Recording started when the history table was added; earlier changes aren't here.</div>
-        : (
-          <ul className="space-y-0.5">
-            {history.rows.map((r) => {
-              const when = new Date(r.at);
-              return <li key={r.id} className="text-[#E6EDF7]"><span className="text-[#8B98B0]">{when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}{easternSuffix(when)} · {r.by}</span> · {describe(r)}</li>;
-            })}
-          </ul>
-        )}
-    </div>
-  ) : null;
+  if (viewer?.is_staff && !viewer.runs_match) staffItems.push({ label: history ? 'Hide history' : 'History (who changed what)', onClick: () => setHistory((h) => !h), title: 'Side picks, lineup saves, subs and home swaps on this match, with who did them' });
+  const historyPanel = history ? <MatchHistory matchId={matchId} onClose={() => setHistory(false)} /> : null;
   if ((viewer?.is_staff || viewer?.is_referee) && auto.reason !== 'site') {
     staffItems.push(auto.enabled
       ? { label: 'Run by hand (no zone automation)', danger: true, disabled: busy !== null, title: 'Take this match out of the zone queue',

@@ -259,7 +259,7 @@ export const REF_RUNS_FROM_MS = 30 * 60 * 1000;
 export type SetupLogAction = 'side_set' | 'side_cleared' | 'lineup_saved' | 'sub' | 'sub_undone' | 'home_swapped';
 export async function logSetupChange(matchId: string, by: Viewer | string | null, action: SetupLogAction, detail: Record<string, unknown>, squadId: string | null = null): Promise<void> {
   try {
-    let byId: string | null = null, byAlias: string | null = null;
+    let byId: string | null = null, byAlias: string | null = by === null ? 'Zone' : null; // null = the arena itself (an undone sub)
     if (typeof by === 'string') {
       byId = by;
       const { data } = await supabaseAdmin.from('profiles').select('in_game_alias').eq('id', by).maybeSingle();
