@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { announceMatchTime } from '@/lib/notices-server';
 import { spacingConflicts, SPACING_REFUSE_MIN, SPACING_WARN_MIN, etClock } from '@/lib/late-start-server';
-import { normalizeRules, scoreMatch, type ScoredMatch, type ScoringRules } from '@/lib/scoring';
+import { normalizeRules, scoreMatch, weekStart, type ScoredMatch, type ScoringRules } from '@/lib/scoring';
 
 /**
  * League schedule (fixtures).
@@ -334,6 +334,11 @@ export async function PATCH(request: NextRequest) {
     // back (the vacated week 2 match, 2026-10-25, stayed expired and so out of the queue and the
     // league page). A match with a result is never revived this way.
     if (current.status === 'expired' && !current.game_id && new Date(body.scheduled_at).getTime() > Date.now()) patch.status = 'scheduled';
+    // An FS match belongs to the Mon–Sun week it is PLAYED in: the week box on the schedule and
+    // both squads' weekly caps key on fs_week_start, stamped at proposal time. A staff date move
+    // across a week boundary re-stamps it (the PTI v DF pair moved Nov 5 → Nov 12 on 2026-11-02
+    // stayed listed, and counted, under Nov 2–8).
+    if (current.stage === 'fs') patch.fs_week_start = weekStart(new Date(body.scheduled_at));
     // A staff time edit on a match that is in, or came out of, a late start wins over the
     // automation: the new time is the kick-off the zone runs to, nothing is on hold any more, and
     // the hold does not re-engage. A match that never waited is left alone.
