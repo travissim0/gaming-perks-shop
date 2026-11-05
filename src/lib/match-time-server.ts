@@ -8,17 +8,25 @@ import { spacingConflicts, SPACING_REFUSE_MIN, SPACING_WARN_MIN, etClock } from 
  * Captains agree a league match's kick-off time on the site (create-match-time-proposals.sql).
  *
  * The league sets the DAY of each fixture; the two squads' leads (captain or co-captain) pick
- * what time that day to play. One side proposes, the other accepts or declines. A proposal
- * from the other side while one is open counts as a counter: the open one is declined. On
- * acceptance the fixture's time is set (and a "Time TBD" fixture becomes timed), the referees'
- * channel hears about it as when staff set a time, and both squads' leads get a site message.
- * Staff may act for either side and can always set or move the time directly.
+ * what time that day to play. One side proposes one or more times (up to MAX_TIMES, so the
+ * other side can pick instead of countering: add-match-time-options.sql), the other accepts
+ * one or declines the lot. A proposal from the other side while one is open counts as a
+ * counter: the open one is declined. On acceptance the fixture's time is set (and a "Time TBD"
+ * fixture becomes timed), the referees' channel hears about it as when staff set a time, and
+ * both squads' leads get a site message. Staff may act for either side and can always set or
+ * move the time directly.
+ *
+ * Times are first come, first served: a squad's other SET matches must be 30 minutes away
+ * (spacingConflicts); an open proposal on another match reserves nothing. The chosen time is
+ * checked again when it is accepted.
  *
  * Nothing changes once the match is within ARENA_LEAD_MS of its kick-off (the zone is opening
  * the arena), or after it is played or cancelled.
  */
 
 const ARENA_LEAD_MS = 30 * 60_000;
+/** Kick-off times one proposal may offer. */
+export const MAX_TIMES = 3;
 
 export interface TimeProposal {
   id: string;
@@ -27,7 +35,15 @@ export interface TimeProposal {
   squad_tag: string | null;
   proposed_by: string;
   proposed_by_alias: string;
+  /** The time proposed; with several offered, the first (pending) or the one chosen (accepted). */
   proposed_at: string;
+  /** Every time offered, earliest first (proposed_at among them). One entry = a plain proposal. */
+  times: string[];
+  /**
+   * On the open proposal: offered times that no longer work because one of the squads' other
+   * matches took a slot within 30 minutes since the offer (first come, first served), with why.
+   */
+  blocked?: { at: string; why: string }[];
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
   note: string | null;
   decided_by_alias: string | null;
@@ -37,6 +53,8 @@ export interface TimeProposal {
 
 export interface TimeState {
   installed: boolean;
+  /** add-match-time-options.sql has run: a proposal may offer up to MAX_TIMES times. */
+  options: boolean;
   /** Set on a proposal that is allowed but close to another match of one of the squads. */
   warning?: string;
   match: {
@@ -73,6 +91,14 @@ const dayLabel = (day: string) => {
   return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' });
 };
 const label = (s: SquadLite) => `${s.tag ? `[${s.tag}] ` : ''}${s.name}`;
+/** "Tue Nov 10 7:00 PM, 8:00 PM or 9:00 PM ET": one day, several clocks. */
+const fmtTimes = (isos: string[]) => {
+  if (isos.length <= 1) return fmtEt(isos[0]);
+  const clocks = isos.map((iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: EASTERN_TZ, hour: 'numeric', minute: '2-digit' }));
+  const day = new Date(isos[0]).toLocaleDateString('en-US', { timeZone: EASTERN_TZ, weekday: 'short', month: 'short', day: 'numeric' });
+  return `${day} ${clocks.slice(0, -1).join(', ')} or ${clocks[clocks.length - 1]} ET`;
+};
+const sortIso = (isos: string[]) => [...new Set(isos.map((s) => new Date(s).toISOString()))].sort((x, y) => new Date(x).getTime() - new Date(y).getTime());
 
 class TimeError extends Error { constructor(message: string, public status = 400) { super(message); } }
 export const isTimeError = (e: unknown): e is TimeError => e instanceof TimeError;
@@ -108,10 +134,15 @@ function closedReason(m: any): string | null {
   return null;
 }
 
-async function loadProposals(matchId: string): Promise<{ installed: boolean; rows: TimeProposal[] }> {
-  const { data, error } = await supabaseAdmin.from('match_time_proposals').select('id, squad_id, proposed_by, proposed_at, status, note, decided_by, decided_at, created_at').eq('match_id', matchId).order('created_at', { ascending: false }).limit(20);
+async function loadProposals(matchId: string): Promise<{ installed: boolean; options: boolean; rows: TimeProposal[] }> {
+  const cols = 'id, squad_id, proposed_by, proposed_at, status, note, decided_by, decided_at, created_at';
+  const q = (c: string) => supabaseAdmin.from('match_time_proposals').select(c).eq('match_id', matchId).order('created_at', { ascending: false }).limit(20);
+  // `alternatives` arrives with add-match-time-options.sql; without it every proposal is one time.
+  let options = true;
+  let { data, error } = await q(`${cols}, alternatives`);
+  if (error && /alternatives/.test(error.message)) { options = false; ({ data, error } = await q(cols)); }
   if (error) {
-    if (/match_time_proposals/.test(error.message)) return { installed: false, rows: [] };
+    if (/match_time_proposals/.test(error.message)) return { installed: false, options: false, rows: [] };
     throw new TimeError(error.message, 500);
   }
   const rows = (data || []) as any[];
@@ -124,9 +155,11 @@ async function loadProposals(matchId: string): Promise<{ installed: boolean; row
   const squad = new Map(((squads || []) as any[]).map((s) => [s.id, s]));
   return {
     installed: true,
+    options,
     rows: rows.map((r) => ({
       id: r.id, squad_id: r.squad_id, squad_name: squad.get(r.squad_id)?.name || '?', squad_tag: squad.get(r.squad_id)?.tag || null,
       proposed_by: r.proposed_by, proposed_by_alias: alias.get(r.proposed_by) || 'Unknown', proposed_at: r.proposed_at, status: r.status, note: r.note || null,
+      times: sortIso([r.proposed_at, ...((Array.isArray(r.alternatives) ? r.alternatives : []) as string[])]),
       decided_by_alias: r.decided_by ? alias.get(r.decided_by) || 'Unknown' : null, decided_at: r.decided_at || null, created_at: r.created_at,
     })),
   };
@@ -134,13 +167,23 @@ async function loadProposals(matchId: string): Promise<{ installed: boolean; row
 
 export async function loadTimeState(matchId: string, viewer: Viewer): Promise<TimeState> {
   const { m, a, b } = await loadFixture(matchId);
-  const [{ installed, rows }, mine] = await Promise.all([loadProposals(matchId), ledBy(viewer.id, [a, b])]);
+  const [{ installed, options, rows }, mine] = await Promise.all([loadProposals(matchId), ledBy(viewer.id, [a, b])]);
   const pending = rows.find((r) => r.status === 'pending') || null;
+  if (pending) {
+    // Times taken by one of the squads' other matches since the offer, so the chooser sees it first.
+    const blocked: { at: string; why: string }[] = [];
+    for (const at of pending.times) {
+      const near = await spacingConflicts([a.id, b.id], at, matchId);
+      if (near.length && near[0].minutes < SPACING_REFUSE_MIN) blocked.push({ at, why: `${near[0].title} is at ${etClock(near[0].scheduled_at)}, ${near[0].minutes} minutes away` });
+    }
+    if (blocked.length) pending.blocked = blocked;
+  }
   const closed = closedReason(m);
   const day = easternDay(m.scheduled_at);
   const acts = !closed && installed && (viewer.staff || !!mine);
   return {
     installed,
+    options,
     match: { id: m.id, scheduled_at: m.scheduled_at, time_tbd: m.time_tbd === true, status: m.status, day, day_label: dayLabel(day), squads: [a, b].map((s) => ({ id: s.id, name: s.name, tag: s.tag })), closed },
     pending,
     history: rows.filter((r) => r.status !== 'pending'),
@@ -160,7 +203,22 @@ async function tell(squadIds: string[], exceptUserId: string | null, subject: st
   await messageUsers([...leads, ...staff].filter((id) => id !== exceptUserId), subject, content);
 }
 
-export async function proposeTime(matchId: string, viewer: Viewer, atIso: string, note: string | null, forSquadId?: string | null): Promise<TimeState> {
+/**
+ * One kick-off time checked against the league day, the clock, and the squads' other matches.
+ * Returns the spacing warning, if any; throws when the time cannot be used.
+ */
+async function checkTime(m: any, a: SquadLite, b: SquadLite, at: Date, matchId: string): Promise<string | undefined> {
+  if (Number.isNaN(at.getTime())) throw new TimeError('Invalid time');
+  const day = easternDay(m.scheduled_at);
+  if (easternDay(at) !== day) throw new TimeError(`The league set this match for ${dayLabel(day)} (Eastern time). Captains pick the time that day; staff can move the day.`);
+  if (at.getTime() <= Date.now() + ARENA_LEAD_MS) throw new TimeError(`${etClock(at.toISOString())} is too soon: pick a time at least 30 minutes from now`);
+  // Spacing: a match and its setup take more than half an hour (Oct 14: two matches 30 minutes apart overlapped).
+  const near = await spacingConflicts([a.id, b.id], at.toISOString(), matchId);
+  if (near.length && near[0].minutes < SPACING_REFUSE_MIN) throw new TimeError(`${near[0].title} is at ${etClock(near[0].scheduled_at)}, only ${near[0].minutes} minutes from ${etClock(at.toISOString())}. Leave at least ${SPACING_REFUSE_MIN} minutes between a squad's matches.`);
+  return near.length && near[0].minutes < SPACING_WARN_MIN ? `Close call: ${near[0].title} is at ${etClock(near[0].scheduled_at)}, ${near[0].minutes} minutes from ${etClock(at.toISOString())}. If it runs long, this match waits for it.` : undefined;
+}
+
+export async function proposeTime(matchId: string, viewer: Viewer, atIsos: string[], note: string | null, forSquadId?: string | null): Promise<TimeState> {
   if (!viewer.id) throw new TimeError('Sign in first', 401);
   const { m, a, b } = await loadFixture(matchId);
   const closed = closedReason(m);
@@ -174,54 +232,60 @@ export async function proposeTime(matchId: string, viewer: Viewer, atIso: string
   if (!mine) throw new TimeError('Only the captains and co-captains of these squads can propose a time', 403);
   const my = mine === a.id ? a : b, other = mine === a.id ? b : a;
 
-  const at = new Date(atIso);
-  if (Number.isNaN(at.getTime())) throw new TimeError('Invalid time');
-  const day = easternDay(m.scheduled_at);
-  if (easternDay(at) !== day) throw new TimeError(`The league set this match for ${dayLabel(day)} (Eastern time). Captains pick the time that day; staff can move the day.`);
-  if (at.getTime() <= Date.now() + ARENA_LEAD_MS) throw new TimeError('Pick a time at least 30 minutes from now');
-  if (m.time_tbd !== true && at.getTime() === new Date(m.scheduled_at).getTime()) throw new TimeError('That is already the match time');
-  // Spacing: a match and its setup take more than half an hour (Oct 14: two matches 30 minutes apart overlapped).
-  const near = await spacingConflicts([a.id, b.id], at.toISOString(), matchId);
-  if (near.length && near[0].minutes < SPACING_REFUSE_MIN) throw new TimeError(`${near[0].title} is at ${etClock(near[0].scheduled_at)}, only ${near[0].minutes} minutes from that. Leave at least ${SPACING_REFUSE_MIN} minutes between a squad's matches.`);
-  const warning = near.length && near[0].minutes < SPACING_WARN_MIN ? `Close call: ${near[0].title} is at ${etClock(near[0].scheduled_at)}, ${near[0].minutes} minutes from this. If it runs long, this match waits for it.` : undefined;
+  if (atIsos.some((s) => Number.isNaN(new Date(s).getTime()))) throw new TimeError('Invalid time');
+  // The current time is not a proposal; drop it rather than refuse the others offered with it.
+  const times = sortIso(atIsos).filter((iso) => m.time_tbd === true || new Date(iso).getTime() !== new Date(m.scheduled_at).getTime());
+  if (times.length === 0) throw new TimeError(atIsos.length ? 'That is already the match time' : 'Pick a time');
+  if (times.length > MAX_TIMES) throw new TimeError(`Offer at most ${MAX_TIMES} times`);
+  for (let i = 1; i < times.length; i++) {
+    const gap = (new Date(times[i]).getTime() - new Date(times[i - 1]).getTime()) / 60_000;
+    if (gap < SPACING_REFUSE_MIN) throw new TimeError(`${etClock(times[i - 1])} and ${etClock(times[i])} are only ${Math.round(gap)} minutes apart; offer times at least ${SPACING_REFUSE_MIN} minutes apart`);
+  }
+  let warning: string | undefined;
+  for (const iso of times) warning = warning || await checkTime(m, a, b, new Date(iso), matchId);
 
-  const { rows, installed } = await loadProposals(matchId);
+  const { rows, installed, options } = await loadProposals(matchId);
   if (!installed) throw new TimeError('Run create-match-time-proposals.sql in Supabase first', 503);
+  if (times.length > 1 && !options) throw new TimeError('Run add-match-time-options.sql in Supabase to offer several times', 503);
   const open = rows.find((r) => r.status === 'pending');
   let countered: TimeProposal | null = null;
   if (open) {
     // Mine again: replaced. Theirs: this is a counter-offer, which turns theirs down.
     const status = open.squad_id === mine ? 'withdrawn' : 'declined';
-    const { error } = await supabaseAdmin.from('match_time_proposals').update({ status, decided_by: viewer.id, decided_at: new Date().toISOString(), note: open.squad_id === mine ? open.note : `Countered with ${fmtEt(at.toISOString())}` }).eq('id', open.id).eq('status', 'pending');
+    const { error } = await supabaseAdmin.from('match_time_proposals').update({ status, decided_by: viewer.id, decided_at: new Date().toISOString(), note: open.squad_id === mine ? open.note : `Countered with ${fmtTimes(times)}` }).eq('id', open.id).eq('status', 'pending');
     if (error) throw new TimeError(error.message, 500);
     if (open.squad_id !== mine) countered = open;
   }
-  const { error } = await supabaseAdmin.from('match_time_proposals').insert({ match_id: matchId, squad_id: mine, proposed_by: viewer.id, proposed_at: at.toISOString(), note: note || null });
+  const row: Record<string, unknown> = { match_id: matchId, squad_id: mine, proposed_by: viewer.id, proposed_at: times[0], note: note || null };
+  if (options) row.alternatives = times.slice(1);
+  const { error } = await supabaseAdmin.from('match_time_proposals').insert(row);
   if (error) throw new TimeError(error.message, 500);
 
   const url = `${SITE_URL}/matches/${matchId}`;
-  const when = fmtEt(at.toISOString());
+  const several = times.length > 1;
   await tell([other.id], viewer.id,
-    `Match time proposed: ${label(my)} vs ${label(other)}`,
-    `${viewer.alias} (${label(my)}) proposes ${when} for ${label(my)} vs ${label(other)}${countered ? `, instead of the ${fmtEt(countered.proposed_at)} ${label(other)} proposed` : ''}.${note ? `\n\n"${note}"` : ''}\n\nAccept or decline it on the match page: ${url}`);
+    `Match time${several ? 's' : ''} proposed: ${label(my)} vs ${label(other)}`,
+    `${viewer.alias} (${label(my)}) proposes ${fmtTimes(times)} for ${label(my)} vs ${label(other)}${countered ? `, instead of the ${fmtTimes(countered.times)} ${label(other)} proposed` : ''}.${note ? `\n\n"${note}"` : ''}\n\n${several ? 'Pick one' : 'Accept'} or decline on the match page: ${url}`);
   const state = await loadTimeState(matchId, viewer);
   return warning ? { ...state, warning } : state;
 }
 
-export async function decideTime(matchId: string, viewer: Viewer, action: 'accept' | 'decline' | 'withdraw', note: string | null): Promise<TimeState> {
+/** `at`: which offered time to accept; may be left out when only one was offered. */
+export async function decideTime(matchId: string, viewer: Viewer, action: 'accept' | 'decline' | 'withdraw', note: string | null, at?: string | null): Promise<TimeState> {
   if (!viewer.id) throw new TimeError('Sign in first', 401);
   const { m, a, b } = await loadFixture(matchId);
-  const { rows } = await loadProposals(matchId);
+  const { rows, options } = await loadProposals(matchId);
   const open = rows.find((r) => r.status === 'pending');
   if (!open) throw new TimeError('There is no open proposal', 409);
   const mine = await ledBy(viewer.id, [a, b]);
   const proposer = open.squad_id === a.id ? a : b, other = open.squad_id === a.id ? b : a;
+  const several = open.times.length > 1;
 
   if (action === 'withdraw') {
     if (!viewer.staff && mine !== open.squad_id) throw new TimeError('Only the squad that proposed it (or staff) can withdraw it', 403);
     const { error } = await supabaseAdmin.from('match_time_proposals').update({ status: 'withdrawn', decided_by: viewer.id, decided_at: new Date().toISOString() }).eq('id', open.id).eq('status', 'pending');
     if (error) throw new TimeError(error.message, 500);
-    await tell([other.id], viewer.id, `Match time proposal withdrawn: ${label(proposer)} vs ${label(other)}`, `${viewer.alias} withdrew the ${fmtEt(open.proposed_at)} proposal for ${label(proposer)} vs ${label(other)}.\n\n${SITE_URL}/matches/${matchId}`);
+    await tell([other.id], viewer.id, `Match time proposal withdrawn: ${label(proposer)} vs ${label(other)}`, `${viewer.alias} withdrew the ${fmtTimes(open.times)} proposal for ${label(proposer)} vs ${label(other)}.\n\n${SITE_URL}/matches/${matchId}`);
     return loadTimeState(matchId, viewer);
   }
 
@@ -229,19 +293,35 @@ export async function decideTime(matchId: string, viewer: Viewer, action: 'accep
   const closed = closedReason(m);
   if (action === 'accept' && closed) throw new TimeError(`Time proposals are closed. ${closed}`, 409);
 
-  const { error } = await supabaseAdmin.from('match_time_proposals').update({ status: action === 'accept' ? 'accepted' : 'declined', decided_by: viewer.id, decided_at: new Date().toISOString(), note: action === 'decline' && note ? note : open.note }).eq('id', open.id).eq('status', 'pending');
-  if (error) throw new TimeError(error.message, 500);
-
   const url = `${SITE_URL}/matches/${matchId}`;
   if (action === 'decline') {
-    await tell([proposer.id], viewer.id, `Match time declined: ${label(proposer)} vs ${label(other)}`, `${viewer.alias} (${label(other)}) declined the ${fmtEt(open.proposed_at)} proposal for ${label(proposer)} vs ${label(other)}.${note ? `\n\n"${note}"` : ''}\n\nPropose another time on the match page: ${url}`);
+    const { error } = await supabaseAdmin.from('match_time_proposals').update({ status: 'declined', decided_by: viewer.id, decided_at: new Date().toISOString(), note: note || open.note }).eq('id', open.id).eq('status', 'pending');
+    if (error) throw new TimeError(error.message, 500);
+    await tell([proposer.id], viewer.id, `Match time${several ? 's' : ''} declined: ${label(proposer)} vs ${label(other)}`, `${viewer.alias} (${label(other)}) declined the ${fmtTimes(open.times)} proposal for ${label(proposer)} vs ${label(other)}.${note ? `\n\n"${note}"` : ''}\n\nPropose another time on the match page: ${url}`);
     return loadTimeState(matchId, viewer);
   }
 
+  // Which of the offered times. First come, first served: another match of one of these
+  // squads may have taken a nearby slot since the offer was made, so the choice is checked again.
+  let chosen = open.times[0];
+  if (several) {
+    const want = at ? new Date(at).getTime() : NaN;
+    const hit = open.times.find((t) => new Date(t).getTime() === want);
+    if (!hit) throw new TimeError('Pick which of the offered times to accept', 400);
+    chosen = hit;
+  } else if (at && new Date(at).getTime() !== new Date(chosen).getTime()) throw new TimeError('That time was not offered', 400);
+  const warning = await checkTime(m, a, b, new Date(chosen), matchId).catch((e) => { throw e instanceof TimeError ? new TimeError(`${etClock(chosen)} no longer works: ${e.message}`, 409) : e; });
+
+  const done: Record<string, unknown> = { status: 'accepted', decided_by: viewer.id, decided_at: new Date().toISOString(), proposed_at: chosen };
+  if (options) done.alternatives = open.times.filter((t) => t !== chosen);
+  const { error } = await supabaseAdmin.from('match_time_proposals').update(done).eq('id', open.id).eq('status', 'pending');
+  if (error) throw new TimeError(error.message, 500);
+
   const wasTbd = m.time_tbd === true;
-  const { error: setErr } = await supabaseAdmin.from('matches').update({ scheduled_at: open.proposed_at, time_tbd: false }).eq('id', matchId);
+  const { error: setErr } = await supabaseAdmin.from('matches').update({ scheduled_at: chosen, time_tbd: false }).eq('id', matchId);
   if (setErr) throw new TimeError(setErr.message, 500);
   await announceMatchTime(matchId, !wasTbd); // the referees' channel, as when staff set a time
-  await tell([a.id, b.id], viewer.id, `Match time set: ${label(a)} vs ${label(b)}`, `${viewer.alias} (${label(other)}) accepted ${fmtEt(open.proposed_at)} for ${label(proposer)} vs ${label(other)}. The match page and schedule now show it.\n\n${url}`);
-  return loadTimeState(matchId, viewer);
+  await tell([a.id, b.id], viewer.id, `Match time set: ${label(a)} vs ${label(b)}`, `${viewer.alias} (${label(other)}) ${several ? `picked ${fmtEt(chosen)} from the times` : `accepted ${fmtEt(chosen)}`} ${label(proposer)} proposed for ${label(proposer)} vs ${label(other)}. The match page and schedule now show it.\n\n${url}`);
+  const state = await loadTimeState(matchId, viewer);
+  return warning ? { ...state, warning } : state;
 }

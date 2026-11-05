@@ -6,11 +6,15 @@ import { supabase } from '@/lib/supabase';
 import { easternClock, easternSuffix, easternToIso } from '@/lib/eastern';
 import type { TimeState, TimeProposal } from '@/lib/match-time-server';
 
+/** Kick-off times one proposal may offer; mirrors MAX_TIMES in match-time-server (server-only module). */
+const MAX_TIMES = 3;
+
 /**
  * Captains agree the kick-off time of a league match (API: /api/matches/[id]/time).
  *
- * The league set the day; one squad's lead proposes a time that day, the other accepts or
- * declines (or counters with a time of their own). Everyone sees the open proposal; only the
+ * The league set the day; one squad's lead proposes one or more times that day (up to
+ * MAX_TIMES, so the other side can pick rather than counter), the other accepts one or
+ * declines (or counters with times of their own). Everyone sees the open proposal; only the
  * two squads' leads and staff get buttons. Hidden when there is nothing to show or do.
  */
 
@@ -32,7 +36,8 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
   const [state, setState] = useState<TimeState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [proposing, setProposing] = useState(false);
-  const [clock, setClock] = useState('20:00');
+  // Kick-offs being proposed, "HH:MM" Eastern; one row per time offered.
+  const [clocks, setClocks] = useState<string[]>(['20:00']);
   const [note, setNote] = useState('');
   const [forSquad, setForSquad] = useState('');
   const [declining, setDeclining] = useState(false);
@@ -49,7 +54,7 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
       if (!res.ok) return;
       const s: TimeState = await res.json();
       setState(s);
-      setClock((c) => (c === '20:00' && !s.match.time_tbd ? easternClock(s.match.scheduled_at) : c));
+      setClocks((c) => (c.length === 1 && c[0] === '20:00' && !s.match.time_tbd ? [easternClock(s.match.scheduled_at)] : c));
     } catch { /* leave as is */ }
   }, [matchId, headers]);
 
@@ -71,7 +76,12 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
     }
   };
 
-  const proposedIso = useMemo(() => (state ? easternToIso(state.match.day, clock) : null), [state, clock]);
+  // The ISO instants for the rows, deduplicated and in order; null entries are unfilled rows.
+  const proposedIsos = useMemo(() => {
+    if (!state) return [];
+    const isos = clocks.map((c) => (c ? easternToIso(state.match.day, c) : null)).filter((x): x is string => !!x);
+    return [...new Set(isos)].sort();
+  }, [state, clocks]);
 
   if (!state || !state.installed) return null;
   const { match, pending, history, me } = state;
@@ -81,6 +91,10 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
   const squadOf = (id: string) => match.squads.find((s) => s.id === id);
   const tagOf = (p: TimeProposal) => p.squad_tag || p.squad_name;
   const other = pending ? squadOf(match.squads.find((s) => s.id !== pending.squad_id)?.id || '') : null;
+  const blockedWhy = (at: string) => pending?.blocked?.find((b) => b.at === at)?.why || null;
+  /** "7:00 PM, 8:00 PM or 9:00 PM PST (10:00 PM … ET)" for a list on one day. */
+  const timesText = (isos: string[]) => (isos.length <= 1 ? both(isos[0]) : `${isos.slice(0, -1).map(both).join(', ')} or ${both(isos[isos.length - 1])}`);
+  const canOfferMore = state.options && clocks.length < MAX_TIMES;
 
   return (
     <section className={card}>
@@ -91,21 +105,35 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
         </span>
       </div>
       <p className="mt-1 text-xs text-[#8B98B0]">
-        The league set the day: <span className="text-[#E6EDF7]">{match.day_label}</span> (Eastern). The two captains agree what time that day to play; the other side accepts, declines, or counters with a time of their own.
+        The league set the day: <span className="text-[#E6EDF7]">{match.day_label}</span> (Eastern). The two captains agree what time that day to play: one side offers {state.options ? `up to ${MAX_TIMES} times` : 'a time'}, the other picks one, declines, or counters with times of their own. Times are first come, first served against a squad's other matches.
       </p>
 
       {pending && (
         <div className="mt-3 rounded-lg border border-[#F59E0B]/30 bg-[#F59E0B]/5 p-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">Proposed</span>
-            <span className="text-[#E6EDF7]">{both(pending.proposed_at)}</span>
+            <span className="rounded bg-[#F59E0B]/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#F59E0B]">{pending.times.length > 1 ? `${pending.times.length} times offered` : 'Proposed'}</span>
+            {pending.times.length > 1
+              ? pending.times.map((t) => (
+                  <span key={t} className={blockedWhy(t) ? 'text-[#8B98B0] line-through' : 'text-[#E6EDF7]'} title={blockedWhy(t) || undefined}>{both(t)}</span>
+                ))
+              : <span className="text-[#E6EDF7]">{both(pending.proposed_at)}</span>}
             <span className="text-xs text-[#8B98B0]">by {pending.proposed_by_alias} for {tagOf(pending)}{other ? ` · waiting on ${other.tag || other.name}` : ''}</span>
           </div>
           {pending.note && <p className="mt-1 text-xs text-[#C9D3E3]">“{pending.note}”</p>}
+          {pending.blocked?.map((b) => (
+            <p key={b.at} className="mt-1 text-xs text-[#F59E0B]">{both(b.at)} no longer works: {b.why}.</p>
+          ))}
           {(me.can_decide || me.can_withdraw) && !declining && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {me.can_decide && <button type="button" disabled={!!busy} onClick={() => act({ action: 'accept' }, 'Time set')} className={btnGo}>{busy === 'accept' ? 'Setting…' : 'Accept'}</button>}
-              {me.can_decide && <button type="button" disabled={!!busy} onClick={() => { setNote(''); setDeclining(true); }} className={btnWarn}>Decline</button>}
+              {me.can_decide && pending.times.map((t) => {
+                const why = blockedWhy(t);
+                return (
+                  <button key={t} type="button" disabled={!!busy || !!why} title={why || undefined} onClick={() => act({ action: 'accept', at: t }, 'Time set')} className={btnGo}>
+                    {busy === 'accept' ? 'Setting…' : pending.times.length > 1 ? `Accept ${both(t)}` : 'Accept'}
+                  </button>
+                );
+              })}
+              {me.can_decide && <button type="button" disabled={!!busy} onClick={() => { setNote(''); setDeclining(true); }} className={btnWarn}>{pending.times.length > 1 ? 'Decline all' : 'Decline'}</button>}
               {me.can_decide && me.can_propose && !proposing && <button type="button" disabled={!!busy} onClick={() => setProposing(true)} className={btnQuiet}>Counter with another time</button>}
               {me.can_withdraw && !me.can_decide && <button type="button" disabled={!!busy} onClick={() => act({ action: 'withdraw' }, 'Withdrawn')} className={btnQuiet}>{busy === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}</button>}
               {me.can_withdraw && !me.can_decide && me.can_propose && !proposing && <button type="button" disabled={!!busy} onClick={() => setProposing(true)} className={btnQuiet}>Change my proposal</button>}
@@ -132,10 +160,18 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
       {proposing && me.can_propose && (
         <div className="mt-3 rounded-lg border border-white/10 bg-[#0B0F1A]/60 p-3">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs text-[#8B98B0]">
-              <span className="mb-1 block uppercase tracking-wide">Kick-off (Eastern)</span>
-              <input type="time" step={300} value={clock} onChange={(e) => setClock(e.target.value)} className={input} />
-            </label>
+            <div className="text-xs text-[#8B98B0]">
+              <span className="mb-1 block uppercase tracking-wide">Kick-off{clocks.length > 1 ? 's' : ''} (Eastern)</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {clocks.map((c, i) => (
+                  <span key={i} className="inline-flex items-center gap-1">
+                    <input type="time" step={300} value={c} onChange={(e) => setClocks((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))} className={input} />
+                    {clocks.length > 1 && <button type="button" onClick={() => setClocks((cs) => cs.filter((_, j) => j !== i))} className="text-[#8B98B0] hover:text-[#F87171]" title="Remove this time" aria-label="Remove this time">×</button>}
+                  </span>
+                ))}
+                {canOfferMore && <button type="button" onClick={() => setClocks((cs) => [...cs, ''])} className="text-xs text-[#22D3EE] hover:text-[#67E8F9]">+ Add another time</button>}
+              </div>
+            </div>
             {me.staff && !me.squad_id && (
               <label className="text-xs text-[#8B98B0]">
                 <span className="mb-1 block uppercase tracking-wide">For</span>
@@ -152,10 +188,10 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <span className="text-xs text-[#8B98B0]">
-              {proposedIso ? <>That is <span className="text-[#E6EDF7]">{both(proposedIso)}</span> on {match.day_label}</> : 'Pick a time'}
+              {proposedIsos.length ? <>That is <span className="text-[#E6EDF7]">{timesText(proposedIsos)}</span> on {match.day_label}{proposedIsos.length > 1 ? '; the other side picks one' : ''}</> : 'Pick a time'}
             </span>
             <span className="flex-1" />
-            <button type="button" disabled={!!busy || !proposedIso || (me.staff && !me.squad_id && !forSquad)} onClick={() => act({ action: 'propose', at: proposedIso, note, squad_id: me.squad_id || forSquad || undefined }, 'Proposed')} className={btnGo}>{busy === 'propose' ? 'Sending…' : pending ? 'Send counter-proposal' : 'Send proposal'}</button>
+            <button type="button" disabled={!!busy || !proposedIsos.length || (me.staff && !me.squad_id && !forSquad)} onClick={() => act({ action: 'propose', times: proposedIsos, note, squad_id: me.squad_id || forSquad || undefined }, 'Proposed')} className={btnGo}>{busy === 'propose' ? 'Sending…' : pending ? 'Send counter-proposal' : 'Send proposal'}</button>
             <button type="button" disabled={!!busy} onClick={() => setProposing(false)} className={btnQuiet}>Cancel</button>
           </div>
         </div>
@@ -169,7 +205,7 @@ export default function MatchTime({ matchId, onChanged }: { matchId: string; onC
               {history.map((h) => (
                 <li key={h.id}>
                   <span className={h.status === 'accepted' ? 'text-[#34D399]' : h.status === 'declined' ? 'text-[#F87171]' : ''}>{h.status[0].toUpperCase() + h.status.slice(1)}</span>
-                  {' · '}{both(h.proposed_at)} by {h.proposed_by_alias} ({tagOf(h)}){h.decided_by_alias && h.status !== 'withdrawn' ? ` · ${h.status} by ${h.decided_by_alias}` : ''}{h.note ? ` · “${h.note}”` : ''}
+                  {' · '}{h.status === 'accepted' && h.times.length > 1 ? `${both(h.proposed_at)} (of ${timesText(h.times)})` : timesText(h.times)} by {h.proposed_by_alias} ({tagOf(h)}){h.decided_by_alias && h.status !== 'withdrawn' ? ` · ${h.status} by ${h.decided_by_alias}` : ''}{h.note ? ` · “${h.note}”` : ''}
                 </li>
               ))}
             </ul>

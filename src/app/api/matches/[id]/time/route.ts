@@ -8,9 +8,12 @@ export const dynamic = 'force-dynamic';
  * Captains agree a league match's kick-off time (src/lib/match-time-server.ts).
  *
  * GET  /api/matches/[id]/time                      anyone → the open proposal, history, and what the viewer may do
- * POST /api/matches/[id]/time { action: 'propose', at, note?, squad_id? }
- *        captain/co-captain of either squad; staff pass squad_id for the side they act for
- * POST /api/matches/[id]/time { action: 'accept' | 'decline', note? }   the other squad's leads, or staff
+ * POST /api/matches/[id]/time { action: 'propose', times: [at, ...] | at, note?, squad_id? }
+ *        captain/co-captain of either squad; up to MAX_TIMES kick-offs on the league's day;
+ *        staff pass squad_id for the side they act for
+ * POST /api/matches/[id]/time { action: 'accept', at? }   the other squad's leads, or staff; `at`
+ *        picks one of the offered times (needed when several were)
+ * POST /api/matches/[id]/time { action: 'decline', note? }
  * POST /api/matches/[id]/time { action: 'withdraw' }                     the proposing squad's leads, or staff
  */
 
@@ -38,8 +41,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const action = String(body?.action || '');
   const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 300) || null : null;
   try {
-    if (action === 'propose') return NextResponse.json(await proposeTime(id, viewer, String(body?.at || ''), note, body?.squad_id ? String(body.squad_id) : null));
-    if (action === 'accept' || action === 'decline' || action === 'withdraw') return NextResponse.json(await decideTime(id, viewer, action, note));
+    if (action === 'propose') {
+      const times = (Array.isArray(body?.times) ? body.times : [body?.at]).filter((t: unknown) => typeof t === 'string' && t).map(String).slice(0, 10);
+      return NextResponse.json(await proposeTime(id, viewer, times, note, body?.squad_id ? String(body.squad_id) : null));
+    }
+    if (action === 'accept' || action === 'decline' || action === 'withdraw') return NextResponse.json(await decideTime(id, viewer, action, note, typeof body?.at === 'string' ? body.at : null));
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (e) {
     return fail(e);
