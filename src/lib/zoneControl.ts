@@ -1,6 +1,6 @@
 import { getServiceSupabase } from '@/lib/supabase';
 import { playerCountsByTag } from '@/lib/zoneTitles';
-import { isRebuildPinned, REBUILD_PINNED_REASON } from '@/lib/zoneBuildPins';
+import { isRebuildPinned, rebuildPinReason } from '@/lib/zoneBuildPins';
 
 // Shared zone-control core, used by BOTH zone-control API routes:
 //   /api/admin/zone-management  - zone admins, any zone
@@ -272,7 +272,7 @@ export async function queueZoneCommand(params: {
   }
   // Pinned-build zones (src/lib/zoneBuildPins.ts): Rebuild would install the untested latest release.
   if (action === 'rebuild' && isRebuildPinned(zone)) {
-    return { ok: false, status: 409, error: REBUILD_PINNED_REASON };
+    return { ok: false, status: 409, error: rebuildPinReason(zone) };
   }
   if (action === 'swap-lvl-lio' && (!args?.lvl || !args?.lio)) {
     return { ok: false, status: 400, error: 'swap-lvl-lio requires args.lvl and args.lio' };

@@ -10,6 +10,7 @@ import SpaceBackground from '@/components/SpaceBackground';
 import { ZONE_TITLE_TO_TAG } from '@/lib/zoneTitles';
 import { buildMapPairs, mapNameFor, presetsForZone } from '@/lib/zoneMaps';
 import ZoneList from './ZoneList';
+import { filterAndSortZones } from '@/lib/zoneListFilter';
 
 interface ZoneInstance {
   server: string;
@@ -90,8 +91,6 @@ interface ZoneCommand {
   completed_at?: string;
 }
 
-type SortField = 'name' | 'status' | 'key';
-type SortOrder = 'asc' | 'desc';
 
 // Generate time options in 15-minute increments (12-hour format)
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
@@ -131,9 +130,8 @@ export default function ZoneManagementPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [filter, setFilter] = useState<'all' | 'running' | 'stopped'>('all');
+  // Zone list search (grouping, running-first order and the collapsed Stopped section live in ./ZoneList)
+  const [query, setQuery] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     zone_key: '',
@@ -826,58 +824,20 @@ export default function ZoneManagementPage() {
     }
   }, [message]);
 
-  // Convert zones object to sorted and filtered array
-  const sortedAndFilteredZones = useMemo(() => {
-    const zoneArray = zones.map((zone) => ({
-      ...zone,
-      key: zone.key
-    }));
+  // Rows = every zone matching the search box (rules in src/lib/zoneListFilter.ts); ZoneList does the grouping:
+  // flagship first, then running bot zones, then other running zones, then a collapsed Stopped section.
+  const { list: sortedAndFilteredZones } = useMemo(
+    () => filterAndSortZones(zones, { filter: 'all', query, sortField: 'name', sortOrder: 'asc' }),
+    [zones, query],
+  );
 
-    // Apply filter
-    const filtered = zoneArray.filter(zone => {
-      if (filter === 'running') return zone.status === 'RUNNING';
-      if (filter === 'stopped') return zone.status === 'STOPPED';
-      return true;
-    });
-
-    // Apply sort
-    return filtered.sort((a, b) => {
-      let aValue: string, bValue: string;
-      
-      switch (sortField) {
-        case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
-          break;
-        case 'status':
-          aValue = a.status;
-          bValue = b.status;
-          break;
-        case 'key':
-          aValue = a.key.toLowerCase();
-          bValue = b.key.toLowerCase();
-          break;
-        default:
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue.localeCompare(bValue);
-      } else {
-        return bValue.localeCompare(aValue);
-      }
-    });
-  }, [zones, sortField, sortOrder, filter]);
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortOrder('asc');
-    }
-  };
+  // Toolbar numbers always cover every zone, not just the rows currently shown
+  const zoneCounts = useMemo(() => ({
+    running: zones.filter((z) => z.status === 'RUNNING').length,
+    stopped: zones.filter((z) => z.status === 'STOPPED').length,
+    total: zones.length,
+    players: zones.reduce((n, z) => n + (z.status === 'RUNNING' ? z.playerCount || 0 : 0), 0),
+  }), [zones]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1030,24 +990,6 @@ export default function ZoneManagementPage() {
             </button>
           </div>
 
-          {/* Zone Filter and Count */}
-          <div className="flex items-center justify-between gap-3 sm:gap-4 sm:ml-auto">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-300">Filter:</label>
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as 'all' | 'running' | 'stopped')}
-                className="px-3 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-              >
-                <option value="all">All Zones</option>
-                <option value="running">Running Only</option>
-                <option value="stopped">Stopped Only</option>
-              </select>
-            </div>
-            <div className="text-sm text-gray-400 whitespace-nowrap">
-              {sortedAndFilteredZones.length} of {zones.length} zones
-            </div>
-          </div>
         </div>
 
         {/* Command History Section */}
@@ -1214,14 +1156,14 @@ export default function ZoneManagementPage() {
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-4 border-cyan-500 border-t-transparent"></div>
           </div>
-        ) : sortedAndFilteredZones.length > 0 ? (
+        ) : zones.length > 0 ? (
           <>
             {/* Compact zone list (desktop rows + mobile cards live in ./ZoneList) */}
             <ZoneList
               zones={sortedAndFilteredZones}
-              sortField={sortField}
-              sortOrder={sortOrder}
-              onSort={handleSort}
+              query={query}
+              onQueryChange={setQuery}
+              counts={zoneCounts}
               resolveHost={resolveHost}
               serverLabel={serverLabel}
               onSelectHost={(zoneKey, host) => setSelectedHost(prev => ({ ...prev, [zoneKey]: host }))}
