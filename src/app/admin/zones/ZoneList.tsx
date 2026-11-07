@@ -1,14 +1,14 @@
 'use client';
 
-// The zone list on /admin/zones: a card grid that fills the page and stays short as zones are added.
-//   - FLAGSHIP first (src/lib/zoneGroups.ts): gold-bordered headline cards, always shown; a stopped one turns red.
-//   - then RUNNING zones: Bot zones, then Other zones, as compact cards (3 across on wide screens).
+// The zone list on /admin/zones: a compact VERTICAL list, one thin full-width row per zone (same on phones).
+//   - FLAGSHIP first (src/lib/zoneGroups.ts): gold-edged, slightly taller rows, always shown; a stopped one turns red.
+//   - then RUNNING zones: Bot zones, then Other zones.
 //   - STOPPED non-flagship zones are tucked into a collapsed, dimmed "Stopped" section at the bottom (they often
 //     sit dormant for weeks or months); a search that matches one opens it.
 //   - ONE primary action per zone: "Restart" while it is running, "Start" while it is not. Stop / Rebuild / Maps are
 //     rare, so they live in a "..." menu on every card.
-//   - PLAYERS: a glowing pill when anyone is in the zone (amber from 10 players), plus a ring on that card.
-//   - phones: one thin line per zone.
+//   - PLAYERS: a glowing pill when anyone is in the zone (amber from 10 players).
+//   - columns: status dot | name (+ pinned badge) | tag | status  ...  players | Restart | ...  (info on the left, controls on the right)
 // The page owns all state and the API calls; this component only renders and reports clicks.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -71,7 +71,7 @@ const popOf = (z: ZoneListZone) => (z.status === 'RUNNING' ? z.playerCount || 0 
 
 /** The player count: dim zero, glowing pill when anyone is in (amber from 10). */
 function Pop({ n, hideZero = false }: { n: number; hideZero?: boolean }): ReactNode {
-  if (n <= 0) return hideZero ? null : <span className="text-sm tabular-nums text-gray-600">0</span>;
+  if (n <= 0) return hideZero ? null : <span className="hidden text-sm tabular-nums text-gray-600 md:inline">0</span>;
   const hot = n >= 10;
   return (
     <span
@@ -86,21 +86,6 @@ function Pop({ n, hideZero = false }: { n: number; hideZero?: boolean }): ReactN
     </span>
   );
 }
-
-/** ring around a populated card (amber from 10 players) */
-const popRing = (n: number) =>
-  n >= 10
-    ? 'ring-1 ring-amber-300/50 shadow-[0_0_16px_rgba(251,191,36,0.22)]'
-    : n > 0
-    ? 'ring-1 ring-emerald-300/40 shadow-[0_0_14px_rgba(52,211,153,0.18)]'
-    : '';
-
-const GROUP_CARD: Record<ZoneGroup, string> = {
-  flagship: 'border-amber-400/45 bg-gradient-to-br from-amber-400/[0.13] via-gray-900/70 to-gray-900/50 shadow-[0_0_22px_rgba(251,191,36,0.08)]',
-  bots: 'border-cyan-400/25 bg-gradient-to-br from-cyan-400/[0.06] to-gray-900/40',
-  legacy: 'border-gray-600/40 bg-gray-800/30',
-};
-const FLAGSHIP_DOWN = 'border-red-400/60 bg-gradient-to-br from-red-400/[0.16] via-gray-900/70 to-gray-900/50 shadow-[0_0_22px_rgba(248,113,113,0.12)]';
 
 const GROUP_ICON: Record<ZoneGroup, string> = { flagship: '★', bots: '🤖', legacy: '▪' };
 const GROUP_TEXT: Record<ZoneGroup, string> = { flagship: 'text-amber-300', bots: 'text-cyan-300', legacy: 'text-gray-400' };
@@ -258,13 +243,13 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
     </button>
   );
 
-  const pinBadge = (z: Z, compact = false) =>
+  const pinBadge = (z: Z) =>
     isRebuildPinned(z.key) ? (
       <span
         title={rebuildPinReason(z.key)}
         className="shrink-0 cursor-help rounded border border-amber-500/30 bg-amber-900/30 px-1 text-[10px] leading-4 text-amber-300"
       >
-        📌{compact ? '' : ' pinned build'}
+        📌<span className="hidden md:inline"> pinned build</span>
       </span>
     ) : null;
 
@@ -293,74 +278,55 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
     return on.length === 1 ? `${z.name} — ${p.serverLabel(on[0])}` : z.name;
   };
 
-  const look = (z: Z, g: ZoneGroup) => {
-    const down = g === 'flagship' && z.status === 'STOPPED';
-    return `${down ? FLAGSHIP_DOWN : GROUP_CARD[g]} ${down ? '' : popRing(popOf(z))}`;
-  };
-
-  /** Flagship: a headline card, two lines, bigger and gold. */
-  const flagshipCard = (z: Z) => (
-    <div key={z.key} className={`rounded-xl border px-3 py-2 transition-colors ${look(z, 'flagship')}`}>
-      <div className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[z.status]}`} title={STATUS_LABEL[z.status]} />
-        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-tight text-amber-100" title={rowTitle(z)}>
-          <span aria-hidden className="mr-1 text-amber-300">★</span>{z.name}
-        </span>
-        <Pop n={popOf(z)} />
-      </div>
-      <div className="mt-1.5 flex items-center gap-2">
-        <code className="shrink-0 text-[11px] text-amber-200/70">{z.key}</code>
-        {pinBadge(z)}
-        <span className={`whitespace-nowrap text-xs ${STATUS_TEXT[z.status]}`}>{STATUS_LABEL[z.status]}</span>
-        <span className="ml-auto flex items-center gap-1">
-          {primary(z)}
-          {moreBtn(z)}
-        </span>
-      </div>
-      {serverSelect(z)}
-    </div>
-  );
-
-  /** Everything else: a compact two-line card on wide screens, one thin line on phones. */
-  const compactCard = (z: Z, g: ZoneGroup) => {
+  /** One thin line per zone, in a vertical list that runs the full width, with the columns lined up.
+   *  Flagship rows are a little taller, gold and bold (red when the zone is down); bot zones get a cyan edge. */
+  const row = (z: Z, g: ZoneGroup) => {
     const stopped = z.status === 'STOPPED';
-    const nameTone = stopped ? 'text-gray-400' : g === 'bots' ? 'text-cyan-50' : 'text-gray-100';
+    const flag = g === 'flagship';
+    const tone =
+      flag && stopped
+        ? 'border-red-400/80 bg-gradient-to-r from-red-400/[0.16] via-red-400/[0.05] to-transparent'
+        : flag
+        ? 'border-amber-400/80 bg-gradient-to-r from-amber-400/[0.14] via-amber-400/[0.04] to-transparent'
+        : g === 'bots'
+        ? 'border-cyan-400/50 bg-cyan-400/[0.04]'
+        : 'border-gray-600/60 bg-white/[0.02]';
+    const nameTone = flag
+      ? 'text-[15px] font-semibold text-amber-100'
+      : stopped
+      ? 'text-[13px] font-medium text-gray-400'
+      : `text-[13px] font-medium ${g === 'bots' ? 'text-cyan-50' : 'text-gray-100'}`;
     return (
-      <div key={z.key} className={`rounded-lg border px-2.5 py-1.5 transition-colors ${look(z, g)} ${stopped ? 'opacity-60 hover:opacity-100' : ''}`}>
-        {/* phones: one line */}
-        <div className="flex items-center gap-2 md:hidden">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[z.status]}`} title={STATUS_LABEL[z.status]} />
-          <span className={`min-w-0 flex-1 truncate text-[13px] font-medium leading-tight ${nameTone}`} title={rowTitle(z)}>{z.name}</span>
-          <code className="hidden shrink-0 text-[10px] text-cyan-300/70 min-[400px]:inline">{z.key}</code>
-          {pinBadge(z, true)}
-          <Pop n={popOf(z)} hideZero />
+      <div key={z.key}>
+        <div
+          className={`flex items-center gap-2 rounded-md border-l-2 px-2.5 transition-colors hover:bg-white/[0.05] ${
+            flag ? 'py-1.5' : 'py-1'
+          } ${tone} ${stopped && !flag ? 'opacity-60 hover:opacity-100' : ''}`}
+        >
+          <span className="flex w-2.5 shrink-0 justify-center" title={STATUS_LABEL[z.status]}>
+            <span className={`${flag ? 'h-2.5 w-2.5' : 'h-2 w-2'} rounded-full ${DOT[z.status]}`} />
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-2 md:w-64 md:flex-none lg:w-96">
+            <span className={`truncate leading-tight ${nameTone}`} title={rowTitle(z)}>
+              {flag && <span aria-hidden className="mr-1 text-amber-300">★</span>}
+              {z.name}
+            </span>
+            {pinBadge(z)}
+          </span>
+          <code className={`hidden shrink-0 truncate text-[11px] min-[400px]:block md:w-28 ${flag ? 'text-amber-200/70' : 'text-cyan-300/70'}`}>{z.key}</code>
+          <span className={`hidden w-16 shrink-0 whitespace-nowrap text-xs md:block ${STATUS_TEXT[z.status]}`}>{STATUS_LABEL[z.status]}</span>
+          <span className="flex shrink-0 justify-end md:ml-auto md:w-9">
+            <Pop n={popOf(z)} hideZero={stopped} />
+          </span>
           {primary(z)}
           {moreBtn(z)}
-        </div>
-        {/* wider screens: two lines */}
-        <div className="hidden md:block">
-          <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[z.status]}`} title={STATUS_LABEL[z.status]} />
-            <span className={`min-w-0 flex-1 truncate text-sm font-medium leading-tight ${nameTone}`} title={rowTitle(z)}>{z.name}</span>
-            <Pop n={popOf(z)} hideZero />
-          </div>
-          <div className="mt-1 flex items-center gap-2">
-            <code className="shrink-0 text-[11px] text-cyan-300/70">{z.key}</code>
-            {pinBadge(z)}
-            <span className={`whitespace-nowrap text-[11px] ${STATUS_TEXT[z.status]}`}>{STATUS_LABEL[z.status]}</span>
-            <span className="ml-auto flex items-center gap-1">
-              {primary(z)}
-              {moreBtn(z)}
-            </span>
-          </div>
         </div>
         {serverSelect(z)}
       </div>
     );
   };
 
-  // auto-fit: cards stretch to fill the row, so a section with 2 cards never leaves the right edge empty
-  const compactGrid = 'grid grid-cols-[repeat(auto-fit,minmax(19rem,1fr))] gap-1.5';
+  const rows = 'flex flex-col gap-1';
   const nothing = p.zones.length === 0;
 
   return (
@@ -399,19 +365,19 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
           {flagship.length > 0 && (
             <section>
               <SectionHeader g="flagship" n={flagship.length} />
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(16.5rem,1fr))] gap-2">{flagship.map(flagshipCard)}</div>
+              <div className="flex flex-col gap-1.5">{flagship.map((z) => row(z, 'flagship'))}</div>
             </section>
           )}
           {botZones.length > 0 && (
             <section>
               <SectionHeader g="bots" n={botZones.length} />
-              <div className={compactGrid}>{botZones.map((z) => compactCard(z, 'bots'))}</div>
+              <div className={rows}>{botZones.map((z) => row(z, 'bots'))}</div>
             </section>
           )}
           {otherZones.length > 0 && (
             <section>
               <SectionHeader g="legacy" n={otherZones.length} />
-              <div className={compactGrid}>{otherZones.map((z) => compactCard(z, 'legacy'))}</div>
+              <div className={rows}>{otherZones.map((z) => row(z, 'legacy'))}</div>
             </section>
           )}
           {stoppedZones.length > 0 && (
@@ -428,7 +394,7 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
                 <span className="normal-case tracking-normal text-gray-600">· dormant zones{stoppedOpen ? '' : ' (click to show)'}</span>
                 <span className="h-px flex-1 bg-gradient-to-r from-gray-600 to-transparent opacity-30" />
               </button>
-              {stoppedOpen && <div className={`mt-1.5 ${compactGrid}`}>{stoppedZones.map((z) => compactCard(z, zoneGroup(z.key)))}</div>}
+              {stoppedOpen && <div className={`mt-1.5 ${rows}`}>{stoppedZones.map((z) => row(z, zoneGroup(z.key)))}</div>}
             </section>
           )}
         </>
