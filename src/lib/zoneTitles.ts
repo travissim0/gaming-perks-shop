@@ -17,6 +17,7 @@ export const ZONE_TITLE_TO_TAG: Readonly<Record<string, string>> = {
   'CTF - Mini': 'ctfmini',
   'CTF - Twin Peaks 2.0': 'ctf',
   'CTF:X Halloween Edition w/ Bots': 'ctfx',
+  'The Arena (bots)': 'arenabots',
   'CA - Quarantine (Bots)': 'qca',
 };
 
