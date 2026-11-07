@@ -20,6 +20,7 @@ const BOT_TAGS: readonly string[] = [
   'ctfx', //      CTF - CTFX Halloween (CTF:X with bots)
   'qca', //       CA - Quarantine (Bots)
   'arenabots', // The Arena (bots)
+  'tt', //        Test Zone - Molo (Triple Threat; bots coming)
 ];
 
 export function zoneGroup(tag: string): ZoneGroup {

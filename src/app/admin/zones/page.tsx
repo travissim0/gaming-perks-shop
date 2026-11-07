@@ -893,7 +893,7 @@ export default function ZoneManagementPage() {
       <SpaceBackground />
       <div className="relative z-10">
         <NeutralNavbar />
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -1186,27 +1186,6 @@ export default function ZoneManagementPage() {
           </div>
         )}
 
-        {/* Quick Stats */}
-        {!loading && zones.length > 0 && (
-          <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-4">
-            <div className={`p-3 sm:p-4 text-center ${panelClass}`}>
-              <div className="text-xl sm:text-2xl font-bold text-white">{zones.length}</div>
-              <div className="text-xs sm:text-sm text-gray-400">Total Zones</div>
-            </div>
-            <div className="bg-green-900/20 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-green-500/30 text-center">
-              <div className="text-xl sm:text-2xl font-bold text-green-300">
-                {zones.filter(z => z.status === 'RUNNING').length}
-              </div>
-              <div className="text-xs sm:text-sm text-green-400">Running</div>
-            </div>
-            <div className="bg-red-900/20 backdrop-blur-sm rounded-2xl p-3 sm:p-4 border border-red-500/30 text-center">
-              <div className="text-xl sm:text-2xl font-bold text-red-300">
-                {zones.filter(z => z.status === 'STOPPED').length}
-              </div>
-              <div className="text-xs sm:text-sm text-red-400">Stopped</div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Map Rotation Modal */}

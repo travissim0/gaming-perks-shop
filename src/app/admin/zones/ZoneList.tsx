@@ -87,7 +87,6 @@ function Pop({ n, hideZero = false }: { n: number; hideZero?: boolean }): ReactN
   );
 }
 
-const GROUP_ICON: Record<ZoneGroup, string> = { flagship: '★', bots: '🤖', legacy: '▪' };
 const GROUP_TEXT: Record<ZoneGroup, string> = { flagship: 'text-amber-300', bots: 'text-cyan-300', legacy: 'text-gray-400' };
 
 function MenuItem({
@@ -128,7 +127,6 @@ function MenuItem({
 function SectionHeader({ g, label, n, extra }: { g: ZoneGroup; label?: string; n: number; extra?: ReactNode }): ReactNode {
   return (
     <div className={`mb-1.5 mt-3 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider first:mt-0 ${GROUP_TEXT[g]}`}>
-      <span aria-hidden>{GROUP_ICON[g]}</span>
       <span>{label || ZONE_GROUP_LABEL[g]}</span>
       <span className="font-normal text-gray-500">{n}</span>
       <span className="h-px flex-1 bg-gradient-to-r from-current to-transparent opacity-20" />
@@ -306,9 +304,8 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
           <span className="flex w-2.5 shrink-0 justify-center" title={STATUS_LABEL[z.status]}>
             <span className={`${flag ? 'h-2.5 w-2.5' : 'h-2 w-2'} rounded-full ${DOT[z.status]}`} />
           </span>
-          <span className="flex min-w-0 flex-1 items-center gap-2 md:w-64 md:flex-none lg:w-96">
+          <span className="flex min-w-0 flex-1 items-center gap-2 md:w-64 md:flex-none lg:w-80">
             <span className={`truncate leading-tight ${nameTone}`} title={rowTitle(z)}>
-              {flag && <span aria-hidden className="mr-1 text-amber-300">★</span>}
               {z.name}
             </span>
             {pinBadge(z)}
