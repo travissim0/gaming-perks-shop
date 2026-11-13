@@ -41,6 +41,19 @@ const dateOnly = (ymd: string) => {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
+/**
+ * Connector lines for one gutter of the bracket, drawn in a 100 x 100 box stretched over both
+ * rows: y = 25 is the middle of the top row, y = 75 the middle of the bottom one.
+ */
+function Lines({ solid, dashed = [] }: { solid: string[]; dashed?: string[] }) {
+  return (
+    <svg className="h-full w-full text-[#3A4766]" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      {solid.map((d) => <path key={d} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+      {dashed.map((d) => <path key={d} d={d} fill="none" stroke="currentColor" strokeWidth={1.5} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />)}
+    </svg>
+  );
+}
+
 export default function PlayoffCard({
   leagueSlug,
   seasonNumber,
@@ -123,15 +136,34 @@ export default function PlayoffCard({
     return (
       <span className={`inline-flex min-w-0 items-center gap-1.5 ${s.placeholder ? 'text-[#8B98B0] italic' : decided && !isWinner ? 'text-[#8B98B0]' : 'text-[#E6EDF7]'}`}>
         {s.seed != null && <span className="shrink-0 text-[11px] tabular-nums text-[#8B98B0]">#{s.seed}</span>}
-        <span className={`truncate ${isWinner ? 'font-medium' : ''}`}>{s.name}</span>
+        <span className={`truncate ${s.placeholder ? 'pr-1' : ''} ${isWinner ? 'font-medium' : ''}`}>{s.name}</span>
         {isHome && homeKnown && !s.placeholder && <span className="shrink-0 text-[10px] uppercase tracking-wide text-[#F59E0B]/80">home</span>}
         {isWinner && <span className="shrink-0 rounded bg-[#34D399]/15 px-1 text-[10px] font-medium uppercase tracking-wide text-[#34D399]">Won</span>}
       </span>
     );
   };
 
+  const rowOf = Object.fromEntries(rows.map((r) => [r.key, r])) as Record<Row['key'], Row>;
+  /** One game as a bracket box: its label, the two teams on a line each (away over home), and when. */
+  const box = (r: Row) => {
+    const body = (
+      <>
+        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${r.key === 'F' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.label}</span>
+        <div className="mt-1.5 space-y-0.5 text-sm">
+          <div className="flex min-w-0">{team(r.away, r, false)}</div>
+          <div className="flex min-w-0">{team(r.home, r, true)}</div>
+        </div>
+        <div className="mt-1.5 text-[11px] leading-snug">{when(r)}</div>
+      </>
+    );
+    const cls = `block h-full rounded-md px-2.5 py-2 ${r.key === 'F' ? 'ring-1 ring-[#F59E0B]/30' : ''}`;
+    return r.fixture
+      ? <Link href={`/matches/${r.fixture.id}`} className={`${cls} bg-[#1B2438] hover:bg-[#222d45] transition-colors`}>{body}</Link>
+      : <div className={`${cls} bg-[#1B2438]/60`}>{body}</div>;
+  };
+
   return (
-    <section className="rounded-xl overflow-hidden bg-[#131A2B] ring-1 ring-[#F59E0B]/25">
+    <section className="@container rounded-xl overflow-hidden bg-[#131A2B] ring-1 ring-[#F59E0B]/25">
       <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 className="font-display text-lg text-[#E6EDF7]">Playoffs</h3>
         <div className="flex items-center gap-3">
@@ -145,7 +177,32 @@ export default function PlayoffCard({
           )}
         </div>
       </div>
-      <ul className="p-3 pt-0 grid grid-cols-1 md:grid-cols-2 gap-2">
+      {/* Bracket: A and B on the left, C in the middle, the Championship on the right. Needs ~36rem. */}
+      <div className="hidden @xl:block px-3 pb-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)_1.75rem_minmax(0,1fr)] grid-rows-2">
+          <div className="col-start-1 row-start-1 py-1">{box(rowOf.A)}</div>
+          <div className="col-start-1 row-start-2 py-1">{box(rowOf.B)}</div>
+          {/* A's winner runs along the top to the final; A's loser drops (dashed) to meet B's winner in C. */}
+          <div className="col-start-2 row-start-1 row-span-2">
+            <Lines solid={['M0 25 H100', 'M0 75 H100']} dashed={['M50 25 V75']} />
+          </div>
+          <div className="relative col-start-3 row-start-1 flex items-center justify-center">
+            <div className="absolute inset-x-0 top-1/2 border-t-[1.5px] border-[#3A4766]" />
+            <span className="relative rounded bg-[#131A2B] px-1.5 text-[10px] uppercase tracking-wide text-[#8B98B0]">Winner to the final</span>
+          </div>
+          <div className="col-start-3 row-start-2 py-1">{box(rowOf.C)}</div>
+          <div className="col-start-4 row-start-1 row-span-2">
+            <Lines solid={['M0 25 H50 V75 H0', 'M50 50 H100']} />
+          </div>
+          <div className="col-start-5 row-start-1 row-span-2 self-center">{box(rowOf.F)}</div>
+        </div>
+        <p className="mt-2 text-[11px] text-[#8B98B0]">
+          The winner of Game A goes straight to the Championship. The loser of A meets the winner of B in Game C the same night. The loser of B finishes 4th, the loser of C 3rd.
+        </p>
+      </div>
+
+      {/* Narrow screens: the same four games as a list. */}
+      <ul className="@xl:hidden p-3 pt-0 grid grid-cols-1 gap-2">
         {rows.map((r) => {
           const body = (
             <>

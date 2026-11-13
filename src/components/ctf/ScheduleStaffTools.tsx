@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import type { LeagueInfo, LeagueSeason, StandingRow } from '@/lib/leagues';
+import { easternDay } from '@/lib/eastern';
 import { roundRobin, seedBracket, playoffRoundLabel, localDateTimeToIso, playByIso, winnerOf as resultWinner, type TeamRef } from '@/lib/schedule';
 import { leagueDate } from '@/lib/scoring';
 import type { Fixture } from '@/app/api/league/schedule/route';
@@ -196,7 +197,9 @@ export default function ScheduleStaffTools({
 
   // ── Playoffs ────────────────────────────────────────────────────────
   const [field, setField] = useState('4');
-  const [poDate, setPoDate] = useState(todayIso());
+  // Starts on the season's playoff day when one is set: left on today's date, Games A and B were
+  // created for a day already gone (2026-11-13).
+  const [poDate, setPoDate] = useState(season.playoffs_start_on || todayIso());
   const [poTime, setPoTime] = useState('20:00');
   const currentRound = playoffs.reduce((n, f) => Math.max(n, f.playoff_round || 0), 0);
   const roundFixtures = playoffs.filter((f) => f.playoff_round === currentRound);
@@ -271,7 +274,10 @@ export default function ScheduleStaffTools({
   const [poFormat, setPoFormat] = useState<'page' | 'bracket'>(teams.length === 4 ? 'page' : 'bracket');
   // Game C has no fixed time: it starts once A and B are both final, so it is created Time TBD by default.
   const [gameCTbd, setGameCTbd] = useState(true);
-  const gameLabel = (f: Fixture) => f.title.split(' · ')[1] || '';
+  // Every other playoff game: the league sets the day and the captains agree the time on the match
+  // page, as in the regular season (John, 2026-11-13), so Time TBD is the default here too.
+  const [poTbd, setPoTbd] = useState(true);
+  const gameLabel =(f: Fixture) => f.title.split(' · ')[1] || '';
   const teamRef = (f: Fixture, side: 'a' | 'b'): TeamRef =>
     side === 'a' ? { id: f.squad_a_id!, name: f.squad_a_name || '?', tag: f.squad_a_tag } : { id: f.squad_b_id!, name: f.squad_b_name || '?', tag: f.squad_b_tag };
   const aWonIt = (f: Fixture) => resultWinner(f.result) === 'a';
@@ -298,13 +304,12 @@ export default function ScheduleStaffTools({
   const playoffFormat: 'page' | 'bracket' = currentRound > 0 ? (page.A ? 'page' : 'bracket') : poFormat;
   // Game C defaults to the same night as A and B; the Championship to a week later.
   useEffect(() => {
-    if (pageStep === 'gameC' && page.A) {
-      const d = new Date(page.A.scheduled_at);
-      setPoDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-    }
+    // The league day (Eastern) of the earlier game: a Time TBD fixture sits at 23:59 Eastern, which
+    // is already the next day for a viewer east of that.
+    if (pageStep === 'gameC' && page.A) setPoDate(easternDay(page.A.scheduled_at));
     if (pageStep === 'final' && page.C) {
-      const d = new Date(page.C.scheduled_at); d.setDate(d.getDate() + 7);
-      setPoDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      const [y, m, d] = easternDay(page.C.scheduled_at).split('-').map(Number);
+      setPoDate(new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageStep]);
@@ -497,14 +502,20 @@ export default function ScheduleStaffTools({
                         </div>
                         <div>
                           <label className={labelCls}>Time (your zone)</label>
-                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          {poTbd ? (
+                            <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                          ) : (
+                            <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          )}
                         </div>
-                        <div className="md:col-span-2 flex justify-end">
-                          <button type="button" disabled={busy || pageSeedPairs.length === 0} onClick={() => submitPlayoffs(pageSeedPairs, 1, ['Game A', 'Game B'])} className={btnPrimary}>
+                        <div className="md:col-span-2 flex items-center justify-end gap-4">
+                          <TbdToggle checked={poTbd} onChange={setPoTbd} />
+                          <button type="button" disabled={busy || pageSeedPairs.length === 0} onClick={() => submitPlayoffs(pageSeedPairs, 1, ['Game A', 'Game B'], poTbd)} className={btnPrimary}>
                             {busy ? 'Creating…' : 'Seed Games A and B'}
                           </button>
                         </div>
                       </div>
+                      {poTbd && <p className="text-[11px] text-[#8B98B0]">Time TBD: the games go on the schedule for that day and each pair of captains agrees the kick-off time on the match page.</p>}
                       {pageSeedPairs.length === 0 ? (
                         <p className="text-sm text-[#8B98B0]">Seeding uses the standings (RS points). All four teams need a regular-season result first{seeded.length ? ` · ${seeded.length} of 4 in the standings so far` : ''}.</p>
                       ) : (
@@ -554,10 +565,15 @@ export default function ScheduleStaffTools({
                         </div>
                         <div>
                           <label className={labelCls}>Time (your zone)</label>
-                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          {poTbd ? (
+                            <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                          ) : (
+                            <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          )}
                         </div>
-                        <div className="md:col-span-2 flex justify-end">
-                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageFPair], 3, 'Championship')} className={btnPrimary}>{busy ? 'Creating…' : 'Create Championship'}</button>
+                        <div className="md:col-span-2 flex items-center justify-end gap-4">
+                          <TbdToggle checked={poTbd} onChange={setPoTbd} />
+                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageFPair], 3, 'Championship', poTbd)} className={btnPrimary}>{busy ? 'Creating…' : 'Create Championship'}</button>
                         </div>
                       </div>
                     </>
@@ -580,13 +596,18 @@ export default function ScheduleStaffTools({
                     </div>
                     <div>
                       <label className={labelCls}>Time (your zone)</label>
-                      <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                      {poTbd ? (
+                        <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                      ) : (
+                        <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                      )}
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex items-center justify-end gap-4">
+                      <TbdToggle checked={poTbd} onChange={setPoTbd} />
                       <button
                         type="button"
                         disabled={busy || !canSeed}
-                        onClick={() => submitPlayoffs(round1Pairs, 1, playoffRoundLabel(fieldSize))}
+                        onClick={() => submitPlayoffs(round1Pairs, 1, playoffRoundLabel(fieldSize), poTbd)}
                         className={btnPrimary}
                       >
                         {busy ? 'Creating…' : `Seed ${playoffRoundLabel(fieldSize).toLowerCase()}`}
@@ -621,13 +642,18 @@ export default function ScheduleStaffTools({
                       </div>
                       <div>
                         <label className={labelCls}>Time (your zone)</label>
-                        <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        {poTbd ? (
+                          <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                        ) : (
+                          <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        )}
                       </div>
-                      <div className="md:col-span-2 flex justify-end">
+                      <div className="md:col-span-2 flex items-center justify-end gap-4">
+                        <TbdToggle checked={poTbd} onChange={setPoTbd} />
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => submitPlayoffs(nextPairs, currentRound + 1, playoffRoundLabel(winners.length))}
+                          onClick={() => submitPlayoffs(nextPairs, currentRound + 1, playoffRoundLabel(winners.length), poTbd)}
                           className={btnPrimary}
                         >
                           Create {playoffRoundLabel(winners.length).toLowerCase()}
