@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SITE_URL, queueNotice } from '@/lib/notices-server';
 import { messageUsers, squadLeaderIds, staffUserIds } from '@/lib/site-messages';
 import type { Caller } from '@/lib/leave-requests-server';
+import { easternDay } from '@/lib/eastern';
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,13 +83,16 @@ async function seasonSquads(): Promise<SeasonSquad[]> {
 
 async function tradeDeadline(season: number | null): Promise<string | null> {
   if (season == null) return null;
-  // The first playoff match once the bracket is scheduled; until then, the day above.
+  // Trading closes the night before the playoffs: midnight league time at the START of the day of
+  // the first playoff match, not at its kick-off (John, 2026-11-13: "keep the trade deadline at
+  // Saturday night" for the Sunday Nov 15 start). Until the bracket is scheduled, the day above.
   const { data } = await supabaseAdmin.from('matches').select('scheduled_at, time_tbd').eq('league_slug', LEAGUE).eq('season_number', season).eq('stage', 'playoff').order('scheduled_at').limit(20);
   const rows = (data || []) as { scheduled_at: string; time_tbd?: boolean }[];
-  const firstPlayoff = rows.find((r) => !r.time_tbd) || rows[0];
-  if (firstPlayoff) return firstPlayoff.scheduled_at;
-  // Midnight league time on the day the playoffs start: 04:00 or 05:00 UTC depending on DST.
-  const ymd = PLAYOFFS_START;
+  // The earliest playoff fixture, timed or not: a Time TBD fixture's scheduled_at is the end of
+  // its play-by day, so its league day is still the right one.
+  const firstPlayoff = rows[0];
+  const ymd = firstPlayoff ? easternDay(firstPlayoff.scheduled_at) : PLAYOFFS_START;
+  // Midnight league time on that day: 04:00 or 05:00 UTC depending on DST.
   const offset = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' }).formatToParts(new Date(`${ymd}T12:00:00Z`)).find((p) => p.type === 'timeZoneName')?.value || 'GMT-5';
   const hours = Number((offset.match(/GMT([+-]\d+)/) || [])[1] || -5);
   // Local midnight is (0 - offset) hours UTC: GMT-5 → 05:00 UTC, GMT-4 → 04:00 UTC.
