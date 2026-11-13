@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import UserAvatar from '@/components/UserAvatar';
 import SeasonHero from '@/components/ctf/SeasonHero';
 import CtfNewsFeed from '@/components/ctf/CtfNewsFeed';
+import PlayoffCard from '@/components/ctf/PlayoffCard';
 import LeagueStatusSection, { type LeagueStatusData, type LeagueStatusEntry } from '@/components/ctf/LeagueStatusSection';
 import { supabase } from '@/lib/supabase';
 import { VIDEO_THUMBNAIL_PLACEHOLDER } from '@/lib/constants';
@@ -933,6 +934,10 @@ export default function LeagueHome() {
 
           {/* ── CENTER: the season ───────────────────────────────────── */}
           <div className="xl:col-span-6 space-y-4">
+            {/* The Page playoff at a glance; renders nothing until Game A or B is on the schedule. */}
+            {L && S && L.data_source !== 'ctfpl' && (
+              <PlayoffCard leagueSlug={L.slug} seasonNumber={S.season_number} standings={league?.standings || []} championshipDate={S.end_date || null} scheduleHref={`/league/schedule?league=${L.slug}`} />
+            )}
             {showThisWeek && (
               <Card title="This week" action={<MoreLink href={L ? `/league/schedule?league=${L.slug}` : '/league/schedule'}>Full schedule</MoreLink>}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

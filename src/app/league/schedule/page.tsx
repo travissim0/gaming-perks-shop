@@ -25,6 +25,7 @@ import {
 import { playoffRoundLabel, playByLabel, noContestReason, TBD_LABEL, type TeamRef } from '@/lib/schedule';
 import ScheduleStaffTools, { FixtureEditor } from '@/components/ctf/ScheduleStaffTools';
 import FsProposals from '@/components/ctf/FsProposals';
+import PlayoffCard from '@/components/ctf/PlayoffCard';
 import { normalizeRules, weekStart, weekEnd } from '@/lib/scoring';
 import { currentWeekOf, winnerOf } from '@/lib/schedule';
 import type { Fixture } from '@/app/api/league/schedule/route';
@@ -262,6 +263,11 @@ function SchedulePage() {
             )}
           </div>
         </section>
+
+        {/* The Page playoff at a glance; renders nothing until Game A or B is on the schedule. */}
+        {league && season && league.data_source !== 'ctfpl' && (
+          <PlayoffCard fixtures={fixtures} standings={standings.filter((s) => teams.some((t) => t.id === s.squad_id))} championshipDate={season.end_date || null} />
+        )}
 
         {/* Staff tools */}
         {isStaff && league && season && (
