@@ -294,7 +294,8 @@ export default function MatchDetailPage() {
   const [hasResult, setHasResult] = useState(false);
   // What the recorded result was worth: game length, how the win was classed, and the standings
   // points each side got under the season's rules (a = home, b = away), with the rule in words.
-  const [scored, setScored] = useState<{ length_minutes: number | null; win_type: string | null; points: { a: number; b: number; why: string } | null } | null>(null);
+  // `color`: the FS colour it SCORED as, which differs from the booking when a Green dropped to Red.
+  const [scored, setScored] = useState<{ length_minutes: number | null; win_type: string | null; points: { a: number; b: number; why: string } | null; color: 'red' | 'green' | null } | null>(null);
   const [mvp, setMvp] = useState<string | null>(null);
   const [mvpPick, setMvpPick] = useState<string | null>(null); // null = not editing
   useEffect(() => {
@@ -308,7 +309,7 @@ export default function MatchDetailPage() {
         setDidNotCount(fx ? noContestReason(fx) : null);
         setHasResult(!!fx?.result);
         setMvp(fx?.result?.mvp || null);
-        setScored(fx?.result ? { length_minutes: fx.result.length_minutes ?? null, win_type: fx.result.win_type ?? null, points: fx.result.points ?? null } : null);
+        setScored(fx?.result ? { length_minutes: fx.result.length_minutes ?? null, win_type: fx.result.win_type ?? null, points: fx.result.points ?? null, color: fx.result.scored_color === 'green' || fx.result.scored_color === 'red' ? fx.result.scored_color : null } : null);
       })
       .catch(() => { if (!cancelled) setDidNotCount(null); });
     return () => { cancelled = true; };
@@ -586,14 +587,20 @@ export default function MatchDetailPage() {
                 {live && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
                 {statusPill.label}
               </span>
-              {match.stage === 'fs' && (match.fs_color === 'green' || match.fs_color === 'red') && (
-                <span
-                  className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${match.fs_color === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}
-                  title={match.fs_color === 'green' ? 'Free-scheduled Green: only the captain and later-round picks play; worth double a Red' : 'Free-scheduled Red: a normal match with full lineups'}
-                >
-                  {match.fs_color === 'green' ? 'FS Green' : 'FS Red'}
-                </span>
-              )}
+              {match.stage === 'fs' && (match.fs_color === 'green' || match.fs_color === 'red') && (() => {
+                // Once there is a result the badge is the colour it scored as: a Green in which a
+                // round 1–3 pick played is a Red match (PTI v DF, 2026-11-12, still read "FS Green").
+                const shown = scored?.color || match.fs_color;
+                const dropped = match.fs_color === 'green' && shown === 'red';
+                return (
+                  <span
+                    className={`px-1.5 py-0.5 rounded uppercase tracking-wide font-medium ${shown === 'green' ? 'bg-[#34D399]/15 text-[#34D399]' : 'bg-[#F87171]/15 text-[#F87171]'}`}
+                    title={dropped ? 'Booked as FS Green, but a round 1–3 pick played, so it scored as an FS Red match' : shown === 'green' ? 'Free-scheduled Green: only the captain and later-round picks play; worth double a Red' : 'Free-scheduled Red: a normal match with full lineups'}
+                  >
+                    {shown === 'green' ? 'FS Green' : 'FS Red'}{dropped ? ' · booked Green' : ''}
+                  </span>
+                );
+              })()}
             </div>
             {canManage && <MenuButton label="Manage match" items={manageItems} />}
           </div>
