@@ -3,11 +3,22 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { slotSiblings } from '@/lib/zoneSlots';
+import { rebuildRepo } from '@/lib/zoneBuildPins';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
 import { buildMapPairs, mapNameFor, presetsForZone, type MapPreset } from '@/lib/zoneMaps';
+
+// Where a zone's gametype .cs files live under scripts/ - the default for the
+// file manager's scripts subfolder, so a zone dev's upload lands next to the
+// code it replaces. Unlisted zones keep the old CTF default.
+const ZONE_SCRIPTS_SUBDIR: Record<string, string> = {
+  eol: 'GameTypes/Eol',
+  usl: 'GameTypes/USL',
+  usl2: 'GameTypes/USL',
+};
+const defaultScriptsSubdir = (zoneKey: string) => ZONE_SCRIPTS_SUBDIR[zoneKey] || 'GameTypes/CTF';
 
 // Must stay in sync with GRANTABLE_USER_ACTIONS in src/lib/zoneControl.ts.
 // 'maps' is the grant name for map rotation; the daemon action it queues is
@@ -261,7 +272,7 @@ export default function TestZoneManagementPage() {
     // Rebuild downloads the latest server build and restarts the zone, so it
     // kicks everyone in it - make it a deliberate click.
     if (action === 'rebuild' && !window.confirm(
-      `Rebuild ${zoneKey}?\n\nThis downloads the latest server build, deploys it to the zone and restarts it. Anyone currently playing will be disconnected.`
+      `Rebuild ${zoneKey}?\n\nThis downloads the latest release of github.com/${rebuildRepo(zoneKey)}, deploys it to the zone and restarts it. Anyone currently playing will be disconnected.`
     )) {
       return;
     }
@@ -516,7 +527,7 @@ export default function TestZoneManagementPage() {
 
                     {zone.permissions.includes('files') && (
                       <button
-                        onClick={() => { setFilesZone(zone); setFilesOutput(''); setUploadFile(null); setUploadFolder('assets'); }}
+                        onClick={() => { setFilesZone(zone); setFilesOutput(''); setUploadFile(null); setUploadFolder('assets'); setScriptsSubdir(defaultScriptsSubdir(zone.zone_key)); }}
                         title="Upload files into this zone's scripts/ and assets/ folders, list files, view the zone log"
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                       >

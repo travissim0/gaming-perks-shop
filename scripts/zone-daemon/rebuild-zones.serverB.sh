@@ -9,6 +9,15 @@
 #
 #   ./rebuild-zones.sh usl        # only the named tags
 #   ./rebuild-zones.sh all        # every zone in the map (restarts them all!)
+#
+# Each zone installs from REPO (the stock InfantryOnline server) unless
+# zone-daemon.conf's ZONE_REPOS maps its tag to a fork (eol -> ModalInc). A
+# fork zone gets a no-downgrade guard: if the fork's latest release is older
+# than the ZoneServer.dll the zone already runs (someone deployed a newer build
+# by hand), that zone is skipped and left running untouched.
+#
+# Every release is downloaded and checked BEFORE any zone is stopped, so a
+# failed download no longer leaves zones down.
 
 set -uo pipefail
 
@@ -22,6 +31,7 @@ REPO="InfantryOnline/Infantry-Online-Server"
 # fallback for a missing/unreadable conf.
 CONF="${ZONE_DAEMON_CONF:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/zone-daemon.conf}"
 declare -A ZONE_DIRS=()
+declare -A ZONE_REPOS=()
 declare -A ZONES=()
 if [ -r "$CONF" ]; then
   # shellcheck disable=SC1090
@@ -50,37 +60,78 @@ done
 echo "==> Infantry root: $BASE"
 echo "==> Target zones : ${TAGS[*]}"
 
-echo "==> Stopping zone screens"
+# Group the targets by the repo they install from, so each release downloads once.
+declare -A REPO_TAGS=()
 for tag in "${TAGS[@]}"; do
+  r="${ZONE_REPOS[$tag]:-$REPO}"
+  REPO_TAGS["$r"]="${REPO_TAGS[$r]:-}${REPO_TAGS[$r]:+ }$tag"
+done
+
+WORK="$(mktemp -d /tmp/infantry-rebuild.XXXXXX)"
+trap 'rm -rf "$WORK"' EXIT
+declare -A TAG_SRC=()   # tag -> extracted release dir to deploy
+DEPLOY=()               # tags that passed every check, in order
+FAILED=0
+n=0
+for r in "${!REPO_TAGS[@]}"; do
+  n=$((n + 1))
+  echo "==> Resolving latest release of $r"
+  meta="$(curl -fsS "https://api.github.com/repos/$r/releases/latest")" \
+    || { echo "   ERROR: GitHub API request failed for $r"; FAILED=1; continue; }
+  URL="$(printf '%s' "$meta" | jq -r '.assets[] | select(.name=="release-linux.zip") | .browser_download_url' | head -1)"
+  PUBLISHED="$(printf '%s' "$meta" | jq -r '.published_at // empty')"
+  [ -n "$URL" ] && [ "$URL" != "null" ] \
+    || { echo "   ERROR: could not resolve release-linux.zip URL for $r"; FAILED=1; continue; }
+  echo "   $URL (published $PUBLISHED)"
+  ext="$WORK/rel$n"; mkdir -p "$ext"
+  wget -q -O "$WORK/rel$n.zip" "$URL" || { echo "   ERROR: download failed for $r"; FAILED=1; continue; }
+  unzip -o -q "$WORK/rel$n.zip" -d "$ext" || { echo "   ERROR: unzip failed for $r"; FAILED=1; continue; }
+  [ -f "$ext/ZoneServer.dll" ] || { echo "   ERROR: ZoneServer.dll missing in $r release - not deploying it"; FAILED=1; continue; }
+  pub_epoch="$(date -d "$PUBLISHED" +%s 2>/dev/null || echo 0)"
+
+  for tag in ${REPO_TAGS[$r]}; do
+    dir="$BASE/${ZONES[$tag]}"
+    [ -d "$dir" ] || { echo "   SKIP $tag - missing: $dir"; continue; }
+    # No-downgrade guard (fork zones only): a ZoneServer.dll newer than the
+    # release was deployed by hand, so installing the release would roll it back.
+    # (A release's own dll carries its build time, a few minutes BEFORE it was
+    # published, so re-running Rebuild on the same release still passes.)
+    if [ -n "${ZONE_REPOS[$tag]:-}" ] && [ -f "$dir/ZoneServer.dll" ] && [ "$pub_epoch" -gt 0 ]; then
+      cur_epoch="$(stat -c %Y "$dir/ZoneServer.dll")"
+      if [ "$cur_epoch" -gt $((pub_epoch + 600)) ]; then
+        echo "   ERROR $tag: latest $r release ($PUBLISHED) is OLDER than the build $tag runs now ($(date -u -d "@$cur_epoch" +%FT%TZ)) - not rolling it back. Publish a newer release from the fork, then Rebuild again."
+        FAILED=1
+        continue
+      fi
+    fi
+    TAG_SRC["$tag"]="$ext"
+    DEPLOY+=("$tag")
+  done
+done
+
+if [ "${#DEPLOY[@]}" -eq 0 ]; then
+  echo "==> Nothing deployed - every target was skipped (zones left as they were)"
+  exit 1
+fi
+
+echo "==> Stopping zone screens"
+for tag in "${DEPLOY[@]}"; do
   screen -S "$tag" -X quit 2>/dev/null && echo "   stopped $tag" || echo "   $tag not running"
 done
 sleep 2
 
-echo "==> Downloading latest release (once)"
-URL=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" \
-      | grep browser_download_url | grep release-linux.zip | cut -d '"' -f 4)
-[ -n "$URL" ] || { echo "ERROR: could not resolve release-linux.zip URL"; exit 1; }
-echo "   $URL"
-EXTRACT=/tmp/infantry-release
-wget -q -O /tmp/release-linux.zip "$URL" || { echo "ERROR: download failed"; exit 1; }
-rm -rf "$EXTRACT" && mkdir -p "$EXTRACT"
-unzip -o -q /tmp/release-linux.zip -d "$EXTRACT" || { echo "ERROR: unzip failed"; exit 1; }
-[ -f "$EXTRACT/ZoneServer.dll" ] || { echo "ERROR: ZoneServer.dll missing in release - aborting"; exit 1; }
-
 echo "==> Deploying build into each zone"
-for tag in "${TAGS[@]}"; do
+for tag in "${DEPLOY[@]}"; do
   dir="$BASE/${ZONES[$tag]}"
-  [ -d "$dir" ] || { echo "   SKIP $tag - missing: $dir"; continue; }
-  echo "   -> $tag ($dir)"
-  rsync -a "$EXTRACT/" "$dir/"
+  echo "   -> $tag ($dir) from ${ZONE_REPOS[$tag]:-$REPO}"
+  rsync -a "${TAG_SRC[$tag]}/" "$dir/"
 done
 
 echo "==> Starting zones (detached)"
-for tag in "${TAGS[@]}"; do
+for tag in "${DEPLOY[@]}"; do
   dir="$BASE/${ZONES[$tag]}"
-  [ -d "$dir" ] || continue
   ( cd "$dir" && screen -dmS "$tag" dotnet ZoneServer.dll ) && echo "   started $tag"
 done
 
-rm -f /tmp/release-linux.zip; rm -rf "$EXTRACT"
 echo "==> Done. Active screens:"; screen -ls || true
+exit "$FAILED"

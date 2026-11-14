@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { isRebuildPinned, rebuildPinReason } from '@/lib/zoneBuildPins';
+import { hasCustomBuildRepo, isRebuildPinned, rebuildPinReason, rebuildRepo } from '@/lib/zoneBuildPins';
 import { FLAGSHIP_ORDER, ZONE_GROUP_LABEL, zoneGroup, type ZoneGroup } from '@/lib/zoneGroups';
 
 export type ZoneStatus = 'RUNNING' | 'STOPPED' | 'UNKNOWN';
@@ -249,6 +249,13 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
       >
         📌<span className="hidden md:inline"> pinned build</span>
       </span>
+    ) : hasCustomBuildRepo(z.key) ? (
+      <span
+        title={`Custom build: Rebuild installs the latest release of github.com/${rebuildRepo(z.key)}, not the stock server. It refuses a release older than the build the zone already runs.`}
+        className="shrink-0 cursor-help rounded border border-purple-500/30 bg-purple-900/30 px-1 text-[10px] leading-4 text-purple-300"
+      >
+        🔀<span className="hidden md:inline"> fork build</span>
+      </span>
     ) : null;
 
   const serverSelect = (z: Z) => {
@@ -421,8 +428,8 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
               label="Rebuild"
               tone="text-purple-300"
               disabled={isRebuildPinned(menuZone.key) || anyBusy(menuZone)}
-              hint={isRebuildPinned(menuZone.key) ? 'pinned build' : undefined}
-              title={isRebuildPinned(menuZone.key) ? rebuildPinReason(menuZone.key) : 'Stop, deploy latest server build, and restart'}
+              hint={isRebuildPinned(menuZone.key) ? 'pinned build' : hasCustomBuildRepo(menuZone.key) ? 'fork' : undefined}
+              title={isRebuildPinned(menuZone.key) ? rebuildPinReason(menuZone.key) : `Stop, deploy the latest release of ${rebuildRepo(menuZone.key)}, and restart`}
               onClick={() => { close(); p.onAction(menuZone.key, 'rebuild', p.resolveHost(menuZone)); }}
             />
             <MenuItem
