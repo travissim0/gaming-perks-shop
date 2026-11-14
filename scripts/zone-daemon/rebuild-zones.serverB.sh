@@ -16,6 +16,14 @@
 # than the ZoneServer.dll the zone already runs (someone deployed a newer build
 # by hand), that zone is skipped and left running untouched.
 #
+# A fork zone can also take its gametype scripts from the fork: ZONE_REPO_SCRIPTS
+# maps the tag to a repo-relative folder (eol -> scripts/GameTypes/Eol). That
+# folder is fetched from the SAME commit as the release (its tag), so binaries
+# and scripts always match, and replaces the zone's copy (files removed in the
+# repo are removed live; .vs/ is kept). The live folder is backed up first to
+# $BASE/backups/<tag>-scripts/ (last 10 kept). Hand uploads into that folder
+# are overwritten by the next Rebuild - the repo is the source of truth.
+#
 # Every release is downloaded and checked BEFORE any zone is stopped, so a
 # failed download no longer leaves zones down.
 
@@ -32,6 +40,7 @@ REPO="InfantryOnline/Infantry-Online-Server"
 CONF="${ZONE_DAEMON_CONF:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/zone-daemon.conf}"
 declare -A ZONE_DIRS=()
 declare -A ZONE_REPOS=()
+declare -A ZONE_REPO_SCRIPTS=()
 declare -A ZONES=()
 if [ -r "$CONF" ]; then
   # shellcheck disable=SC1090
@@ -70,6 +79,7 @@ done
 WORK="$(mktemp -d /tmp/infantry-rebuild.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 declare -A TAG_SRC=()   # tag -> extracted release dir to deploy
+declare -A TAG_SCRIPTS=()  # tag -> fetched scripts folder to sync (fork zones with ZONE_REPO_SCRIPTS)
 DEPLOY=()               # tags that passed every check, in order
 FAILED=0
 n=0
@@ -80,6 +90,7 @@ for r in "${!REPO_TAGS[@]}"; do
     || { echo "   ERROR: GitHub API request failed for $r"; FAILED=1; continue; }
   URL="$(printf '%s' "$meta" | jq -r '.assets[] | select(.name=="release-linux.zip") | .browser_download_url' | head -1)"
   PUBLISHED="$(printf '%s' "$meta" | jq -r '.published_at // empty')"
+  RELTAG="$(printf '%s' "$meta" | jq -r '.tag_name // empty')"
   [ -n "$URL" ] && [ "$URL" != "null" ] \
     || { echo "   ERROR: could not resolve release-linux.zip URL for $r"; FAILED=1; continue; }
   echo "   $URL (published $PUBLISHED)"
@@ -104,6 +115,25 @@ for r in "${!REPO_TAGS[@]}"; do
         continue
       fi
     fi
+    # Gametype scripts from the fork, at the release's own commit (its tag).
+    # Any failure here skips the zone: binaries without their scripts would
+    # run new server code against old gametype code.
+    sub="${ZONE_REPO_SCRIPTS[$tag]:-}"
+    if [ -n "${ZONE_REPOS[$tag]:-}" ] && [ -n "$sub" ]; then
+      case "$sub" in scripts/*) ;; *) echo "   ERROR $tag: ZONE_REPO_SCRIPTS must be under scripts/ (got '$sub')"; FAILED=1; continue ;; esac
+      case "$sub" in *..*) echo "   ERROR $tag: bad ZONE_REPO_SCRIPTS path '$sub'"; FAILED=1; continue ;; esac
+      src="$WORK/src-$tag"
+      if ! git -c advice.detachedHead=false clone -q --depth 1 --filter=blob:none --sparse --branch "$RELTAG" \
+             "https://github.com/$r.git" "$src" >/dev/null 2>&1 \
+         || ! git -C "$src" sparse-checkout set "$sub" >/dev/null 2>&1; then
+        echo "   ERROR $tag: could not fetch $sub from $r@$RELTAG - zone left as it was"
+        FAILED=1; continue
+      fi
+      ncs="$(find "$src/$sub" -name '*.cs' 2>/dev/null | wc -l)"
+      [ "$ncs" -gt 0 ] || { echo "   ERROR $tag: $sub has no .cs files at $r@$RELTAG - zone left as it was"; FAILED=1; continue; }
+      echo "   $tag scripts: $sub @ $RELTAG ($(git -C "$src" rev-parse --short HEAD), $ncs .cs files)"
+      TAG_SCRIPTS["$tag"]="$src/$sub"
+    fi
     TAG_SRC["$tag"]="$ext"
     DEPLOY+=("$tag")
   done
@@ -125,6 +155,20 @@ for tag in "${DEPLOY[@]}"; do
   dir="$BASE/${ZONES[$tag]}"
   echo "   -> $tag ($dir) from ${ZONE_REPOS[$tag]:-$REPO}"
   rsync -a "${TAG_SRC[$tag]}/" "$dir/"
+  if [ -n "${TAG_SCRIPTS[$tag]:-}" ]; then
+    sub="${ZONE_REPO_SCRIPTS[$tag]}"
+    bdir="$BASE/backups/$tag-scripts"; mkdir -p "$bdir"
+    if [ -d "$dir/$sub" ]; then
+      tar -czf "$bdir/$(date -u +%Y%m%d-%H%M%S).tgz" -C "$dir" "$sub" \
+        && echo "   backed up $sub to $bdir"
+      # keep the 10 newest backups
+      ls -1t "$bdir"/*.tgz 2>/dev/null | tail -n +11 | xargs -r rm -f
+    fi
+    mkdir -p "$dir/$sub"
+    rsync -a --delete --exclude '.vs/' "${TAG_SCRIPTS[$tag]}/" "$dir/$sub/" \
+      && echo "==> Synced $tag $sub from the repo" \
+      || { echo "   ERROR $tag: scripts sync failed"; FAILED=1; }
+  fi
 done
 
 echo "==> Starting zones (detached)"

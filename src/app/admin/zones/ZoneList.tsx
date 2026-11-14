@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { hasCustomBuildRepo, isRebuildPinned, rebuildPinReason, rebuildRepo } from '@/lib/zoneBuildPins';
+import { hasCustomBuildRepo, isRebuildPinned, rebuildPinReason, rebuildRepo, repoScriptsDir } from '@/lib/zoneBuildPins';
 import { FLAGSHIP_ORDER, ZONE_GROUP_LABEL, zoneGroup, type ZoneGroup } from '@/lib/zoneGroups';
 
 export type ZoneStatus = 'RUNNING' | 'STOPPED' | 'UNKNOWN';
@@ -251,7 +251,7 @@ export default function ZoneList<Z extends ZoneListZone>(p: ZoneListProps<Z>) {
       </span>
     ) : hasCustomBuildRepo(z.key) ? (
       <span
-        title={`Custom build: Rebuild installs the latest release of github.com/${rebuildRepo(z.key)}, not the stock server. It refuses a release older than the build the zone already runs.`}
+        title={`Custom build: Rebuild installs the latest release of github.com/${rebuildRepo(z.key)}, not the stock server${repoScriptsDir(z.key) ? `, and replaces ${repoScriptsDir(z.key)} with the repo's copy from the same commit` : ''}. It refuses a release older than the build the zone already runs.`}
         className="shrink-0 cursor-help rounded border border-purple-500/30 bg-purple-900/30 px-1 text-[10px] leading-4 text-purple-300"
       >
         🔀<span className="hidden md:inline"> fork build</span>

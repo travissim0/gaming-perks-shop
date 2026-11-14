@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { slotSiblings } from '@/lib/zoneSlots';
-import { rebuildRepo } from '@/lib/zoneBuildPins';
+import { rebuildRepo, repoScriptsDir } from '@/lib/zoneBuildPins';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -272,7 +272,7 @@ export default function TestZoneManagementPage() {
     // Rebuild downloads the latest server build and restarts the zone, so it
     // kicks everyone in it - make it a deliberate click.
     if (action === 'rebuild' && !window.confirm(
-      `Rebuild ${zoneKey}?\n\nThis downloads the latest release of github.com/${rebuildRepo(zoneKey)}, deploys it to the zone and restarts it. Anyone currently playing will be disconnected.`
+      `Rebuild ${zoneKey}?\n\nThis downloads the latest release of github.com/${rebuildRepo(zoneKey)}${repoScriptsDir(zoneKey) ? ` (and replaces ${repoScriptsDir(zoneKey)} with the repo's copy from the same commit)` : ''}, deploys it to the zone and restarts it. Anyone currently playing will be disconnected.`
     )) {
       return;
     }
@@ -627,6 +627,15 @@ export default function TestZoneManagementPage() {
                       ? <>Will deploy to <span className="text-cyan-400">{uploadDest}</span> (overwrites if it exists)</>
                       : 'Pick a file to upload'}
                   </p>
+                  {(() => {
+                    const repoDir = filesZone ? repoScriptsDir(filesZone.zone_key) : null;
+                    return repoDir && uploadDest.startsWith(repoDir + '/') ? (
+                      <p className="text-xs text-amber-300 mt-1">
+                        ⚠ {repoDir} is synced from github.com/{rebuildRepo(filesZone!.zone_key)} on every Rebuild. A file
+                        uploaded here is replaced by the repo&apos;s copy next Rebuild, so commit the change to the repo too.
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
                 <button
                   onClick={submitFileUpload}

@@ -42,6 +42,17 @@ const BUILD_REPOS: Readonly<Record<string, string>> = {
   eol: 'ModalInc/Infantry-Online-Server',
 };
 
+// Fork zones whose gametype scripts Rebuild ALSO syncs from the repo (same commit as the release), replacing the
+// zone's copy. Mirror of ZONE_REPO_SCRIPTS in zone-daemon.serverB.conf. Zone-relative path = repo-relative path.
+const REPO_SCRIPTS: Readonly<Record<string, string>> = {
+  eol: 'scripts/GameTypes/Eol',
+};
+
+/** The zone folder Rebuild replaces from the fork repo, if any (e.g. 'scripts/GameTypes/Eol'). */
+export function repoScriptsDir(tag: string): string | null {
+  return REPO_SCRIPTS[tag] || null;
+}
+
 export const STOCK_BUILD_REPO = 'InfantryOnline/Infantry-Online-Server';
 
 /** owner/repo whose latest GitHub release Rebuild installs for this tag. */
