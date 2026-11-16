@@ -10,11 +10,15 @@ import type { Fixture } from '@/app/api/league/schedule/route';
 
 /**
  * The Page playoff at a glance (4 teams): Game A (1 v 2), Game B (3 v 4), Game C (loser of A v
- * winner of B, same night) and the Championship (winner of A v winner of C, one game).
+ * winner of B, same night) and the Championship (winner of A v winner of C).
  *
- * Games C and the Championship only become fixtures once the results before them are in, so the
- * fixture list alone shows two games on the first night and no sign of the rest. This card always
- * shows all four, with "Loser of Game A" style slots until a result fills them.
+ * The Championship is double elimination (John, 2026-11-15): the winner of Game A has not lost
+ * yet, so it takes the title with one win, while the winner of Game C has to beat it twice. If the
+ * Game C winner takes the Championship, a second game ("Championship Game 2") decides the title.
+ *
+ * Games C, the Championship and Game 2 only become fixtures once the results before them are in,
+ * so the fixture list alone shows two games on the first night and no sign of the rest. This card
+ * always shows them all, with "Loser of Game A" style slots until a result fills them.
  *
  * Shown once Game A or Game B exists (the staff tool names them in the fixture title); nothing for
  * a season with no playoffs yet or a plain single-elimination bracket. Pass `fixtures` when the
@@ -23,7 +27,7 @@ import type { Fixture } from '@/app/api/league/schedule/route';
 
 type Slot = { id: string | null; name: string; tag: string | null; seed: number | null; placeholder?: boolean };
 type Row = {
-  key: 'A' | 'B' | 'C' | 'F';
+  key: 'A' | 'B' | 'C' | 'F' | 'G';
   label: string;
   note: string;
   fixture: Fixture | undefined;
@@ -32,6 +36,8 @@ type Row = {
   home: Slot;
   /** Where the game stands when it is not on the schedule yet. */
   pending: string;
+  /** Game 2 once the Championship made it unnecessary. */
+  off?: boolean;
 };
 
 const labelOf = (f: Fixture) => f.title.split(' · ')[1] || '';
@@ -86,7 +92,7 @@ export default function PlayoffCard({
   const fixtures = given || loaded || [];
   const playoffs = fixtures.filter((f) => f.stage === 'playoff' && f.status !== 'cancelled');
   const game = (label: string) => playoffs.find((f) => labelOf(f) === label);
-  const A = game('Game A'), B = game('Game B'), C = game('Game C'), F = game('Championship');
+  const A = game('Game A'), B = game('Game B'), C = game('Game C'), F = game('Championship'), G = game('Championship Game 2');
   if (!A && !B) return null;
 
   const seedOf = (id: string | null) => { const i = id ? standings.findIndex((s) => s.squad_id === id) : -1; return i < 0 ? null : i + 1; };
@@ -104,6 +110,13 @@ export default function PlayoffCard({
   const fromFixture = (f: Fixture): [Slot, Slot] => [side(f, 'b'), side(f, 'a')];
   const cSlots: [Slot, Slot] = C ? fromFixture(C) : order(lost(A) || open('Loser of Game A'), won(B) || open('Winner of Game B'));
   const fSlots: [Slot, Slot] = F ? fromFixture(F) : order(won(A) || open('Winner of Game A'), won(C) || open('Winner of Game C'));
+  const gSlots: [Slot, Slot] = G ? fromFixture(G) : fSlots;
+  // The winner of Game A is unbeaten going into the Championship; the winner of Game C has one loss.
+  const unbeaten = won(A), challenger = won(C);
+  const fWinner = won(F);
+  // Game 2 is played only when the Game C winner takes the Championship.
+  const needG = !!G || (!!fWinner && !!unbeaten && fWinner.id !== unbeaten.id);
+  const gOff = !G && !!fWinner && !needG;
   const abSlots = (f: Fixture | undefined, hi: number, lo: number): [Slot, Slot] => {
     if (f) return fromFixture(f);
     const s = (n: number): Slot => { const r = standings[n - 1]; return r ? { id: r.squad_id, name: r.squad_name, tag: r.squad_tag, seed: n } : open(`Seed ${n}`); };
@@ -114,9 +127,20 @@ export default function PlayoffCard({
     { key: 'A', label: 'Game A', note: 'Winner goes straight to the Championship', fixture: A, away: abSlots(A, 1, 2)[0], home: abSlots(A, 1, 2)[1], pending: 'Not scheduled yet' },
     { key: 'B', label: 'Game B', note: 'Loser is out in 4th', fixture: B, away: abSlots(B, 3, 4)[0], home: abSlots(B, 3, 4)[1], pending: 'Not scheduled yet' },
     { key: 'C', label: 'Game C', note: 'For the last Championship spot · loser finishes 3rd', fixture: C, away: cSlots[0], home: cSlots[1], pending: 'Same night, once Games A and B are final' },
-    { key: 'F', label: 'Championship', note: 'One game for the title', fixture: F, away: fSlots[0], home: fSlots[1], pending: championshipDate ? `Planned for ${dateOnly(championshipDate)}` : 'After Game C' },
+    {
+      key: 'F', label: 'Championship', fixture: F, away: fSlots[0], home: fSlots[1],
+      note: unbeaten && challenger
+        ? `A win gives ${unbeaten.name} the title · ${challenger.name} must win twice`
+        : 'A win gives the Game A winner the title · the Game C winner must win twice',
+      pending: championshipDate ? `Planned for ${dateOnly(championshipDate)}` : 'After Game C',
+    },
+    {
+      key: 'G', label: needG ? 'Game 2' : 'Game 2 · if needed', fixture: G, away: gSlots[0], home: gSlots[1], off: gOff,
+      note: 'Decides the title when the Game C winner takes the Championship',
+      pending: gOff ? 'Not needed' : needG ? 'Same night, not scheduled yet' : `Only if ${challenger ? challenger.name : 'the Game C winner'} wins the Championship`,
+    },
   ];
-  const champion = won(F);
+  const champion = fWinner && !needG ? fWinner : won(G);
 
   const when = (r: Row) => {
     const f = r.fixture;
@@ -144,11 +168,12 @@ export default function PlayoffCard({
   };
 
   const rowOf = Object.fromEntries(rows.map((r) => [r.key, r])) as Record<Row['key'], Row>;
+  const isFinal = (r: Row) => r.key === 'F' || r.key === 'G';
   /** One game as a bracket box: its label, the two teams on a line each (away over home), and when. */
   const box = (r: Row) => {
     const body = (
       <>
-        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${r.key === 'F' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.label}</span>
+        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${isFinal(r) ?'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.label}</span>
         <div className="mt-1.5 space-y-0.5 text-sm">
           <div className="flex min-w-0">{team(r.away, r, false)}</div>
           <div className="flex min-w-0">{team(r.home, r, true)}</div>
@@ -156,7 +181,7 @@ export default function PlayoffCard({
         <div className="mt-1.5 text-[11px] leading-snug">{when(r)}</div>
       </>
     );
-    const cls = `block h-full rounded-md px-2.5 py-2 ${r.key === 'F' ? 'ring-1 ring-[#F59E0B]/30' : ''}`;
+    const cls = `block h-full rounded-md px-2.5 py-2 ${r.key === 'F' || (r.key === 'G' && r.fixture) ? 'ring-1 ring-[#F59E0B]/30' : ''} ${r.off ? 'opacity-50' : ''}`;
     return r.fixture
       ? <Link href={`/matches/${r.fixture.id}`} className={`${cls} bg-[#1B2438] hover:bg-[#222d45] transition-colors`}>{body}</Link>
       : <div className={`${cls} bg-[#1B2438]/60`}>{body}</div>;
@@ -177,9 +202,9 @@ export default function PlayoffCard({
           )}
         </div>
       </div>
-      {/* Bracket: A and B on the left, C in the middle, the Championship on the right. Needs ~36rem. */}
+      {/* Bracket: A and B on the left, C in the middle, the Championship on the right with Game 2 under it. Needs ~36rem. */}
       <div className="hidden @xl:block px-3 pb-3">
-        <div className="grid grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)_1.75rem_minmax(0,1fr)] grid-rows-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_1.75rem_minmax(0,1fr)_1.75rem_minmax(0,1fr)] grid-rows-[auto_auto_auto]">
           <div className="col-start-1 row-start-1 py-1">{box(rowOf.A)}</div>
           <div className="col-start-1 row-start-2 py-1">{box(rowOf.B)}</div>
           {/* A's winner runs along the top to the final; A's loser drops (dashed) to meet B's winner in C. */}
@@ -194,20 +219,29 @@ export default function PlayoffCard({
           <div className="col-start-4 row-start-1 row-span-2">
             <Lines solid={['M0 25 H50 V75 H0', 'M50 50 H100']} />
           </div>
-          <div className="col-start-5 row-start-1 row-span-2 self-center">{box(rowOf.F)}</div>
+          {/* The Championship sits level with the line from the gutter; a dashed drop leads to Game 2. */}
+          <div className="col-start-5 row-start-1 row-span-2 flex flex-col">
+            <div className="flex-1 basis-0" />
+            <div>{box(rowOf.F)}</div>
+            <div className="flex-1 basis-0 flex justify-center">
+              <div className={`h-full border-l-[1.5px] border-dashed border-[#3A4766] ${gOff ? 'opacity-40' : ''}`} />
+            </div>
+          </div>
+          <p className="col-start-1 col-span-3 row-start-3 self-center pt-2 text-[11px] leading-snug text-[#8B98B0]">
+            The winner of Game A goes straight to the Championship. The loser of A meets the winner of B in Game C the same night. The loser of B finishes 4th, the loser of C 3rd.
+            {' '}The Championship is double elimination: the Game A winner has not lost, so one win takes the title. The Game C winner has to win twice, the Championship and then Game 2.
+          </p>
+          <div className="col-start-5 row-start-3">{box(rowOf.G)}</div>
         </div>
-        <p className="mt-2 text-[11px] text-[#8B98B0]">
-          The winner of Game A goes straight to the Championship. The loser of A meets the winner of B in Game C the same night. The loser of B finishes 4th, the loser of C 3rd.
-        </p>
       </div>
 
-      {/* Narrow screens: the same four games as a list. */}
+      {/* Narrow screens: the same games as a list. */}
       <ul className="@xl:hidden p-3 pt-0 grid grid-cols-1 gap-2">
         {rows.map((r) => {
           const body = (
             <>
               <div className="flex items-center justify-between gap-2">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${r.key === 'F' ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.label}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${isFinal(r) ?'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#22D3EE]/15 text-[#22D3EE]'}`}>{r.label}</span>
                 <span className="text-[11px] text-right">{when(r)}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
@@ -219,7 +253,7 @@ export default function PlayoffCard({
             </>
           );
           return (
-            <li key={r.key}>
+            <li key={r.key} className={r.off ? 'opacity-50' : ''}>
               {r.fixture
                 ? <Link href={`/matches/${r.fixture.id}`} className="block h-full rounded-md bg-[#1B2438] px-3 py-2 hover:bg-[#222d45] transition-colors">{body}</Link>
                 : <div className="h-full rounded-md bg-[#1B2438]/60 px-3 py-2">{body}</div>}

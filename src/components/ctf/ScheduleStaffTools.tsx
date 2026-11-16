@@ -268,9 +268,10 @@ export default function ScheduleStaffTools({
   // ── Page playoff (4 teams) ──────────────────────────────────────────
   // Game A: 1 v 2, winner straight to the Championship. Game B: 3 v 4, loser out (4th).
   // Game C: loser of A v winner of B, same night, for the last Championship spot; loser is 3rd.
-  // Championship: winner of A v winner of C, a week later, ONE game, no head start for anyone
-  // (John, 2026-10-03: "Championship is single elimination"). The higher seed is home in every
-  // game. Each game is a fixture whose title carries its label.
+  // Championship: winner of A v winner of C, a week later, DOUBLE ELIMINATION (John, 2026-11-15,
+  // replacing his 2026-10-03 "one game"): the winner of A has not lost, so one win takes the title;
+  // if the winner of C takes the Championship, "Championship Game 2" decides it the same night.
+  // The higher seed is home in every game. Each game is a fixture whose title carries its label.
   const [poFormat, setPoFormat] = useState<'page' | 'bracket'>(teams.length === 4 ? 'page' : 'bracket');
   // Game C has no fixed time: it starts once A and B are both final, so it is created Time TBD by default.
   const [gameCTbd, setGameCTbd] = useState(true);
@@ -289,17 +290,23 @@ export default function ScheduleStaffTools({
     B: playoffs.find((f) => gameLabel(f) === 'Game B'),
     C: playoffs.find((f) => gameLabel(f) === 'Game C'),
     F: playoffs.find((f) => gameLabel(f) === 'Championship'),
+    G: playoffs.find((f) => gameLabel(f) === 'Championship Game 2'),
   };
-  const pageStep: 'seed' | 'gameC' | 'final' | 'waitAB' | 'waitC' | 'waitF' | 'done' =
+  // Game 2 is owed when the Championship went to the side that did NOT win Game A.
+  const game2Owed = !!page.A?.result && !!page.F?.result && winnerOf(page.F).id !== winnerOf(page.A).id;
+  const pageStep: 'seed' | 'gameC' | 'final' | 'final2' | 'waitAB' | 'waitC' | 'waitF' | 'waitG' | 'done' =
     !page.A || !page.B ? 'seed'
       : !page.A.result || !page.B.result ? 'waitAB'
         : !page.C ? 'gameC'
           : !page.C.result ? 'waitC'
             : !page.F ? 'final'
-              : !page.F.result ? 'waitF' : 'done';
+              : !page.F.result ? 'waitF'
+                : page.G ? (page.G.result ? 'done' : 'waitG')
+                  : game2Owed ? 'final2' : 'done';
   const pageSeedPairs: [TeamRef, TeamRef][] = seeded.length >= 4 ? [[seeded[0], seeded[1]], [seeded[2], seeded[3]]] : [];
   const pageCPair: [TeamRef, TeamRef] | null = pageStep === 'gameC' ? bySeed(loserOf(page.A!), winnerOf(page.B!)) : null;
   const pageFPair: [TeamRef, TeamRef] | null = pageStep === 'final' ? bySeed(winnerOf(page.A!), winnerOf(page.C!)) : null;
+  const pageGPair: [TeamRef, TeamRef] | null = pageStep === 'final2' ? bySeed(winnerOf(page.F!), loserOf(page.F!)) : null;
   // Once playoff fixtures exist, their labels say which format is in use.
   const playoffFormat: 'page' | 'bracket' = currentRound > 0 ? (page.A ? 'page' : 'bracket') : poFormat;
   // Game C defaults to the same night as A and B; the Championship to a week later.
@@ -311,6 +318,8 @@ export default function ScheduleStaffTools({
       const [y, m, d] = easternDay(page.C.scheduled_at).split('-').map(Number);
       setPoDate(new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10));
     }
+    // Game 2 follows the Championship the same night.
+    if (pageStep === 'final2' && page.F) setPoDate(easternDay(page.F.scheduled_at));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageStep]);
 
@@ -522,7 +531,7 @@ export default function ScheduleStaffTools({
                         <>
                           <div className="text-[11px] uppercase tracking-wide text-[#8B98B0]">Game A · top two seeds &nbsp;·&nbsp; Game B · bottom two</div>
                           <PairList pairs={pageSeedPairs} />
-                          <p className="text-[11px] text-[#8B98B0]">Winner of A goes straight to the Championship. Loser of B is out in 4th. Loser of A plays the winner of B in Game C, the same night, for the last Championship spot; the loser of C is 3rd. The Championship is one game. The higher seed is home and picks the side in every game.</p>
+                          <p className="text-[11px] text-[#8B98B0]">Winner of A goes straight to the Championship. Loser of B is out in 4th. Loser of A plays the winner of B in Game C, the same night, for the last Championship spot; the loser of C is 3rd. The Championship is double elimination: the winner of A takes the title with one win, the winner of C has to win twice (Game 2 is created if it wins the first). The higher seed is home and picks the side in every game.</p>
                         </>
                       )}
                     </>
@@ -578,8 +587,38 @@ export default function ScheduleStaffTools({
                       </div>
                     </>
                   )}
-                  {pageStep === 'waitF' && <p className="text-sm text-[#8B98B0]">Championship is on the schedule. One game, one champion.</p>}
-                  {pageStep === 'done' && <p className="text-sm text-[#F59E0B]">Championship played. Champion: {winnerOf(page.F!).name}. Record it on the season in the admin season tools.</p>}
+                  {pageStep === 'waitF' && (
+                    <p className="text-sm text-[#8B98B0]">
+                      Championship is on the schedule. Double elimination: a win gives {winnerOf(page.A!).name} the title. If {winnerOf(page.C!).name} wins, Game 2 unlocks here and decides it.
+                    </p>
+                  )}
+                  {pageStep === 'final2' && pageGPair && (
+                    <>
+                      <div className="text-sm text-[#E6EDF7]">Championship Game 2 · {winnerOf(page.F!).name} won the Championship, so both sides have one loss · this game decides the title</div>
+                      <PairList pairs={[pageGPair]} />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                        <div>
+                          <label className={labelCls}>Game 2 date</label>
+                          <input type="date" value={poDate} onChange={(e) => setPoDate(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Time (your zone)</label>
+                          {gameCTbd ? (
+                            <div className={`${inputCls} text-[#8B98B0]`}>TBD</div>
+                          ) : (
+                            <input type="time" value={poTime} onChange={(e) => setPoTime(e.target.value)} className={inputCls} style={{ colorScheme: 'dark' }} />
+                          )}
+                        </div>
+                        <div className="md:col-span-2 flex items-center justify-end gap-4">
+                          <TbdToggle checked={gameCTbd} onChange={setGameCTbd} />
+                          <button type="button" disabled={busy} onClick={() => submitPlayoffs([pageGPair], 3, 'Championship Game 2', gameCTbd)} className={btnPrimary}>{busy ? 'Creating…' : 'Create Game 2'}</button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-[#8B98B0]">Like Game C, Game 2 has no fixed time: it starts once the Championship is final. Leave it Time TBD and set the time on the night, which also opens its arena.</p>
+                    </>
+                  )}
+                  {pageStep === 'waitG' && <p className="text-sm text-[#8B98B0]">Championship Game 2 is on the schedule. Its winner is the champion.</p>}
+                  {pageStep === 'done' && <p className="text-sm text-[#F59E0B]">{page.G ? 'Championship Game 2 played' : 'Championship played'}. Champion: {winnerOf(page.G || page.F!).name}. Record it on the season in the admin season tools.</p>}
                 </>
               ) : currentRound === 0 ? (
                 <>
