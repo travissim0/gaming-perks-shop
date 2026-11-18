@@ -1,11 +1,11 @@
 # Zone population history snapshot. Installed but NOT enabled by setup-server.sh:
-# enable it only after the old scheduler (pg_cron / cron-job.org / wherever it runs
-# today) is turned off, or snapshots double up. Adjust OnCalendar to match the old one.
+# today serverB's crontab runs it every 30 min against https://www.freeinf.org. Enable
+# this only after removing that crontab line, or snapshots double up.
 [Unit]
 Description=Snapshot zone population into history
 
 [Timer]
-OnCalendar=*:0/15
+OnCalendar=*:0/30
 Persistent=true
 
 [Install]

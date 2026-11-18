@@ -22,15 +22,16 @@ Visitor → Cloudflare (cache, DDoS) → Caddy :443 (TLS) → node server.js :30
 - [ ] **Copy the production env vars out of Vercel** (Project → Settings → Environment
       Variables, or `vercel env pull --environment=production .env.vercel`). Vercel has more
       than `.env.local`. Keep the file out of git.
-- [ ] **Find what calls `/api/cron/snapshot-zone-population` today.** Nothing in the repo
-      schedules it. Check Supabase pg_cron (`select * from cron.job;` in the SQL editor),
-      cron-job.org, and `crontab -l` on both zone hosts.
+- [x] **What calls the crons:** serverB's `freeinfantry` crontab, every 30 min for
+      `snapshot-zone-population` and every minute for `zone-pop-reporter.py`. Both use
+      `https://www.freeinf.org`, so they follow DNS to the VPS with no change.
 - [ ] Lower the TTL on the `freeinf.org` / `www` DNS records to 300s a day ahead.
 
 ## 2. Buy and set up the VPS
 
-1. OVH VPS, the cheapest tier with **4 GB RAM or more**, US East (near the game boxes),
-   Ubuntu 24.04. Add your SSH key at order time.
+1. OVH **VPS-1** (2 vCore / 4 GB / 40 GB NVMe, from $4.54/mo, Nov 2026), US East
+   (Vint Hill, same region as serverB), Ubuntu 24.04. Add your SSH key at order time.
+   Builds run in GitHub Actions, so the box only serves the site (~0.5-1 GB RAM).
 2. Make a deploy key pair on your PC (no passphrase):
    `ssh-keygen -t ed25519 -f ~/.ssh/freeinf_deploy -N "" -C freeinf-deploy`
 3. Copy this folder up and run the setup:
@@ -78,8 +79,9 @@ Google sign-in comes back to the real domain, so test that after cutover.
    → eligible for cache, respect origin headers.
 4. Check the zone hosts still report population (they post to `https://www.freeinf.org`),
    a USL mix ingest arrives, Google sign-in works, and a Ko-fi test webhook lands.
-5. Switch the snapshot cron over: turn off the old scheduler, then on the VPS
-   `systemctl enable --now freeinf-cron@snapshot-zone-population.timer`.
+5. The snapshot cron keeps running from serverB. Only if you'd rather it lived on the VPS:
+   remove the `*/30 … snapshot-zone-population` line from serverB's crontab, then
+   `systemctl enable --now freeinf-cron@snapshot-zone-population.timer` here.
 6. Long admin jobs (USL mix recompute / fix-accuracy / set-rated, up to 300s) fail through
    Cloudflare's 100s limit. Run them from `https://origin.freeinf.org/...`.
 
