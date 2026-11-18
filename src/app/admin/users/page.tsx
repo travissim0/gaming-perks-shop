@@ -34,6 +34,14 @@ interface UserProfile {
   session_count?: number;
 }
 
+interface DeletePlanRow {
+  table_name: string;
+  column_name: string;
+  row_count: number;
+  action: 'deleted' | 'unlinked' | 'unlink_first' | 'blocked';
+  note: string | null;
+}
+
 interface DailyActivity {
   date: string;
   unique_users: number;
@@ -72,6 +80,11 @@ export default function AdminUsersPage() {
   const [profileCheckAttempts, setProfileCheckAttempts] = useState(0);
   const [dailyActivity, setDailyActivity] = useState<DailyActivity[]>([]);
   const [todayActiveUsers, setTodayActiveUsers] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+  const [deletePlan, setDeletePlan] = useState<DeletePlanRow[] | null>(null);
+  const [deletePlanError, setDeletePlanError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // Handle loading timeouts gracefully
   useLoadingTimeout({
@@ -399,6 +412,60 @@ export default function AdminUsersPage() {
       toast.error('Error updating registration status: ' + error.message);
     }
   };
+
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+
+  const openDeleteDialog = async (target: UserProfile) => {
+    setDeleteTarget(target);
+    setDeletePlan(null);
+    setDeletePlanError(null);
+    setDeleteConfirm('');
+    try {
+      const res = await fetch(`/api/admin/delete-account?userId=${encodeURIComponent(target.id)}`, {
+        headers: await authHeaders(),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load preview');
+      setDeletePlan(json.plan || []);
+    } catch (e: any) {
+      setDeletePlanError(e.message);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/admin/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ userId: deleteTarget.id, confirm: deleteConfirm }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+      toast.success(`Deleted account ${deleteTarget.in_game_alias || deleteTarget.email}`);
+      setDeleteTarget(null);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteConfirmWord = deleteTarget ? (deleteTarget.in_game_alias || deleteTarget.email || '') : '';
+  const deleteBlocked = !!deletePlan?.some(r => r.action === 'blocked');
+  const canConfirmDelete =
+    !!deletePlan && !deleteBlocked && !deleting &&
+    deleteConfirm.trim().toLowerCase() === deleteConfirmWord.trim().toLowerCase();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -839,6 +906,14 @@ export default function AdminUsersPage() {
                         >
                           Copy ID
                         </button>
+                        <button
+                          onClick={() => openDeleteDialog(userProfile)}
+                          disabled={userProfile.is_admin || userProfile.id === user?.id}
+                          className="ml-3 text-red-400 hover:text-red-300 transition-colors text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={userProfile.is_admin ? 'Remove the admin role before deleting' : 'Delete this account'}
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -848,6 +923,105 @@ export default function AdminUsersPage() {
           )}
         </div>
       </main>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={closeDeleteDialog}>
+          <div
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gray-900 border border-red-500/40 rounded-xl shadow-2xl p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-red-400 mb-1">Delete account</h2>
+            <p className="text-sm text-gray-300 mb-4">
+              <span className="text-white font-semibold">{deleteTarget.in_game_alias || 'No Alias'}</span>
+              <span className="text-gray-400"> · {deleteTarget.email}</span>
+            </p>
+            <p className="text-xs text-gray-400 mb-4">
+              Removes their login and site profile. Their in-game account and alias-based game stats are not touched.
+              This cannot be undone.
+            </p>
+
+            {!deletePlan && !deletePlanError && (
+              <div className="text-sm text-gray-400 mb-4">Checking linked data…</div>
+            )}
+            {deletePlanError && (
+              <div className="text-sm text-red-300 bg-red-900/30 border border-red-500/40 rounded p-3 mb-4">{deletePlanError}</div>
+            )}
+
+            {deletePlan && (
+              <div className="mb-4">
+                {deletePlan.length === 0 ? (
+                  <div className="text-sm text-gray-400">No linked site data besides the profile.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-400 text-left">
+                        <th className="py-1 pr-2 font-medium">Linked data</th>
+                        <th className="py-1 pr-2 font-medium text-right">Rows</th>
+                        <th className="py-1 font-medium">What happens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deletePlan.map(r => (
+                        <tr key={`${r.table_name}.${r.column_name}`} className="border-t border-gray-800">
+                          <td className="py-1 pr-2 text-gray-200 font-mono break-all">
+                            {r.table_name.replace(/^public\./, '')}.{r.column_name}
+                          </td>
+                          <td className="py-1 pr-2 text-right text-gray-200">{r.row_count}</td>
+                          <td className="py-1">
+                            {r.action === 'deleted' && <span className="text-orange-300">Deleted</span>}
+                            {(r.action === 'unlinked' || r.action === 'unlink_first') && (
+                              <span className="text-cyan-300">Kept, name removed</span>
+                            )}
+                            {r.action === 'blocked' && (
+                              <span className="text-red-400">Blocks: {r.note}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {deleteBlocked && (
+                  <div className="mt-3 text-sm text-red-300">
+                    Sort out the blocking items above before this account can be deleted.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {deletePlan && !deleteBlocked && (
+              <label className="block mb-4">
+                <span className="block text-xs text-gray-300 mb-1">
+                  Type <span className="font-mono text-white">{deleteConfirmWord}</span> to confirm
+                </span>
+                <input
+                  value={deleteConfirm}
+                  onChange={e => setDeleteConfirm(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-md text-white focus:border-red-500 focus:outline-none"
+                  autoFocus
+                />
+              </label>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeDeleteDialog}
+                disabled={deleting}
+                className="px-4 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={!canConfirmDelete}
+                className="px-4 py-2 text-sm rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting…' : 'Delete account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-} 
+}
