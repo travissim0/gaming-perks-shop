@@ -1,6 +1,19 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  // Self-contained server bundle (.next/standalone) for the OVH VPS — see deploy/site-host/.
+  // Vercel ignores this, so it is safe while both hosts exist.
+  output: 'standalone',
+  // Pin the tracing root to this repo (a stray lockfile in a parent folder otherwise nests
+  // the bundle one level down) and keep non-site folders out of the bundle.
+  outputFileTracingRoot: path.join(__dirname),
+  outputFileTracingIncludes: {
+    '/api/patch-notes': ['./sample-ctfpl.nws'],
+  },
+  outputFileTracingExcludes: {
+    '*': ['ngrok/**', 'stripe-cli/**', 'CTF/**', 'bot/**', 'scripts/**', 'deploy/**', '**/*.cs'],
+  },
   // Infantry zone editors — static SPA in public/editors/ (built by infantry-cfs-studio
   // `vite build --config vite.config.web.ts --base=/editors/`). public/ has no
   // directory-index behavior, so map the bare path to the SPA's index.html.

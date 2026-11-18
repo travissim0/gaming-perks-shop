@@ -1,0 +1,31 @@
+[Unit]
+Description=freeinf.org Next.js site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=web
+Group=web
+# `current` is a symlink to the active release (releases/<sha>), flipped by the deploy workflow.
+WorkingDirectory=/srv/freeinf/current
+EnvironmentFile=/etc/freeinf/site.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+# Keep a runaway request from starving the box.
+MemoryMax=3G
+LimitNOFILE=65535
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/freeinf
+
+[Install]
+WantedBy=multi-user.target

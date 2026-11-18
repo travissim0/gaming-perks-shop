@@ -24,8 +24,11 @@ export async function GET(request: NextRequest) {
       try {
         console.log(`Attempting to read patch notes from: ${filePath}`);
         
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-        const stats = await fs.stat(filePath);
+        // turbopackIgnore: a variable path here otherwise makes the build tracer copy the
+        // whole repo (SQL, docs, *.env) into the server bundle. sample-ctfpl.nws is shipped
+        // explicitly via outputFileTracingIncludes in next.config.ts.
+        const fileContent = await fs.readFile(/* turbopackIgnore: true */ filePath, 'utf-8');
+        const stats = await fs.stat(/* turbopackIgnore: true */ filePath);
         
         content = fileContent;
         lastModified = stats.mtime.toISOString();

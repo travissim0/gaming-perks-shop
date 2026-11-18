@@ -1,0 +1,121 @@
+name: Deploy site (OVH)
+
+# Builds the Next.js standalone bundle here (keeps build load off the VPS), ships it to
+# /srv/freeinf/releases/<sha>, flips the `current` symlink and restarts the service.
+# If the new release doesn't answer within 60s, the symlink goes back to the previous one.
+#
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   SITE_SSH_HOST   VPS address
+#   SITE_SSH_KEY    private key whose public half is in /home/web/.ssh/authorized_keys
+#   SITE_ENV        full contents of /etc/freeinf/site.env (needed at build time for
+#                   NEXT_PUBLIC_* values and any pages prerendered from Supabase)
+# Until SITE_SSH_HOST exists the job skips instead of failing. Setup: deploy/site-host/README.md
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'bot/**'
+      - 'CTF/**'
+      - '**/*.cs'
+      - '**/*.sql'
+      - '**/*.md'
+      - 'scripts/zone-daemon/**'
+      - '.github/workflows/deploy-bot.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_HOST: ${{ secrets.SITE_SSH_HOST }}
+    steps:
+      - name: Skip until deploy secrets are set
+        if: env.HAS_HOST == ''
+        run: echo "SITE_SSH_HOST is not set — nothing to deploy yet."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_HOST != ''
+
+      - uses: actions/setup-node@v4
+        if: env.HAS_HOST != ''
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: env.HAS_HOST != ''
+        run: npm ci
+
+      - name: Build
+        if: env.HAS_HOST != ''
+        env:
+          SITE_ENV: ${{ secrets.SITE_ENV }}
+        run: |
+          printf '%s\n' "$SITE_ENV" > .env.production.local
+          npm run build
+          rm -f .env.production.local
+
+      - name: Assemble bundle
+        if: env.HAS_HOST != ''
+        run: |
+          set -e
+          cd .next/standalone
+          # Runtime env comes from /etc/freeinf/site.env on the server, never the bundle.
+          rm -f .env .env.*
+          mkdir -p public .next/static
+          cp -r ../../public/. ./public/
+          cp -r ../static/. ./.next/static/
+          test -f server.js
+          tar -czf "$GITHUB_WORKSPACE/site.tgz" .
+          ls -lh "$GITHUB_WORKSPACE/site.tgz"
+
+      - name: Ship, switch and health-check
+        if: env.HAS_HOST != ''
+        env:
+          SSH_KEY: ${{ secrets.SITE_SSH_KEY }}
+          HOST: ${{ secrets.SITE_SSH_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/site_key
+          chmod 600 ~/.ssh/site_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH="ssh -i $HOME/.ssh/site_key web@$HOST"
+
+          scp -i ~/.ssh/site_key site.tgz "web@$HOST:/srv/freeinf/site-$SHA.tgz"
+
+          $SSH "SHA=$SHA bash -s" <<'REMOTE'
+          set -e
+          cd /srv/freeinf
+          REL="releases/$SHA"
+          rm -rf "$REL" && mkdir -p "$REL"
+          tar -xzf "site-$SHA.tgz" -C "$REL" && rm -f "site-$SHA.tgz"
+          PREV="$(readlink current || true)"
+
+          ln -sfn "$REL" current.new && mv -T current.new current
+          sudo /usr/bin/systemctl restart freeinf-site
+
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3000/; then
+              echo "Release $SHA is live."
+              # Keep the 5 newest releases.
+              ls -1dt releases/*/ | tail -n +6 | xargs -r rm -rf
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Release $SHA failed its health check."
+          if [ -n "$PREV" ]; then
+            ln -sfn "$PREV" current.new && mv -T current.new current
+            sudo /usr/bin/systemctl restart freeinf-site
+            echo "Rolled back to $PREV."
+          fi
+          exit 1
+          REMOTE

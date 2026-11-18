@@ -1,0 +1,11 @@
+# Calls one CRON_SECRET-protected route on the local site. The instance name is the
+# path after /api/cron/, e.g. freeinf-cron@snapshot-zone-population.service.
+[Unit]
+Description=freeinf.org cron route %i
+After=freeinf-site.service
+
+[Service]
+Type=oneshot
+User=web
+EnvironmentFile=/etc/freeinf/site.env
+ExecStart=/bin/sh -c 'curl -fsS --max-time 120 -H "Authorization: Bearer $CRON_SECRET" "http://127.0.0.1:3000/api/cron/%i"'

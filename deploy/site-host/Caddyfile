@@ -1,0 +1,33 @@
+# /etc/caddy/Caddyfile — freeinf.org on the OVH VPS.
+#
+# Caddy gets Let's Encrypt certificates automatically. That needs DNS for these names
+# to point at this box (DNS-only / grey cloud in Cloudflare while the first cert is
+# issued). Once Cloudflare is proxying (orange cloud), set SSL mode to "Full (strict)".
+#
+# Same behaviour as Vercel today: the apex redirects to www, and the zone hosts post to
+# https://www.freeinf.org.
+
+freeinf.org {
+	redir https://www.freeinf.org{uri} permanent
+}
+
+www.freeinf.org {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:3000
+
+	log {
+		output file /var/log/caddy/freeinf.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+# Direct-to-origin hostname for the long admin jobs (USL mix recompute / fix-accuracy /
+# set-rated run up to 300s; Cloudflare cuts proxied requests at ~100s). Keep this record
+# DNS-only (grey cloud) in Cloudflare.
+origin.freeinf.org {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
