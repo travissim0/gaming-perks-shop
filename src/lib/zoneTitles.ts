@@ -18,6 +18,9 @@ export const ZONE_TITLE_TO_TAG: Readonly<Record<string, string>> = {
   'CTF - Twin Peaks 2.0': 'ctf',
   'CTF:X Halloween Edition w/ Bots': 'ctfx',
   'The Arena (bots)': 'arenabots',
+  'CTF - Twin Peaks Pub': 'tppub',
+  // The Pub borrows zoneid 151, whose game-DB row is still named "CTF - Combined"; the zone list may report that.
+  'CTF - Combined': 'tppub',
   'CA - Quarantine (Bots)': 'qca',
 };
 

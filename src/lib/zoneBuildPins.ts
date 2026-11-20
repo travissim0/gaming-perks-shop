@@ -16,6 +16,9 @@ const PIN_REASONS: Readonly<Record<string, string>> = {
   // stage-tested against; the latest release (09-26) has not been tried with it.
   arenabots:
     "Pinned build: Rebuild is disabled for this zone. Rebuild installs the latest GitHub server release over the zone's folder, and The Arena (bots) is only known to work on the engine it runs now. Update it by hand if you need to.",
+  // CTF - Twin Peaks Pub: 08-23 engine + hand-deployed CTF/CTFX/MiniTP scripts and ctfhard cfg/itm/veh/lio.
+  tppub:
+    "Pinned build: Rebuild is disabled for this zone. Rebuild installs the latest GitHub server release over the zone's folder, and the Twin Peaks Pub runs a hand-deployed engine, scripts and item files that it would overwrite. Update it by hand if you need to.",
 };
 
 export const REBUILD_PINNED_TAGS: ReadonlySet<string> = new Set(Object.keys(PIN_REASONS));

@@ -20,6 +20,7 @@ const BOT_TAGS: readonly string[] = [
   'ctfx', //      CTF - CTFX Halloween (CTF:X with bots)
   'qca', //       CA - Quarantine (Bots)
   'arenabots', // The Arena (bots)
+  'tppub', //     CTF - Twin Peaks Pub (hard economy + MiniTP bots)
   'tt', //        Test Zone - Molo (Triple Threat; bots coming)
 ];
 
